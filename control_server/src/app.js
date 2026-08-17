@@ -46,7 +46,7 @@ async function build(opts = {}) {
 
   await app.register(require('@fastify/rate-limit'), {
     global: true,
-    max: 200,
+    max: 5000,
     timeWindow: '1 minute',
     // Giới hạn theo thiết bị khi có token, theo IP khi chưa — nhiều máy sau
     // cùng một NAT không được phép chặn lẫn nhau.

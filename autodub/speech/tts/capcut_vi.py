@@ -19,19 +19,15 @@ from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.tts.capcut")
 
-#: Số câu đọc song song. Đây là I/O chờ mạng nên không tranh CPU với Demucs
-#: hay Whisper, nhưng CapCut có bộ chống lạm dụng: bắn quá dày thì máy chủ
-#: chặn thẳng định danh máy (``shark block``) chứ không chỉ từ chối một câu.
-#: 3 luồng là mức đã chạy sạch qua nhiều lượt đo — đủ nhanh mà không liều.
-RECOMMENDED_THREADS = 3
+#: Số câu đọc song song (3 luồng mặc định an toàn, có thể nâng qua CAPCUT_THREADS trong .env).
+RECOMMENDED_THREADS = min(8, max(1, int(os.environ.get("CAPCUT_THREADS", "3"))))
 
-#: Khoảng cách tối thiểu giữa hai lần gửi, tính chung cho MỌI luồng. Van an
-#: toàn cho lúc các câu ngắn trả về gần như tức thì và ba luồng dồn cục.
-MIN_GAP_S = 0.8
+#: Khoảng cách tối thiểu giữa hai lần gửi, tính chung cho MỌI luồng (giãn cách mượt mà 0.2s thay vì 0.8s).
+MIN_GAP_S = 0.2
 
 #: Số lần thử lại một câu khi mạng chập chờn, và thời gian chờ giữa các lần.
 RETRIES = 3
-BACKOFF_S = (1.0, 2.0, 4.0)
+BACKOFF_S = (0.5, 1.5, 3.0)
 
 #: Số lần đổi định danh liên tiếp mà vẫn bị chặn thì bỏ cuộc. Đổi được rồi
 #: đọc trôi một câu là bộ đếm về 0 — video dài bị chặn vài lần vẫn chạy hết,
@@ -39,9 +35,9 @@ BACKOFF_S = (1.0, 2.0, 4.0)
 MAX_ROTATIONS = 2
 
 #: Trần thời gian: chờ máy chủ tạo xong, tải file, và chạy ffmpeg cho MỘT câu.
-TASK_TIMEOUT_S = 120.0
-DOWNLOAD_TIMEOUT_S = 60
-FFMPEG_TIMEOUT_S = 120
+TASK_TIMEOUT_S = 60.0
+DOWNLOAD_TIMEOUT_S = 30
+FFMPEG_TIMEOUT_S = 60
 
 OFFLINE_HINT = ("Giọng CapCut cần kết nối mạng. Kiểm tra mạng rồi chạy lại, "
                 "hoặc chọn một giọng offline (VieNeu) ở ô chọn giọng.")
@@ -188,26 +184,21 @@ class CapCutSynthesizer:
 
     @staticmethod
     def _to_wav(mp3_bytes: bytes, output_path: str) -> None:
-        """MP3 → WAV mono 44.1 kHz — cả pipeline chỉ làm việc với WAV."""
+        """MP3 → WAV mono 44.1 kHz qua stdin pipe siêu nhanh, không ghi tệp đệm."""
         from autodub.resources import FFMPEG_SLOTS
 
-        tmp_mp3 = output_path + ".capcut.tmp.mp3"
-        with open(tmp_mp3, "wb") as f:
-            f.write(mp3_bytes)
-        try:
-            with FFMPEG_SLOTS:
-                result = subprocess.run(
-                    ["ffmpeg", "-y", "-i", tmp_mp3, "-ac", "1", "-ar", "44100",
-                     output_path],
-                    capture_output=True, encoding="utf-8", errors="replace",
-                    timeout=FFMPEG_TIMEOUT_S,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            if result.returncode != 0 or not os.path.isfile(output_path):
-                raise RuntimeError("ffmpeg không chuyển được audio CapCut "
-                                   f"sang WAV: {(result.stderr or '')[-300:]}")
-        finally:
-            if os.path.exists(tmp_mp3):
-                os.remove(tmp_mp3)
+        with FFMPEG_SLOTS:
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", "pipe:0", "-ac", "1", "-ar", "44100",
+                 output_path],
+                input=mp3_bytes,
+                capture_output=True,
+                timeout=FFMPEG_TIMEOUT_S,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if result.returncode != 0 or not os.path.isfile(output_path):
+            err_msg = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+            raise RuntimeError("ffmpeg không chuyển được audio CapCut "
+                               f"sang WAV: {err_msg[-300:]}")
 
     # -- giao diện Synthesizer -------------------------------------------
 

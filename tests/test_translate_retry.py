@@ -114,6 +114,15 @@ def test_client_error_is_not_retried(patched, monkeypatch):
     assert len(client.job_ids) == 1
 
 
+def test_missing_provider_is_not_retried(patched, monkeypatch):
+    client = FakeClient([SaasError(
+        'Chưa cấu hình nơi gọi mô hình cho "translate".',
+        code="NO_PROVIDER", status=503)])
+    with pytest.raises(TranslateError, match="nơi gọi mô hình"):
+        _run(client, monkeypatch)
+    assert len(client.job_ids) == 1
+
+
 # ------------------------------------------------------------ chặn nhịp ----
 
 def test_rate_limiter_admits_up_to_the_limit_then_waits():

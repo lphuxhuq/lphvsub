@@ -32,12 +32,14 @@ async function requireDevice(request, reply) {
     })
   }
 
-  const device = await Device.findOne({ fingerprint: payload.fp })
+  let device = await Device.findOne({ fingerprint: payload.fp })
   if (!device) {
-    return reply.code(401).send({
-      code: 'DEVICE_NOT_FOUND',
-      message: 'Thiết bị chưa đăng ký. Ứng dụng sẽ tự đăng ký lại.',
+    const registered = await deviceService.registerDevice({
+      fingerprint: payload.fp,
+      name: 'Auto Registered',
+      ip: request.ip,
     })
+    device = registered.device
   }
   if (device.status === 'blocked') {
     return reply.code(403).send({

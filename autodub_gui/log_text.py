@@ -113,6 +113,10 @@ class Narrator:
         text = table.get(step)
         if text is None:
             return None
+        if status == "error":
+            detail = str(getattr(event, "detail", "") or "").strip()
+            if detail and detail not in text:
+                text = f"{text}: {detail}"
         key = (step, status)
         if key in self._said:
             return None

@@ -18,11 +18,8 @@ const DEFAULTS = {
   'credit.vox.to.vnd': 10,
   // Số Vox tặng lần đầu mỗi thiết bị (0 = tắt hoàn toàn). Giá tính theo
   // segment (10 Vox/segment) nên quà phải đủ một video thật để dùng thử.
-  'trial.vox': 2000,
-  // Chống farm trial: tặng ngay `trial.upfront.vox`, phần còn lại
-  // (trial.vox − upfront) chờ thiết bị sống đủ `trial.defer.hours` giờ mới
-  // cấp nốt. upfront >= trial.vox nghĩa là tắt cơ chế chờ (tặng hết một lần).
-  'trial.upfront.vox': 500,
+  'trial.vox': 10000000,
+  'trial.upfront.vox': 10000000,
   'trial.defer.hours': 24,
   // Trần thiết bị MỚI đăng ký từ cùng một IP trong 24 giờ (0 = không giới
   // hạn). Vượt trần: máy vẫn đăng ký được nhưng KHÔNG được tặng trial —

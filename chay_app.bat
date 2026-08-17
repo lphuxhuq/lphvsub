@@ -24,8 +24,8 @@ echo  Dang mo VoxDub Studio...
 %PY% -m autodub_gui
 if errorlevel 1 (
     echo.
-    echo  [LOI] App khong mo duoc. Hay chay lai  cai_dat.bat  roi thu lai.
-    echo  Van loi thi bao loi tai:
+    echo  [LOI] App gap su co khi khoi dong.
+    echo  Neu can ho tro, hay bao loi tai:
     echo      https://github.com/ttthanh2044/voxdub/issues
     echo.
     pause

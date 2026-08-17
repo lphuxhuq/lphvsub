@@ -240,6 +240,33 @@ class VoiceAndExportMixin:
                         "đã chuyển sang Ghi thẳng vào hình.")
         self._save_render_opts()
         self._apply_style_to_player()
+        try:
+            from autodub_gui.env_store import bool_to_env, write_env
+            import json
+            updates = {}
+            if self._subtitle_style:
+                style = self._subtitle_style
+                if "font" in style: updates["SUBTITLE_FONT"] = str(style["font"])
+                if "font_size" in style: updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
+                if "position" in style: updates["SUBTITLE_POSITION"] = str(style["position"])
+                if "color" in style: updates["SUBTITLE_COLOR"] = str(style["color"])
+                if "outline" in style: updates["SUBTITLE_OUTLINE"] = str(style["outline"])
+                if "outline_color" in style: updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
+                if "shadow" in style: updates["SUBTITLE_SHADOW"] = str(style["shadow"])
+                if "bold" in style: updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
+                if "box" in style: updates["SUBTITLE_BOX"] = str(style["box"])
+                if "box_color" in style: updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
+                if "box_opacity" in style: updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
+                if "display" in style: updates["SUBTITLE_DISPLAY"] = str(style["display"])
+                if "words_per_cue" in style: updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
+                if "effect" in style: updates["KARAOKE_EFFECT"] = str(style["effect"])
+                if "highlight_color" in style: updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
+            if self._blur_regions:
+                updates["BLUR_REGIONS"] = json.dumps(self._blur_regions)
+            if updates:
+                write_env(updates)
+        except Exception:
+            pass
         TOASTS.info("Bấm «Ghi lại phụ đề vào video» để thấy kiểu chữ mới trên "
                     "video ngay, không cần xuất lại cả phim.")
 

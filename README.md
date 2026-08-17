@@ -41,12 +41,13 @@ Link / File video
 
 ## 1. Cài đặt trong 5 phút
 
-### Bạn cần chuẩn bị 2 thứ
+### Bạn cần chuẩn bị
 
 | Cần gì | Tải ở đâu | Lưu ý |
 |---|---|---|
 | **Python 3.10 trở lên** | <https://www.python.org/downloads/> | Khi cài **NHỚ TÍCH ô "Add Python to PATH"** — quên bước này là mọi thứ sau đó không chạy |
 | **ffmpeg (bản full)** | <https://www.gyan.dev/ffmpeg/builds/> — file `ffmpeg-release-full.7z` | Giải nén ra ví dụ `C:\ffmpeg`, rồi thêm `C:\ffmpeg\bin` vào **PATH** của Windows |
+| **aria2 (Tùy chọn)** | Chạy lệnh `winget install aria2.aria2` trong PowerShell | Tăng tốc tải video Bilibili, YouTube, v.v. bằng 16 kết nối song song tối đa băng thông mạng |
 
 <details>
 <summary><b>Cách thêm ffmpeg vào PATH (bấm để xem)</b></summary>
@@ -56,6 +57,17 @@ Link / File video
 3. Bấm phím Windows, gõ **"environment variables"** → mở **"Edit the system environment variables"**
 4. Bấm **Environment Variables…** → ở khung dưới chọn dòng **Path** → **Edit** → **New** → dán `C:\ffmpeg\bin` → **OK** hết
 5. **Mở lại** Command Prompt, gõ `ffmpeg -version`. Hiện ra một đống chữ = xong.
+
+</details>
+
+<details>
+<summary><b>Cài đặt aria2 (Tùy chọn — Tối đa tốc độ tải video)</b></summary>
+
+Mở PowerShell và chạy:
+```powershell
+winget install aria2.aria2
+```
+Sau khi cài, ứng dụng sẽ tự động tận dụng `aria2c` với 16 kết nối song song để đạt tốc độ tối đa của gói mạng.
 
 </details>
 
@@ -243,8 +255,9 @@ Mọi bước đều **cache theo file**: xoá file nào thì riêng bước đ�
 
 Mỗi mục là một file `.bat`, đúp chuột là chạy:
 
-| File | Làm gì | Dung lượng |
+| File / Lệnh | Làm gì | Dung lượng |
 |---|---|---|
+| `winget install aria2.aria2` | Cài **aria2** — tăng tốc tải video Bilibili/YouTube/TikTok với 16 kết nối song song | ~5 MB |
 | `cai_them_paraformer.bat` | Bộ nghe tiếng Trung **Paraformer** — chính xác hơn Whisper và nhanh hơn trên CPU. Cài xong app tự dùng cho video tiếng Trung. | ~520 MB |
 | `cai_them_douyin.bat` | Trình duyệt Chromium để tải video **Douyin** thẳng từ link | ~170 MB |
 | `nap_giong_doc.bat` | Nạp 120 giọng mẫu trong `voices/` vào app. Thả thêm file `.wav` vào `voices/custom/` rồi chạy lại để thêm giọng riêng. | — |

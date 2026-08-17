@@ -10,10 +10,13 @@
  * Provider lỗi thì tự rơi xuống provider kế tiếp cùng `role` — đổi nhà cung
  * cấp hay hết hạn mức không làm gián đoạn người dùng.
  */
+const fs = require('fs')
+const path = require('path')
+const dotenv = require('dotenv')
 const axios = require('axios')
 
 const AiProvider = require('../models/AiProvider')
-const { decrypt } = require('../utils/crypto')
+const { encrypt, decrypt } = require('../utils/crypto')
 const {
   parseResponseSegments, parseJsonObject, mergeTranslations, containsCjk,
 } = require('../utils/json-repair')
@@ -31,12 +34,125 @@ class AiError extends Error {
 const PROVIDER_CACHE_TTL_MS = 60_000
 const providerCache = new Map()   // role -> { list, expiresAt }
 
+/**
+ * Tự động đồng bộ các API Key từ .env (cả control_server/.env và root .env)
+ * vào database AiProvider để người dùng chỉ cần điền key vào .env là chạy được ngay.
+ */
+async function syncProvidersFromEnv() {
+  const envPaths = [
+    path.join(__dirname, '../../.env'),           // control_server/.env
+    path.join(__dirname, '../../../../.env'),      // root .env
+    path.join(process.cwd(), '.env'),             // current working dir .env
+    path.join(process.cwd(), 'control_server/.env'),
+  ]
+
+  const loadedEnv = { ...process.env }
+  for (const p of envPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const parsed = dotenv.parse(fs.readFileSync(p, 'utf8'))
+        Object.assign(loadedEnv, parsed)
+      } catch {}
+    }
+  }
+
+  const geminiTranslateKey = (loadedEnv.GEMINI_API_KEY || loadedEnv.GOOGLE_API_KEY || loadedEnv.SEED_GEMINI_API_KEY || '').trim()
+  const geminiContentKey = (loadedEnv.GEMINI_CONTENT_API_KEY || loadedEnv.CONTENT_API_KEY || geminiTranslateKey).trim()
+
+  const configs = [
+    {
+      name: 'hhtech',
+      label: 'HHTech API / Custom AI',
+      type: 'openai_compat',
+      key: (loadedEnv.CUSTOM_AI_API_KEY || loadedEnv.HHTECH_API_KEY || '').trim(),
+      model: (loadedEnv.CUSTOM_AI_MODEL || loadedEnv.HHTECH_MODEL || 'deepseek-v4-flash').trim(),
+      baseUrl: (loadedEnv.CUSTOM_AI_BASE_URL || loadedEnv.HHTECH_BASE_URL || 'https://hhtechapi.net/v1').trim(),
+      priority: 1,
+    },
+    {
+      name: 'gemini',
+      label: 'Google Gemini',
+      type: 'google',
+      translateKey: geminiTranslateKey,
+      contentKey: geminiContentKey,
+      model: (loadedEnv.GEMINI_MODEL || 'gemini-2.5-flash').trim(),
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      priority: 2,
+    },
+    {
+      name: 'openrouter',
+      label: 'OpenRouter',
+      type: 'openai_compat',
+      key: (loadedEnv.OPENROUTER_API_KEY || loadedEnv.SEED_OPENROUTER_API_KEY || '').trim(),
+      model: (loadedEnv.OPENROUTER_MODEL || loadedEnv.SEED_OPENROUTER_MODEL || 'google/gemini-2.5-flash').trim(),
+      baseUrl: 'https://openrouter.ai/api/v1',
+      priority: 3,
+    },
+    {
+      name: 'openai',
+      label: 'OpenAI',
+      type: 'openai_compat',
+      key: (loadedEnv.OPENAI_API_KEY || loadedEnv.SEED_OPENAI_API_KEY || '').trim(),
+      model: (loadedEnv.OPENAI_MODEL || 'gpt-4o-mini').trim(),
+      baseUrl: 'https://api.openai.com/v1',
+      priority: 4,
+    },
+    {
+      name: 'deepseek',
+      label: 'DeepSeek',
+      type: 'openai_compat',
+      key: (loadedEnv.DEEPSEEK_API_KEY || loadedEnv.SEED_DEEPSEEK_API_KEY || '').trim(),
+      model: (loadedEnv.DEEPSEEK_MODEL || 'deepseek-chat').trim(),
+      baseUrl: 'https://api.deepseek.com/v1',
+      priority: 5,
+    },
+  ]
+
+  let changed = false
+  for (const cfg of configs) {
+    for (const role of ['translate', 'content']) {
+      const key = role === 'translate' ? (cfg.translateKey || cfg.key) : (cfg.contentKey || cfg.key)
+      if (!key) continue
+      const providerName = role === 'translate' ? cfg.name : `${cfg.name}-content`
+      const providerLabel = role === 'translate' ? cfg.label : `${cfg.label} (Nội dung)`
+      const updateData = {
+        name: providerName,
+        label: providerLabel,
+        role,
+        type: cfg.type,
+        baseUrl: cfg.baseUrl,
+        model: cfg.model,
+        apiKeyEnc: encrypt(key),
+        temperature: 0.3,
+        maxTokens: 16384,
+        priority: cfg.priority,
+        enabled: true,
+      }
+      await AiProvider.findOneAndUpdate(
+        { name: providerName },
+        { $set: updateData },
+        { upsert: true, new: true }
+      )
+      changed = true
+    }
+  }
+
+  if (changed) {
+    invalidateProviders()
+  }
+}
+
 /** Provider đang bật của một vai trò, đã sắp theo ưu tiên. */
 async function providersFor(role) {
   const hit = providerCache.get(role)
   if (hit && hit.expiresAt > Date.now()) return hit.list
-  const list = await AiProvider.find({ role, enabled: true })
+  let list = await AiProvider.find({ role, enabled: true })
     .sort({ priority: 1 }).lean()
+  if (!list.length) {
+    await syncProvidersFromEnv()
+    list = await AiProvider.find({ role, enabled: true })
+      .sort({ priority: 1 }).lean()
+  }
   providerCache.set(role, { list, expiresAt: Date.now() + PROVIDER_CACHE_TTL_MS })
   return list
 }
@@ -49,6 +165,7 @@ function openAiHeaders(provider, apiKey) {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   }
   const host = String(provider.baseUrl || '')
   if (host.includes('anthropic.com')) {
@@ -125,7 +242,16 @@ async function callOpenAiCompat(provider, { system, user, schema, maxRetries = 2
     if ([400, 401, 403, 404, 402].includes(resp.status)) {
       // Cấu hình sai hoặc hết tiền — thử lại cũng vậy, rơi xuống provider sau.
       const detail = typeof resp.data === 'string'
-        ? resp.data.slice(0, 200) : JSON.stringify(resp.data || {}).slice(0, 200)
+        ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300)
+      // OpenRouter hay trả "Cannot read image.png" khi model/type sai
+      // (key Gemini dán vào OpenAI, hoặc model vision). Hướng dẫn admin sửa.
+      if (/image\.png|does not support image/i.test(detail)) {
+        throw new AiError('PROVIDER_REJECTED',
+          `${provider.name}: model không nhận text-only (lỗi image input). `
+          + 'Nếu dùng key Gemini (AIza…): đặt Giao thức = Google Gemini, '
+          + 'model = gemini-2.0-flash (không ghi google/…). '
+          + 'Nếu dùng OpenRouter: model = google/gemini-2.5-flash, key sk-or-…')
+      }
       throw new AiError('PROVIDER_REJECTED',
         `${provider.name} từ chối request (HTTP ${resp.status}): ${detail}`)
     }
@@ -145,9 +271,11 @@ function readOpenAiReply(data, provider) {
     throw new AiError('EMPTY_RESPONSE', `${provider.name} trả về nội dung rỗng`)
   }
   if (choice.finish_reason === 'length') {
-    // Bị cắt vì chạm trần token đầu ra ⇒ JSON chắc chắn hỏng. Báo lỗi để lớp
-    // trên chia đôi lô (đầu vào nhỏ hơn thì đầu ra lọt dưới trần).
-    throw new AiError('TRUNCATED', `${provider.name} cắt phản hồi giữa chừng`)
+    try {
+      parseJsonObject(content)
+    } catch {
+      throw new AiError('TRUNCATED', `${provider.name} cắt phản hồi giữa chừng`)
+    }
   }
   const usage = data.usage || {}
   return {
@@ -159,32 +287,81 @@ function readOpenAiReply(data, provider) {
   }
 }
 
-/** Google Gemini — API riêng, không tương thích OpenAI. */
-async function callGemini(provider, { system, user, schema, maxRetries = 2 }) {
-  const apiKey = decrypt(provider.apiKeyEnc)
-  if (!apiKey) throw new AiError('PROVIDER_MISCONFIGURED', `Provider ${provider.name} chưa có API key`)
+/**
+ * Chuẩn hóa tên model Gemini.
+ * Admin hay dán nhầm `google/gemini-2.5-flash` (kiểu OpenRouter) hoặc
+ * `models/gemini-2.5-flash` — API native chỉ nhận `gemini-2.5-flash`.
+ */
+function normalizeGeminiModel(model) {
+  let name = String(model || '').trim()
+  name = name.replace(/^models\//, '')
+  name = name.replace(/^google\//, '')
+  if (name === 'gemini-2.0-flash' || !name) {
+    name = 'gemini-2.5-flash'
+  }
+  return name
+}
 
-  const base = provider.baseUrl || 'https://generativelanguage.googleapis.com/v1beta'
-  const url = `${base.replace(/\/+$/, '')}/models/${provider.model}:generateContent`
+/** Google Gemini — API riêng, không tương thích OpenAI. Chỉ gửi TEXT. */
+async function callGemini(provider, { system, user, schema, maxRetries = 3 }) {
+  const rawKey = decrypt(provider.apiKeyEnc)
+  if (!rawKey) throw new AiError('PROVIDER_MISCONFIGURED', `Provider ${provider.name} chưa có API key`)
+
+  const allKeys = rawKey.split(/[,;\n]+/).map((k) => k.trim()).filter(Boolean)
+  let keyIndex = 0
+  let apiKey = allKeys[0] || rawKey
+
+  const initialModel = normalizeGeminiModel(provider.model) || 'gemini-2.5-flash'
+  const fallbackList = [
+    initialModel,
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.5-pro',
+    'gemini-1.5-pro',
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i)
+
+  let base = (provider.baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '')
+  // Nếu admin dán nhầm endpoint OpenAI-compat của Google → ép về v1beta native.
+  if (base.includes('/openai')) {
+    base = 'https://generativelanguage.googleapis.com/v1beta'
+  }
+
   const generationConfig = {
     temperature: provider.temperature,
     maxOutputTokens: provider.maxTokens,
     responseMimeType: 'application/json',
   }
-  if (schema) generationConfig.responseSchema = toGeminiSchema(schema)
+  // responseSchema không bắt buộc — một số model/region lỗi schema thì vẫn
+  // chạy được nhờ responseMimeType=json + prompt đã dặn format.
+  if (schema) {
+    try {
+      generationConfig.responseSchema = toGeminiSchema(schema)
+    } catch {
+      // bỏ schema, vẫn yêu cầu JSON
+    }
+  }
 
+  // Chỉ TEXT — tuyệt đối không đính kèm image/file (tránh lỗi
+  // "Cannot read image.png (this model does not support image input)").
   const payload = {
-    systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
+    contents: [{ role: 'user', parts: [{ text: String(user || '') }] }],
     generationConfig,
+  }
+  if (system && String(system).trim()) {
+    payload.systemInstruction = { parts: [{ text: String(system).trim() }] }
   }
 
   let lastError = ''
+  let modelIndex = 0
+  let model = fallbackList[0]
+
   for (let attempt = 0; attempt < Math.max(1, maxRetries); attempt += 1) {
+    const url = `${base}/models/${model}:generateContent`
     let resp
     try {
       resp = await axios.post(url, payload, {
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        params: { key: apiKey },
         timeout: provider.timeoutMs || 180_000,
         validateStatus: () => true,
       })
@@ -212,24 +389,62 @@ async function callGemini(provider, { system, user, schema, maxRetries = 2 }) {
         },
       }
     }
-    if ([400, 401, 403, 404].includes(resp.status)) {
-      throw new AiError('PROVIDER_REJECTED',
-        `${provider.name} từ chối request (HTTP ${resp.status})`)
+    const detail = _geminiErrorDetail(resp.data)
+    if (resp.status === 429 || (resp.status === 403 && detail.toLowerCase().includes('quota'))) {
+      if (keyIndex + 1 < allKeys.length) {
+        keyIndex += 1
+        apiKey = allKeys[keyIndex]
+        lastError = `Rate limit trên key #${keyIndex}, đã chuyển sang key #${keyIndex + 1}`
+        continue
+      }
+      const waitMs = Math.min(2 ** (attempt + 1) * 2000 + Math.floor(Math.random() * 1000), 20_000)
+      lastError = `Rate limit (429): ${detail}`
+      await sleep(waitMs)
+      continue
     }
-    lastError = `HTTP ${resp.status}`
+    if ([400, 401, 403, 404].includes(resp.status)) {
+      // Schema không hỗ trợ → thử lại 1 lần không schema.
+      if (resp.status === 400 && generationConfig.responseSchema && attempt === 0) {
+        delete generationConfig.responseSchema
+        lastError = detail || `HTTP ${resp.status}`
+        continue
+      }
+      // Model 404 → chuyển sang model kế tiếp trong danh sách fallback
+      if (resp.status === 404 && modelIndex + 1 < fallbackList.length) {
+        modelIndex += 1
+        model = fallbackList[modelIndex]
+        lastError = detail || `HTTP ${resp.status}`
+        continue
+      }
+      throw new AiError('PROVIDER_REJECTED',
+        `${provider.name} từ chối request (HTTP ${resp.status}): ${detail}`)
+    }
+    lastError = detail || `HTTP ${resp.status}`
     await sleep(Math.min(2 ** (attempt + 1) * 2000, 15_000))
   }
   throw new AiError('PROVIDER_UNAVAILABLE', `Không gọi được ${provider.name} — ${lastError}`)
 }
 
-/** JSON Schema → lược đồ Gemini (không nhận `additionalProperties`). */
+function _geminiErrorDetail(data) {
+  if (!data) return ''
+  if (typeof data === 'string') return data.slice(0, 300)
+  const err = data.error || data
+  const msg = err.message || err.status || JSON.stringify(err).slice(0, 300)
+  return String(msg).slice(0, 300)
+}
+
+/** JSON Schema → lược đồ Gemini (không nhận `additionalProperties`, type viết HOA). */
 function toGeminiSchema(schema) {
   if (!schema || typeof schema !== 'object') return schema
   if (Array.isArray(schema)) return schema.map(toGeminiSchema)
   const out = {}
   for (const [k, v] of Object.entries(schema)) {
     if (k === 'additionalProperties') continue
-    out[k] = (v && typeof v === 'object') ? toGeminiSchema(v) : v
+    if (k === 'type' && typeof v === 'string') {
+      out[k] = v.toUpperCase()
+    } else {
+      out[k] = (v && typeof v === 'object') ? toGeminiSchema(v) : v
+    }
   }
   return out
 }
@@ -247,13 +462,19 @@ async function callWithFallback(role, args) {
   const list = await providersFor(role)
   if (!list.length) {
     throw new AiError('NO_PROVIDER',
-      `Chưa cấu hình nơi gọi mô hình cho "${role}". Thêm qua /v1/admin/providers.`, 503)
+      `Chưa cấu hình API Key cho "${role}". Hãy thêm GEMINI_API_KEY hoặc OPENROUTER_API_KEY vào tệp .env hoặc trang Cài đặt.`, 503)
   }
 
   let lastError = null
   for (const provider of list) {
     try {
-      const result = provider.type === 'google'
+      // Key Gemini (AIza...) bắt buộc đi API native — nếu admin lỡ chọn
+      // openai_compat/OpenRouter sẽ ra lỗi lạ kiểu "Cannot read image.png".
+      const apiKey = decrypt(provider.apiKeyEnc || '')
+      const looksGeminiKey = /^(AIza|AQ\.)/i.test(apiKey)
+      const useGemini = provider.type === 'google' || provider.type === 'gemini'
+        || looksGeminiKey
+      const result = useGemini
         ? await callGemini(provider, args)
         : await callOpenAiCompat(provider, args)
       AiProvider.updateOne({ _id: provider._id },
@@ -442,4 +663,5 @@ module.exports = {
   generatePost,
   invalidateProviders,
   providersFor,
+  syncProvidersFromEnv,
 }

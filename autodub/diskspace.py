@@ -170,6 +170,46 @@ def clean_project(work_dir: str) -> int:
     return freed
 
 
+def clean_audio_intermediates(work_dir: str) -> int:
+    """Xóa các file âm thanh thô nặng (segments/, demucs cache, wavs thô)
+    nhưng giữ lại toàn bộ phụ đề (transcript_vi.json, transcript_vi.srt),
+    metadata và video thành phẩm.
+    """
+    data_dir_path = os.path.join(work_dir, DATA_SUBDIR)
+    if not os.path.isdir(data_dir_path):
+        return 0
+
+    freed = 0
+    # Xóa thư mục segments/
+    seg_dir = os.path.join(data_dir_path, "segments")
+    if os.path.isdir(seg_dir):
+        sz = dir_size(seg_dir)
+        try:
+            shutil.rmtree(seg_dir)
+            freed += sz
+        except OSError:
+            pass
+
+    # Xóa các file wav thô trong data/
+    try:
+        for fname in os.listdir(data_dir_path):
+            if fname.endswith((".wav", ".enc", ".mp3")) and not fname.startswith("transcript"):
+                fpath = os.path.join(data_dir_path, fname)
+                if os.path.isfile(fpath):
+                    sz = _file_size(fpath)
+                    try:
+                        os.remove(fpath)
+                        freed += sz
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+
+    if freed:
+        logger.info(f"Đã dọn audio trung gian ({freed / (1024 ** 2):.1f} MB): {work_dir}")
+    return freed
+
+
 def clean_all(output_dir: str) -> tuple[int, int]:
     """Dọn tệp trung gian của mọi dự án đã xong trong thư mục kết quả.
 

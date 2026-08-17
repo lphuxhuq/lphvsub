@@ -81,6 +81,7 @@ class SegmentRow(QWidget):
     subtitle_edited = Signal(int, str)
     play_requested = Signal(int)
     resynth_requested = Signal(int)
+    ai_translate_requested = Signal(int)
     split_requested = Signal(int)
     merge_requested = Signal(int)
     delete_requested = Signal(int)
@@ -178,6 +179,8 @@ class SegmentRow(QWidget):
             (icons.play(tokens.SUCCESS), "Nghe câu này", self.play_requested),
             (icons.reload(tokens.ACCENT_BLUE), "Đọc lại câu này",
              self.resynth_requested),
+            (icons.globe(tokens.ACCENT_PURPLE), "Dịch lại câu này bằng AI (HHTech / Gemini / DeepSeek)",
+             self.ai_translate_requested),
             (icons.scissors(tokens.TEXT_SECONDARY), "Tách câu này làm đôi",
              self.split_requested),
             (icons.merge(tokens.TEXT_SECONDARY), "Gộp với câu bên dưới",
@@ -251,11 +254,13 @@ class SubtitleListPanel(QWidget):
     segment_selected = Signal(int)
     play_requested = Signal(int)
     resynth_requested = Signal(int)
+    ai_translate_requested = Signal(int)
     split_requested = Signal(int)
     merge_requested = Signal(int)
     delete_requested = Signal(int)
     voice_changed = Signal(int, str)     # (seg_id, tên giọng) — "" = giọng chung
     add_requested = Signal()
+    retranslate_all_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -307,9 +312,17 @@ class SubtitleListPanel(QWidget):
         self.list.currentRowChanged.connect(self._on_row_changed)
         root.addWidget(self.list, 1)
 
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(tokens.SP_2)
         add_button = GhostButton("Thêm câu mới")
         add_button.clicked.connect(self.add_requested.emit)
-        root.addWidget(add_button)
+        btn_row.addWidget(add_button)
+
+        retrans_btn = GhostButton("Dịch lại tất cả bằng AI")
+        retrans_btn.setToolTip("Dịch lại toàn bộ các câu thoại bằng AI bên thứ 3 (HHTech / Gemini / DeepSeek...)")
+        retrans_btn.clicked.connect(self.retranslate_all_requested.emit)
+        btn_row.addWidget(retrans_btn)
+        root.addLayout(btn_row)
 
     # -- Dữ liệu -------------------------------------------------------
     def set_segments(self, segments: list[dict],
@@ -343,6 +356,7 @@ class SubtitleListPanel(QWidget):
             row.subtitle_edited.connect(self.subtitle_edited.emit)
             row.play_requested.connect(self.play_requested.emit)
             row.resynth_requested.connect(self.resynth_requested.emit)
+            row.ai_translate_requested.connect(self.ai_translate_requested.emit)
             row.split_requested.connect(self.split_requested.emit)
             row.merge_requested.connect(self.merge_requested.emit)
             row.delete_requested.connect(self.delete_requested.emit)

@@ -70,7 +70,19 @@ class CapCutClient:
         else:
             self.device = DeviceConfig()
 
-        self.session = session or (requests.Session() if requests else None)
+        if session:
+            self.session = session
+        elif requests:
+            self.session = requests.Session()
+            try:
+                from requests.adapters import HTTPAdapter
+                adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16)
+                self.session.mount("https://", adapter)
+                self.session.mount("http://", adapter)
+            except Exception:
+                pass
+        else:
+            self.session = None
 
     # -------------------------------------------------------------------------
     # Voice Resolution Helper
@@ -348,7 +360,7 @@ class CapCutClient:
         resource_id: Optional[str] = None,
         rate: str = "1.0",
         wait: bool = True,
-        poll_interval: float = 1.0,
+        poll_interval: float = 0.25,
         timeout: float = 60.0,
     ) -> Dict[str, Any]:
         """
@@ -366,6 +378,7 @@ class CapCutClient:
         token = tasks[0]["token"]
 
         start_time = time.time()
+        time.sleep(0.15)
         while time.time() - start_time < timeout:
             query_res = self.query_tts_task(task_id, token)
             query_tasks = (query_res.get("data") or {}).get("tasks") or []
@@ -380,8 +393,6 @@ class CapCutClient:
                     query_tasks[0]["speech_url"] = payload["audio_subtitles"][0]["speech_url"]
 
                     return query_tasks[0]
-                if status in ("success", "succeed"):
-                    return query_res
                 elif status == "failed":
                     raise CapCutTaskError(f"TTS Task failed: {query_res}")
             time.sleep(poll_interval)

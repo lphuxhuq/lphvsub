@@ -11,13 +11,14 @@
 
 const CJK_RE = /[㐀-䶿一-鿿]/
 const FENCE_RE = /^\s*```(?:json)?\s*|\s*```\s*$/gi
+const CITE_RE = /\[cite:\s*[\d,\s]+\]/gi
 
 function containsCjk(text) {
   return CJK_RE.test(String(text || ''))
 }
 
 function stripFences(text) {
-  return String(text || '').trim().replace(FENCE_RE, '').trim()
+  return String(text || '').trim().replace(FENCE_RE, '').replace(CITE_RE, '').trim()
 }
 
 /** Cắt lấy phần từ dấu mở ngoặc đầu tiên tới dấu đóng cuối cùng. */

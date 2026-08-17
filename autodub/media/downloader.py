@@ -51,6 +51,68 @@ def normalize_url(url: str) -> str:
     return url
 
 
+import shutil
+
+
+def _get_optimized_opts(
+    output_dir: str,
+    outtmpl: str | None = None,
+    cookies_from_browser: str | None = None,
+    cookies_file: str | None = None,
+) -> dict:
+    """Cấu hình yt-dlp tối ưu tốc độ tải (đa luồng, chia chunk, DASH stream, aria2c)."""
+    template = outtmpl or os.path.join(output_dir, "%(id)s.%(ext)s")
+    opts: dict = {
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best",
+        "outtmpl": template,
+        "merge_output_format": "mp4",
+        "quiet": False,
+        "no_warnings": False,
+        "retries": 10,
+        "fragment_retries": 10,
+        "socket_timeout": 30,
+        # Tăng tốc độ tải: tải 16 phân mảnh đồng thời + chunk 10MB vượt giới hạn bóp băng thông
+        "concurrent_fragment_downloads": 16,
+        "http_chunk_size": 10485760,
+        "buffersize": 1048576,
+        # Header chuẩn tránh bị CDN Bilibili bóp băng thông hoặc chặn
+        "http_headers": {
+            "Referer": "https://www.bilibili.com/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        },
+        "extractor_args": {
+            "bilibili": {
+                "playback": "dash",
+            }
+        },
+    }
+
+    # Tự động dùng aria2c nếu có sẵn trên máy để tải tối đa băng thông
+    aria2 = shutil.which("aria2c")
+    if aria2:
+        opts["external_downloader"] = "aria2c"
+        opts["external_downloader_args"] = {
+            "aria2c": [
+                "-s", "16",
+                "-x", "16",
+                "-k", "1M",
+                "--file-allocation=none",
+                "--max-connection-per-server=16",
+                "--header=Referer: https://www.bilibili.com/",
+                "--header=User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "--check-certificate=false",
+                "--min-split-size=1M",
+            ]
+        }
+
+    if cookies_from_browser:
+        opts["cookiesfrombrowser"] = (cookies_from_browser,)
+    if cookies_file:
+        opts["cookiefile"] = cookies_file
+
+    return opts
+
+
 def download_video(url: str, output_dir: str) -> str:
     if not url:
         raise ValueError("URL cannot be empty")
@@ -71,32 +133,35 @@ def download_video(url: str, output_dir: str) -> str:
     if canonical != url:
         logger.info(f"Normalized URL: {url} -> {canonical}")
 
-    ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "outtmpl": os.path.join(output_dir, "%(id)s.%(ext)s"),
-        "merge_output_format": "mp4",
-        "quiet": False,
-        "no_warnings": False,
-        # Mạng chập chờn: tự thử lại thay vì fail cả video trong batch.
-        "retries": 5,
-        "fragment_retries": 5,
-        "socket_timeout": 30,
-    }
+    ydl_opts = _get_optimized_opts(output_dir, outtmpl=os.path.join(output_dir, "%(id)s.%(ext)s"))
 
     logger.info(f"Downloading video from: {canonical}")
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(canonical, download=True)
-        video_id = info.get("id", "video")
-        ext = info.get("ext", "mp4")
-        filepath = (_ydl_reported_path(info)
-                    or os.path.join(output_dir, f"{video_id}.{ext}"))
+    info = None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(canonical, download=True)
+    except Exception as e:
+        if "external_downloader" in ydl_opts:
+            logger.warning(f"aria2c tải gặp sự cố ({e}) — Tự động chuyển sang bộ tải native đa luồng...")
+            fallback_opts = dict(ydl_opts)
+            fallback_opts.pop("external_downloader", None)
+            fallback_opts.pop("external_downloader_args", None)
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                info = ydl.extract_info(canonical, download=True)
+        else:
+            raise
 
-        if not os.path.exists(filepath):
-            for f in sorted(os.listdir(output_dir)):
-                if f.startswith(video_id) and not _is_partial_name(f):
-                    filepath = os.path.join(output_dir, f)
-                    break
+    video_id = info.get("id", "video")
+    ext = info.get("ext", "mp4")
+    filepath = (_ydl_reported_path(info)
+                or os.path.join(output_dir, f"{video_id}.{ext}"))
+
+    if not os.path.exists(filepath):
+        for f in sorted(os.listdir(output_dir)):
+            if f.startswith(video_id) and not _is_partial_name(f):
+                filepath = os.path.join(output_dir, f)
+                break
 
     if not os.path.exists(filepath):
         raise RuntimeError(f"Download failed: file not found at {filepath}")
@@ -112,22 +177,13 @@ def build_ydl_opts(
     cookies_file: str | None = None,
 ) -> dict:
     """yt-dlp options for the standalone `autodub download` command."""
-    opts = {
-        # Use extractor + id as filename so TikTok/Douyin/YouTube don't collide
-        "outtmpl": os.path.join(output_dir, "%(extractor_key)s_%(id)s.%(ext)s"),
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "merge_output_format": "mp4",
-        "quiet": False,
-        "no_warnings": False,
-        "noprogress": False,
-        "retries": 5,
-        "fragment_retries": 5,
-        "socket_timeout": 30,
-    }
-    if cookies_from_browser:
-        opts["cookiesfrombrowser"] = (cookies_from_browser,)
-    if cookies_file:
-        opts["cookiefile"] = cookies_file
+    opts = _get_optimized_opts(
+        output_dir,
+        outtmpl=os.path.join(output_dir, "%(extractor_key)s_%(id)s.%(ext)s"),
+        cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies_file,
+    )
+    opts["noprogress"] = False
     return opts
 
 
@@ -198,8 +254,20 @@ def download_one(
 
     ydl_opts = build_ydl_opts(output_dir, cookies_from_browser, cookies_file)
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(canonical, download=True)
+    info = None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(canonical, download=True)
+    except Exception as e:
+        if "external_downloader" in ydl_opts:
+            logger.warning(f"aria2c tải gặp sự cố ({e}) — Tự động chuyển sang bộ tải native đa luồng...")
+            fallback_opts = dict(ydl_opts)
+            fallback_opts.pop("external_downloader", None)
+            fallback_opts.pop("external_downloader_args", None)
+            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                info = ydl.extract_info(canonical, download=True)
+        else:
+            raise
 
     filepath = _resolve_filepath(info, output_dir)
 

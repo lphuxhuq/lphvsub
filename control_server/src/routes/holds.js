@@ -17,7 +17,7 @@ module.exports = async function holdRoutes(fastify) {
 
   // --- Tạo hold (hoặc nhận lại hold active cùng holdId) -------------------
   fastify.post('/', {
-    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: 1000, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',

@@ -130,6 +130,7 @@ def read_json_secure(path: str, key: bytes | str | None = None) -> object:
     Không có khóa mà file lại mã hóa → :class:`SecureStoreError` (dự án đang
     khóa, cần lấy lại khóa từ máy chủ trước).
     """
+    import re
     with open(path, "rb") as f:
         blob = f.read()
     if blob.startswith(MAGIC):
@@ -137,8 +138,10 @@ def read_json_secure(path: str, key: bytes | str | None = None) -> object:
             raise SecureStoreError(
                 "File đang được mã hóa — cần khóa giải mã từ máy chủ.")
         blob = decrypt_bytes(blob, key)
+    text = blob.decode("utf-8")
+    cleaned = re.sub(r'\[cite:\s*[\d,\s]+\]', '', text)
     try:
-        return json.loads(blob.decode("utf-8"))
+        return json.loads(cleaned)
     except (ValueError, UnicodeDecodeError) as e:
         raise SecureStoreError(f"File JSON hỏng: {os.path.basename(path)}") from e
 

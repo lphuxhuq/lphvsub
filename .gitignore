@@ -47,6 +47,7 @@ smoke_err.txt
 control_server/node_modules/
 control_server/.env
 control_server/logs/
+control_server/data/
 
 # Website
 website/node_modules/

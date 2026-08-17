@@ -86,7 +86,8 @@ test('mã hóa API key: sửa một byte trong DB thì giải mã thất bại',
   const { encrypt, decrypt } = require('../src/utils/crypto')
   const enc = encrypt('sk-secret')
   const [iv, tag, data] = enc.split(':')
-  const tampered = `${iv}:${tag}:${data.slice(0, -2)}00`
+  const flip = data.endsWith('00') ? 'ff' : '00'
+  const tampered = `${iv}:${tag}:${data.slice(0, -2)}${flip}`
   assert.throws(() => decrypt(tampered))
 })
 

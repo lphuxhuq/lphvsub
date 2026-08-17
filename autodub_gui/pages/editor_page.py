@@ -231,6 +231,8 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.subtitles.delete_requested.connect(self._delete_segment)
         self.subtitles.voice_changed.connect(self._on_segment_voice_changed)
         self.subtitles.add_requested.connect(self._add_segment)
+        self.subtitles.ai_translate_requested.connect(self._ai_translate_one)
+        self.subtitles.retranslate_all_requested.connect(self._ai_retranslate_all)
 
         self.qc_panel = QCPanel()
         self.qc_panel.issue_clicked.connect(self._jump_to_issue)
@@ -515,6 +517,10 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             settings, opts.get("voice") or self._project.voice)
         self.voice_panel.set_project_voice(project_voice)
         self.overview.set_voice(project_voice)
+        selected_voice = opts.get("selected_voice")
+        if selected_voice and selected_voice != project_voice:
+            self.voice_panel.picker.set_voice(selected_voice)
+            self.voice_panel._refresh_hint()
         self.voice_panel.speed.set_value(
             float(opts.get("voice_speed", settings.voice_speed)))
         self.export_panel.set_source_info(0, 0, 0)
@@ -541,6 +547,10 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts.update(self.background_panel.values())
         opts.update(self.voice_panel.values())
         opts.update(self.export_panel.values())
+        opts["selected_voice"] = self.voice_panel.picker.voice()
+        opts["voice_speed"] = self.voice_panel.speed.value()
+        opts["subtitle_mode"] = self.export_panel.subtitle.current_key()
+        opts["subtitle_preset"] = self.export_panel.preset.current_key()
         opts["blur_regions"] = list(getattr(self, "_blur_regions", []))
         if getattr(self, "_subtitle_style", None):
             opts["subtitle_style"] = self._subtitle_style
@@ -846,6 +856,114 @@ class EditorPage(VoiceAndExportMixin, BasePage):
 
     def target_key(self) -> str:
         return self._state.target.key if self._state else "vi"
+
+    def _ai_translate_one(self, seg_id: int) -> None:
+        """Dịch lại một câu thoại bằng AI bên thứ 3."""
+        if not self._work_dir:
+            return
+        import threading
+        from PySide6.QtCore import QTimer
+        from autodub.config import Settings
+        from autodub.editor import retranslate_segment_ai
+        from autodub_gui.ui.toast import TOASTS
+
+        settings = self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        has_key = bool(
+            getattr(settings, "custom_ai_api_key", "").strip()
+            or getattr(settings, "gemini_api_key", "").strip()
+            or getattr(settings, "deepseek_api_key", "").strip()
+            or getattr(settings, "openrouter_api_key", "").strip()
+            or getattr(settings, "openai_api_key", "").strip()
+        )
+        if not has_key:
+            TOASTS.warn("Chưa cấu hình API Key AI. Vui lòng vào Cài đặt > Dịch thuật để nhập key (HHTech / Gemini...).")
+            return
+
+        TOASTS.info(f"Đang dịch lại câu {seg_id} bằng AI...")
+
+        def _worker():
+            try:
+                new_text = retranslate_segment_ai(
+                    self._work_dir,
+                    seg_id,
+                    target_key=self.target_key(),
+                    settings=settings,
+                )
+                def _done():
+                    self._on_text_edited(seg_id, new_text)
+                    self._flush_edits()
+                    self.reload_segments()
+                    TOASTS.success(f"Câu {seg_id}: đã dịch lại bằng AI thành công!")
+                QTimer.singleShot(0, _done)
+            except Exception as e:
+                def _err():
+                    TOASTS.error(f"Lỗi dịch lại câu {seg_id}: {e}")
+                QTimer.singleShot(0, _err)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _ai_retranslate_all(self) -> None:
+        """Dịch lại toàn bộ các câu thoại trong dự án bằng AI bên thứ 3."""
+        if not self._work_dir or not self._segments:
+            return
+        import threading
+        from PySide6.QtCore import QTimer
+        from autodub.config import Settings
+        from autodub.editor import retranslate_all_segments_ai
+        from autodub.progress import ProgressReporter
+        from autodub_gui.ui.modal import ConfirmDialog
+        from autodub_gui.ui.toast import TOASTS
+
+        settings = self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        has_key = bool(
+            getattr(settings, "custom_ai_api_key", "").strip()
+            or getattr(settings, "gemini_api_key", "").strip()
+            or getattr(settings, "deepseek_api_key", "").strip()
+            or getattr(settings, "openrouter_api_key", "").strip()
+            or getattr(settings, "openai_api_key", "").strip()
+        )
+        if not has_key:
+            TOASTS.warn("Chưa cấu hình API Key AI. Vui lòng vào Cài đặt > Dịch thuật.")
+            return
+
+        confirmed, _ = ConfirmDialog.ask(
+            self,
+            "Dịch lại toàn bộ dự án bằng AI",
+            f"Bạn có muốn dịch lại toàn bộ {len(self._segments)} câu bằng AI bên thứ 3?\n"
+            "Bản dịch mới sẽ tự động cập nhật vào danh sách và làm mới dự án.",
+            confirm_label="Bắt đầu dịch lại",
+            cancel_label="Khoan đã",
+        )
+        if not confirmed:
+            return
+
+        self._flush_edits()
+        TOASTS.info(f"Bắt đầu dịch lại {len(self._segments)} câu bằng AI...")
+        self.save_indicator.set_state("saving", "Đang dịch AI...")
+
+        def _worker():
+            try:
+                rep = ProgressReporter()
+                translated = retranslate_all_segments_ai(
+                    self._work_dir,
+                    target_key=self.target_key(),
+                    settings=settings,
+                    reporter=rep,
+                )
+                def _done():
+                    self._dirty_ids.update(int(s["id"]) for s in self._segments)
+                    self.reload_segments()
+                    self._refresh_banner()
+                    self.save_indicator.set_state("saved", "Đã dịch AI xong")
+                    TOASTS.success(f"Đã dịch lại xong toàn bộ {len(translated)} câu bằng AI!")
+                QTimer.singleShot(0, _done)
+            except Exception as e:
+                def _err():
+                    self.save_indicator.set_state("error", str(e))
+                    TOASTS.error(f"Lỗi dịch lại dự án: {e}")
+                QTimer.singleShot(0, _err)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     # -- Mở tệp và thư mục ---------------------------------------------
     def _open_work_folder(self) -> None:

@@ -358,6 +358,9 @@ class NewProjectPage(BasePage):
         data: dict = {}
         for step in self._steps:
             data.update(step.values())
+        data["blur_regions"] = list(getattr(self, "_blur_regions", []))
+        if getattr(self, "_subtitle_style", None):
+            data["subtitle_style"] = self._subtitle_style
         return data
 
     def _source_lang_label(self) -> str:
@@ -382,14 +385,14 @@ class NewProjectPage(BasePage):
             ("Độ chính xác khi nghe",
              label_of(consts.WHISPER_MODELS, data["whisper_model"])),
             ("Cách dịch",
-             "tự động (12 Vox/câu)" if data["auto_translate"]
-             else "dịch tay có hướng dẫn (10 Vox/câu)"),
+             ("Google Gemini Direct (Trực tiếp, Đa luồng)" if data.get("translate_engine") == "gemini" and data.get("gemini_api_key")
+              else ("tự động qua VoxDub Cloud" if data["auto_translate"] else "dịch tay có hướng dẫn"))),
             ("Phong cách dịch",
              label_of([(a, b) for a, b, _c in consts.TRANSLATE_STYLES],
                       data["translate_style"])
              if data["auto_translate"] else "—"),
             ("Tiêu đề + mô tả đăng bài",
-             "có (+20 Vox)" if data["generate_metadata"] else "không"),
+             "có" if data["generate_metadata"] else "không"),
             ("Giọng đọc",
              f"{data['voice'] or 'theo cài đặt chung'} · "
              f"tốc độ {data['voice_speed']:.2f}x"),
@@ -430,8 +433,11 @@ class NewProjectPage(BasePage):
         if not isinstance(data, dict):
             data = {}
         if data:
+            self._blur_regions = list(data.get("blur_regions") or [])
+            self._subtitle_style = data.get("subtitle_style")
             for step in self._steps:
                 step.load(data)
+            self._update_style_summary()
         else:
             self._apply_defaults_from_settings()
         self._restore_active_session(data)
@@ -475,11 +481,30 @@ class NewProjectPage(BasePage):
         self.step_recognize.model.set_key(settings.whisper_model)
         self.step_translate.auto_translate.setChecked(settings.translate_enabled)
         self.step_translate.metadata.setChecked(settings.generate_metadata)
+        if hasattr(self.step_translate, "custom_ai_base_url"):
+            self.step_translate.custom_ai_base_url.set_text(settings.custom_ai_base_url or "https://hhtechapi.net/v1")
+        if hasattr(self.step_translate, "custom_ai_key"):
+            self.step_translate.custom_ai_key.set_text(settings.custom_ai_api_key)
+        if hasattr(self.step_translate, "custom_ai_model"):
+            self.step_translate.custom_ai_model.set_text(settings.custom_ai_model or "deepseek-v4-flash")
+        if hasattr(self.step_translate, "gemini_key"):
+            self.step_translate.gemini_key.set_text(settings.gemini_api_key)
+        if hasattr(self.step_translate, "gemini_model") and settings.gemini_model:
+            self.step_translate.gemini_model.set_key(settings.gemini_model)
+        if hasattr(self.step_translate, "deepseek_key"):
+            self.step_translate.deepseek_key.set_text(settings.deepseek_api_key)
+        if hasattr(self.step_translate, "openrouter_key"):
+            self.step_translate.openrouter_key.set_text(settings.openrouter_api_key)
+        if hasattr(self.step_translate, "openai_key"):
+            self.step_translate.openai_key.set_text(settings.openai_api_key)
         self.step_voice.picker.reload(settings)
         self.step_voice.picker.set_voice(settings.vieneu_voice)
         self.step_voice.speed.set_value(settings.voice_speed)
         self.step_voice.mode.set_key(settings.subtitle_mode)
         self.step_voice.preset.set_key(settings.subtitle_preset)
+        self._blur_regions = list(settings.blur_regions_list())
+        self._subtitle_style = settings.subtitle_style()
+        self._update_style_summary()
 
     def _clear_draft(self) -> None:
         confirmed, _ = ConfirmDialog.ask(
@@ -495,9 +520,12 @@ class NewProjectPage(BasePage):
             pass
         self._active_work_dir = ""
         self._active_status = ""
+        self._blur_regions = []
+        self._subtitle_style = None
         for step in self._steps:
             step.load({})
         self._apply_defaults_from_settings()
+        self._update_style_summary()
         self._go_to_step(0)
         TOASTS.info("Đã xóa bản nháp.")
 
@@ -553,6 +581,12 @@ class NewProjectPage(BasePage):
         # tọa độ đã chuẩn hóa 0..1 nên áp đúng lên video sau khi tải về.
         self._blur_regions = dialog.regions()
         self._update_style_summary()
+        try:
+            settings = self._settings_provider()
+            self._persist_pricing_choices(settings, self.values())
+        except Exception:
+            pass
+        self._on_form_changed()
 
     def _update_style_summary(self) -> None:
         parts: list[str] = []
@@ -644,6 +678,22 @@ class NewProjectPage(BasePage):
         changes = {"voice_speed": data["voice_speed"],
                    "translate_enabled": bool(data["auto_translate"]),
                    "generate_metadata": bool(data["generate_metadata"])}
+        if "custom_ai_base_url" in data and data["custom_ai_base_url"]:
+            changes["custom_ai_base_url"] = data["custom_ai_base_url"]
+        if "custom_ai_api_key" in data:
+            changes["custom_ai_api_key"] = data["custom_ai_api_key"]
+        if "custom_ai_model" in data and data["custom_ai_model"]:
+            changes["custom_ai_model"] = data["custom_ai_model"]
+        if "gemini_api_key" in data:
+            changes["gemini_api_key"] = data["gemini_api_key"]
+        if "gemini_model" in data and data["gemini_model"]:
+            changes["gemini_model"] = data["gemini_model"]
+        if "deepseek_api_key" in data:
+            changes["deepseek_api_key"] = data["deepseek_api_key"]
+        if "openrouter_api_key" in data:
+            changes["openrouter_api_key"] = data["openrouter_api_key"]
+        if "openai_api_key" in data:
+            changes["openai_api_key"] = data["openai_api_key"]
         if merged != settings.translate_style_notes:
             changes["translate_style_notes"] = merged
         if data["asr_engine"]:
@@ -656,13 +706,102 @@ class NewProjectPage(BasePage):
         return replace(settings, **changes)
 
     def _persist_pricing_choices(self, settings, data: dict) -> None:
-        """Ghi lựa chọn dịch tự động + gói đăng bài về tệp cấu hình."""
+        """Ghi lựa chọn wizard về .env để dự án sau mở ra đúng như lần này.
+
+        Không chỉ giá (dịch / metadata): giọng, tốc độ, ASR, phụ đề, font chữ,
+        vùng che mờ… cũng lưu lại. .env là mặc định cho video mới.
+        """
+        import json
         from autodub_gui.env_store import bool_to_env, write_env
+
         updates: dict[str, str] = {}
-        if bool(data["auto_translate"]) != settings.translate_enabled:
-            updates["TRANSLATE_ENABLED"] = bool_to_env(data["auto_translate"])
-        if bool(data["generate_metadata"]) != settings.generate_metadata:
-            updates["GENERATE_METADATA"] = bool_to_env(data["generate_metadata"])
+
+        def put(key: str, new: str, old) -> None:
+            if str(new) != str(old if old is not None else ""):
+                updates[key] = str(new)
+
+        put("TRANSLATE_ENABLED",
+            bool_to_env(bool(data["auto_translate"])),
+            bool_to_env(settings.translate_enabled))
+        put("GENERATE_METADATA",
+            bool_to_env(bool(data["generate_metadata"])),
+            bool_to_env(settings.generate_metadata))
+        if "custom_ai_base_url" in data:
+            put("CUSTOM_AI_BASE_URL", data["custom_ai_base_url"], settings.custom_ai_base_url)
+        if "custom_ai_api_key" in data:
+            put("CUSTOM_AI_API_KEY", data["custom_ai_api_key"], settings.custom_ai_api_key)
+        if "custom_ai_model" in data:
+            put("CUSTOM_AI_MODEL", data["custom_ai_model"], settings.custom_ai_model)
+        if "gemini_api_key" in data:
+            put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
+        if "gemini_model" in data and data["gemini_model"]:
+            put("GEMINI_MODEL", data["gemini_model"], settings.gemini_model)
+        if "deepseek_api_key" in data:
+            put("DEEPSEEK_API_KEY", data["deepseek_api_key"], settings.deepseek_api_key)
+        if "openrouter_api_key" in data:
+            put("OPENROUTER_API_KEY", data["openrouter_api_key"], settings.openrouter_api_key)
+        if "openai_api_key" in data:
+            put("OPENAI_API_KEY", data["openai_api_key"], settings.openai_api_key)
+        if data.get("asr_engine"):
+            put("ASR_ENGINE", data["asr_engine"], settings.asr_engine)
+        if data.get("whisper_model"):
+            put("WHISPER_MODEL", data["whisper_model"], settings.whisper_model)
+        if data.get("voice"):
+            put("VIENEU_VOICE", data["voice"], settings.vieneu_voice)
+        put("VOICE_SPEED", f"{float(data['voice_speed']):.2f}",
+            f"{float(settings.voice_speed):.2f}")
+        if data.get("subtitle_mode"):
+            put("SUBTITLE_MODE", data["subtitle_mode"], settings.subtitle_mode)
+        if data.get("subtitle_preset"):
+            put("SUBTITLE_PRESET", data["subtitle_preset"],
+                settings.subtitle_preset)
+        if data.get("bg_mode"):
+            try:
+                from autodub_gui.env_store import read_env
+                old_bg = read_env().get("BG_MODE", "")
+            except OSError:
+                old_bg = ""
+            put("BG_MODE", data["bg_mode"], old_bg)
+
+        # Lưu cài đặt chi tiết về kiểu chữ & font cho các dự án sau
+        style = getattr(self, "_subtitle_style", None)
+        if style:
+            if "font" in style:
+                put("SUBTITLE_FONT", str(style["font"]), settings.subtitle_font)
+            if "font_size" in style:
+                put("SUBTITLE_FONT_SIZE", str(style["font_size"]), str(settings.subtitle_font_size))
+            if "position" in style:
+                put("SUBTITLE_POSITION", str(style["position"]), settings.subtitle_position)
+            if "color" in style:
+                put("SUBTITLE_COLOR", str(style["color"]), settings.subtitle_color)
+            if "outline" in style:
+                put("SUBTITLE_OUTLINE", str(style["outline"]), str(settings.subtitle_outline))
+            if "outline_color" in style:
+                put("SUBTITLE_OUTLINE_COLOR", str(style["outline_color"]), settings.subtitle_outline_color)
+            if "shadow" in style:
+                put("SUBTITLE_SHADOW", str(style["shadow"]), str(settings.subtitle_shadow))
+            if "bold" in style:
+                put("SUBTITLE_BOLD", bool_to_env(bool(style["bold"])), bool_to_env(settings.subtitle_bold))
+            if "box" in style:
+                put("SUBTITLE_BOX", str(style["box"]), settings.subtitle_box)
+            if "box_color" in style:
+                put("SUBTITLE_BOX_COLOR", str(style["box_color"]), settings.subtitle_box_color)
+            if "box_opacity" in style:
+                put("SUBTITLE_BOX_OPACITY", str(style["box_opacity"]), str(settings.subtitle_box_opacity))
+            if "display" in style:
+                put("SUBTITLE_DISPLAY", str(style["display"]), settings.subtitle_display)
+            if "words_per_cue" in style:
+                put("KARAOKE_WORDS_PER_CUE", str(style["words_per_cue"]), str(settings.karaoke_words_per_cue))
+            if "effect" in style:
+                put("KARAOKE_EFFECT", str(style["effect"]), settings.karaoke_effect)
+            if "highlight_color" in style:
+                put("KARAOKE_HIGHLIGHT_COLOR", str(style["highlight_color"]), settings.karaoke_highlight_color)
+
+        # Lưu vùng làm mờ mặc định cho các dự án sau
+        blur_regions = getattr(self, "_blur_regions", [])
+        blur_str = json.dumps(blur_regions) if blur_regions else ""
+        put("BLUR_REGIONS", blur_str, settings.blur_regions)
+
         if not updates:
             return
         try:

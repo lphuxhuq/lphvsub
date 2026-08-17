@@ -232,12 +232,18 @@ class Settings:
     generate_metadata: bool = True
 
     # --- Dịch tự động -----------------------------------------------------
-    # Mô hình, lời nhắc và API key đều nằm trên máy chủ VoxDub — app chỉ gửi
-    # câu thoại và ngữ cảnh. Hai nút vặn dưới đây là thứ duy nhất còn lại ở
-    # phía máy khách vì chúng quyết định cách CHIA VIỆC, không phải cách dịch.
     translate_enabled: bool = True
     # Số câu mỗi lượt gửi lên máy chủ (trần cứng phía máy chủ là 120).
     translate_batch_size: int = 40
+    # Khóa API của các dịch vụ dịch AI (tự động đồng bộ sang máy chủ khi chạy)
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    openrouter_api_key: str = ""
+    openai_api_key: str = ""
+    deepseek_api_key: str = ""
+    custom_ai_base_url: str = "https://hhtechapi.net/v1"
+    custom_ai_api_key: str = ""
+    custom_ai_model: str = "deepseek-v4-flash"
 
     # --- Phụ đề -----------------------------------------------------------
     # Kiểu mặc định: "none" | "soft" (tệp rời) | "burn" (ghi thẳng vào hình)
@@ -271,6 +277,9 @@ class Settings:
     # Khớp mốc chữ THẬT bằng Whisper nghe lại giọng đọc (~30-60s/video).
     # Tắt = ước lượng theo âm tiết (nhanh, kém chính xác hơn một chút).
     karaoke_alignment: bool = True
+
+    # Danh sách vùng làm mờ/che phụ đề mặc định (dạng chuỗi JSON)
+    blur_regions: str = ""
 
     # ------------------------------------------------------------------ #
 
@@ -394,6 +403,14 @@ class Settings:
                               not in ("0", "false", "no"),
             translate_batch_size=max(1, min(100,
                 env_int("TRANSLATE_BATCH_SIZE", "40"))),
+            gemini_api_key=env("GEMINI_API_KEY", "", "GOOGLE_API_KEY", "SEED_GEMINI_API_KEY").strip(),
+            gemini_model=env("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash",
+            openrouter_api_key=env("OPENROUTER_API_KEY", "", "SEED_OPENROUTER_API_KEY").strip(),
+            openai_api_key=env("OPENAI_API_KEY", "", "SEED_OPENAI_API_KEY").strip(),
+            deepseek_api_key=env("DEEPSEEK_API_KEY", "", "SEED_DEEPSEEK_API_KEY").strip(),
+            custom_ai_base_url=env("CUSTOM_AI_BASE_URL", "https://hhtechapi.net/v1", "HHTECH_BASE_URL", "OPENAI_COMPAT_BASE_URL").strip() or "https://hhtechapi.net/v1",
+            custom_ai_api_key=env("CUSTOM_AI_API_KEY", "", "HHTECH_API_KEY", "OPENAI_COMPAT_API_KEY").strip(),
+            custom_ai_model=env("CUSTOM_AI_MODEL", "deepseek-v4-flash", "HHTECH_MODEL", "OPENAI_COMPAT_MODEL").strip() or "deepseek-v4-flash",
             subtitle_mode=_one_of(env("SUBTITLE_MODE", "none"),
                                   ("none", "soft", "burn"), "none"),
             subtitle_preset=env("SUBTITLE_PRESET", "clean").strip() or "clean",
@@ -427,7 +444,18 @@ class Settings:
                                         "#FFD54A").strip() or "#FFD54A",
             karaoke_alignment=env_bool("KARAOKE_ALIGNMENT",
                                        _p["karaoke_alignment"]),
+            blur_regions=env("BLUR_REGIONS", "").strip(),
         )
+
+    def blur_regions_list(self) -> list[dict]:
+        """Danh sách vùng làm mờ phụ đề mặc định."""
+        if not self.blur_regions:
+            return []
+        try:
+            val = json.loads(self.blur_regions)
+            return val if isinstance(val, list) else []
+        except Exception:
+            return []
 
     # --- Kiểm tra cấu hình -------------------------------------------------
 

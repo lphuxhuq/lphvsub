@@ -70,8 +70,14 @@ if errorlevel 1 (
     echo  Ban van co the cai tiep phan con lai ngay bay gio.
     echo.
     pause
-) else (
     echo  Da tim thay ffmpeg
+)
+
+where aria2c >nul 2>&1
+if errorlevel 1 (
+    echo  (Tuy chon) Chua co aria2c. Muon tai video nhanh hon, hay chay: winget install aria2.aria2
+) else (
+    echo  Da tim thay aria2c - se tu dong tang toc tai video
 )
 
 echo.

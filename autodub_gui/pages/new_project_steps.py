@@ -302,46 +302,118 @@ class TranslateStep(_StepPanel):
         self.body.addWidget(LabeledWidget(
             "Dịch sang", target, "Bản này chỉ lồng tiếng Việt."))
 
-        # Hai lựa chọn quyết định giá của video — lưu lại vào Cài đặt khi
-        # bấm chạy để các video sau dùng luôn, khỏi chọn lại.
-        self.auto_translate = QCheckBox("Dịch tự động qua máy chủ VoxDub")
+        # Hai lựa chọn quyết định dịch & metadata
+        self.auto_translate = QCheckBox("Dịch tự động bằng AI")
         self.auto_translate.setToolTip(
-            "Bật: máy chủ dịch toàn bộ, 12 Vox mỗi câu thoại. Tắt: ứng dụng "
-            "dừng ở bước dịch và hướng dẫn bạn dịch tay, còn 10 Vox mỗi câu.")
+            "Bật: tự động dịch toàn bộ các câu thoại sang tiếng Việt. Tắt: dừng ở bước dịch để bạn dịch tay.")
         self.auto_translate.setChecked(True)
         self.auto_translate.toggled.connect(self._on_auto_translate)
         self.body.addWidget(self.auto_translate)
 
-        self.metadata = QCheckBox("Tạo tiêu đề + mô tả đăng bài (+20 Vox)")
+        self.metadata = QCheckBox("Tạo tiêu đề + mô tả đăng bài (YouTube/TikTok/Facebook)")
         self.metadata.setToolTip(
-            "Máy chủ viết sẵn tiêu đề, mô tả và thẻ cho mạng xã hội, lưu vào "
-            "tệp youtube_post.txt trong thư mục dự án. Tắt đi nếu bạn tự viết.")
+            "AI viết sẵn tiêu đề, mô tả và hashtag cho mạng xã hội, lưu vào "
+            "tệp youtube_post.txt trong thư mục dự án.")
         self.metadata.setChecked(True)
         self.metadata.toggled.connect(lambda _c: self.changed.emit())
         self.body.addWidget(self.metadata)
+
+        # Bộ chọn công nghệ dịch: HHTech / Custom AI, Gemini, DeepSeek, OpenRouter, OpenAI, VoxDub Cloud
+        self.engine = LabeledCombo(
+            "Công nghệ dịch",
+            [
+                ("HHTech API / AI bên thứ 3 (DeepSeek V4, Grok 4.6, Custom Proxy)", "custom_ai"),
+                ("Google Gemini Direct API (Nhanh, chia luồng song song)", "gemini"),
+                ("DeepSeek API Trực tiếp (deepseek-chat)", "deepseek"),
+                ("OpenRouter API (Hàng trăm mô hình AI)", "openrouter"),
+                ("OpenAI API (GPT-4o, GPT-4o-mini)", "openai"),
+                ("VoxDub Cloud (Máy chủ dịch tự động)", "saas"),
+            ],
+            "Chọn nơi xử lý dịch thuật: API bên thứ 3 (HHTech/Gemini/DeepSeek) hoặc qua máy chủ VoxDub.")
+        self.engine.changed.connect(self._on_engine_changed)
+
+        # 1. Các ô nhập cho Custom AI / HHTech API
+        self.custom_ai_base_url = LabeledLineEdit(
+            "Base URL API bên thứ 3",
+            "https://hhtechapi.net/v1",
+            "Địa chỉ API tương thích chuẩn OpenAI (ví dụ: https://hhtechapi.net/v1).")
+        self.custom_ai_base_url.changed.connect(lambda _t: self.changed.emit())
+
+        self.custom_ai_key = LabeledLineEdit(
+            "API Key bên thứ 3 (HHTech / Custom)",
+            "sk-... (có thể dán nhiều key cách nhau bằng dấu phẩy)",
+            "Khóa API từ hhtechapi.net hoặc proxy OpenAI tương thích.")
+        self.custom_ai_key.changed.connect(lambda _t: self.changed.emit())
+
+        self.custom_ai_model = LabeledLineEdit(
+            "Mô hình AI bên thứ 3",
+            "deepseek-v4-flash",
+            "Tên model muốn dùng (ví dụ: deepseek-v4-flash, grok-4.6, deepseek-v4-pro, gpt-4o-mini).")
+        self.custom_ai_model.changed.connect(lambda _t: self.changed.emit())
+
+        # 2. Các ô nhập cho Gemini
+        self.gemini_key = LabeledLineEdit(
+            "Google Gemini API Key(s)",
+            "AIzaSyKey1, AIzaSyKey2... (dán 1 hoặc nhiều key để chia luồng)",
+            "Khóa API Gemini (lấy miễn phí tại aistudio.google.com). Có thể nhập nhiều key để chia luồng.")
+        self.gemini_key.changed.connect(lambda _t: self.changed.emit())
+
+        self.gemini_model = LabeledCombo(
+            "Mô hình Gemini",
+            [
+                ("Gemini 2.5 Flash (Mới nhất, nhanh & chuẩn)", "gemini-2.5-flash"),
+                ("Gemini 1.5 Flash (Ổn định, tốc độ cao)", "gemini-1.5-flash"),
+                ("Gemini 2.5 Pro (Văn phong cao cấp, thông minh)", "gemini-2.5-pro"),
+            ],
+            "Mô hình AI xử lý dịch thuật và tạo nội dung đăng bài.")
+        self.gemini_model.changed.connect(self.changed.emit)
+
+        # 3. Các ô nhập cho DeepSeek, OpenRouter, OpenAI
+        self.deepseek_key = LabeledLineEdit(
+            "DeepSeek API Key",
+            "sk-...",
+            "Khóa API DeepSeek từ platform.deepseek.com.")
+        self.deepseek_key.changed.connect(lambda _t: self.changed.emit())
+
+        self.openrouter_key = LabeledLineEdit(
+            "OpenRouter API Key",
+            "sk-or-v1-...",
+            "Khóa API OpenRouter từ openrouter.ai.")
+        self.openrouter_key.changed.connect(lambda _t: self.changed.emit())
+
+        self.openai_key = LabeledLineEdit(
+            "OpenAI API Key",
+            "sk-...",
+            "Khóa API OpenAI từ platform.openai.com.")
+        self.openai_key.changed.connect(lambda _t: self.changed.emit())
 
         self.style = LabeledCombo(
             "Phong cách dịch",
             [(label, key) for label, key, _note in consts.TRANSLATE_STYLES],
             "Quyết định giọng văn của bản dịch, ví dụ trang trọng hay đời thường.")
-        self.engine_row = LabeledWidget(
-            "Dịch bằng", self._engine_view(),
-            "Máy chủ VoxDub tự chọn mô hình tốt nhất — bạn không phải cấu "
-            "hình gì.")
         self.note = LabeledLineEdit(
             "Ghi chú thêm cho người dịch",
             "ví dụ: giữ tên nhân vật Hán Việt, xưng hô mình với các bạn",
             "Ghi chú này được gửi kèm mỗi lần dịch.")
         self.style.changed.connect(self.changed.emit)
         self.note.changed.connect(lambda _t: self.changed.emit())
+
+        self.body.addWidget(self.engine)
+        self.body.addWidget(self.custom_ai_base_url)
+        self.body.addWidget(self.custom_ai_key)
+        self.body.addWidget(self.custom_ai_model)
+        self.body.addWidget(self.gemini_key)
+        self.body.addWidget(self.gemini_model)
+        self.body.addWidget(self.deepseek_key)
+        self.body.addWidget(self.openrouter_key)
+        self.body.addWidget(self.openai_key)
         self.body.addWidget(self.style)
-        self.body.addWidget(self.engine_row)
         self.body.addWidget(self.note)
 
         self.manual_note = QLabel(
             "Đã tắt dịch tự động: chạy tới bước dịch, ứng dụng sẽ dừng lại và "
             "mở hướng dẫn để bạn tự dịch (theo TRANSLATE_PENDING.txt), xong "
-            "bấm tiếp tục. Giá video vẫn tính theo số câu thoại.")
+            "bấm tiếp tục.")
         self.manual_note.setWordWrap(True)
         self.manual_note.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
@@ -350,19 +422,24 @@ class TranslateStep(_StepPanel):
         self.body.addWidget(self.manual_note)
         self.finish()
 
-    @staticmethod
-    def _engine_view() -> QLabel:
-        view = QLabel("VoxDub Cloud")
-        view.setStyleSheet(
-            f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: {tokens.BG_INPUT}; "
-            f"border-radius: 8px; padding: 8px 12px;")
-        return view
+    def _on_engine_changed(self) -> None:
+        key = self.engine.current_key()
+        self.custom_ai_base_url.setVisible(key == "custom_ai")
+        self.custom_ai_key.setVisible(key == "custom_ai")
+        self.custom_ai_model.setVisible(key == "custom_ai")
+        self.gemini_key.setVisible(key == "gemini")
+        self.gemini_model.setVisible(key == "gemini")
+        self.deepseek_key.setVisible(key == "deepseek")
+        self.openrouter_key.setVisible(key == "openrouter")
+        self.openai_key.setVisible(key == "openai")
+        self.changed.emit()
 
     def _on_auto_translate(self, checked: bool) -> None:
-        # Tắt dịch tự động thì phong cách và ghi chú không được gửi đi đâu
-        # cả — mờ chúng đi cho khỏi gây hiểu lầm.
-        for widget in (self.style, self.engine_row, self.note):
+        for widget in (
+            self.engine, self.custom_ai_base_url, self.custom_ai_key, self.custom_ai_model,
+            self.gemini_key, self.gemini_model, self.deepseek_key, self.openrouter_key,
+            self.openai_key, self.style, self.note
+        ):
             widget.setEnabled(checked)
         self.manual_note.setVisible(not checked)
         self.changed.emit()
@@ -374,22 +451,70 @@ class TranslateStep(_StepPanel):
         return {
             "auto_translate": self.auto_translate.isChecked(),
             "generate_metadata": self.metadata.isChecked(),
+            "translate_engine": self.engine.current_key(),
+            "custom_ai_base_url": self.custom_ai_base_url.text().strip(),
+            "custom_ai_api_key": self.custom_ai_key.text().strip(),
+            "custom_ai_model": self.custom_ai_model.text().strip(),
+            "gemini_api_key": self.gemini_key.text().strip(),
+            "gemini_model": self.gemini_model.current_key(),
+            "deepseek_api_key": self.deepseek_key.text().strip(),
+            "openrouter_api_key": self.openrouter_key.text().strip(),
+            "openai_api_key": self.openai_key.text().strip(),
             "translate_style": self.style.current_key(),
             "translate_note": self.note.text(),
         }
 
     def load(self, data: dict) -> None:
-        # Nháp chưa có hai mục mới thì rơi về giá trị trong Cài đặt — hai
-        # nơi luôn thống nhất, giống cách VoiceStep xử lý phụ đề.
         try:
             from autodub.config import Settings
             settings = Settings.load()
             fb_auto = settings.translate_enabled
             fb_meta = settings.generate_metadata
+            fb_custom_base = settings.custom_ai_base_url or "https://hhtechapi.net/v1"
+            fb_custom_key = settings.custom_ai_api_key
+            fb_custom_model = settings.custom_ai_model or "deepseek-v4-flash"
+            fb_gemini_key = settings.gemini_api_key
+            fb_gemini_model = settings.gemini_model
+            fb_deepseek_key = settings.deepseek_api_key
+            fb_openrouter_key = settings.openrouter_api_key
+            fb_openai_key = settings.openai_api_key
         except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
             fb_auto, fb_meta = True, True
+            fb_custom_base, fb_custom_key, fb_custom_model = "https://hhtechapi.net/v1", "", "deepseek-v4-flash"
+            fb_gemini_key, fb_gemini_model = "", "gemini-2.5-flash"
+            fb_deepseek_key, fb_openrouter_key, fb_openai_key = "", "", ""
+
         self.auto_translate.setChecked(bool(data.get("auto_translate", fb_auto)))
         self.metadata.setChecked(bool(data.get("generate_metadata", fb_meta)))
+        
+        self.custom_ai_base_url.set_text(data.get("custom_ai_base_url", fb_custom_base))
+        self.custom_ai_key.set_text(data.get("custom_ai_api_key", fb_custom_key))
+        self.custom_ai_model.set_text(data.get("custom_ai_model", fb_custom_model))
+
+        self.gemini_key.set_text(data.get("gemini_api_key", fb_gemini_key))
+        self.gemini_model.set_key(data.get("gemini_model", fb_gemini_model or "gemini-2.5-flash"))
+
+        self.deepseek_key.set_text(data.get("deepseek_api_key", fb_deepseek_key))
+        self.openrouter_key.set_text(data.get("openrouter_api_key", fb_openrouter_key))
+        self.openai_key.set_text(data.get("openai_api_key", fb_openai_key))
+
+        engine_key = data.get("translate_engine")
+        if not engine_key:
+            if fb_custom_key:
+                engine_key = "custom_ai"
+            elif fb_gemini_key:
+                engine_key = "gemini"
+            elif fb_deepseek_key:
+                engine_key = "deepseek"
+            elif fb_openrouter_key:
+                engine_key = "openrouter"
+            elif fb_openai_key:
+                engine_key = "openai"
+            else:
+                engine_key = "custom_ai"
+        self.engine.set_key(engine_key)
+        self._on_engine_changed()
+
         self.style.set_key(data.get("translate_style", "natural"))
         self.note.set_text(data.get("translate_note", ""))
         self._on_auto_translate(self.auto_translate.isChecked())

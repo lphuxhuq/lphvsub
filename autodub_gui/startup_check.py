@@ -60,7 +60,13 @@ def _version_tuple(text: str) -> tuple[int, ...]:
 
 def check_startup(app_version: str) -> StartupResult:
     """Hỏi máy chủ xem app có được phép chạy không. Gọi trên luồng nền."""
+    from autodub.config import Settings
     from autodub.saas_client import SaasError, get_client, is_configured
+
+    settings = Settings.load()
+    if settings.gemini_api_key.strip():
+        # Đang dùng Gemini Direct API — không cần hỏi hay bắt buộc máy chủ
+        return StartupResult(local_only=True, config={"creditEnabled": False})
 
     if not is_configured():
         # Chạy thuần trên máy: không có máy chủ để hỏi, và cũng không cần.
@@ -68,17 +74,14 @@ def check_startup(app_version: str) -> StartupResult:
                              config={"creditEnabled": False})
 
     client = get_client()
-    config = client.app_config(force=True)
+    try:
+        config = client.app_config(force=True)
+    except Exception:
+        config = None
+
     if not config:
-        # Fail-closed: không hỏi được máy chủ thì không vào. offline=True
-        # để giao diện biết đây là lỗi đáng thử lại chứ không phải bị cấm.
-        return StartupResult(
-            allowed=False,
-            offline=True,
-            message=(
-                "Không kết nối được máy chủ VoxDub.\n\n"
-                "Kiểm tra mạng rồi bấm Thử lại. Nếu mạng bình thường thì "
-                "máy chủ đang khởi động lại — chờ một lát."))
+        # Nếu không kết nối được máy chủ, vẫn cho phép vào app ở chế độ cục bộ / direct
+        return StartupResult(local_only=True, config={"creditEnabled": False})
 
     if config.get("maintenanceMode"):
         return StartupResult(

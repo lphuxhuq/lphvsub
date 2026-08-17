@@ -39,14 +39,13 @@ from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.translate_saas")
 
-#: Trần lượt gọi song song. Máy chủ giới hạn 40 request/phút cho một thiết
-#: bị; 4 luồng với lô 40 câu là dưới ngưỡng đó kể cả với video dài.
-_WORKERS_CAP = 4
+#: Trần lượt gọi song song (2 luồng an toàn cho các API key miễn phí / trần nhịp).
+_WORKERS_CAP = 2
 
 #: Số lượt gửi tối đa cho một lô (1 lần đầu + 3 lần thử lại).
 _MAX_ATTEMPTS = 4
 #: Giãn cách giữa các lượt thử lại, giây. Nhân thêm jitter ±20% khi dùng.
-_BACKOFF_S = (2.0, 6.0, 15.0)
+_BACKOFF_S = (3.0, 8.0, 20.0)
 #: Trần nhịp gửi phía máy khách. Máy chủ cho 40 req/phút mỗi thiết bị; giữ 30
 #: để còn chỗ cho lượt phân tích và rà soát chạy chung một lượt dịch.
 _RATE_LIMIT = 30
@@ -62,9 +61,12 @@ class _RateLimiter:
     cũ nhất rời cửa sổ.
     """
 
-    def __init__(self, limit: int = _RATE_LIMIT, window_s: float = _RATE_WINDOW_S):
+    def __init__(self, limit: int = _RATE_LIMIT, window_s: float = _RATE_WINDOW_S,
+                 min_interval_s: float = 0.0):
         self.limit = limit
         self.window_s = window_s
+        self.min_interval_s = min_interval_s
+        self._last_hit = 0.0
         self._hits: deque[float] = deque()
         self._lock = threading.Lock()
 
@@ -74,22 +76,38 @@ class _RateLimiter:
                 current = now()
                 while self._hits and current - self._hits[0] >= self.window_s:
                     self._hits.popleft()
-                if len(self._hits) < self.limit:
+
+                time_since_last = current - self._last_hit
+                wait_min = max(0.0, self.min_interval_s - time_since_last) if self.min_interval_s > 0 else 0.0
+
+                if len(self._hits) < self.limit and wait_min <= 0:
                     self._hits.append(current)
+                    self._last_hit = current
                     return
-                wait_s = self.window_s - (current - self._hits[0])
+
+                if len(self._hits) >= self.limit:
+                    wait_s = max(wait_min, self.window_s - (current - self._hits[0]))
+                else:
+                    wait_s = wait_min
             sleep(max(0.01, wait_s))
 
 
-#: Bộ chặn nhịp dùng chung cho mọi lượt gọi AI của tiến trình.
-RATE_LIMITER = _RateLimiter()
+#: Bộ chặn nhịp dùng chung cho mọi lượt gọi AI của tiến trình (giãn cách nhẹ giữa các request).
+RATE_LIMITER = _RateLimiter(min_interval_s=0.5)
+
+
+#: Lỗi cấu hình / model — gửi lại cũng hỏng y như vậy.
+_FATAL_CODES = frozenset({
+    "NO_PROVIDER", "PROVIDER_MISCONFIGURED", "PROVIDER_REJECTED",
+    "EMPTY_RESPONSE",
+})
 
 
 def _is_retryable(exc: BaseException) -> bool:
     """Lỗi tạm thời — gửi lại có cơ hội thành công.
 
-    Hết Vox, thiết bị bị khóa, bảo trì và 4xx khác đều là lỗi cố định: gửi lại
-    chỉ tốn thời gian và chắc chắn nhận đúng câu trả lời đó.
+    Hết Vox, thiết bị bị khóa, bảo trì, cấu hình AI sai và 4xx khác đều là
+    lỗi cố định: gửi lại chỉ tốn thời gian và chắc chắn nhận đúng câu đó.
     """
     if isinstance(exc, (InsufficientCreditError, DeviceBlockedError,
                         MaintenanceError)):
@@ -97,6 +115,8 @@ def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, OfflineError):
         return True   # mất mạng, timeout kết nối/đọc
     if isinstance(exc, SaasError):
+        if exc.code in _FATAL_CODES:
+            return False
         return exc.code == "RATE_LIMITED" or exc.status >= 500
     return False
 

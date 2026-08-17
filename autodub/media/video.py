@@ -280,7 +280,7 @@ def merge_video(
         cmd += ["-map", "2:0", "-c:s", "mov_text",
                 "-metadata:s:s:0", f"language={subtitle_lang}"]
 
-    cmd += ["-c:a", "aac", "-b:a", "192k", "-y", output_path]
+    cmd += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output_path]
 
     what = ["audio"]
     if subtitle_mode != "none":

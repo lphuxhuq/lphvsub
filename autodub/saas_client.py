@@ -254,6 +254,13 @@ class SaasClient:
         self._device["creditEnabled"] = bool(data.get("creditEnabled", True))
         return self._device
 
+    def get_ai_status(self) -> dict:
+        """Lấy trạng thái các provider dịch trên máy chủ."""
+        try:
+            return self._request("GET", "/v1/ai/status", timeout=10.0)
+        except Exception:
+            return {}
+
     @property
     def device(self) -> dict:
         """Thông tin thiết bị đã đọc gần nhất (có thể rỗng nếu chưa gọi)."""

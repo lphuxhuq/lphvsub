@@ -19,9 +19,15 @@ class TranslateToolPage(ToolPage):
 
     TAB = spec.TAB_TRANSLATE
     TITLE = "Dịch thuật"
-    SUBTITLE = ("Bản dịch do máy chủ VoxDub thực hiện. Điền ngữ cảnh video ở "
-                "đây để kết quả bám đúng chủ đề và cách xưng hô của kênh bạn.")
-    EXPANDED = {"Ngữ cảnh video"}
+    SUBTITLE = ("Cấu hình danh sách khóa API (Google Gemini Direct, OpenRouter, OpenAI, DeepSeek) "
+                "để chia luồng song song hoặc điều chỉnh ngữ cảnh và xưng hô cho video.")
+    EXPANDED = {
+        "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)",
+        "Khóa API dịch AI",
+        "Dịch tự động",
+        "Ngữ cảnh video",
+        "Nội dung đăng bài",
+    }
     SAVE_LABEL = "Lưu cấu hình dịch"
     SAVED_TOAST = "Đã lưu cấu hình dịch."
 

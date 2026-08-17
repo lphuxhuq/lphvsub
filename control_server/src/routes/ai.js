@@ -159,9 +159,32 @@ module.exports = async function aiRoutes(fastify) {
     }
   })
 
+  // Trạng thái AI Provider (để app kiểm tra kết nối & nơi dịch)
+  fastify.get('/status', async () => {
+    await gateway.syncProvidersFromEnv()
+    const translateList = await gateway.providersFor('translate')
+    const contentList = await gateway.providersFor('content')
+    return {
+      ok: true,
+      hasTranslateProvider: translateList.length > 0,
+      translateProviders: translateList.map((p) => ({
+        name: p.name,
+        label: p.label || p.name,
+        model: p.model,
+        type: p.type,
+      })),
+      contentProviders: contentList.map((p) => ({
+        name: p.name,
+        label: p.label || p.name,
+        model: p.model,
+        type: p.type,
+      })),
+    }
+  })
+
   // ------------------------------------------------------------ dịch lô ---
   fastify.post('/translate', {
-    config: { rateLimit: { max: 40, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: 1000, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',
@@ -293,10 +316,16 @@ module.exports = async function aiRoutes(fastify) {
         },
       })
       request.log.error({ err, jobId }, 'translate failed')
+      const code = err.code || 'AI_UNAVAILABLE'
+      const configError = [
+        'NO_PROVIDER', 'PROVIDER_MISCONFIGURED', 'PROVIDER_REJECTED',
+      ].includes(code)
       return reply.code(err.statusCode || 503).send({
-        code: err.code || 'AI_UNAVAILABLE',
-        message: 'Dịch vụ dịch tạm thời không phản hồi. Thử lại sau ít phút.',
-        retryAfter: 30,
+        code,
+        message: configError
+          ? String(err.message || '').slice(0, 400)
+          : 'Dịch vụ dịch tạm thời không phản hồi. Thử lại sau ít phút.',
+        retryAfter: configError ? 0 : 30,
       })
     }
 

@@ -115,7 +115,25 @@ function ProviderModal({ open, onClose, editing, onDone }) {
         </div>
         <div>
           <label className="label">Giao thức</label>
-          <select className="input" value={form.type} onChange={(e) => set('type', e.target.value)}>
+          <select
+            className="input"
+            value={form.type}
+            onChange={(e) => {
+              const type = e.target.value
+              setForm((f) => ({
+                ...f,
+                type,
+                baseUrl: type === 'google'
+                  ? 'https://generativelanguage.googleapis.com/v1beta'
+                  : (f.baseUrl.includes('googleapis')
+                    ? 'https://openrouter.ai/api/v1'
+                    : f.baseUrl),
+                model: type === 'google' && f.model.startsWith('google/')
+                  ? f.model.replace(/^google\//, '')
+                  : f.model,
+              }))
+            }}
+          >
             <option value="openai_compat">Chuẩn OpenAI (OpenRouter, DeepSeek…)</option>
             <option value="google">Google Gemini</option>
           </select>
@@ -124,10 +142,17 @@ function ProviderModal({ open, onClose, editing, onDone }) {
           <label className="label">Địa chỉ máy chủ</label>
           <input
             className="input font-mono text-xs"
-            placeholder="https://openrouter.ai/api/v1"
+            placeholder={form.type === 'google'
+              ? 'https://generativelanguage.googleapis.com/v1beta'
+              : 'https://openrouter.ai/api/v1'}
             value={form.baseUrl}
             onChange={(e) => set('baseUrl', e.target.value)}
           />
+          {form.type === 'google' && (
+            <p className="text-[11px] text-ink-muted mt-1">
+              Có thể để trống — server tự dùng endpoint Gemini native.
+            </p>
+          )}
         </div>
         <div className="sm:col-span-2">
           <label className="label">
@@ -146,10 +171,15 @@ function ProviderModal({ open, onClose, editing, onDone }) {
           <label className="label">Mô hình</label>
           <input
             className="input font-mono text-xs"
-            placeholder="google/gemini-2.5-flash"
+            placeholder={form.type === 'google' ? 'gemini-2.0-flash' : 'google/gemini-2.5-flash'}
             value={form.model}
             onChange={(e) => set('model', e.target.value)}
           />
+          <p className="text-[11px] text-ink-muted mt-1">
+            {form.type === 'google'
+              ? 'Key Gemini (AIza…): model dạng gemini-2.0-flash hoặc gemini-2.5-flash — không ghi google/…'
+              : 'OpenRouter (sk-or-…): model dạng google/gemini-2.5-flash'}
+          </p>
         </div>
         <div>
           <label className="label">Ưu tiên (nhỏ = trước)</label>

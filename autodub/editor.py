@@ -1238,3 +1238,157 @@ def list_export_history(work_dir: str) -> list[dict]:
         return entries
     except OSError:
         return []
+
+
+def batch_replace_text(
+    work_dir: str,
+    search_term: str,
+    replacement: str,
+    target_key: str = "vi",
+    case_sensitive: bool = False,
+    whole_word: bool = False,
+) -> int:
+    """Tìm kiếm và thay thế một từ/cụm từ trên toàn bộ các câu thoại trong dự án.
+
+    Tự động dọn cache audio của những câu bị thay đổi để chúng được đọc lại.
+    Trả về số câu đã được thay đổi.
+    """
+    from autodub.text.glossary import batch_replace_segments
+
+    target = get_target(target_key)
+    segments, path = _load_segments(work_dir, target)
+    updated, changed_count = batch_replace_segments(
+        segments, search_term, replacement,
+        text_field=target.text_field,
+        case_sensitive=case_sensitive,
+        whole_word=whole_word,
+    )
+    if changed_count > 0:
+        # Xác định câu nào bị đổi chữ để dọn audio
+        old_ids = []
+        for orig, upd in zip(segments, updated):
+            if orig.get(target.text_field) != upd.get(target.text_field):
+                seg_id = int(orig.get("id", -1))
+                _drop_segment_audio(work_dir, seg_id)
+                old_ids.append(-1)
+            else:
+                old_ids.append(int(orig.get("id", -1)))
+        _commit(work_dir, target, updated, path, old_ids)
+        logger.info(f"Đã thay thế «{search_term}» → «{replacement}» trong {changed_count} câu ({work_dir})")
+    return changed_count
+
+
+def apply_project_glossary(
+    work_dir: str,
+    glossary: dict[str, str],
+    target_key: str = "vi",
+    case_sensitive: bool = False,
+) -> int:
+    """Áp dụng bảng thuật ngữ lên toàn bộ các câu thoại trong dự án.
+
+    Trả về số câu đã được thay đổi.
+    """
+    from autodub.text.glossary import apply_glossary_to_segments
+
+    if not glossary:
+        return 0
+    target = get_target(target_key)
+    segments, path = _load_segments(work_dir, target)
+    updated, changed_count = apply_glossary_to_segments(
+        segments, glossary, text_field=target.text_field, case_sensitive=case_sensitive
+    )
+    if changed_count > 0:
+        old_ids = []
+        for orig, upd in zip(segments, updated):
+            if orig.get(target.text_field) != upd.get(target.text_field):
+                seg_id = int(orig.get("id", -1))
+                _drop_segment_audio(work_dir, seg_id)
+                old_ids.append(-1)
+            else:
+                old_ids.append(int(orig.get("id", -1)))
+        _commit(work_dir, target, updated, path, old_ids)
+        logger.info(f"Đã áp dụng bảng thuật ngữ lên {changed_count} câu trong {work_dir}")
+    return changed_count
+
+
+def retranslate_segment_ai(
+    work_dir: str,
+    seg_id: int,
+    target_key: str = "vi",
+    settings: Any = None,
+) -> str:
+    """Dịch lại một câu thoại bằng AI bên thứ 3 (HHTech / Gemini / OpenAI / DeepSeek...)."""
+    if settings is None:
+        settings = Settings.load()
+    target = get_target(target_key)
+    segments, path = _load_segments(work_dir, target)
+    seg = next((s for s in segments if s.get("id") == seg_id), None)
+    if not seg:
+        raise EditorError(f"Không tìm thấy câu {seg_id}")
+
+    from autodub.text.translate_direct import (
+        get_direct_client, _build_system_prompt, parse_response_segments,
+        ensure_terminal_punct
+    )
+    client, provider_desc = get_direct_client(settings)
+
+    # Đọc ngữ cảnh video nếu có
+    ctx_path = data_path(work_dir, "video_context.json")
+    style_notes = getattr(settings, "translate_style_notes", "")
+    if os.path.exists(ctx_path):
+        try:
+            with open(ctx_path, "r", encoding="utf-8") as f:
+                ctx_data = json.load(f)
+                if ctx_data.get("style_notes"):
+                    style_notes = f"{style_notes}\n{ctx_data['style_notes']}".strip()
+        except Exception:
+            pass
+
+    system_prompt = _build_system_prompt(target_field=target.text_field, style_notes=style_notes)
+    user_prompt = f"Translate this segment into {target.name} ({target.text_field}):\n{json.dumps([{'id': seg_id, 'text': seg.get('text', '')}], ensure_ascii=False)}"
+
+    raw = client.call_ai(system_prompt, user_prompt)
+    items = parse_response_segments(raw, text_field=target.text_field)
+    new_text = ""
+    for it in items:
+        if it.get("id") == seg_id:
+            new_text = it.get(target.text_field, "")
+            break
+    if not new_text and items:
+        new_text = items[0].get(target.text_field, "")
+    if not new_text:
+        raise EditorError("AI không trả về bản dịch hợp lệ.")
+
+    new_text = ensure_terminal_punct(new_text)
+    save_segment_texts(work_dir, {seg_id: new_text}, target_key=target_key)
+    return new_text
+
+
+def retranslate_all_segments_ai(
+    work_dir: str,
+    target_key: str = "vi",
+    settings: Any = None,
+    reporter: Optional[ProgressReporter] = None,
+) -> list[dict]:
+    """Dịch lại toàn bộ các câu thoại trong dự án bằng AI bên thứ 3."""
+    if settings is None:
+        settings = Settings.load()
+    target = get_target(target_key)
+    segments, path = _load_segments(work_dir, target)
+    if not segments:
+        return []
+
+    from autodub.text.translate_direct import translate_segments_direct
+    from autodub.pipeline import source_lang_of
+
+    source_lang = source_lang_of(work_dir) or "auto"
+    translated = translate_segments_direct(
+        segments,
+        target=target,
+        source_lang=source_lang,
+        settings=settings,
+        reporter=reporter,
+    )
+    _commit(work_dir, target, translated, path, old_ids=[-1] * len(translated))
+    return translated
+

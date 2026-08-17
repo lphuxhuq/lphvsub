@@ -383,12 +383,18 @@ class ConnectionChecks(CollapsibleSection):
         client = get_client()
         try:
             device = client.ensure_session()
+            ai_status = client.get_ai_status()
         except SaasError as e:
             return f"{STATUS_WARN} {e}"
-        if not device.get("creditEnabled", True):
-            return f"{STATUS_OK} Máy chủ trả lời bình thường. Đang miễn phí."
-        return (f"{STATUS_OK} Máy chủ trả lời bình thường. "
-                f"Ví còn {int(device.get('balance', 0)):,} Vox.")
+
+        providers = ai_status.get("translateProviders", [])
+        if not providers:
+            return (f"{STATUS_WARN} Máy chủ kết nối được nhưng CHƯA CÓ API KEY dịch. "
+                    "Vui lòng điền Gemini API Key hoặc OpenRouter API Key vào bên dưới rồi bấm Lưu.")
+
+        prov_names = ", ".join(p.get("label") or p.get("name") for p in providers[:2])
+        balance_txt = f" (Ví còn {int(device.get('balance', 0)):,} Vox)" if device.get("creditEnabled", True) else ""
+        return f"{STATUS_OK} Sẵn sàng dịch. Nơi gọi mô hình: {prov_names}{balance_txt}."
 
 
 class MaintenancePanel(CollapsibleSection):

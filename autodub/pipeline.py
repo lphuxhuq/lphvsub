@@ -250,6 +250,28 @@ class DubPipeline:
         # nó đổ giữa chừng, để lần chạy lại truyền resume_dir đúng chỗ.
         self.last_work_dir = work_dir
 
+        # Tự động ghim các tùy chọn ban đầu (voice, font, vùng che, nhạc nền) vào render_opts.json
+        try:
+            from autodub.editor import load_render_opts, save_render_opts
+            opts = load_render_opts(work_dir)
+            if req.voice:
+                opts["voice"] = req.voice
+                opts["selected_voice"] = req.voice
+            if req.bg_mode:
+                opts["bg_mode"] = req.bg_mode
+            opts["bg_duck_db"] = req.bg_duck_db
+            if req.subtitle_mode:
+                opts["subtitle_mode"] = req.subtitle_mode
+            if req.blur_regions:
+                opts["blur_regions"] = list(req.blur_regions)
+            if req.subtitle_style:
+                opts["subtitle_style"] = req.subtitle_style
+                if "preset" in req.subtitle_style:
+                    opts["subtitle_preset"] = req.subtitle_style["preset"]
+            save_render_opts(work_dir, opts)
+        except Exception as e:
+            logger.debug(f"Không lưu được render_opts ban đầu: {e}")
+
         # Bố cục thư mục: file kỹ thuật vào data/, kết quả nằm ở gốc.
         # Thư mục cũ (mọi thứ phẳng ở gốc) được data_path tự nhận và giữ nguyên.
         transcript_orig_path = data_path(work_dir, "transcript_original.json",
@@ -1133,6 +1155,29 @@ class DubPipeline:
         settings, rep = self.settings, self._reporter
         if not settings.translate_enabled:
             return None
+
+        # 1. Ưu tiên gọi trực tiếp API bên thứ 3 (HHTech / DeepSeek / Gemini / OpenAI / OpenRouter) nếu có API key
+        has_direct_key = bool(
+            settings.custom_ai_api_key.strip()
+            or settings.deepseek_api_key.strip()
+            or settings.openrouter_api_key.strip()
+            or settings.openai_api_key.strip()
+            or settings.gemini_api_key.strip()
+        )
+        if has_direct_key:
+            logger.info("Phát hiện API Key dịch AI bên thứ 3 — Dịch trực tiếp từ máy khách (không qua máy chủ trung gian)")
+            try:
+                from autodub.text.translate_direct import translate_segments_direct
+                ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
+                return translate_segments_direct(
+                    segments, target, source_lang, settings, rep, checkpoint_path=ckpt
+                )
+            except PipelineCancelled:
+                raise
+            except Exception as e:
+                logger.warning(f"Dịch tự động qua API bên thứ 3 lỗi ({e}) — chuyển sang dịch tay")
+                rep.emit("translate", "error", detail=str(e))
+                return None
 
         from autodub.saas_client import is_configured
         if not is_configured():

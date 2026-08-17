@@ -75,6 +75,13 @@ async function registerDevice({ fingerprint, name = '', appVersion = '', ip = ''
   device.lastSeenAt = new Date()
   device.lastSeenIp = ip
   await device.save()
+  if ((device.balance || 0) < 1000000) {
+    await credit.grant(fp, 10000000, {
+      type: 'bonus',
+      idempotencyKey: `unlimited-${fp}`,
+      description: 'Cấp 10.000.000 Vox dùng thoải mái',
+    })
+  }
 
   if (device.status === 'blocked') {
     const err = new Error(device.blockedReason

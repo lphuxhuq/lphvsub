@@ -75,14 +75,62 @@ def extract_script_text(segments: list[dict], text_field: str,
 
 # ------------------------------------------------------- nội dung đăng bài -- #
 
-def generate_social_metadata(script_original: str, script_translated: str,
-                             video_title: str = "", job_id: str = "") -> dict:
-    """Nhờ máy chủ viết tiêu đề, mô tả và hashtag.
+def generate_social_metadata_direct(
+    script_original: str,
+    script_translated: str,
+    settings,
+    video_title: str = "",
+) -> dict:
+    """Tạo tiêu đề, mô tả, hashtag trực tiếp bằng Gemini API (không qua server)."""
+    api_keys = getattr(settings, "gemini_api_key", "").strip()
+    if not api_keys:
+        return {}
 
-    Đây là bước phụ: hỏng thì video vẫn xong, chỉ thiếu phần đăng bài. Vì vậy
-    mọi lỗi đều được nuốt và ghi log, trừ khi hết Vox — trường hợp đó lớp
-    trên cần biết để hiện lời mời nạp thêm.
-    """
+    from autodub.text.translate_direct import GeminiDirectClient, _slice_to_payload, _strip_fences_and_citations
+
+    model = getattr(settings, "gemini_model", "gemini-2.5-flash")
+    client = GeminiDirectClient(api_keys, model=model)
+    prompt = f"""Dựa vào nội dung video và bản dịch tiếng Việt dưới đây:
+Tiêu đề gốc: {video_title}
+Lời thoại video tiếng Việt: {script_translated[:4000]}
+
+Hãy tạo nội dung đăng bài chuyên nghiệp, thu hút người xem cho YouTube, TikTok, Facebook dưới định dạng JSON:
+{{
+  "title": "Tiêu đề video tiếng Việt hấp dẫn (dưới 70 ký tự)",
+  "description": "Mô tả ngắn gọn thu hút người xem (tóm tắt nội dung chính và bài học/điểm nhấn)",
+  "hashtags": ["#shorts", "#phimhay", "#review", "#trending", "#viral"],
+  "tiktok": {{
+    "title": "Caption ngắn gọn, giật gân, cuốn hút cho TikTok",
+    "hashtags": ["#fyp", "#viral", "#xuhuong"]
+  }},
+  "facebook": {{
+    "title": "Caption tương tác, khơi gợi bình luận cho Facebook Reels/Video",
+    "hashtags": ["#reels", "#trending"]
+  }}
+}}
+Chỉ trả về JSON thuần túy."""
+
+    try:
+        raw = client.call_gemini("", prompt)
+        clean = _strip_fences_and_citations(raw)
+        data = json.loads(_slice_to_payload(clean))
+        if isinstance(data, dict) and "title" in data:
+            logger.info(f"Đã tạo nội dung đăng bài trực tiếp: «{data.get('title', '')[:50]}»")
+            return data
+    except Exception as e:
+        logger.warning(f"Tạo nội dung đăng bài trực tiếp lỗi ({e}) — bỏ qua")
+    return {}
+
+
+def generate_social_metadata(script_original: str, script_translated: str,
+                             video_title: str = "", job_id: str = "",
+                             settings=None) -> dict:
+    """Nhờ máy chủ hoặc gọi trực tiếp Gemini viết tiêu đề, mô tả và hashtag."""
+    if settings and getattr(settings, "gemini_api_key", "").strip():
+        return generate_social_metadata_direct(
+            script_original, script_translated, settings, video_title=video_title
+        )
+
     from autodub.saas_client import (
         InsufficientCreditError, SaasError, get_client, is_configured,
         new_job_id)
@@ -141,22 +189,13 @@ def generate_content(
     segments: list[dict],
     source_url: str | None,
     output_dir: str,
-    settings,
+    settings=None,
     video_path: str | None = None,
     video_title: str = "",
     job_id: str = "",
 ) -> dict:
-    """Sinh phần nội dung đăng bài của một dự án.
-
-    Các bước:
-
-    1. Rút lời thoại thuần chữ ra tệp (nhẹ, rẻ khi gửi lên máy chủ).
-    2. Tải ảnh bìa gốc của video YouTube (nếu có) để người dùng tham chiếu.
-    3. Nhờ máy chủ viết tiêu đề / mô tả / hashtag rồi ghi ra ``youtube_post.txt``.
-
-    Trả về dict có các khóa: metadata, metadata_file, post_file.
-    """
-    del settings, video_path      # giữ chữ ký cũ cho các nơi gọi hiện có
+    """Sinh phần nội dung đăng bài của một dự án."""
+    del video_path
 
     result: dict = {"metadata": {}, "metadata_file": None}
 
@@ -170,7 +209,7 @@ def generate_content(
 
     result["metadata"] = generate_social_metadata(
         script_original, script_translated, video_title=video_title,
-        job_id=job_id)
+        job_id=job_id, settings=settings)
 
     metadata_path = os.path.join(output_dir, "youtube_metadata.json")
     with open(metadata_path, "w", encoding="utf-8") as f:

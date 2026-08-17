@@ -366,31 +366,55 @@ def wav_duration_s(path: str) -> float | None:
         return None
 
 
+#: Ducking attack & release ramps:
+#: Attack (0.08s) hạ nhạc nền nhanh và êm dịu khi bắt đầu câu thoại.
+#: Release (0.22s) đưa nhạc nền nổi lên du dương, tự nhiên khi dứt câu.
+_DUCK_ATTACK_S = 0.08
+_DUCK_RELEASE_S = 0.22
+
+
 def _duck_envelope(n: int, b0: int, rate: int,
                    intervals: list[tuple[float, float]],
                    duck_db: float):
     """Gain multiplier (n,) cho một block nhạc nền: 1.0 ngoài lời thoại,
-    ``10^(duck_db/20)`` trong lời thoại, trượt tuyến tính ``_DUCK_RAMP_S``
-    ở hai mép. Các câu sát nhau tự hoà làm một vùng duck liền mạch (lấy
-    min của các envelope)."""
+    ``10^(duck_db/20)`` trong lời thoại.
+
+    Sử dụng đường cong S-curve Cosine mượt mà với dốc Attack (80ms) và
+    Release (220ms), tạo hiệu ứng sidechain ducking chuẩn phòng thu.
+    Các câu thoại sát nhau tự động hòa làm một vùng duck liền mạch."""
     import numpy as np
 
     env = np.ones(n, dtype=np.float32)
     duck_gain = 10.0 ** (duck_db / 20.0)
-    ramp = _DUCK_RAMP_S
+    att = _DUCK_ATTACK_S
+    rel = _DUCK_RELEASE_S
     t0 = b0 / rate
     t1 = (b0 + n) / rate
     for s, e in intervals:
-        # Vùng ảnh hưởng của câu (gồm cả hai dốc ramp) giao với block này?
-        if e + ramp <= t0 or s - ramp >= t1:
+        if e + rel <= t0 or s - att >= t1:
             continue
-        # Thời điểm từng mẫu trong block (giây, tương đối theo track).
-        i_lo = max(0, int((s - ramp - t0) * rate))
-        i_hi = min(n, int((e + ramp - t0) * rate) + 1)
+        i_lo = max(0, int((s - att - t0) * rate))
+        i_hi = min(n, int((e + rel - t0) * rate) + 1)
         idx = np.arange(i_lo, i_hi, dtype=np.float32) / rate + t0
-        # Khoảng cách tới lõi câu [s, e]: 0 trong lõi, tăng dần ra mép.
-        dist = np.maximum(0.0, np.maximum(s - idx, idx - e))
-        frac = np.clip(1.0 - dist / ramp, 0.0, 1.0)  # 1 = duck hết cỡ
+        
+        # Attack slope (trước câu thoại: s - att -> s)
+        # Core segment (trong câu thoại: s -> e)
+        # Release slope (sau câu thoại: e -> e + rel)
+        frac = np.zeros_like(idx)
+        in_core = (idx >= s) & (idx <= e)
+        in_att = (idx >= s - att) & (idx < s)
+        in_rel = (idx > e) & (idx <= e + rel)
+
+        frac[in_core] = 1.0
+        if in_att.any():
+            linear_att = (idx[in_att] - (s - att)) / att
+            # Cosine smoothstep: 0 -> 1
+            frac[in_att] = 0.5 - 0.5 * np.cos(np.pi * linear_att)
+        if in_rel.any():
+            linear_rel = (e + rel - idx[in_rel]) / rel
+            # Cosine smoothstep: 1 -> 0
+            frac[in_rel] = 0.5 - 0.5 * np.cos(np.pi * linear_rel)
+
         seg_env = 1.0 + frac * (duck_gain - 1.0)
         env[i_lo:i_hi] = np.minimum(env[i_lo:i_hi], seg_env)
     return env
