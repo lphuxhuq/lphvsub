@@ -43,14 +43,19 @@ def nav_icon(icon_fn, normal: str | None = None,
 
 
 def app_logo(size: int = 32) -> QPixmap:
-    """Biểu trưng ứng dụng lấy từ logo.ico; thiếu tệp thì vẽ tay."""
+    """Biểu trưng ứng dụng lấy từ logo.png hoặc logo.ico; thiếu tệp thì vẽ tay."""
     try:
         from autodub.utils import bundled_file
-        path = bundled_file("logo.ico")
-        if path and os.path.exists(path):
-            px = QIcon(str(path)).pixmap(size, size)
-            if not px.isNull():
-                return px
+        for filename in ("logo.png", "logo.ico"):
+            path = bundled_file(filename)
+            if path and os.path.exists(path):
+                px = QPixmap(str(path))
+                if not px.isNull():
+                    return px.scaled(
+                        size, size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
     except Exception:
         pass
     return brand_logo(size)
