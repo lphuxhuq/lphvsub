@@ -42,6 +42,10 @@ Link / File video
   - Chỉnh sửa từng câu phụ đề / lời dịch, nghe thử câu đơn, bấm đọc lại tức thì cho câu đã sửa.
   - Kéo thả phụ đề, tuỳ chỉnh font chữ, màu sắc, viền, hiệu ứng Karaoke.
   - Công cụ khoanh vùng che chữ/watermark gốc trên video.
+- 🌐 **Gemini SRT Translator Pro (Tích hợp sẵn):**
+  - Giao diện web dịch phụ đề `.srt`, `.ass`, `.vtt` và video/audio chuyên sâu.
+  - Multi-Key Pooling thông minh, tự động hậu xử lý chống sót chữ (Auto CJK) và Live Subtitle Editor với đo tốc độ CPS.
+  - Khởi chạy trực tiếp từ thanh **CÔNG CỤ** của app hoặc nhấp đúp file **`chay_dich_srt.bat`**.
 - ⚡ **Tốc độ cao & Bền bỉ (Crash-Safe):**
   - Tích hợp công cụ tải đa luồng `aria2` tối đa băng thông mạng.
   - Lưu tiến độ theo từng bước — nếu tắt app giữa chừng, mở lại sẽ tiếp tục từ bước vừa dừng mà không phải chạy lại từ đầu.

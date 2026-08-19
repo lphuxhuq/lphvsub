@@ -19,8 +19,9 @@ from PySide6.QtWidgets import (
 from autodub_gui import icons, tokens
 from autodub_gui.ui.style import clear_background
 from autodub_gui.env_store import (
-    bool_to_env, env_bool, env_to_multiline, multiline_to_env, read_env,
-    write_env,
+    bool_to_env, env_bool, env_to_multiline, multiline_to_env,
+    api_keys_to_multiline, multiline_to_api_keys,
+    read_env, write_env,
 )
 from autodub_gui.pages import BasePage
 from autodub_gui.pages import settings_fields as spec
@@ -222,7 +223,8 @@ class SettingsPage(BasePage):
 
         edit = QPlainTextEdit()
         edit.setPlaceholderText(item.placeholder)
-        edit.setFixedHeight(_MULTILINE_H)
+        h = 200 if item.key == "GEMINI_API_KEY" else _MULTILINE_H
+        edit.setFixedHeight(h)
         edit.textChanged.connect(self._mark_dirty)
         return LabeledWidget(item.label, edit, item.hint)
 
@@ -291,6 +293,8 @@ class SettingsPage(BasePage):
         if item.kind == spec.NUMBER:
             return f"{widget.widget.value():.{item.decimals}f}"
         if item.kind == spec.MULTILINE:
+            if item.key == "GEMINI_API_KEY":
+                return multiline_to_api_keys(widget.widget.toPlainText())
             return multiline_to_env(widget.widget.toPlainText())
         if item.kind == spec.COLOR:
             return widget.widget.text().strip()
@@ -309,7 +313,10 @@ class SettingsPage(BasePage):
         elif item.kind == spec.NUMBER:
             widget.widget.setValue(_to_float(raw, item.default))
         elif item.kind == spec.MULTILINE:
-            widget.widget.setPlainText(env_to_multiline(raw))
+            if item.key == "GEMINI_API_KEY":
+                widget.widget.setPlainText(api_keys_to_multiline(raw))
+            else:
+                widget.widget.setPlainText(env_to_multiline(raw))
         elif item.kind == spec.COLOR:
             self._paint_color(widget.widget, raw or item.default)
         else:

@@ -98,3 +98,56 @@ def test_theme_stylesheet_builds_from_tokens() -> None:
     assert theme.STYLESHEET.strip()
     assert tokens.BG_APP in theme.STYLESHEET
     assert tokens.PRIMARY in theme.STYLESHEET
+
+
+def test_tokens_surface_and_elevation_system() -> None:
+    """Bảo đảm tokens có đủ hệ thống phân cấp bề mặt (surface hierarchy)."""
+    from autodub_gui import tokens
+
+    surfaces = (
+        "BG_APP", "BG_SIDEBAR", "BG_MAIN", "BG_PANEL", "BG_PANEL_HOVER",
+        "BG_ELEVATED", "BG_INPUT", "BG_INPUT_DISABLED", "BG_BUTTON",
+        "BG_BUTTON_PRESSED", "BG_VIDEO", "BG_SELECTED", "BG_SELECTED_SOFT",
+    )
+    for name in surfaces:
+        assert hasattr(tokens, name), f"tokens.py thiếu token bề mặt: {name}"
+
+
+def test_tokens_spacing_and_radius_scales() -> None:
+    """Bảo đảm tokens có đủ thang khoảng cách và bo góc nhất quán."""
+    from autodub_gui import tokens
+
+    spacing = ("SP_0", "SP_1", "SP_2", "SP_3", "SP_4", "SP_5", "SP_6", "SP_8", "SP_10", "SP_12")
+    for name in spacing:
+        assert hasattr(tokens, name), f"tokens.py thiếu token khoảng cách: {name}"
+
+    radii = ("RADIUS_NONE", "RADIUS_SM", "RADIUS_MD", "RADIUS_LG", "RADIUS_XL", "RADIUS_2XL")
+    for name in radii:
+        assert hasattr(tokens, name), f"tokens.py thiếu token bo góc: {name}"
+
+
+def test_tokens_animation_timings() -> None:
+    """Bảo đảm tokens có đủ hằng số thời gian chuyển động."""
+    from autodub_gui import tokens
+
+    timings = ("ANIM_FAST", "ANIM_MID", "ANIM_SLOW")
+    for name in timings:
+        assert hasattr(tokens, name), f"tokens.py thiếu token animation: {name}"
+        assert isinstance(getattr(tokens, name), int)
+
+
+def test_stylesheet_covers_all_core_states() -> None:
+    """Kiểm tra STYLESHEET có đủ định nghĩa cho các trạng thái quan trọng."""
+    from autodub_gui import theme
+
+    css = theme.STYLESHEET
+    assert "QPushButton#primary" in css
+    assert "QPushButton#primary:hover" in css
+    assert "QPushButton#primary:disabled" in css
+    assert "QPushButton#ghost:hover" in css
+    assert "QPushButton#danger:hover" in css
+    assert "QLineEdit:focus" in css
+    assert "QLineEdit:disabled" in css
+    assert "QScrollBar:vertical" in css
+    assert "QComboBox QAbstractItemView" in css
+

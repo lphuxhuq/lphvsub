@@ -1,11 +1,6 @@
 """Bộ tổng hợp giọng CapCut — gọi API, không cần model trên máy.
 
-Engine thứ hai bên cạnh VieNeu. Người dùng chọn giọng nào thì
-:func:`autodub.speech.tts.get_synthesizer` tự định tuyến; hai engine độc
-lập, không engine nào dự phòng cho engine kia.
-
-Đây là engine ONLINE: mất mạng thì không đọc được. Đổi lại, máy chưa cài
-VieNeu vẫn lồng tiếng được ngay.
+Hỗ trợ Device Pool đa thiết bị (fake nhiều device.json) chạy đa luồng tốc độ cao.
 """
 from __future__ import annotations
 
@@ -13,25 +8,25 @@ import os
 import subprocess
 import threading
 import time
+from typing import Any, Optional, Tuple
 
 from autodub.speech.tts.base import TTSResult, write_silence
+from autodub.speech.tts.capcut_device_pool import get_device_pool
 from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.tts.capcut")
 
-#: Số câu đọc song song (3 luồng mặc định an toàn, có thể nâng qua CAPCUT_THREADS trong .env).
-RECOMMENDED_THREADS = min(8, max(1, int(os.environ.get("CAPCUT_THREADS", "3"))))
+#: Số câu đọc song song (mặc định 8 luồng song song với Device Pool, có thể nâng lên đến 16 qua Settings.capcut_threads hoặc CAPCUT_THREADS).
+RECOMMENDED_THREADS = min(16, max(1, int(os.environ.get("CAPCUT_THREADS", "8"))))
 
-#: Khoảng cách tối thiểu giữa hai lần gửi, tính chung cho MỌI luồng (giãn cách mượt mà 0.2s thay vì 0.8s).
-MIN_GAP_S = 0.2
+#: Khoảng cách tối thiểu giữa hai lần gửi per-device
+MIN_GAP_S = 0.05
 
-#: Số lần thử lại một câu khi mạng chập chờn, và thời gian chờ giữa các lần.
-RETRIES = 3
-BACKOFF_S = (0.5, 1.5, 3.0)
+#: Số lần thử lại một câu khi mạng chập chờn hoặc máy chủ báo bận.
+RETRIES = 6
+BACKOFF_S = (0.5, 1.0, 1.5, 2.5, 3.5, 5.0)
 
-#: Số lần đổi định danh liên tiếp mà vẫn bị chặn thì bỏ cuộc. Đổi được rồi
-#: đọc trôi một câu là bộ đếm về 0 — video dài bị chặn vài lần vẫn chạy hết,
-#: nhưng chặn liên hồi (vấn đề không nằm ở định danh) thì dừng sớm.
+#: Số lần đổi định danh liên tiếp mà vẫn bị chặn thì bỏ cuộc.
 MAX_ROTATIONS = 2
 
 #: Trần thời gian: chờ máy chủ tạo xong, tải file, và chạy ffmpeg cho MỘT câu.
@@ -42,9 +37,9 @@ FFMPEG_TIMEOUT_S = 60
 OFFLINE_HINT = ("Giọng CapCut cần kết nối mạng. Kiểm tra mạng rồi chạy lại, "
                 "hoặc chọn một giọng offline (VieNeu) ở ô chọn giọng.")
 
-BLOCKED_HINT = ("Máy chủ CapCut đang chặn máy này (shark block). Nghỉ khoảng "
-                "15-30 phút rồi chạy lại, giảm số luồng giọng đọc trong Cài "
-                "đặt, hoặc chọn một giọng offline (VieNeu) để lồng tiếng ngay.")
+BLOCKED_HINT = ("Máy chủ CapCut đang tạm thời bận hoặc giới hạn kết nối (system busy / shark block). "
+                "Hệ thống đã tự động thử lại và đổi hồ sơ thiết bị nhưng máy chủ vẫn chưa phản hồi. "
+                "Hãy thử lại sau ít phút hoặc chọn một giọng offline (VieNeu) để lồng tiếng ngay.")
 
 _THROTTLE_LOCK = threading.Lock()
 _next_slot = 0.0
@@ -55,7 +50,7 @@ _profile: dict | None = None
 
 
 def _current_profile() -> dict:
-    """Hồ sơ thiết bị dùng chung cho mọi luồng trong phiên chạy này."""
+    """Hồ sơ thiết bị dùng chung / mặc định."""
     global _profile
     with _DEVICE_LOCK:
         if _profile is None:
@@ -73,11 +68,7 @@ def _note_success() -> None:
 
 
 def _rotate_profile(seen: dict) -> dict | None:
-    """Đổi định danh máy sau khi bị chặn. None nghĩa là hết lượt đổi.
-
-    ``seen`` là hồ sơ luồng gọi đang cầm: nếu một luồng khác đã đổi trước rồi
-    thì trả luôn hồ sơ mới, không đốt thêm một lượt đổi nữa.
-    """
+    """Đổi định danh máy sau khi bị chặn. None nghĩa là hết lượt đổi."""
     global _profile, _rotations
     with _DEVICE_LOCK:
         if _profile is not None and _profile is not seen:
@@ -92,8 +83,12 @@ def _rotate_profile(seen: dict) -> dict | None:
         return _profile
 
 
-def _throttle() -> None:
-    """Giữ nhịp gửi chung cho mọi luồng, không để ba luồng dồn vào một lúc."""
+def _throttle(device: Optional[dict] = None) -> None:
+    """Giữ nhịp gửi, ưu tiên phân tán theo từng thiết bị trong pool."""
+    if device is not None:
+        get_device_pool().throttle_device(device, min_gap_s=MIN_GAP_S)
+        return
+
     global _next_slot
     with _THROTTLE_LOCK:
         now = time.monotonic()
@@ -104,15 +99,22 @@ def _throttle() -> None:
 
 
 def _is_shark_block(error: Exception) -> bool:
-    """Máy chủ chặn định danh máy, khác hẳn lỗi mạng — thử lại là vô ích."""
+    """Máy chủ chặn định danh máy hoặc báo bận — cần đổi thiết bị và giãn cách."""
     text = str(error).lower()
-    return "shark block" in text or "'ret': '-6'" in text or '"ret": "-6"' in text
+    return (
+        "shark block" in text
+        or "'ret': '-6'" in text
+        or '"ret": "-6"' in text
+        or "'ret': '1014'" in text
+        or '"ret": "1014"' in text
+        or "system busy" in text
+        or "'ret': '1004'" in text
+        or '"ret": "1004"' in text
+    )
 
 
 class CapCutSynthesizer:
     """Đọc từng câu bằng API CapCut rồi chuyển sang WAV cho pipeline."""
-
-    recommended_threads = RECOMMENDED_THREADS
 
     def __init__(self, settings, voice_name: str):
         from autodub.speech.tts import capcut_catalog
@@ -125,14 +127,53 @@ class CapCutSynthesizer:
         self.voice_name = voice_name
         self._voice_type = entry["voice_type"]
         self._resource_id = entry["resource_id"]
+        self._pool = get_device_pool()
         self._device = _current_profile()
         self._client = CapCutClient(device=self._device)
+        self._local = threading.local()
+
+    @property
+    def recommended_threads(self) -> int:
+        threads = getattr(self.settings, "capcut_threads", None)
+        if threads:
+            return min(16, max(1, int(threads)))
+        env_val = os.environ.get("CAPCUT_THREADS")
+        if env_val:
+            return min(16, max(1, int(env_val)))
+        return RECOMMENDED_THREADS
 
     # -- gọi máy chủ ------------------------------------------------------
+
+    def _get_worker_client_and_device(self) -> Tuple[Any, dict]:
+        """Lấy client và hồ sơ thiết bị riêng biệt cho từng luồng thực thi."""
+        # Luồng phụ trong ThreadPoolExecutor (đa luồng thực sự):
+        if threading.current_thread() is not threading.main_thread():
+            client = getattr(self._local, "client", None)
+            device = getattr(self._local, "device", None)
+            if client is None or device is None:
+                from autodub.speech.tts.capcut_api import CapCutClient
+                device = self._pool.get_device()
+                client = CapCutClient(device=device)
+                self._local.client = client
+                self._local.device = device
+            return client, device
+
+        return self._client, self._device
 
     def _reload_device(self, used: dict) -> bool:
         """Nhận định danh mới sau khi ``used`` bị chặn. False là hết đường."""
         from autodub.speech.tts.capcut_api import CapCutClient
+
+        # Nếu đang ở worker thread có thread-local client:
+        if getattr(self._local, "client", None) is not None:
+            new_dev = self._pool.report_block(used)
+            try:
+                self._local.client.session.close()
+            except Exception:
+                pass
+            self._local.device = new_dev
+            self._local.client = CapCutClient(device=new_dev)
+            return True
 
         profile = _rotate_profile(used)
         if profile is None:
@@ -146,35 +187,41 @@ class CapCutSynthesizer:
         """MP3 do máy chủ đọc ra. Thử lại khi mạng lỗi; hết lượt thì ném."""
         last_error: Exception | None = None
         for attempt in range(RETRIES):
-            used = self._device
+            client, used = self._get_worker_client_and_device()
             try:
-                _throttle()
-                task = self._client.generate_speech(
+                try:
+                    _throttle(used)
+                except TypeError:
+                    _throttle()
+                task = client.generate_speech(
                     texts=text, voice=self._voice_type,
                     resource_id=self._resource_id, wait=True,
                     timeout=TASK_TIMEOUT_S)
                 url = task.get("speech_url")
                 if not url:
                     raise RuntimeError(f"Máy chủ không trả link audio: {task}")
-                resp = self._client.session.get(url,
-                                                timeout=DOWNLOAD_TIMEOUT_S)
+                resp = client.session.get(url, timeout=DOWNLOAD_TIMEOUT_S)
                 resp.raise_for_status()
                 if not resp.content:
                     raise RuntimeError("Máy chủ trả file audio rỗng")
+                self._pool.report_success(used)
                 _note_success()
                 return resp.content
             except Exception as e:  # noqa: BLE001 — lỗi nào cũng đáng thử lại
                 last_error = e
                 if _is_shark_block(e):
-                    # Bị chặn thì gửi lại y hệt chỉ tổ đào sâu thêm: phải đổi
-                    # định danh máy rồi mới thử tiếp, hết lượt đổi thì dừng.
                     if not self._reload_device(used):
                         raise RuntimeError(BLOCKED_HINT) from e
+                    sleep_s = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
+                    logger.warning(
+                        f"CapCut phản hồi chậm/bận ({e}) — đã đổi thiết bị và chờ {sleep_s:.1f}s (lần {attempt + 1}/{RETRIES})..."
+                    )
+                    time.sleep(sleep_s)
                     continue
                 if attempt < RETRIES - 1:
                     logger.warning(
                         f"CapCut lỗi (lần {attempt + 1}/{RETRIES}): {e}")
-                    time.sleep(BACKOFF_S[attempt])
+                    time.sleep(BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)])
         if last_error is not None and _is_shark_block(last_error):
             raise RuntimeError(BLOCKED_HINT) from last_error
         raise RuntimeError(f"Không đọc được câu bằng giọng CapCut sau "
@@ -208,12 +255,7 @@ class CapCutSynthesizer:
         output_path: str,
         target_duration: float | None = None,
     ) -> TTSResult:
-        """Đọc một câu ở tốc độ tự nhiên.
-
-        ``target_duration`` nhận vào cho khớp giao diện engine rồi bỏ qua —
-        giống VieNeu, việc co giãn thời lượng do VIDEO_SPEED/VOICE_SPEED lo
-        đồng loạt sau bước TTS.
-        """
+        """Đọc một câu ở tốc độ tự nhiên."""
         from autodub.media.audio import wav_duration_s
         from autodub.text.vi_numbers import normalize_vi_text
 
@@ -222,8 +264,6 @@ class CapCutSynthesizer:
 
         text = normalize_vi_text(text.strip())
         if not text.strip(".,!?;: "):
-            # Dòng trống (transcript sửa tay) — clip im lặng, cùng lý do như
-            # VieNeu: một dòng rỗng không được làm đổ cả video.
             return write_silence(output_path)
 
         self._to_wav(self._fetch_mp3(text), output_path)
@@ -239,4 +279,13 @@ class CapCutSynthesizer:
         """Đóng session HTTP khi pipeline chạy xong."""
         session = getattr(self._client, "session", None)
         if session is not None:
-            session.close()
+            try:
+                session.close()
+            except Exception:
+                pass
+        local_client = getattr(self._local, "client", None)
+        if local_client is not None and getattr(local_client, "session", None):
+            try:
+                local_client.session.close()
+            except Exception:
+                pass

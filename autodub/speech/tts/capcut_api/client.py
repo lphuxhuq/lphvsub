@@ -360,7 +360,7 @@ class CapCutClient:
         resource_id: Optional[str] = None,
         rate: str = "1.0",
         wait: bool = True,
-        poll_interval: float = 0.25,
+        poll_interval: float = 0.1,
         timeout: float = 60.0,
     ) -> Dict[str, Any]:
         """
@@ -378,7 +378,7 @@ class CapCutClient:
         token = tasks[0]["token"]
 
         start_time = time.time()
-        time.sleep(0.15)
+        time.sleep(0.08)
         while time.time() - start_time < timeout:
             query_res = self.query_tts_task(task_id, token)
             query_tasks = (query_res.get("data") or {}).get("tasks") or []

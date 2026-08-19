@@ -60,6 +60,12 @@ def transcribe_paraformer(audio_path: str, settings: Settings) -> list[dict]:
 
     threading.Thread(target=_drain, daemon=True).start()
 
+    from autodub.media.audio import wav_duration_s
+    from autodub.utils import format_eta
+    import time
+
+    total_audio_dur = wav_duration_s(audio_path) or 0.0
+    t0 = time.time()
     segments: list[dict] = []
     done = False
     try:
@@ -83,8 +89,15 @@ def transcribe_paraformer(audio_path: str, settings: Settings) -> list[dict]:
                     "end": round(end, 3),
                     "duration": round(end - start, 3),
                 })
+                elapsed = time.time() - t0
+                eta_text = ""
+                if total_audio_dur > 0 and end > 0:
+                    pct = min(99, int((end / total_audio_dur) * 100))
+                    rate = end / elapsed if elapsed > 0 else 1.0
+                    rem_s = max(0.0, total_audio_dur - end) / rate
+                    eta_text = f" [{pct}% | ⏱ Đã chạy: {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]"
                 logger.info(f"Segment {len(segments)}: "
-                            f"[{start:.1f}s-{end:.1f}s] {msg['text'][:50]}...")
+                            f"[{start:.1f}s-{end:.1f}s]{eta_text} {msg['text'][:40]}...")
             elif msg.get("done"):
                 done = True
         # Thời lượng phụ thuộc độ dài video — chờ tiến trình kết thúc hẳn

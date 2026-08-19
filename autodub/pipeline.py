@@ -1156,16 +1156,15 @@ class DubPipeline:
         if not settings.translate_enabled:
             return None
 
-        # 1. Ưu tiên gọi trực tiếp API bên thứ 3 (HHTech / DeepSeek / Gemini / OpenAI / OpenRouter) nếu có API key
+        # 1. Ưu tiên gọi trực tiếp API Google Gemini AI / Gemini SRT nếu có API key
         has_direct_key = bool(
-            settings.custom_ai_api_key.strip()
+            settings.gemini_api_key.strip()
             or settings.deepseek_api_key.strip()
             or settings.openrouter_api_key.strip()
             or settings.openai_api_key.strip()
-            or settings.gemini_api_key.strip()
         )
         if has_direct_key:
-            logger.info("Phát hiện API Key dịch AI bên thứ 3 — Dịch trực tiếp từ máy khách (không qua máy chủ trung gian)")
+            logger.info("Phát hiện Google Gemini API Key — Dịch trực tiếp từ máy khách qua Gemini SRT Engine (không qua máy chủ trung gian)")
             try:
                 from autodub.text.translate_direct import translate_segments_direct
                 ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
@@ -1175,7 +1174,7 @@ class DubPipeline:
             except PipelineCancelled:
                 raise
             except Exception as e:
-                logger.warning(f"Dịch tự động qua API bên thứ 3 lỗi ({e}) — chuyển sang dịch tay")
+                logger.warning(f"Dịch tự động qua Gemini/AI lỗi ({e}) — chuyển sang dịch tay")
                 rep.emit("translate", "error", detail=str(e))
                 return None
 
@@ -1587,6 +1586,7 @@ class DubPipeline:
         results: list[dict | None] = [None] * total
         count_lock = threading.Lock()
         done_count = 0
+        t_tts_start = time.time()
 
         def _one(seg: dict) -> dict:
             rep.check_cancelled()
@@ -1628,11 +1628,16 @@ class DubPipeline:
                         rep.emit("tts", "progress", current=n, total=total)
                         if (n % log_every == 0 or n == total
                                 or result["speed_adjusted"]):
+                            elapsed = time.time() - t_tts_start
+                            rate = n / elapsed if elapsed > 0 else 0
+                            rem_n = max(0, total - n)
+                            rem_s = rem_n / rate if rate > 0 else 0
+                            from autodub.utils import format_eta
+                            eta_info = f" [⏱ {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)} | {rate:.1f} câu/s]" if rem_n > 0 else f" [⏱ Tổng: {format_eta(elapsed)}]"
                             logger.info(
                                 f"  Segment {segments[i]['id']}: "
                                 f"{result['actual_duration']:.1f}s "
-                                f"(target: {segments[i]['duration']:.1f}s, "
-                                f"rate: {result['rate_applied']}) [{n}/{total}]"
+                                f"[{n}/{total}]{eta_info}"
                             )
                 except BaseException:
                     # Unstarted tasks never run; in-flight renders (a few

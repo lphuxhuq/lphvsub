@@ -52,12 +52,19 @@ class _BaseButton(QPushButton):
             super().setText(self._busy_text)
             self.setEnabled(False)
             self._timer_id = self.startTimer(_SPIN_INTERVAL_MS)
+            # Dim the button visually to reinforce "busy" state
+            from PySide6.QtWidgets import QGraphicsOpacityEffect
+            effect = QGraphicsOpacityEffect(self)
+            effect.setOpacity(0.65)
+            self.setGraphicsEffect(effect)
         else:
             if self._timer_id:
                 self.killTimer(self._timer_id)
                 self._timer_id = 0
             super().setText(self._idle_text)
             self.setEnabled(True)
+            # Remove opacity effect — restore full visual weight
+            self.setGraphicsEffect(None)
 
     def timerEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
         if event.timerId() != self._timer_id:

@@ -146,13 +146,15 @@ class NewProjectPage(BasePage):
         card.body.addWidget(self.log, 1)
 
         self.pending_banner = Banner("warning", "Đang chờ bản dịch tiếng Việt")
+        btn_gemini = GhostButton("Mở Gemini SRT Web")
+        btn_gemini.clicked.connect(self._open_gemini_srt_for_current_project)
         btn_hint = GhostButton("Mở hướng dẫn dịch")
         btn_hint.clicked.connect(self._open_hint)
         btn_dir = GhostButton("Mở thư mục dự án")
         btn_dir.clicked.connect(self._open_result_folder)
         self.btn_resume_after = PrimaryButton("Đã dịch xong, tiếp tục")
         self.btn_resume_after.clicked.connect(self._resume_after_translation)
-        for button in (btn_hint, btn_dir, self.btn_resume_after):
+        for button in (btn_gemini, btn_hint, btn_dir, self.btn_resume_after):
             self.pending_banner.add_button(button)
         card.body.addWidget(self.pending_banner)
 
@@ -385,7 +387,7 @@ class NewProjectPage(BasePage):
             ("Độ chính xác khi nghe",
              label_of(consts.WHISPER_MODELS, data["whisper_model"])),
             ("Cách dịch",
-             ("Google Gemini Direct (Trực tiếp, Đa luồng)" if data.get("translate_engine") == "gemini" and data.get("gemini_api_key")
+             ("Gemini SRT Translator Pro (Google Gemini AI, Đa luồng)" if data.get("translate_engine") in ("gemini", "gemini_srt") and data.get("gemini_api_key")
               else ("tự động qua VoxDub Cloud" if data["auto_translate"] else "dịch tay có hướng dẫn"))),
             ("Phong cách dịch",
              label_of([(a, b) for a, b, _c in consts.TRANSLATE_STYLES],
@@ -481,12 +483,6 @@ class NewProjectPage(BasePage):
         self.step_recognize.model.set_key(settings.whisper_model)
         self.step_translate.auto_translate.setChecked(settings.translate_enabled)
         self.step_translate.metadata.setChecked(settings.generate_metadata)
-        if hasattr(self.step_translate, "custom_ai_base_url"):
-            self.step_translate.custom_ai_base_url.set_text(settings.custom_ai_base_url or "https://hhtechapi.net/v1")
-        if hasattr(self.step_translate, "custom_ai_key"):
-            self.step_translate.custom_ai_key.set_text(settings.custom_ai_api_key)
-        if hasattr(self.step_translate, "custom_ai_model"):
-            self.step_translate.custom_ai_model.set_text(settings.custom_ai_model or "deepseek-v4-flash")
         if hasattr(self.step_translate, "gemini_key"):
             self.step_translate.gemini_key.set_text(settings.gemini_api_key)
         if hasattr(self.step_translate, "gemini_model") and settings.gemini_model:
@@ -678,12 +674,6 @@ class NewProjectPage(BasePage):
         changes = {"voice_speed": data["voice_speed"],
                    "translate_enabled": bool(data["auto_translate"]),
                    "generate_metadata": bool(data["generate_metadata"])}
-        if "custom_ai_base_url" in data and data["custom_ai_base_url"]:
-            changes["custom_ai_base_url"] = data["custom_ai_base_url"]
-        if "custom_ai_api_key" in data:
-            changes["custom_ai_api_key"] = data["custom_ai_api_key"]
-        if "custom_ai_model" in data and data["custom_ai_model"]:
-            changes["custom_ai_model"] = data["custom_ai_model"]
         if "gemini_api_key" in data:
             changes["gemini_api_key"] = data["gemini_api_key"]
         if "gemini_model" in data and data["gemini_model"]:
@@ -726,12 +716,6 @@ class NewProjectPage(BasePage):
         put("GENERATE_METADATA",
             bool_to_env(bool(data["generate_metadata"])),
             bool_to_env(settings.generate_metadata))
-        if "custom_ai_base_url" in data:
-            put("CUSTOM_AI_BASE_URL", data["custom_ai_base_url"], settings.custom_ai_base_url)
-        if "custom_ai_api_key" in data:
-            put("CUSTOM_AI_API_KEY", data["custom_ai_api_key"], settings.custom_ai_api_key)
-        if "custom_ai_model" in data:
-            put("CUSTOM_AI_MODEL", data["custom_ai_model"], settings.custom_ai_model)
         if "gemini_api_key" in data:
             put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
         if "gemini_model" in data and data["gemini_model"]:
@@ -991,7 +975,7 @@ class NewProjectPage(BasePage):
         if result.status == "credit_blocked":
             self._mark_interrupted("credit_blocked", result.work_dir)
             self._show_credit_blocked(result)
-            REGISTRY.finish_job(False, "không đủ Vox")
+            REGISTRY.finish_job(False, "bị chặn")
             return
         if result.status == "export_pending":
             self._mark_interrupted("export_pending", result.work_dir)
@@ -1018,7 +1002,7 @@ class NewProjectPage(BasePage):
                        on_action=self._open_result_video)
 
     def _show_export_pending(self, result: DubResult) -> None:
-        """Chạy xong phần lồng tiếng — sang bước Xuất video chờ chốt Vox."""
+        """Chạy xong phần lồng tiếng — sang bước Xuất video."""
         report = result.report or {}
         self.step_summary.set_stats(
             int(report.get("sentences") or 0),
@@ -1031,15 +1015,10 @@ class NewProjectPage(BasePage):
                        "hoàn chỉnh.")
 
     def _show_credit_blocked(self, result: DubResult) -> None:
-        report = result.report or {}
-        balance = int(report.get("balance") or 0)
-        required = int(report.get("required") or 0)
-        sentences = int(report.get("sentences") or 0)
         ConfirmDialog.show_error(
-            self, "Không đủ Vox cho video này",
-            f"Video có {sentences:,} câu thoại, cần giữ chỗ {required:,} Vox "
-            f"nhưng ví chỉ còn {balance:,} Vox. Nạp thêm rồi chạy lại — phần "
-            "đã nghe-chép được dùng lại, không mất công chờ.")
+            self, "Không đủ tài nguyên cho video này",
+            "Video có quá nhiều câu thoại so với giới hạn hiện tại. Hãy kiểm tra "
+            "cấu hình rồi chạy lại.")
 
     # -- Xuất video (chốt hold) ----------------------------------------
     def _export(self) -> None:
@@ -1085,14 +1064,6 @@ class NewProjectPage(BasePage):
 
     def _on_export_finished(self, result: DubResult) -> None:
         self._result = result
-        # Ví đã phản ánh phần hoàn giữ chỗ thừa — cập nhật thanh Vox.
-        try:
-            from autodub.saas_client import get_client
-            balance = int(get_client().device.get("balance") or 0)
-            if balance:
-                self.balance_changed.emit(balance)
-        except Exception:  # noqa: BLE001
-            pass
         self._show_completed(result)
 
     def _on_export_failed(self, message: str) -> None:
@@ -1108,18 +1079,31 @@ class NewProjectPage(BasePage):
             return
         ConfirmDialog.show_error(
             self, "Chưa xuất được video",
-            "Vox chưa bị trừ và dữ liệu vẫn được khóa an toàn. Kiểm tra mạng "
-            "rồi bấm Xuất video lần nữa.", detail=message)
+            "Kiểm tra mạng rồi bấm Xuất video lần nữa.", detail=message)
 
     def _show_pending(self, result: DubResult) -> None:
+        orig_srt = os.path.join(result.work_dir, "transcript_original.srt")
+        if os.path.exists(orig_srt):
+            try:
+                from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
+                get_server_manager().open_project_srt(orig_srt, work_dir=result.work_dir, open_browser=True)
+            except Exception:
+                pass
+
         self.pending_banner.set_text(
-            "Video đang chờ bản dịch tiếng Việt. Bấm Mở hướng dẫn dịch rồi làm "
-            "theo ba bước, mất khoảng hai đến ba phút. Lưu bản dịch xong thì "
-            "quay lại đây bấm Đã dịch xong, tiếp tục.\n\n"
-            "Mẹo: điền API Key Gemini miễn phí trong Cài đặt để ứng dụng tự "
-            "dịch, khỏi làm tay.\n\n"
+            "Video đã được nhận dạng và tạo phụ đề gốc xong. Trình duyệt đã tự động "
+            "mở Gemini SRT Translator Pro và nạp sẵn file phụ đề.\n\n"
+            "Bạn hãy bấm Bắt đầu dịch trên trình duyệt. Khi dịch xong, quay lại đây "
+            "bấm Đã dịch xong, tiếp tục.\n\n"
             f"Thư mục dự án: {result.work_dir}")
         self.pending_banner.setVisible(True)
+
+    def _open_gemini_srt_for_current_project(self) -> None:
+        if self._result is None or not self._result.work_dir:
+            return
+        orig_srt = os.path.join(self._result.work_dir, "transcript_original.srt")
+        from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
+        get_server_manager().open_project_srt(orig_srt, work_dir=self._result.work_dir, open_browser=True)
 
     def _on_failed(self, message: str) -> None:
         import logging as _log

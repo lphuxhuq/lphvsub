@@ -15,13 +15,13 @@ from PySide6.QtWidgets import (
 from autodub_gui import tokens
 from autodub_gui.ui.effects import soft_shadow
 
-_WIDTH = 340
+_WIDTH = 348
 _MARGIN = 20
-_GAP = 10
+_GAP = 8
 _TTL_MS = 4000
 _TTL_ERROR_MS = 8000
-_ANIM_MS = 150
-_SLIDE_PX = 8
+_ANIM_MS = 160   # slide + fade — InOutCubic
+_SLIDE_PX = 12   # px trượt lên khi xuất hiện
 _MAX_STACK = 3
 
 # loại thông báo -> màu vạch dọc bên trái
@@ -40,13 +40,16 @@ class _Toast(QFrame):
                  detail: str = "", action_label: str = "", on_action=None):
         super().__init__(parent)
         color = _KIND_COLOR.get(kind, tokens.ACCENT_BLUE)
+        # Glass panel look — BORDER_TOP là hairline highlight, BORDER_LEFT là color indicator
         self.setStyleSheet(
             f"QFrame {{ background: {tokens.BG_PANEL}; "
             f"border: 1px solid {tokens.BORDER_DEFAULT}; "
+            f"border-top: 1px solid {tokens.GLASS_BORDER}; "
             f"border-left: 3px solid {color}; "
             f"border-radius: {tokens.RADIUS_LG}px; }}")
         self.setFixedWidth(_WIDTH)
-        soft_shadow(self)
+        from autodub_gui.ui.effects import popup_shadow
+        popup_shadow(self)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(tokens.SP_4, tokens.SP_3,
@@ -151,16 +154,35 @@ class ToastManager(QObject):
         toast.start()
 
     def _animate_in(self, toast: _Toast) -> None:
-        """Hiện dần và trượt lên 8px trong 150ms."""
+        """Slide lên + fade in đồng thời — 160ms OutCubic.
+
+        Motivated: feedback action cần xuất hiện tức thì nhưng smooth.
+        Dùng pos animation (không trigger layout) + opacity (GPU-safe).
+        """
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+
+        # Opacity effect
+        effect = QGraphicsOpacityEffect(toast)
+        effect.setOpacity(0.0)
+        toast.setGraphicsEffect(effect)
+
+        op_anim = QPropertyAnimation(effect, b"opacity", toast)
+        op_anim.setDuration(_ANIM_MS)
+        op_anim.setStartValue(0.0)
+        op_anim.setEndValue(1.0)
+        op_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        op_anim.start()
+
+        # Slide up
         end = toast.pos()
         start = QPoint(end.x(), end.y() + _SLIDE_PX)
-        anim = QPropertyAnimation(toast, b"pos", toast)
-        anim.setDuration(_ANIM_MS)
-        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.setStartValue(start)
-        anim.setEndValue(end)
-        toast._anim = anim
-        anim.start()
+        pos_anim = QPropertyAnimation(toast, b"pos", toast)
+        pos_anim.setDuration(_ANIM_MS)
+        pos_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        pos_anim.setStartValue(start)
+        pos_anim.setEndValue(end)
+        toast._anim = pos_anim
+        pos_anim.start()
 
     def remove(self, toast: _Toast) -> None:
         """Bỏ một thông báo khỏi hàng đợi rồi xếp lại các cái còn lại."""

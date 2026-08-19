@@ -869,14 +869,13 @@ class EditorPage(VoiceAndExportMixin, BasePage):
 
         settings = self._settings_provider() if callable(self._settings_provider) else Settings.load()
         has_key = bool(
-            getattr(settings, "custom_ai_api_key", "").strip()
-            or getattr(settings, "gemini_api_key", "").strip()
+            getattr(settings, "gemini_api_key", "").strip()
             or getattr(settings, "deepseek_api_key", "").strip()
             or getattr(settings, "openrouter_api_key", "").strip()
             or getattr(settings, "openai_api_key", "").strip()
         )
         if not has_key:
-            TOASTS.warn("Chưa cấu hình API Key AI. Vui lòng vào Cài đặt > Dịch thuật để nhập key (HHTech / Gemini...).")
+            TOASTS.warn("Chưa cấu hình Google Gemini API Key. Vui lòng vào Cài đặt > Dịch thuật để nhập key Gemini.")
             return
 
         TOASTS.info(f"Đang dịch lại câu {seg_id} bằng AI...")

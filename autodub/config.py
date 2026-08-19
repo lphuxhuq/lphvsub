@@ -157,6 +157,8 @@ class Settings:
     # ffmpeg atempo, dịch qua mạng). Tự tính theo CPU lúc nạp cấu hình;
     # PARALLEL_WORKERS trong .env là lối thoát hiểm cho người biết việc.
     parallel_workers: int = 4
+    # Số câu tạo giọng CapCut song song qua Device Pool (1–16, mặc định 8 luồng)
+    capcut_threads: int = 8
 
     # HAI nút vặn thời lượng — không tự căn, không cắt, không nén từng câu.
     # Giọng luôn đọc ở voice_speed; video luôn chạy ở video_speed. Tiếng Việt
@@ -362,6 +364,7 @@ class Settings:
                 else str(_auto_vieneu_workers())))),
             parallel_workers=max(1, min(16, env_int("PARALLEL_WORKERS",
                                                     auto_workers))),
+            capcut_threads=max(1, min(16, env_int("CAPCUT_THREADS", "8"))),
             video_speed=min(1.0, max(0.5, env_float("VIDEO_SPEED", "1.0"))),
             voice_speed=min(2.0, max(0.5, env_float("VOICE_SPEED", "1.0"))),
             translate_cps_budget=env_float("TRANSLATE_CPS_BUDGET", "12.5"),

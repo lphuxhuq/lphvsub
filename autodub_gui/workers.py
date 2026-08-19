@@ -574,25 +574,20 @@ class SystemStatusWorker(QThread):
 
     @staticmethod
     def _translate_status(settings: Settings) -> tuple[str, bool | None]:
-        """Kết nối tới máy chủ dịch, và số Vox còn lại.
-
-        Chạy trong luồng nền của trang Trợ giúp nên được phép gọi mạng; mất
-        mạng thì báo đúng như vậy chứ không treo giao diện.
-        """
+        """Kiểm tra cấu hình API key dịch thuật."""
         if not settings.translate_enabled:
             return ("đang tắt", None)
-        from autodub.saas_client import SaasError, get_client, is_configured
+        # Kiểm tra có API key nào được cấu hình không
+        has_key = bool(
+            settings.gemini_api_keys
+            or getattr(settings, "deepseek_api_key", "")
+            or getattr(settings, "openrouter_api_key", "")
+            or getattr(settings, "openai_api_key", "")
+        )
+        if has_key:
+            return ("API key đã cấu hình — sẵn sàng dịch", True)
+        return ("chưa có API key dịch — vào Cài đặt để thêm", False)
 
-        if not is_configured():
-            return ("chạy thuần trên máy — bước dịch làm tay", True)
-        try:
-            device = get_client().ensure_session()
-        except SaasError as e:
-            return (f"chưa kết nối được ({str(e)[:60]})", False)
-        if not device.get("creditEnabled", True):
-            return ("VoxDub Cloud (đang miễn phí)", True)
-        balance = int(device.get("balance", 0))
-        return (f"VoxDub Cloud — còn {balance:,} Vox", balance > 0)
 
 
 class DownloadWorker(QThread):

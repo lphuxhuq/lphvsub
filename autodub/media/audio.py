@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from pydub import AudioSegment
@@ -334,15 +335,26 @@ def postprocess_voice_clips(segments: list[dict], src_dir: str, dst_dir: str,
 
     done = 0
     lock = threading.Lock()
+    t_post_start = time.time()
+    total_segs = len(segments)
+    log_step = max(1, min(50, total_segs // 5))
 
     def _tracked(seg: dict) -> None:
         nonlocal done
         _one(seg)
+        with lock:
+            done += 1
+            n = done
         if on_done is not None:
-            with lock:
-                done += 1
-                n = done
-            on_done(n, len(segments))
+            on_done(n, total_segs)
+        if n % log_step == 0 or n == total_segs:
+            elapsed = time.time() - t_post_start
+            rate = n / elapsed if elapsed > 0 else 0
+            rem_n = max(0, total_segs - n)
+            rem_s = rem_n / rate if rate > 0 else 0
+            from autodub.utils import format_eta
+            eta_info = f" [⏱ {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]" if rem_n > 0 else f" [⏱ Tổng: {format_eta(elapsed)}]"
+            logger.info(f"  Hậu kỳ âm thanh: {n}/{total_segs} câu ({int(n / total_segs * 100)}%){eta_info}")
 
     with ThreadPoolExecutor(max_workers=max_workers or _FFMPEG_WORKERS) as pool:
         list(pool.map(_tracked, segments))

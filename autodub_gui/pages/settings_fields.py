@@ -222,6 +222,10 @@ FIELDS: tuple[Field, ...] = (
           TAB_PERF, "Hiệu năng", "0",
           "Đặt 0 để tự chọn. Mỗi luồng tốn khoảng 1,5 GB bộ nhớ.",
           minimum=0, maximum=8, step=1, decimals=0),
+    Field("CAPCUT_THREADS", NUMBER, "Số luồng tạo giọng CapCut",
+          TAB_PERF, "Hiệu năng", "8",
+          "Số câu tạo giọng CapCut song song qua Device Pool. Mặc định 8 luồng siêu tốc.",
+          minimum=1, maximum=16, step=1, decimals=0),
     Field("HQ_BACKGROUND", CHECK, "Giữ nhạc nền chất lượng cao",
           TAB_PERF, "Hiệu năng", "true",
           "Tắt đi thì chạy nhanh hơn nhưng nhạc nền kém hơn một chút."),
@@ -270,18 +274,13 @@ FIELDS: tuple[Field, ...] = (
           "đĩa, nhưng dự án đó sẽ không sửa từng câu hay xuất lại được nữa."),
 
     # -- Thẻ Dịch thuật ------------------------------------------------
-    # Mô hình, lời nhắc và API Key nằm trên máy chủ VoxDub. Người dùng không
-    # chọn nơi dịch nữa — thứ họ đóng góp được là NGỮ CẢNH: video nói về gì,
-    # xưng hô ra sao, thuật ngữ nào phải dịch cố định. Máy chủ tự phân tích
-    # được phần lớn, nhưng người làm kênh biết rõ hơn máy.
     Field("TRANSLATE_ENABLED", CHECK, "Bật dịch tự động", TAB_TRANSLATE,
           "Dịch tự động", "true",
-          "Bật: máy chủ dịch toàn bộ, 12 Vox mỗi câu thoại. Tắt: ứng dụng "
-          "dừng ở bước dịch và hướng dẫn bạn dịch tay, còn 10 Vox mỗi câu."),
-    Field("TRANSLATE_BATCH_SIZE", NUMBER, "Số câu mỗi lượt gửi", TAB_TRANSLATE,
+          "Bật: ứng dụng gọi API dịch toàn bộ. Tắt: dừng ở bước dịch và hướng dẫn bạn dịch tay."),
+    Field("TRANSLATE_BATCH_SIZE", NUMBER, "Số câu mọi lượt gửi", TAB_TRANSLATE,
           "Dịch tự động", "40",
           "Lô nhỏ hơn thì chậm hơn một chút nhưng mạch dịch bám ngữ cảnh sát "
-          "hơn. Không ảnh hưởng số Vox — tính theo câu, không theo lượt gửi.",
+          "hơn.",
           minimum=1, maximum=100, step=5, decimals=0),
 
     # Khóa API dịch AI
@@ -309,18 +308,6 @@ FIELDS: tuple[Field, ...] = (
           "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)", "",
           "Khóa API DeepSeek từ platform.deepseek.com.",
           placeholder="sk-..."),
-    Field("CUSTOM_AI_BASE_URL", TEXT, "Base URL API bên thứ 3 (HHTech / Proxy)", TAB_TRANSLATE,
-          "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)", "https://hhtechapi.net/v1",
-          "Địa chỉ API tương thích chuẩn OpenAI (ví dụ: https://hhtechapi.net/v1).",
-          placeholder="https://hhtechapi.net/v1"),
-    Field("CUSTOM_AI_API_KEY", TEXT, "API Key bên thứ 3 (HHTech / Custom OpenAI)", TAB_TRANSLATE,
-          "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)", "",
-          "Nhập API key bên thứ 3 (HHTech API, SiliconFlow, OneAPI...). Có thể nhập nhiều key cách nhau bằng dấu phẩy.",
-          placeholder="sk-..."),
-    Field("CUSTOM_AI_MODEL", TEXT, "Model AI bên thứ 3", TAB_TRANSLATE,
-          "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)", "deepseek-v4-flash",
-          "Tên mô hình muốn dùng (ví dụ: deepseek-v4-flash, grok-4.6, deepseek-v4-pro, gpt-4o-mini).",
-          placeholder="deepseek-v4-flash"),
 
     Field("TRANSLATE_DOMAIN", TEXT, "Chủ đề video", TAB_TRANSLATE,
           "Ngữ cảnh video", "",
@@ -348,8 +335,17 @@ FIELDS: tuple[Field, ...] = (
     Field("GENERATE_METADATA", CHECK,
           "Tạo tiêu đề, mô tả và thẻ cho mạng xã hội", TAB_TRANSLATE,
           "Nội dung đăng bài", "true",
-          "Kết quả lưu vào thư mục dự án, tệp youtube_post.txt. Thêm 20 Vox "
-          "mỗi video — tắt đi nếu bạn tự viết."),
+          "Kết quả lưu vào thư mục dự án, tệp youtube_post.txt. Tắt đi nếu bạn tự viết."),
+
+    Field("CUSTOM_AI_BASE_URL", TEXT, "Địa chỉ API dịch AI", TAB_TRANSLATE,
+          "Dịch AI tùy chỉnh", "https://hhtechapi.net/v1",
+          "Địa chỉ máy chủ API tương thích OpenAI dùng cho dịch thuật."),
+    Field("CUSTOM_AI_API_KEY", TEXT, "Khóa API dịch AI", TAB_TRANSLATE,
+          "Dịch AI tùy chỉnh", "",
+          "Khóa API nếu sử dụng máy chủ dịch thuật riêng."),
+    Field("CUSTOM_AI_MODEL", TEXT, "Mô hình dịch AI", TAB_TRANSLATE,
+          "Dịch AI tùy chỉnh", "deepseek-v4-flash",
+          "Tên mô hình AI dùng để dịch thuật (ví dụ deepseek-v4-flash)."),
 )
 
 # Khóa do ứng dụng tự tính hoặc chỉ dùng nội bộ, không hiện thành ô nhập chữ.

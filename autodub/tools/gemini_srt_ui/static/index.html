@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemini SRT Translator Pro — Dịch phụ đề AI Hàng loạt & Chuyên sâu</title>
+  <meta name="description" content="Hệ thống dịch phụ đề và video/audio hàng loạt bằng Google Gemini AI với Streaming realtime, Custom Glossary và Trình chỉnh sửa chuyên nghiệp." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #0f1628;
+      --bg3: #161f36;
+      --surface: rgba(255,255,255,0.04);
+      --surface2: rgba(255,255,255,0.08);
+      --border: rgba(255,255,255,0.09);
+      --border2: rgba(255,255,255,0.16);
+      --text: #e8eaf6;
+      --text2: #9ca3af;
+      --text3: #6b7280;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --accent3: #a5b4fc;
+      --success: #22c55e;
+      --error: #f87171;
+      --warn: #fbbf24;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Inter", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 10% 0%, rgba(99,102,241,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 100%, rgba(129,140,248,0.12) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; position: relative; z-index: 1; }
+
+    /* Header */
+    header { padding: 40px 0 24px; text-align: center; }
+    .logo { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .logo-icon { width: 50px; height: 50px; background: linear-gradient(135deg, var(--accent), #a78bfa); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 8px 24px rgba(99,102,241,0.4); }
+    h1 { font-size: clamp(28px, 5vw, 42px); font-weight: 800; background: linear-gradient(135deg, var(--text) 30%, var(--accent3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .subtitle { color: var(--text2); font-size: 15px; margin-top: 6px; }
+    .badge-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+    .badge { background: var(--surface2); border: 1px solid var(--border2); border-radius: 999px; padding: 4px 12px; font-size: 12px; color: var(--text2); display: inline-flex; align-items: center; gap: 6px; }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(16px);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { border-color: var(--border2); }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--accent3); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .card-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+    /* Forms */
+    .form-grid { display: grid; gap: 16px; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+    @media(max-width: 768px) { .form-grid-2, .form-grid-3, .form-grid-4 { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 6px; position: relative; }
+    label { font-size: 13px; color: var(--text2); font-weight: 500; }
+    
+    .input-wrap { position: relative; display: flex; align-items: center; }
+    input, select, textarea {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      width: 100%;
+    }
+    .input-wrap input { padding-right: 42px; }
+    .eye-btn {
+      position: absolute; right: 8px; background: none; border: none;
+      color: var(--text2); cursor: pointer; padding: 6px; border-radius: 6px;
+      font-size: 14px; display: flex; align-items: center; justify-content: center;
+      transition: color 0.2s;
+    }
+    .eye-btn:hover { color: var(--text); background: var(--surface2); }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    input::placeholder { color: #4b5563; }
+    select option { background: #1a1f36; }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border2);
+      border-radius: var(--radius);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.06);
+    }
+    .drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .drop-icon { font-size: 38px; margin-bottom: 8px; }
+    .drop-text { font-size: 15px; color: var(--text2); }
+    .drop-text span { color: var(--accent2); font-weight: 600; }
+    .drop-ext { font-size: 12px; color: #6b7280; margin-top: 4px; }
+
+    /* File Queue List */
+    .queue-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .queue-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px;
+    }
+    .queue-info { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+    .queue-name { font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+    .queue-meta { font-size: 11px; color: var(--text3); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      padding: 11px 24px; border-radius: var(--radius-sm);
+      border: none; cursor: pointer; transition: all 0.2s;
+      text-decoration: none; white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(99,102,241,0.5); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-outline {
+      background: transparent; color: var(--text2);
+      border: 1px solid var(--border2);
+    }
+    .btn-outline:hover { border-color: var(--accent2); color: var(--accent3); background: rgba(99,102,241,0.06); }
+    .btn-success {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white; box-shadow: 0 4px 20px rgba(16,185,129,0.3);
+    }
+    .btn-success:hover { transform: translateY(-1px); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    /* Glossary Table */
+    .glossary-wrap {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg2); padding: 12px; margin-top: 10px;
+    }
+    .glossary-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .del-btn { background: none; border: none; color: var(--text3); cursor: pointer; padding: 6px; font-size: 14px; border-radius: 4px; }
+    .del-btn:hover { color: var(--error); background: rgba(239,68,68,0.1); }
+
+    /* Stats Dashboard */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; margin-bottom: 20px; }
+    @media(max-width: 650px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat-label { font-size: 11px; text-transform: uppercase; color: var(--text2); letter-spacing: 0.5px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+    .stat-val { font-size: 16px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+    .stat-val.accent { color: var(--accent3); }
+    .stat-val.green { color: #4ade80; }
+
+    /* Progress Bar */
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--text2); }
+    .progress-bar { height: 10px; background: var(--surface2); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #a78bfa); transition: width 0.4s ease; width: 0%; }
+    .progress-fill.done { background: linear-gradient(90deg, #059669, #22c55e); }
+    .progress-fill.error { background: linear-gradient(90deg, #b91c1c, #f87171); }
+
+    /* Tabs */
+    .tab-nav { display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .tab-btn {
+      background: transparent; border: 1px solid transparent; color: var(--text2);
+      padding: 6px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .tab-btn.active { background: var(--surface2); color: var(--accent3); border-color: var(--border2); }
+    .tab-btn:hover:not(.active) { color: var(--text); }
+
+    /* Subtitle Live Editor Table */
+    .sub-table-wrap {
+      max-height: 480px; overflow-y: auto; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); background: #0c101c;
+    }
+    .sub-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    .sub-table th {
+      background: var(--bg2); color: var(--text2); font-weight: 600; font-size: 12px;
+      padding: 10px 14px; position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--border2);
+    }
+    .sub-table td {
+      padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top;
+    }
+    .sub-table tr:hover { background: rgba(99,102,241,0.04); }
+    .sub-idx { width: 45px; color: var(--text3); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .sub-time { width: 175px; color: #a5b4fc; font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; }
+    .sub-orig { width: 38%; color: var(--text2); line-height: 1.5; word-break: break-word; }
+    .sub-trans { color: var(--text); line-height: 1.5; word-break: break-word; position: relative; }
+    
+    .edit-cell {
+      outline: none; border-radius: 4px; padding: 4px 6px; min-height: 24px; transition: all 0.2s;
+      background: rgba(255,255,255,0.02); border: 1px solid transparent;
+    }
+    .edit-cell:focus {
+      background: var(--bg2); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.25);
+    }
+    .edit-cell.modified { border-left: 3px solid var(--warn); background: rgba(251,191,36,0.05); }
+
+    .cps-tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; margin-left: 6px; font-family: 'JetBrains Mono', monospace; }
+    .cps-ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .cps-fast { background: rgba(239,68,68,0.2); color: #f87171; }
+
+    /* Log Box */
+    .log-box {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px;
+      height: 240px; overflow-y: auto; font-family: "JetBrains Mono", monospace;
+      font-size: 12px; color: #6ee7b7;
+    }
+    .log-line { padding: 1px 0; color: #6ee7b7; }
+    .log-line.err  { color: var(--error); font-weight: 600; }
+    .log-line.ok   { color: #4ade80; font-weight: 600; }
+    .log-line.prog { color: #a5b4fc; }
+    .log-line.sep  { color: #374151; }
+
+    /* Status Pill */
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+    }
+    .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .status-idle { background: rgba(75,85,99,0.2); color: var(--text2); }
+    .status-idle .dot { background: var(--text2); }
+    .status-running { background: rgba(99,102,241,0.15); color: var(--accent2); }
+    .status-running .dot { background: var(--accent); animation: pulse 1s infinite; }
+    .status-done { background: rgba(22,163,74,0.15); color: #4ade80; }
+    .status-done .dot { background: var(--success); }
+    .status-error { background: rgba(220,38,38,0.15); color: var(--error); }
+    .status-error .dot { background: var(--error); }
+    .status-stopped { background: rgba(251,191,36,0.15); color: var(--warn); }
+    .status-stopped .dot { background: var(--warn); }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* Download Box */
+    .download-box {
+      display: none; background: rgba(22,163,74,0.08);
+      border: 1px solid rgba(22,163,74,0.3);
+      border-radius: var(--radius); padding: 22px; text-align: center; margin-top: 20px;
+    }
+    .download-box.visible { display: block; }
+    .download-icon { font-size: 36px; margin-bottom: 8px; }
+
+    /* Collapsible */
+    .section-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; }
+    .section-toggle .arrow { transition: transform 0.25s; color: var(--text2); }
+    .section-toggle.open .arrow { transform: rotate(90deg); }
+    .collapsible { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+    .collapsible.open { max-height: 1200px; }
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+    /* Notification */
+    .notif {
+      position: fixed; top: 20px; right: 20px; z-index: 999;
+      background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: var(--radius-sm); padding: 12px 18px;
+      font-size: 13px; max-width: 380px; box-shadow: 0 10px 35px rgba(0,0,0,0.5);
+      transform: translateX(130%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(16px);
+    }
+    .notif.show { transform: translateX(0); }
+    .notif.success { border-color: rgba(34,197,94,0.5); color: #4ade80; }
+    .notif.error { border-color: rgba(248,113,113,0.5); color: var(--error); }
+    .notif.warn { border-color: rgba(251,191,36,0.5); color: var(--warn); }
+    .notif.info { border-color: rgba(99,102,241,0.5); color: var(--accent3); }
+
+    footer { text-align: center; padding: 32px 0 40px; color: #4b5563; font-size: 13px; }
+    footer a { color: var(--accent2); text-decoration: none; }
+
+    /* ===== KEY MANAGER ===== */
+    .key-input-row {
+      display: flex; gap: 8px; align-items: stretch;
+    }
+    .key-input-row textarea {
+      flex: 1; resize: none; min-height: 70px; font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; line-height: 1.6;
+    }
+    .key-add-btn {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: white; border: none; border-radius: var(--radius-sm);
+      padding: 0 18px; font-size: 18px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center; transition: all 0.2s;
+      white-space: nowrap; box-shadow: 0 2px 10px rgba(99,102,241,0.3);
+    }
+    .key-add-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(99,102,241,0.5); }
+
+    .key-list-wrap {
+      margin-top: 14px; display: flex; flex-direction: column; gap: 6px;
+      max-height: 260px; overflow-y: auto;
+    }
+    .key-list-wrap::-webkit-scrollbar { width: 5px; }
+    .key-list-wrap::-webkit-scrollbar-track { background: transparent; }
+    .key-list-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; }
+
+    .key-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 8px 12px;
+      font-size: 12px; font-family: 'JetBrains Mono', monospace;
+      transition: border-color 0.25s, background 0.25s;
+      animation: keySlideIn 0.2s ease;
+    }
+    @keyframes keySlideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .key-item.status-ok    { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.05); }
+    .key-item.status-fail  { border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.05); }
+    .key-item.status-checking { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.05); }
+
+    .key-icon { font-size: 15px; flex-shrink: 0; }
+    .key-text {
+      flex: 1; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .key-status-label {
+      font-size: 11px; font-family: 'Inter', sans-serif; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; flex-shrink: 0;
+    }
+    .key-item.status-ok    .key-status-label { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .key-item.status-fail  .key-status-label { color: var(--error); background: rgba(248,113,113,0.12); }
+    .key-item.status-checking .key-status-label { color: var(--accent3); background: rgba(99,102,241,0.15); }
+    .key-item .key-del-btn {
+      background: none; border: none; color: var(--text3); cursor: pointer;
+      font-size: 13px; padding: 3px 6px; border-radius: 4px; flex-shrink: 0;
+      transition: all 0.15s; line-height: 1;
+    }
+    .key-item .key-del-btn:hover { color: var(--error); background: rgba(248,113,113,0.12); }
+    .key-err-msg {
+      font-size: 10px; color: var(--error); margin-top: 3px; word-break: break-word;
+      font-family: 'Inter', sans-serif; padding-left: 2px; opacity: 0.9;
+    }
+    .key-item-inner { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .key-summary-bar {
+      display: flex; align-items: center; gap: 10px; margin-top: 12px;
+      padding: 8px 14px; border-radius: var(--radius-sm);
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 12px; flex-wrap: wrap;
+    }
+    .key-summary-bar .ks-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 999px; font-weight: 600;
+    }
+    .ks-chip.valid   { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .ks-chip.invalid { background: rgba(248,113,113,0.15); color: var(--error); }
+    .ks-chip.total   { background: rgba(99,102,241,0.12); color: var(--accent3); }
+    .ks-chip.fmt     { background: rgba(251,191,36,0.12); color: var(--warn); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🌐</div>
+    </div>
+    <h1>Gemini SRT Translator Pro</h1>
+    <p class="subtitle">Dịch phụ đề &amp; Video/Audio hàng loạt • Trực tiếp • Custom Glossary • Realtime Editor</p>
+    <div class="badge-row">
+      <span class="badge">🎬 SRT / ASS / VTT / MP4 / MKV</span>
+      <span class="badge">🤖 Multi-Key Pooling</span>
+      <span class="badge">📚 Custom Glossary</span>
+      <span class="badge">📦 Batch Queue (.ZIP)</span>
+      <span class="badge">✏️ Live Subtitle Editor</span>
+    </div>
+  </header>
+
+  <!-- API Key & Pooling Card -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <div class="card-title" style="margin-bottom:0;"><div class="dot"></div> Cấu hình API Gemini — Multi-Key Pool</div>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent2); font-size:12px; text-decoration:none;">🔑 Lấy API Key miễn phí ↗</a>
+      </div>
+    </div>
+
+    <!-- Input + Add row -->
+    <label style="font-size:13px; color:var(--text2); font-weight:500; margin-bottom:6px; display:block;">
+      Nhập API Key <span style="color:var(--text3)">(dán 1 key hoặc nhiều key cách nhau bởi dòng mới / dấu phẩy)</span> <span style="color:var(--error)">*</span>
+    </label>
+    <div class="key-input-row">
+      <textarea id="apiKeyInput" rows="2"
+        placeholder="AIzaSyXXXX...&#10;AIzaSyYYYY...&#10;Dán 1 hoặc nhiều key, mỗi key 1 dòng"
+        autocomplete="off"
+        onkeydown="if(event.ctrlKey&&event.key==='Enter'){addKeysFromInput();}"
+      ></textarea>
+      <button class="key-add-btn" onclick="addKeysFromInput()" title="Thêm key (Ctrl+Enter)">
+        ➕ Thêm
+      </button>
+    </div>
+    <div style="font-size:11px; color:var(--text3); margin-top:4px;">💡 Nhấn <kbd style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 5px;">Ctrl+Enter</kbd> hoặc nút Thêm để thêm key vào danh sách</div>
+
+    <!-- Key list -->
+    <div class="key-list-wrap" id="keyListWrap"></div>
+
+    <!-- Summary bar -->
+    <div class="key-summary-bar" id="keySummaryBar" style="display:none;">
+      <span style="color:var(--text2); font-weight:600;">📊 Kết quả kiểm tra:</span>
+      <span class="ks-chip total" id="ksSummaryTotal"></span>
+      <span class="ks-chip valid" id="ksSummaryValid"></span>
+      <span class="ks-chip invalid" id="ksSummaryInvalid"></span>
+    </div>
+
+    <!-- Hidden textarea for backward compat (stores raw keys) -->
+    <textarea id="apiKey" style="display:none;" autocomplete="off"></textarea>
+    <input type="hidden" id="apiKey2" />
+
+    <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" id="checkKeyBtn" onclick="loadModels()">🔍 Kiểm tra Key &amp; Tải Model</button>
+      <button class="btn btn-outline btn-sm" onclick="clearStoredKeys()" style="color:var(--error); border-color:rgba(248,113,113,0.3);">🗑️ Xóa tất cả key</button>
+      <span id="modelLoadStatus" style="font-size:12px;color:var(--text2);"></span>
+    </div>
+  </div>
+
+  <!-- Multi-File Upload & Queue -->
+  <div class="card">
+    <div class="card-title"><div class="dot"></div> Tệp đầu vào (Hỗ trợ kéo thả hàng loạt)</div>
+    <div class="form-grid">
+
+      <div class="field">
+        <div class="drop-zone" id="fileDrop" onclick="document.getElementById('fileInput').click()">
+          <input type="file" id="fileInput" multiple accept=".srt,.ass,.vtt,.mp4,.mkv,.avi,.mov,.mp3,.wav,.m4a" style="display:none" onchange="handleMultipleFiles(this)" />
+          <div class="drop-icon">📁</div>
+          <div class="drop-text"><span>Chọn file</span> hoặc kéo thả nhiều file vào đây</div>
+          <div class="drop-ext">Hỗ trợ phụ đề (.srt, .ass, .vtt) và Video/Audio (.mp4, .mkv, .mp3, .wav)</div>
+        </div>
+
+        <!-- File Queue List -->
+        <div class="queue-list" id="queueList"></div>
+      </div>
+
+      <!-- Language & Model -->
+      <div class="form-grid form-grid-3" style="align-content:start;">
+        <div class="field">
+          <label for="targetLang">Ngôn ngữ đích <span style="color:var(--error)">*</span></label>
+          <select id="targetLang" onchange="saveSettingsToStorage()">
+            <option value="Vietnamese">🇻🇳 Tiếng Việt</option>
+            <option value="English">🇺🇸 English</option>
+            <option value="Chinese Simplified">🇨🇳 中文 (Giản thể)</option>
+            <option value="Chinese Traditional">🇹🇼 中文 (Phồn thể)</option>
+            <option value="Japanese">🇯🇵 日本語</option>
+            <option value="Korean">🇰🇷 한국어</option>
+            <option value="French">🇫🇷 Français</option>
+            <option value="Spanish">🇪🇸 Español</option>
+            <option value="German">🇩🇪 Deutsch</option>
+            <option value="Portuguese">🇧🇷 Português</option>
+            <option value="Italian">🇮🇹 Italiano</option>
+            <option value="Russian">🇷🇺 Русский</option>
+            <option value="Arabic">🇸🇦 العربية</option>
+            <option value="Thai">🇹🇭 ภาษาไทย</option>
+            <option value="Indonesian">🇮🇩 Bahasa Indonesia</option>
+            <option value="Hindi">🇮🇳 हिन्दी</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modelName">Model AI Gemini</label>
+          <select id="modelName" onchange="saveSettingsToStorage()">
+            <option value="gemini-2.5-flash" selected>🚀 gemini-2.5-flash (Khuyên dùng)</option>
+            <option value="gemini-2.5-flash-lite">⚡ gemini-2.5-flash-lite (Nhanh &amp; Tiết kiệm)</option>
+            <option value="gemini-2.5-pro">🧠 gemini-2.5-pro (Chất lượng cao)</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="speedMode">Chế độ tốc độ</label>
+          <select id="speedMode" onchange="applySpeedMode(this.value)">
+            <option value="balanced" selected>⚖️ Cân bằng</option>
+            <option value="fast">⚡ Nhanh</option>
+            <option value="turbo">🚀 Turbo</option>
+            <option value="quality">🎯 Chất lượng</option>
+          </select>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Custom Glossary Card -->
+  <div class="card">
+    <div class="card-title section-toggle" onclick="toggleAdv(this, 'glossaryPanel')">
+      <div class="dot"></div>
+      📚 Từ điển thuật ngữ tùy chỉnh (Custom Glossary)
+      <span class="arrow" style="margin-left:auto;font-size:12px;">▶</span>
+    </div>
+    <div class="collapsible" id="glossaryPanel">
+      <p style="font-size:13px; color:var(--text2); margin-bottom:12px;">
+        Định nghĩa các từ khóa bắt buộc (tên nhân vật, danh xưng, thuật ngữ riêng) để Gemini luôn dịch cố định và đồng bộ:
+      </p>
+      <div class="glossary-wrap">
+        <div id="glossaryRows"></div>
+        <div class="glossary-row" style="margin-top:10px;">
+          <input type="text" id="newGlossarySrc" placeholder="Từ gốc (vd: Iron Man, Jutsu, Senpai)" />
+          <input type="text" id="newGlossaryTgt" placeholder="Bản dịch (vd: Người Sắt, Nhẫn Thuật, Tiền Bối)" />
+          <button class="btn btn-outline btn-sm" onclick="addGlossaryItem()">+ Thêm từ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advanced Settings -->
+  <div class="card">
+    <div class="card-title section-toggle" onclick="toggleAdv(this, 'advPanel')">
+      <div class="dot"></div>
+      ⚙️ Cài đặt nâng cao (Ngữ cảnh, Batch size, Streaming)
+      <span class="arrow" style="margin-left:auto;font-size:12px;">▶</span>
+    </div>
+    <div class="collapsible" id="advPanel">
+      <div class="form-grid">
+        <div class="field">
+          <label for="description">Mô tả ngữ cảnh phim / video</label>
+          <textarea id="description" rows="2" placeholder="Ví dụ: Phim kiếm hiệp cổ trang, xưng hô Huynh - Đệ. Phim tài liệu y khoa..."></textarea>
+        </div>
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label for="batchSize">Batch size (Số dòng / mẻ)</label>
+            <input type="number" id="batchSize" placeholder="30" min="1" max="500" />
+          </div>
+          <div class="field">
+            <label for="temperature">Temperature (0–2)</label>
+            <input type="number" id="temperature" placeholder="0.7" min="0" max="2" step="0.1" />
+          </div>
+          <div class="field">
+            <label for="startLine">Bắt đầu từ dòng (Auto-resume)</label>
+            <input type="number" id="startLine" placeholder="1" min="1" />
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-grid form-grid-2">
+          <div class="toggle-row">
+<span class="toggle-label">No-streaming (bắt buộc)</span>
+<label class="toggle"><input type="checkbox" id="noStreaming" checked disabled /><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Không dùng context trước đó</span>
+            <label class="toggle"><input type="checkbox" id="noContext" /><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Translate Button -->
+  <div style="text-align:center; margin-bottom: 24px;">
+    <button class="btn btn-primary" id="translateBtn" onclick="startTranslation()" style="padding:14px 50px; font-size:16px;">
+      ✨ Bắt đầu dịch phụ đề
+    </button>
+    <button class="btn btn-outline" id="stopBtn" onclick="stopTranslation()" style="display:none; padding:14px 30px; font-size:16px; border-color:var(--error); color:var(--error);">
+      ⏹ Dừng
+    </button>
+  </div>
+
+  <!-- Realtime Progress & Live Editor Card -->
+  <div class="card" id="progressCard" style="display:none;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+      <div class="card-title" style="margin-bottom:0;"><div class="dot"></div> Tiến trình &amp; Phụ đề trực tiếp</div>
+      <span class="status-pill status-idle" id="statusPill"><span class="dot"></span><span id="statusText">Đang chờ</span></span>
+    </div>
+
+    <!-- Stats Grid (ETA, Speed, Lines, Tokens) -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">⏱️ Đã chạy</span>
+        <span class="stat-val" id="statElapsed">0.0s</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">⏳ Còn lại (ETA)</span>
+        <span class="stat-val accent" id="statEta">--</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">⚡ Tốc độ</span>
+        <span class="stat-val" id="statSpeed">0.0 dòng/s</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">📝 Tiến độ dòng</span>
+        <span class="stat-val green" id="statLines">0 / 0 dòng</span>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-wrap" style="margin-bottom:20px;">
+      <div class="progress-header">
+        <span id="progressLabel">Đang dịch...</span>
+        <span id="progressPct" style="font-weight:700; color:var(--accent3);">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <!-- Tab navigation: Live Subtitles vs Logs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" id="tabSubBtn" onclick="switchTab('subtitles')">📺 Bảng phụ đề trực tiếp (<span id="subCountBadge">0</span> dòng)</button>
+      <button class="tab-btn" id="tabLogBtn" onclick="switchTab('logs')">📜 Terminal Logs</button>
+      
+      <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <!-- Timing Shift Tool -->
+        <div style="display:inline-flex; align-items:center; gap:4px;">
+          <input type="number" id="shiftMsInput" placeholder="± ms" style="width:70px; padding:4px 6px; font-size:11px;" />
+          <button class="btn btn-outline btn-sm" onclick="applyTimeShift()" title="Dịch chuyển timecode (ms)">⏱️ Shift</button>
+        </div>
+
+        <label style="font-size:12px; color:var(--text2); display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="autoScrollCheck" checked /> Tự cuộn
+        </label>
+        <button class="btn btn-outline btn-sm" id="saveSubBtn" onclick="saveEditedSubtitles()" style="display:none;" title="Lưu chỉnh sửa">
+          💾 Lưu
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Subtitle Stream Table & Tools -->
+    <div id="subtitlesTabContent">
+      <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <input type="text" id="subSearchInput" placeholder="🔍 Tìm kiếm câu gốc hoặc câu dịch..." oninput="filterSubtitles()" style="flex:1; min-width:200px; font-size:13px; padding:7px 12px;" />
+        <input type="text" id="findReplaceFind" placeholder="Tìm từ..." style="width:120px; font-size:12px; padding:6px 10px;" />
+        <input type="text" id="findReplaceWith" placeholder="Thay bằng..." style="width:120px; font-size:12px; padding:6px 10px;" />
+        <button class="btn btn-outline btn-sm" onclick="applyFindReplace()">🔄 Thay thế</button>
+      </div>
+
+      <div class="sub-table-wrap" id="subTableWrap">
+        <table class="sub-table" id="subTable">
+          <thead>
+            <tr>
+              <th class="sub-idx">#</th>
+              <th class="sub-time">Thời gian</th>
+              <th class="sub-orig">Câu gốc</th>
+              <th class="sub-trans">Bản dịch AI (Bấm vào để sửa trực tiếp)</th>
+            </tr>
+          </thead>
+          <tbody id="subTableBody">
+            <tr>
+              <td colspan="4" style="text-align:center; color:var(--text2); padding:30px;">
+                ⏳ Đang chuẩn bị dịch... Các dòng phụ đề sẽ xuất hiện ở đây theo thời gian thực.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Terminal Log Tab -->
+    <div id="logsTabContent" style="display:none;">
+      <div class="log-box" id="logBox"></div>
+    </div>
+
+    <!-- Download Box (Multi-format & ZIP) -->
+    <div class="download-box" id="downloadBox">
+      <div class="download-icon">🎉</div>
+      <p style="font-size:17px;font-weight:700;color:#4ade80;margin-bottom:4px;">Dịch hoàn tất!</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">Chọn định dạng tải về hoặc tải toàn bộ file nén ZIP:</p>
+      
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="downloadCurrentFormat('srt')">⬇️ Tải .SRT</button>
+        <button class="btn btn-outline" onclick="downloadCurrentFormat('ass')">⬇️ Tải .ASS</button>
+        <button class="btn btn-outline" onclick="downloadCurrentFormat('vtt')">⬇️ Tải .VTT</button>
+        <button class="btn btn-outline" onclick="downloadCurrentFormat('txt_bilingual')">📄 TXT Song ngữ</button>
+        <button class="btn btn-primary" id="downloadZipBtn" onclick="downloadAllZip()" style="display:none;">📦 Tải tất cả (.ZIP)</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="notif" id="notif"></div>
+
+<footer>
+  <p>Gemini SRT Translator Pro • Powered by <a href="https://github.com/MaKTaiL/gemini-srt-translator" target="_blank">gemini-srt-translator</a> &amp; Google Gemini AI</p>
+</footer>
+
+<script>
+  let uploadedQueue = [];
+  let currentJobId = null;
+  let currentBatchId = null;
+  let currentOutputFile = null;
+  let completedOutputFiles = [];
+  let liveSubtitlesData = [];
+  let modifiedSubtitles = new Set();
+  let activeTab = 'subtitles';
+  let pollingInterval = null;
+  let glossaryData = [];
+  let keyCheckResult = null; // {valid, total, keySet}
+
+  // ===== KEY MANAGER STATE =====
+  // Each entry: { value, status: 'pending'|'checking'|'ok'|'fail', err: null|string }
+  let keyPool = [];
+
+  const SPEED_MODES = {
+    turbo: { model: 'gemini-2.5-flash', batch: 100, noContext: true },
+    fast: { model: 'gemini-2.5-flash', batch: 60, noContext: true },
+    balanced: { model: 'gemini-2.5-flash', batch: 50, noContext: false },
+    quality: { model: 'gemini-2.5-pro', batch: 30, noContext: false }
+  };
+
+  // --- LocalStorage persistence ---
+  window.addEventListener('DOMContentLoaded', () => {
+    loadKeysFromStorage();
+    loadGlossaryFromStorage();
+  });
+
+  // --- Parse raw text into unique key strings ---
+  function parseRawKeys(raw) {
+    return (raw || '').replace(/,/g, '\n').split('\n')
+      .map(s => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+  }
+
+  // --- Add keys from textarea input ---
+  function addKeysFromInput() {
+    const inputEl = document.getElementById('apiKeyInput');
+    const raw = inputEl.value;
+    const parsed = parseRawKeys(raw);
+    if (!parsed.length) { showNotif('warn', 'Chưa nhập key nào!'); return; }
+    let added = 0;
+    for (const k of parsed) {
+      if (!keyPool.find(e => e.value === k)) {
+        keyPool.push({ value: k, status: 'pending', err: null });
+        added++;
+      }
+    }
+    inputEl.value = '';
+    renderKeyList();
+    saveKeyToStorage();
+    if (added > 0) showNotif('info', `✅ Đã thêm ${added} key vào danh sách`);
+    else showNotif('warn', 'Tất cả key đã tồn tại trong danh sách');
+  }
+
+  // --- Remove a key by index ---
+  function removeKey(idx) {
+    keyPool.splice(idx, 1);
+    renderKeyList();
+    saveKeyToStorage();
+  }
+
+  // --- Render the key list UI ---
+  function renderKeyList() {
+    const wrap = document.getElementById('keyListWrap');
+    wrap.innerHTML = '';
+    if (!keyPool.length) {
+      wrap.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:12px;padding:16px 0;">⚪ Chưa có key nào — nhập key ở trên rồi bấm <b>Thêm</b></div>';
+      document.getElementById('keySummaryBar').style.display = 'none';
+      return;
+    }
+    keyPool.forEach((entry, idx) => {
+      const item = document.createElement('div');
+      const statusCls = entry.status === 'ok' ? 'status-ok'
+                      : entry.status === 'fail' ? 'status-fail'
+                      : entry.status === 'checking' ? 'status-checking'
+                      : '';
+      const icon = entry.status === 'ok' ? '✅'
+                 : entry.status === 'fail' ? '❌'
+                 : entry.status === 'checking' ? '⏳'
+                 : (entry.value.startsWith('AIza') || entry.value.startsWith('AQ.')) ? '🔑' : '⚠️';
+      const label = entry.status === 'ok' ? 'Hợp lệ'
+                  : entry.status === 'fail' ? 'Không hợp lệ'
+                  : entry.status === 'checking' ? 'Đang kiểm tra…'
+                  : 'Chưa kiểm tra';
+      const masked = entry.value.length > 12
+        ? entry.value.slice(0, 8) + '···' + entry.value.slice(-4)
+        : entry.value;
+      item.className = 'key-item ' + statusCls;
+      item.innerHTML = `
+        <span class="key-icon">${icon}</span>
+        <div class="key-item-inner">
+          <span class="key-text" title="${entry.value}">${masked}</span>
+          ${entry.err ? `<div class="key-err-msg">${entry.err}</div>` : ''}
+        </div>
+        <span class="key-status-label">${label}</span>
+        <button class="key-del-btn" onclick="removeKey(${idx})" title="Xóa key này">✕</button>
+      `;
+      wrap.appendChild(item);
+    });
+    updateSummaryBar();
+  }
+
+  // --- Update the summary bar ---
+  function updateSummaryBar() {
+    const total = keyPool.length;
+    const validCount = keyPool.filter(e => e.status === 'ok').length;
+    const failCount = keyPool.filter(e => e.status === 'fail').length;
+    const bar = document.getElementById('keySummaryBar');
+    const anyChecked = keyPool.some(e => e.status === 'ok' || e.status === 'fail');
+    if (!anyChecked || total === 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('ksSummaryTotal').textContent   = `📦 Tổng: ${total}`;
+    document.getElementById('ksSummaryValid').textContent   = `✅ Hợp lệ: ${validCount}`;
+    document.getElementById('ksSummaryInvalid').textContent = `❌ Lỗi: ${failCount}`;
+    document.getElementById('ksSummaryInvalid').style.display = failCount > 0 ? '' : 'none';
+  }
+
+  // --- Sync keyPool → hidden #apiKey textarea (for backward compat) ---
+  function syncHiddenApiKey() {
+    document.getElementById('apiKey').value = keyPool.map(e => e.value).join('\n');
+  }
+
+  function saveKeyToStorage() {
+    syncHiddenApiKey();
+    const k1 = keyPool.map(e => e.value).join('\n');
+    localStorage.setItem('gemini_api_key', k1);
+    localStorage.setItem('gemini_api_key2', '');
+  }
+
+  // currentKeyList — returns all keys (or only valid if checked)
+  function currentKeyList() {
+    if (!keyPool.length) return [];
+    const anyChecked = keyPool.some(e => e.status === 'ok' || e.status === 'fail');
+    if (anyChecked) {
+      const valid = keyPool.filter(e => e.status === 'ok').map(e => e.value);
+      return valid.length ? valid : keyPool.map(e => e.value);
+    }
+    return keyPool.map(e => e.value);
+  }
+
+  function saveSettingsToStorage() {
+    const lang = document.getElementById('targetLang').value;
+    const model = document.getElementById('modelName').value;
+    const speed = document.getElementById('speedMode').value;
+    localStorage.setItem('gemini_target_lang', lang);
+    localStorage.setItem('gemini_model_name', model);
+    localStorage.setItem('gemini_speed_mode', speed);
+  }
+
+  function applySpeedMode(mode) {
+    const preset = SPEED_MODES[mode] || SPEED_MODES.balanced;
+    const modelSel = document.getElementById('modelName');
+    if ([...modelSel.options].some(o => o.value === preset.model)) {
+      modelSel.value = preset.model;
+    }
+    document.getElementById('batchSize').value = preset.batch;
+    document.getElementById('noContext').checked = preset.noContext;
+    saveSettingsToStorage();
+  }
+
+  async function loadKeysFromStorage() {
+    const k1 = localStorage.getItem('gemini_api_key') || '';
+    const lang = localStorage.getItem('gemini_target_lang');
+    const model = localStorage.getItem('gemini_model_name');
+    const speed = localStorage.getItem('gemini_speed_mode') || 'balanced';
+
+    // Restore keyPool from storage
+    const parsed = parseRawKeys(k1);
+    keyPool = parsed.map(v => ({ value: v, status: 'pending', err: null }));
+
+    // Auto-sync from VoxDub if no keys saved in browser
+    if (keyPool.length === 0) {
+      try {
+        const res = await fetch('/api/voxdub/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && data.config && Array.isArray(data.config.api_keys) && data.config.api_keys.length > 0) {
+            keyPool = data.config.api_keys.map(v => ({ value: v, status: 'pending', err: null }));
+            saveKeyToStorage();
+            if (data.config.target_lang && !lang) {
+              const langEl = document.getElementById('targetLang');
+              if (langEl) langEl.value = data.config.target_lang;
+            }
+            if (data.config.glossary) {
+              const gloEl = document.getElementById('glossaryInput');
+              if (gloEl && !gloEl.value) gloEl.value = data.config.glossary;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not sync VoxDub config:', e);
+      }
+    }
+
+    renderKeyList();
+
+    if (lang) document.getElementById('targetLang').value = lang;
+    if (model) document.getElementById('modelName').value = model;
+    if (speed && SPEED_MODES[speed]) document.getElementById('speedMode').value = speed;
+  }
+
+  function clearStoredKeys() {
+    localStorage.removeItem('gemini_api_key');
+    localStorage.removeItem('gemini_api_key2');
+    document.getElementById('apiKey').value = '';
+    keyPool = [];
+    keyCheckResult = null;
+    renderKeyList();
+    showNotif('warn', '🗑️ Đã xóa tất cả API Key khỏi bộ nhớ trình duyệt');
+  }
+
+  function toggleVisibility(inputId) {
+    const el = document.getElementById(inputId);
+    el.type = el.type === 'password' ? 'text' : 'password';
+  }
+
+  // --- Glossary Management ---
+  function loadGlossaryFromStorage() {
+    try {
+      glossaryData = JSON.parse(localStorage.getItem('gemini_glossary') || '[]');
+    } catch(e) { glossaryData = []; }
+    renderGlossaryRows();
+  }
+
+  function saveGlossaryToStorage() {
+    localStorage.setItem('gemini_glossary', JSON.stringify(glossaryData));
+  }
+
+  function renderGlossaryRows() {
+    const container = document.getElementById('glossaryRows');
+    container.innerHTML = '';
+    glossaryData.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'glossary-row';
+      row.innerHTML = `
+        <input type="text" value="${escapeHtml(item.src)}" oninput="updateGlossaryItem(${idx}, 'src', this.value)" />
+        <input type="text" value="${escapeHtml(item.tgt)}" oninput="updateGlossaryItem(${idx}, 'tgt', this.value)" />
+        <button class="del-btn" onclick="removeGlossaryItem(${idx})" title="Xóa">✕</button>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  function addGlossaryItem() {
+    const src = document.getElementById('newGlossarySrc').value.trim();
+    const tgt = document.getElementById('newGlossaryTgt').value.trim();
+    if (!src || !tgt) {
+      showNotif('error', 'Vui lòng nhập cả từ gốc và bản dịch!');
+      return;
+    }
+    glossaryData.push({ src, tgt });
+    saveGlossaryToStorage();
+    renderGlossaryRows();
+    document.getElementById('newGlossarySrc').value = '';
+    document.getElementById('newGlossaryTgt').value = '';
+    showNotif('success', `Đã thêm thuật ngữ: "${src}" -> "${tgt}"`);
+  }
+
+  function updateGlossaryItem(idx, field, val) {
+    if (glossaryData[idx]) {
+      glossaryData[idx][field] = val;
+      saveGlossaryToStorage();
+    }
+  }
+
+  function removeGlossaryItem(idx) {
+    glossaryData.splice(idx, 1);
+    saveGlossaryToStorage();
+    renderGlossaryRows();
+  }
+
+  // --- Multi-file Drag & drop ---
+  ['fileDrop'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault(); el.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) handleMultipleFiles({ files: e.dataTransfer.files });
+    });
+  });
+
+  async function handleMultipleFiles(input) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      await uploadSingleFile(file);
+    }
+    renderQueueList();
+  }
+
+  async function uploadSingleFile(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      uploadedQueue.push({
+        filename: data.filename,
+        original: data.original,
+        line_count: data.line_count,
+        file_type: data.file_type,
+        size_mb: data.size_mb,
+        status: 'ready'
+      });
+      showNotif('success', `Đã tải lên: ${data.original}`);
+    } catch (e) {
+      showNotif('error', `Lỗi tải file ${file.name}: ${e.message}`);
+    }
+  }
+
+  function renderQueueList() {
+    const container = document.getElementById('queueList');
+    container.innerHTML = '';
+    uploadedQueue.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'queue-item';
+
+      const info = document.createElement('div');
+      info.className = 'queue-info';
+
+      const icon = document.createElement('span');
+      icon.textContent = item.file_type === 'video' ? '🎬' : (item.file_type === 'audio' ? '🎵' : '📄');
+
+      const name = document.createElement('span');
+      name.className = 'queue-name';
+      name.textContent = String(item.original || '');
+      name.title = String(item.original || '');
+
+      const lines = item.line_count ? `${item.line_count} dòng` : `${item.size_mb} MB`;
+      const meta = document.createElement('span');
+      meta.className = 'queue-meta';
+      meta.textContent = `(${lines})`;
+
+      info.append(icon, name, meta);
+
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex; align-items:center; gap:10px;';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = item.status === 'ready' ? 'Sẵn sàng' : item.status;
+
+      const del = document.createElement('button');
+      del.className = 'del-btn';
+      del.title = 'Xóa file';
+      del.textContent = '✕';
+      del.addEventListener('click', () => removeFromQueue(idx));
+
+      actions.append(badge, del);
+      div.append(info, actions);
+      container.appendChild(div);
+    });
+  }
+
+  function removeFromQueue(idx) {
+    uploadedQueue.splice(idx, 1);
+    renderQueueList();
+  }
+
+  async function loadModels() {
+    if (!keyPool.length) { showNotif('error', 'Vui lòng nhập ít nhất 1 API Key!'); return; }
+
+    // Mark all as checking
+    keyPool.forEach(e => { e.status = 'checking'; e.err = null; });
+    renderKeyList();
+
+    const allKeys = keyPool.map(e => e.value);
+    const statusEl = document.getElementById('modelLoadStatus');
+    const btn = document.getElementById('checkKeyBtn');
+    btn.disabled = true;
+    statusEl.textContent = `⏳ Đang kiểm tra ${allKeys.length} API Key...`;
+
+    try {
+      const res = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: allKeys[0], api_keys: allKeys })
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        // All keys failed — mark all fail
+        keyPool.forEach(e => { e.status = 'fail'; e.err = data.error || `Lỗi ${res.status}`; });
+        renderKeyList();
+        statusEl.textContent = '❌ Không có key hợp lệ';
+        showNotif('error', data.error || `Lỗi kết nối (${res.status})`);
+        btn.disabled = false;
+        return;
+      }
+
+      // Backend trả về valid_keys list nếu có, hoặc dùng valid_count
+      const validKeys = data.valid_keys || [];
+      const validCount = data.valid_count || validKeys.length || 0;
+      const total = allKeys.length;
+
+      // Update individual key status based on valid_keys list
+      if (validKeys.length > 0) {
+        keyPool.forEach(e => {
+          if (validKeys.includes(e.value)) {
+            e.status = 'ok'; e.err = null;
+          } else {
+            e.status = 'fail';
+            e.err = 'Key không hợp lệ hoặc hết quota';
+          }
+        });
+      } else {
+        // Fallback: mark first validCount keys as ok
+        keyPool.forEach((e, i) => {
+          e.status = i < validCount ? 'ok' : 'fail';
+          if (i >= validCount) e.err = 'Không thể xác thực (hết quota hoặc sai định dạng)';
+        });
+      }
+      renderKeyList();
+
+      keyCheckResult = {
+        valid: validCount, total,
+        keySet: allKeys.slice().sort().join('|')
+      };
+      syncHiddenApiKey();
+      saveKeyToStorage();
+
+      const failCount = total - validCount;
+      if (failCount > 0) {
+        showNotif('warn', `⚠️ ${failCount}/${total} key không hợp lệ. Chỉ dùng ${validCount} key hoạt động.`);
+      }
+
+      const models = data.models || [];
+      if (models.length > 0) {
+        const sel = document.getElementById('modelName');
+        const currentVal = sel.value;
+        sel.innerHTML = '';
+        models.forEach(m => {
+          const name = typeof m === 'string' ? m : (m.name || m.id || JSON.stringify(m));
+          const opt = document.createElement('option');
+          opt.value = name;
+          let badge = '';
+          if (name === 'gemini-2.5-flash') badge = ' 🚀 (Khuyên dùng)';
+          else if (name === 'gemini-2.5-flash-lite') badge = ' ⚡ (Nhanh & Tiết kiệm)';
+          else if (name === 'gemini-2.5-pro') badge = ' 🧠 (Chất lượng cao)';
+          opt.textContent = name + badge;
+          if (name === currentVal || (!currentVal && name === 'gemini-2.5-flash')) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        if (!sel.value && sel.options.length > 0) sel.selectedIndex = 0;
+        statusEl.textContent = `✅ ${models.length} models | ${validCount}/${total} key hợp lệ`;
+        if (failCount === 0) {
+          showNotif('success', `🎉 Tất cả ${total} key hợp lệ! ${models.length} model sẵn sàng.`);
+        } else {
+          showNotif('info', `✅ Kết nối OK — ${validCount}/${total} key hợp lệ, ${models.length} model.`);
+        }
+      } else {
+        statusEl.textContent = `✅ ${validCount}/${total} key hợp lệ`;
+        showNotif('success', `✅ ${validCount}/${total} key hợp lệ.`);
+      }
+    } catch (e) {
+      keyPool.forEach(k => { if (k.status === 'checking') { k.status = 'fail'; k.err = e.message; } });
+      renderKeyList();
+      statusEl.textContent = '❌ Lỗi kết nối';
+      showNotif('error', e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function toggleAdv(btn, targetId) {
+    btn.classList.toggle('open');
+    document.getElementById(targetId).classList.toggle('open');
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tabSubBtn').classList.toggle('active', tab === 'subtitles');
+    document.getElementById('tabLogBtn').classList.toggle('active', tab === 'logs');
+    document.getElementById('subtitlesTabContent').style.display = tab === 'subtitles' ? 'block' : 'none';
+    document.getElementById('logsTabContent').style.display = tab === 'logs' ? 'block' : 'none';
+  }
+
+  // --- Translation Engine (Single & Batch) ---
+  async function startTranslation() {
+    const rawVal = document.getElementById('apiKey').value || '';
+    const keys = rawVal.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/,/g, '\n').split('\n').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+    if (!keys.length) { showNotif('error', 'Vui lòng nhập Gemini API Key!'); return; }
+    if (!uploadedQueue.length) { showNotif('error', 'Vui lòng chọn ít nhất 1 file phụ đề/video!'); return; }
+    const poolKeys = keys.slice();
+    const key2Field = document.getElementById('apiKey2').value.trim();
+    if (key2Field && !poolKeys.includes(key2Field)) { poolKeys.push(key2Field); }
+
+    saveKeyToStorage();
+    saveSettingsToStorage();
+
+    const basePayload = {
+      api_key: poolKeys[0],
+      api_keys: poolKeys,
+      api_key2: key2Field || null,
+      target_language: document.getElementById('targetLang').value,
+      model_name: document.getElementById('modelName').value || 'gemini-2.5-flash',
+      speed_mode: document.getElementById('speedMode').value || 'balanced',
+      description: document.getElementById('description').value.trim() || null,
+      batch_size: document.getElementById('batchSize').value || null,
+      temperature: document.getElementById('temperature').value || null,
+      start_line: document.getElementById('startLine').value || null,
+      no_context: document.getElementById('noContext').checked,
+      glossary: glossaryData
+    };
+
+    document.getElementById('translateBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'inline-flex';
+    document.getElementById('progressCard').style.display = 'block';
+    document.getElementById('downloadBox').classList.remove('visible');
+    document.getElementById('saveSubBtn').style.display = 'inline-flex';
+    document.getElementById('logBox').innerHTML = '';
+
+    clearSubtitleTable();
+    liveSubtitlesData = [];
+    modifiedSubtitles.clear();
+    completedOutputFiles = [];
+
+    setStatus('running');
+    setProgress(0);
+    switchTab('subtitles');
+
+    if (uploadedQueue.length === 1) {
+      // Single file translation
+      const singlePayload = {
+        ...basePayload,
+        input_file: uploadedQueue[0].filename,
+        original_name: uploadedQueue[0].original,
+        work_dir: uploadedQueue[0].work_dir || ''
+      };
+      try {
+        const res = await fetch('/api/translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(singlePayload)
+        });
+        const data = await res.json();
+        currentJobId = data.job_id;
+        pollStatus(currentJobId);
+      } catch (e) {
+        setStatus('error');
+        showNotif('error', 'Lỗi khi bắt đầu: ' + e.message);
+        document.getElementById('translateBtn').disabled = false;
+        document.getElementById('stopBtn').style.display = 'none';
+      }
+    } else {
+      // Multi-file batch translation
+      const batchPayload = {
+        ...basePayload,
+        files: uploadedQueue
+      };
+      try {
+        const res = await fetch('/api/batch_translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batchPayload)
+        });
+        const data = await res.json();
+        currentBatchId = data.batch_id;
+        pollBatchStatus(currentBatchId);
+        document.getElementById('downloadZipBtn').style.display = 'inline-flex';
+      } catch (e) {
+        setStatus('error');
+        showNotif('error', 'Lỗi batch translation: ' + e.message);
+        document.getElementById('translateBtn').disabled = false;
+        document.getElementById('stopBtn').style.display = 'none';
+      }
+    }
+  }
+
+  async function stopTranslation() {
+    const stopBtn = document.getElementById('stopBtn');
+    stopBtn.disabled = true;
+    try {
+      if (currentJobId) {
+        await fetch('/api/stop/' + currentJobId, { method: 'POST' });
+      }
+      if (currentBatchId) {
+        await fetch('/api/batch_stop/' + currentBatchId, { method: 'POST' });
+      }
+      showNotif('warn', 'Đang dừng dịch...');
+    } catch (e) {
+      stopBtn.disabled = false;
+      showNotif('error', 'Lỗi khi dừng: ' + e.message);
+    }
+  }
+
+  function pollStatus(job_id) {
+    if (pollingInterval) clearInterval(pollingInterval);
+    let statusTick = 0;
+    pollingInterval = setInterval(async () => {
+      try {
+        statusTick++;
+        const includeSubtitles = statusTick % 5 === 1;
+        const res = await fetch(`/api/status/${job_id}?include_subtitles=${includeSubtitles ? 1 : 0}`);
+        const data = await res.json();
+        if (data.error) { clearInterval(pollingInterval); setStatus('error'); return; }
+
+        if (data.output_file) {
+          currentOutputFile = data.output_file;
+          if (!completedOutputFiles.includes(data.output_file)) completedOutputFiles.push(data.output_file);
+        }
+
+        // Stats
+        document.getElementById('statElapsed').textContent = formatSeconds(data.elapsed_sec);
+        document.getElementById('statEta').textContent = (data.status === 'done') ? 'Xong ✅' : (data.eta_sec > 0 ? '~' + formatSeconds(data.eta_sec) : '--');
+        document.getElementById('statSpeed').textContent = `${data.speed_lps || 0} dòng/s`;
+        document.getElementById('statLines').textContent = `${data.current_lines || 0} / ${data.total_lines || 0} dòng`;
+
+        // Progress
+        setProgress(Math.max(data.progress || 0, 0));
+
+        // Subtitles stream
+        if (includeSubtitles && data.subtitles && data.subtitles.length > 0) {
+          updateSubtitlesTable(data.subtitles);
+        }
+
+        // Logs
+        renderLogs(data.log || []);
+
+        if (data.status === 'done') {
+          clearInterval(pollingInterval);
+          setStatus('done');
+          setProgress(100);
+          document.getElementById('translateBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
+          document.getElementById('downloadBox').classList.add('visible');
+
+          if (!includeSubtitles) {
+            try {
+              const finalRes = await fetch(`/api/status/${job_id}?include_subtitles=1`);
+              const finalData = await finalRes.json();
+              if (finalData.subtitles) updateSubtitlesTable(finalData.subtitles);
+              if (finalData.output_file && !completedOutputFiles.includes(finalData.output_file)) {
+                completedOutputFiles.push(finalData.output_file);
+              }
+            } catch (e) {}
+          }
+
+          showNotif('success', '🎉 Dịch hoàn tất! Bạn có thể tải file hoặc chỉnh sửa.');
+        } else if (data.status === 'error') {
+          clearInterval(pollingInterval);
+          setStatus('error');
+          document.getElementById('translateBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
+          showNotif('error', 'Lỗi: ' + (data.error || 'Không xác định'));
+        } else if (data.status === 'stopped') {
+          clearInterval(pollingInterval);
+          setStatus('stopped');
+          document.getElementById('translateBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
+          showNotif('warn', 'Đã dừng dịch.');
+        }
+      } catch (e) {
+        console.error('polling error:', e);
+      }
+    }, 1200);
+  }
+
+  function pollBatchStatus(batch_id) {
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/batch_status/' + batch_id);
+        const data = await res.json();
+        if (data.error) { clearInterval(pollingInterval); setStatus('error'); return; }
+
+        const failedFiles = data.failed_files || [];
+        const batchLabel = `Đang dịch hàng loạt: ${data.completed_files}/${data.total_files} file hoàn tất${failedFiles.length ? `, ${failedFiles.length} lỗi` : ''}`;
+        setProgress(data.overall_progress || 0, batchLabel);
+        document.getElementById('statLines').textContent = `${data.translated_lines || 0} / ${data.total_lines || 0} dòng`;
+
+        // Check running sub-job to update live preview
+        const runningJob = (data.jobs || []).find(j => j.status === 'running');
+        if (runningJob) {
+          pollSubJobPreview(runningJob.job_id);
+        }
+
+        data.jobs.forEach(j => {
+          if (j.output_file && !completedOutputFiles.includes(j.output_file)) {
+            completedOutputFiles.push(j.output_file);
+          }
+        });
+
+        if (data.status === 'done') {
+          clearInterval(pollingInterval);
+          document.getElementById('translateBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
+          document.getElementById('downloadBox').classList.add('visible');
+
+          if (failedFiles.length) {
+            setStatus('error');
+            setProgress(100, `Hoàn tất nhưng ${failedFiles.length} file lỗi`);
+            showNotif('error', `Hoàn tất với lỗi: ${failedFiles.join(', ')}`);
+          } else {
+            setStatus('done');
+            setProgress(100);
+            showNotif('success', `🎉 Đã hoàn tất toàn bộ ${data.total_files} file!`);
+          }
+        } else if (data.status === 'stopped') {
+          clearInterval(pollingInterval);
+          setStatus('stopped');
+          document.getElementById('translateBtn').disabled = false;
+          document.getElementById('stopBtn').style.display = 'none';
+          showNotif('warn', `Đã dừng batch.`);
+        }
+      } catch(e) {}
+    }, 1500);
+  }
+
+  async function pollSubJobPreview(job_id) {
+    try {
+      const res = await fetch('/api/status/' + job_id);
+      const data = await res.json();
+      if (data.output_file) currentOutputFile = data.output_file;
+      if (data.subtitles) updateSubtitlesTable(data.subtitles);
+      if (data.log) renderLogs(data.log);
+      document.getElementById('statSpeed').textContent = `${data.speed_lps || 0} dòng/s`;
+      document.getElementById('statEta').textContent = data.eta_sec > 0 ? '~' + formatSeconds(data.eta_sec) : '--';
+    } catch(e) {}
+  }
+
+  function renderLogs(logs) {
+    const logBox = document.getElementById('logBox');
+    const wasAtBottom = logBox.scrollHeight - logBox.scrollTop <= logBox.clientHeight + 35;
+    logBox.innerHTML = '';
+    logs.forEach(line => {
+      const d = document.createElement('div');
+      let cls = 'log-line';
+      const lo = line.toLowerCase();
+      if (lo.includes('error') || lo.includes('lỗi') || lo.includes('failed') || lo.includes('exception')) cls += ' err';
+      else if (lo.includes('complete') || lo.includes('hoàn thành') || lo.includes('done') || lo.includes('success') || lo.includes('100%')) cls += ' ok';
+      else if (lo.includes('%') || lo.includes('translat') || lo.includes('dịch')) cls += ' prog';
+      else if (lo.startsWith('---') || lo.startsWith('===')) cls += ' sep';
+      d.className = cls;
+      d.textContent = line;
+      logBox.appendChild(d);
+    });
+    if (wasAtBottom && document.getElementById('autoScrollCheck').checked && activeTab === 'logs') {
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+  }
+
+  function clearSubtitleTable() {
+    const tbody = document.getElementById('subTableBody');
+    tbody.innerHTML = '';
+    document.getElementById('subCountBadge').textContent = '0';
+  }
+
+  function updateSubtitlesTable(subtitles) {
+    const tbody = document.getElementById('subTableBody');
+    const autoScroll = document.getElementById('autoScrollCheck').checked;
+    liveSubtitlesData = subtitles;
+    document.getElementById('subCountBadge').textContent = subtitles.length;
+
+    let hasNew = false;
+    if (tbody.children.length === 1 && tbody.children[0].cells.length === 1) tbody.innerHTML = '';
+    if (!subtitles.length) {
+      tbody.innerHTML = '';
+      return;
+    }
+
+    subtitles.forEach((sub, i) => {
+      let tr = document.getElementById(`sub-row-${i}`);
+      if (!tr) {
+        hasNew = true;
+        tr = document.createElement('tr');
+        tr.id = `sub-row-${i}`;
+        const cpsClass = sub.cps > 24 ? 'cps-fast' : 'cps-ok';
+        const cpsBadge = sub.cps ? `<span class="cps-tag ${cpsClass}">${sub.cps} c/s</span>` : '';
+        tr.innerHTML = `
+          <td class="sub-idx">${sub.index}</td>
+          <td class="sub-time">${sub.start} → ${sub.end} ${cpsBadge}</td>
+          <td class="sub-orig">${escapeHtml(sub.original)}</td>
+          <td class="sub-trans">
+            <div class="edit-cell" contenteditable="true" data-idx="${i}" oninput="onSubCellEdit(this, ${i})">
+              ${escapeHtml(sub.translated || '')}
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      } else if (!modifiedSubtitles.has(i)) {
+        const cell = tr.querySelector('.edit-cell');
+        if (cell && document.activeElement !== cell) {
+          const cur = cell.innerText.trim();
+          const nxt = (sub.translated || '').trim();
+          if (cur !== nxt) cell.innerText = sub.translated || '';
+        }
+      }
+    });
+
+    while (tbody.children.length > subtitles.length) {
+      tbody.removeChild(tbody.lastChild);
+    }
+
+    if (hasNew && autoScroll && activeTab === 'subtitles') {
+      const wrap = document.getElementById('subTableWrap');
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+  }
+
+  function onSubCellEdit(el, idx) {
+    modifiedSubtitles.add(idx);
+    el.classList.add('modified');
+    if (liveSubtitlesData[idx]) {
+      liveSubtitlesData[idx].translated = el.innerText;
+    }
+  }
+
+  async function saveEditedSubtitles() {
+    if (!currentOutputFile) {
+      showNotif('error', 'Không tìm thấy file để lưu.');
+      return;
+    }
+    const payload = {
+      filename: currentOutputFile,
+      subtitles: liveSubtitlesData.map(s => ({
+        index: s.index,
+        start_ms: s.start_ms,
+        end_ms: s.end_ms,
+        translated: s.translated
+      }))
+    };
+    try {
+      const res = await fetch('/api/save_subtitles', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Lưu thất bại');
+      document.querySelectorAll('.edit-cell.modified').forEach(el => el.classList.remove('modified'));
+      showNotif('success', `💾 Đã lưu thành công ${data.count} dòng phụ đề!`);
+    } catch (e) {
+      showNotif('error', 'Lỗi lưu phụ đề: ' + e.message);
+    }
+  }
+
+  // Find & Replace
+  function applyFindReplace() {
+    const f = document.getElementById('findReplaceFind').value;
+    const r = document.getElementById('findReplaceWith').value;
+    if (!f) { showNotif('error', 'Vui lòng nhập từ cần tìm'); return; }
+
+    let count = 0;
+    liveSubtitlesData.forEach((sub, i) => {
+      if (sub.translated && sub.translated.includes(f)) {
+        sub.translated = sub.translated.replaceAll(f, r);
+        modifiedSubtitles.add(i);
+        const row = document.getElementById(`sub-row-${i}`);
+        if (row) {
+          const cell = row.querySelector('.edit-cell');
+          if (cell) {
+            cell.innerText = sub.translated;
+            cell.classList.add('modified');
+          }
+        }
+        count++;
+      }
+    });
+    showNotif('success', `Đã thay thế "${f}" thành "${r}" trên ${count} dòng! Nhớ bấm "Lưu".`);
+  }
+
+  // Timing Shift
+  async function applyTimeShift() {
+    const ms = parseInt(document.getElementById('shiftMsInput').value);
+    if (!ms || isNaN(ms)) { showNotif('error', 'Nhập số mili-giây (vd: 500 hoặc -300)'); return; }
+    if (!currentOutputFile) { showNotif('error', 'Chưa có file để shift timecode'); return; }
+
+    try {
+      const res = await fetch('/api/shift_timing', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: currentOutputFile, offset_ms: ms })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Shift thất bại');
+      showNotif('success', `Đã dịch chuyển ${ms}ms cho toàn bộ phụ đề!`);
+    } catch(e) {
+      showNotif('error', e.message);
+    }
+  }
+
+  // Export formats
+  function downloadCurrentFormat(fmt) {
+    if (!currentOutputFile) { showNotif('error', 'Chưa có file phụ đề để tải về.'); return; }
+    window.location.href = `/api/export_format?filename=${encodeURIComponent(currentOutputFile)}&format=${fmt}`;
+  }
+
+  async function downloadAllZip() {
+    if (!completedOutputFiles.length) { showNotif('error', 'Chưa có file nào hoàn tất.'); return; }
+    try {
+      const res = await fetch('/api/export_zip', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filenames: completedOutputFiles })
+      });
+      const data = await res.json();
+      if (data.zip_url) window.location.href = data.zip_url;
+    } catch(e) {
+      showNotif('error', 'Lỗi tạo ZIP: ' + e.message);
+    }
+  }
+
+  function filterSubtitles() {
+    const q = document.getElementById('subSearchInput').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('#subTableBody tr');
+    rows.forEach(r => {
+      if (r.cells.length < 4) return;
+      const orig = r.cells[2].textContent.toLowerCase();
+      const trans = r.cells[3].textContent.toLowerCase();
+      r.style.display = (!q || orig.includes(q) || trans.includes(q)) ? '' : 'none';
+    });
+  }
+
+  function formatSeconds(sec) {
+    if (!sec || isNaN(sec) || sec <= 0) return '0s';
+    const s = Math.round(sec);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}m ${rem}s`;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function setStatus(s) {
+    const pill = document.getElementById('statusPill');
+    const text = document.getElementById('statusText');
+    pill.className = 'status-pill status-' + s;
+    const map = { idle: 'Đang chờ', running: 'Đang dịch...', done: 'Hoàn tất ✅', error: 'Lỗi ❌', stopped: 'Đã dừng' };
+    text.textContent = map[s] || s;
+  }
+
+  function setProgress(pct, label) {
+    const clean = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    document.getElementById('progressPct').textContent = clean + '%';
+    const fill = document.getElementById('progressFill');
+    fill.style.width = clean + '%';
+    fill.className = 'progress-fill' + (clean >= 100 ? ' done' : '');
+    document.getElementById('progressLabel').textContent = label || (clean >= 100 ? 'Đã hoàn thành!' : 'Đang dịch phụ đề...');
+  }
+
+  function showNotif(type, msg) {
+    const el = document.getElementById('notif');
+    el.textContent = msg;
+    el.className = 'notif ' + type + ' show';
+    setTimeout(() => el.classList.remove('show'), 4500);
+  }
+
+  async function checkPendingProject() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const preloadFile = urlParams.get('preload') || '';
+      let endpoint = '/api/voxdub/pending_project';
+      if (preloadFile) {
+        endpoint += '?preload=' + encodeURIComponent(preloadFile);
+      }
+      const res = await fetch(endpoint);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.file) {
+          const exists = uploadedQueue.some(item => item.filename === data.file.filename);
+          if (!exists) {
+            uploadedQueue.push({
+              filename: data.file.filename,
+              original: data.file.original,
+              line_count: data.file.line_count,
+              file_type: data.file.file_type || 'subtitle',
+              size_mb: data.file.size_mb || 0,
+              status: 'ready',
+              work_dir: data.file.work_dir || '',
+            });
+            renderQueueList();
+            showNotif('success', `Đã tự động nạp file phụ đề: ${data.file.original}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not check pending project:', e);
+    }
+  }
+
+  // Khởi tạo giao diện khi mở trang
+  loadKeysFromStorage();
+  loadGlossaryFromStorage();
+  checkPendingProject();
+</script>
+</body>
+</html>

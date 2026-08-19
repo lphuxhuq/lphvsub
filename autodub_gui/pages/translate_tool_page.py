@@ -1,16 +1,9 @@
-"""Trang Dịch thuật — ngữ cảnh video và kiểm tra kết nối máy chủ.
-
-Mô hình, lời nhắc và API Key đã chuyển hẳn lên máy chủ VoxDub, nên trang này
-không còn ô API Key nào. Thứ còn lại là NGỮ CẢNH: những gì người làm kênh
-biết về video mà máy không tự đoán chính xác được — chủ đề, xưng hô, thuật
-ngữ phải dịch cố định.
-"""
+"""Trang Dịch thuật — ngữ cảnh video và cấu hình khóa API."""
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 
 from autodub_gui.pages import settings_fields as spec
-from autodub_gui.pages.settings_panels import ConnectionChecks
 from autodub_gui.pages.tool_page_base import ToolPage
 
 
@@ -32,10 +25,7 @@ class TranslateToolPage(ToolPage):
     SAVED_TOAST = "Đã lưu cấu hình dịch."
 
     def extra_panels(self) -> list[QWidget]:
-        self.checks_panel = ConnectionChecks()
-        return [self.checks_panel]
+        return []
 
     def cleanup(self) -> None:
-        panel = getattr(self, "checks_panel", None)
-        if panel is not None and hasattr(panel, "cleanup"):
-            panel.cleanup()
+        pass

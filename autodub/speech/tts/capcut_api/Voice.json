@@ -3,7 +3,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV421_vivn_streaming",
-    "display_name": "Thanh Lan - Nữ ngọt ngào",
+    "display_name": "Nhỏ Ngọt Ngào",
     "resource_id": "7252594014782755330",
     "captured_at": "2026-04-16T16:54:58.535653"
   },
@@ -11,7 +11,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "vi_female_huong",
-    "display_name": "Hoàng Anh - Nữ phổ thông",
+    "display_name": "Giọng Nữ Phổ Thông",
     "resource_id": "7264854897953083905",
     "captured_at": "2026-04-16T16:58:05.941432"
   },
@@ -19,7 +19,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV074_streaming_dsp",
-    "display_name": "Thu Hà - Giọng trẻ em",
+    "display_name": "Giọng Bé",
     "resource_id": "7550087831092251920",
     "captured_at": "2026-04-16T16:59:13.750474"
   },
@@ -27,7 +27,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV074_streaming",
-    "display_name": "Minh Trang - Nữ hoạt ngôn",
+    "display_name": "Cô Gái Hoạt Ngôn",
     "resource_id": "7102355709945188865",
     "captured_at": "2026-04-16T16:59:13.750474"
   },
@@ -35,7 +35,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV562_streaming",
-    "display_name": "Ngọc Mai - Nữ nhẹ nhàng",
+    "display_name": "Mai",
     "resource_id": "7483736254694035984",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -43,7 +43,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_yangguangnv_uranus_bigtts",
-    "display_name": "Ban Mai - Nữ tươi sáng",
+    "display_name": "Ban Mai",
     "resource_id": "7637456432522218773",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -51,7 +51,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_richgirl_uranus_bigtts",
-    "display_name": "Tú Anh - Review phim",
+    "display_name": "Review Phim new",
     "resource_id": "7637460351541447956",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -59,7 +59,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_quanweinv_uranus_bigtts",
-    "display_name": "Quỳnh Anh - Bản tin trang trọng",
+    "display_name": "Bản Tin 1",
     "resource_id": "7637458743197732117",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -67,7 +67,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_stokie_uranus_bigtts",
-    "display_name": "Khánh Linh - Review phim",
+    "display_name": "Review Phim 4",
     "resource_id": "7637456729696996628",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -75,7 +75,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_sisi_uranus_bigtts",
-    "display_name": "Thu Nhung - Bản tin nữ",
+    "display_name": "Bản Tin nữ",
     "resource_id": "7637455857285860629",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -83,7 +83,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_daqi_uranus_bigtts",
-    "display_name": "Hải Yến - Review phim",
+    "display_name": "Review Phim 3",
     "resource_id": "7637451983389019409",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -91,7 +91,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_xyf04auto_uranus_bigtts",
-    "display_name": "Thảo Nhi - Review phim",
+    "display_name": "Review Phim 2",
     "resource_id": "7637458743197732117",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -99,7 +99,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "multi_female_kiwi_uranus_bigtts",
-    "display_name": "Bích Ngọc - Nữ trẻ trung",
+    "display_name": "Sunny Idol",
     "resource_id": "7637457995882089749",
     "captured_at": "2026-04-16T17:03:08.196640"
   },
@@ -155,7 +155,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV075_streaming_demon_dsp",
-    "display_name": "Gia Bảo - Hiệu ứng ma quái",
+    "display_name": "Kenny Đại Đế",
     "resource_id": "7569442422665661712",
     "captured_at": "2026-04-16T17:07:53.599467"
   },
@@ -163,7 +163,7 @@
     "lan": "vi",
     "lang": "vi-VN",
     "voice_type": "BV075_streaming_vibrato_dsp",
-    "display_name": "Thành Đạt - Hiệu ứng rung",
+    "display_name": "Việt Méo",
     "resource_id": "7569450639810465040",
     "captured_at": "2026-04-16T17:01:05.535801"
   },

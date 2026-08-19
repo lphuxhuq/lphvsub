@@ -31,5 +31,12 @@ PySide6>=6.6.0
 # Cài một lần: pip install keyring
 # keyring>=24.0.0
 
+# --- Tools: Gemini SRT Translator Pro ---
+flask>=3.0.0
+werkzeug>=3.0.0
+pysubs2>=1.7.0
+google-genai>=1.0.0
+gemini-srt-translator>=3.7.0
+
 # --- Dev ---
 pytest>=8.0.0

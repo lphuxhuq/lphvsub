@@ -22,7 +22,7 @@ from autodub.utils import save_json_atomic
 LANG = "vi-VN"
 
 #: Giọng mặc định khi catalog offline rỗng (máy chưa cài VieNeu).
-DEFAULT_CAPCUT_VOICE = "Minh Trang"
+DEFAULT_CAPCUT_VOICE = "Cô Gái Hoạt Ngôn"
 
 
 def _gender_of(voice_type: str) -> str:

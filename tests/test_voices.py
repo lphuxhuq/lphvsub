@@ -95,11 +95,11 @@ def test_stale_cloned_capcut_presets_do_not_shadow_the_api_voices(settings):
     """Máy cũ còn 16 giọng clone source="capcut" trùng tên với giọng API.
 
     Preset cũ phải bị bỏ hẳn, nếu không nó đứng trước và chắn mất giọng API
-    — người dùng bấm "Thanh Lan" sẽ chạy VieNeu chứ không phải CapCut.
+    — người dùng bấm "Trúc Mai" sẽ chạy VieNeu chứ không phải CapCut.
     """
-    write_custom(settings, {"Thanh Lan": {"gender": "female",
+    write_custom(settings, {"Trúc Mai": {"gender": "female",
                                           "source": "capcut"}})
-    matches = [v for v in voices.catalog(settings) if v.name == "Thanh Lan"]
+    matches = [v for v in voices.catalog(settings) if v.name == "Trúc Mai"]
     assert len(matches) == 1
     assert matches[0].description  # mục từ Voice.json, không phải preset cũ
 

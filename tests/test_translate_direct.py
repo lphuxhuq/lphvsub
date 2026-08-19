@@ -76,7 +76,7 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
         except Exception:
             return json.dumps([])
 
-    monkeypatch.setattr(GeminiDirectClient, "call_gemini", _mock_call)
+    monkeypatch.setattr(GeminiDirectClient, "call_ai", _mock_call)
 
     target = get_target("vi")
     translated = translate_segments_direct(
@@ -90,3 +90,16 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
 
     # Xác nhận các key khác nhau đều được chia luồng chạy
     assert len(keys_used) >= 2
+
+
+def test_get_direct_client_prioritizes_gemini():
+    from autodub.text.translate_direct import get_direct_client, GeminiDirectClient
+    settings = Settings(
+        gemini_api_key="AIzaSyTestKey123",
+        gemini_model="gemini-2.5-flash",
+    )
+    client, desc = get_direct_client(settings)
+    assert isinstance(client, GeminiDirectClient)
+    assert "Google Gemini" in desc
+    assert client.keys == ["AIzaSyTestKey123"]
+    assert client.model == "gemini-2.5-flash"

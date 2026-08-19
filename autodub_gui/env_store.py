@@ -69,6 +69,23 @@ def multiline_to_env(value: str) -> str:
     return value.strip().replace("\r\n", "\n").replace("\n", "\\n")
 
 
+def api_keys_to_multiline(value: str) -> str:
+    """Tách danh sách API Key (phân cách bởi dấu phẩy hoặc \\n) thành nhiều dòng để hiển thị.
+
+    Mỗi key chiếm một dòng riêng, giúp người dùng dễ đọc và chỉnh sửa.
+    """
+    import re
+    tokens = [t.strip() for t in re.split(r"[,;\n]+", value.replace("\\n", "\n")) if t.strip()]
+    return "\n".join(tokens)
+
+
+def multiline_to_api_keys(value: str) -> str:
+    """Gộp danh sách API Key nhiều dòng thành một dòng dấu phẩy để lưu .env."""
+    import re
+    tokens = [t.strip() for t in re.split(r"[,;\n]+", value) if t.strip()]
+    return ",".join(tokens)
+
+
 def env_bool(value: str, default: bool = False) -> bool:
     """Hiểu các cách viết đúng và sai khác nhau của một giá trị bật tắt."""
     text = (value or "").strip().lower()

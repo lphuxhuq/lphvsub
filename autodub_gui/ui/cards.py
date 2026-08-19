@@ -318,6 +318,7 @@ class ProjectCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumWidth(tokens.CARD_MIN_W)
         self._key = ""
+        self._actions_anim = None  # QPropertyAnimation for action row fade
         self._build()
 
     def _build(self) -> None:
@@ -390,14 +391,38 @@ class ProjectCard(QFrame):
         self.thumb.set_thumbnail(pixmap)
 
     def enterEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
-        self.actions.setVisible(True)
+        self._set_actions_visible(True)
         self.thumb.set_play_overlay(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
-        self.actions.setVisible(False)
+        self._set_actions_visible(False)
         self.thumb.set_play_overlay(False)
         super().leaveEvent(event)
+
+    def _set_actions_visible(self, visible: bool) -> None:
+        """Fade actions row in/out with QPropertyAnimation for smooth reveal."""
+        from PySide6.QtCore import QPropertyAnimation
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+        effect = self.actions.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(self.actions)
+            self.actions.setGraphicsEffect(effect)
+        # Stop previous animation before starting a new one
+        if self._actions_anim is not None:
+            self._actions_anim.stop()
+        if visible:
+            self.actions.setVisible(True)
+        anim = QPropertyAnimation(effect, b"opacity", self.actions)
+        anim.setDuration(tokens.ANIM_FAST)
+        from PySide6.QtCore import QEasingCurve
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.setStartValue(effect.opacity())
+        anim.setEndValue(1.0 if visible else 0.0)
+        if not visible:
+            anim.finished.connect(lambda: self.actions.setVisible(False))
+        self._actions_anim = anim
+        anim.start()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
         if event.button() == Qt.MouseButton.LeftButton:

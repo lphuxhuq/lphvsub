@@ -53,6 +53,20 @@ class _KeyRateLimiter:
 KEY_LIMITER = _KeyRateLimiter(min_interval_s=0.3)
 
 
+def _has_cjk(text: str) -> bool:
+    """Kiểm tra câu dịch có còn sót ký tự chữ Hán / Nhật / Hàn không."""
+    if not text:
+        return False
+    cjk_count = sum(
+        1 for c in text
+        if (0x4E00 <= ord(c) <= 0x9FFF)    # CJK Unified Ideographs
+        or (0x3400 <= ord(c) <= 0x4DBF)    # CJK Extension A
+        or (0xAC00 <= ord(c) <= 0xD7AF)    # Korean Hangul
+        or (0x3040 <= ord(c) <= 0x30FF)    # Hiragana + Katakana
+    )
+    return cjk_count >= 2
+
+
 def _strip_fences_and_citations(text: str) -> str:
     cleaned = re.sub(_CITE_RE, "", text)
     cleaned = re.sub(_FENCE_RE, "", cleaned)
@@ -207,6 +221,7 @@ class GeminiDirectClient:
                 "generationConfig": {
                     "temperature": 0.3,
                     "responseMimeType": "application/json",
+                    "maxOutputTokens": 8192,
                 },
             }
             if system_instruction and system_instruction.strip():
@@ -455,13 +470,15 @@ class OpenAICompatDirectClient:
 
 
 def get_direct_client(settings: Any) -> Tuple[Any, str]:
-    """Khởi tạo client AI phù hợp dựa trên cài đặt của người dùng."""
-    # 1. Custom AI / HHTech API
-    custom_key = getattr(settings, "custom_ai_api_key", "").strip()
-    if custom_key:
-        base_url = getattr(settings, "custom_ai_base_url", "https://hhtechapi.net/v1").strip() or "https://hhtechapi.net/v1"
-        model = getattr(settings, "custom_ai_model", "deepseek-v4-flash").strip() or "deepseek-v4-flash"
-        return OpenAICompatDirectClient(custom_key, base_url=base_url, model=model), f"Custom/HHTech ({model})"
+    """Khởi tạo client AI phù hợp dựa trên cài đặt của người dùng.
+    
+    Google Gemini AI (Gemini SRT Pro Direct) là bộ dịch chính trực tiếp.
+    """
+    # 1. Google Gemini AI (Ưu tiên số 1 - Gemini Direct / Gemini SRT Pro)
+    gemini_key = getattr(settings, "gemini_api_key", "").strip()
+    if gemini_key:
+        model = getattr(settings, "gemini_model", "gemini-2.5-flash") or "gemini-2.5-flash"
+        return GeminiDirectClient(gemini_key, model=model), f"Google Gemini ({model})"
 
     # 2. DeepSeek API trực tiếp
     deepseek_key = getattr(settings, "deepseek_api_key", "").strip()
@@ -478,13 +495,7 @@ def get_direct_client(settings: Any) -> Tuple[Any, str]:
     if openai_key:
         return OpenAICompatDirectClient(openai_key, base_url="https://api.openai.com/v1", model="gpt-4o-mini"), "OpenAI (gpt-4o-mini)"
 
-    # 5. Gemini API
-    gemini_key = getattr(settings, "gemini_api_key", "").strip()
-    if gemini_key:
-        model = getattr(settings, "gemini_model", "gemini-2.5-flash")
-        return GeminiDirectClient(gemini_key, model=model), f"Google Gemini ({model})"
-
-    raise ValueError("Chưa cấu hình API Key dịch thuật nào trong Cài đặt.")
+    raise ValueError("Chưa cấu hình Google Gemini API Key trong Cài đặt hoặc bước Tạo dự án.")
 
 
 def translate_segments_direct(
@@ -541,6 +552,7 @@ def translate_segments_direct(
     translated_segments_map: Dict[int, dict] = {}
     completed_count = 0
     state_lock = threading.Lock()
+    t_trans_start = time.time()
 
     pending_batches: List[Tuple[int, List[dict], str]] = []
     for idx, (b_idx, batch) in enumerate(batches):
@@ -570,8 +582,32 @@ def translate_segments_direct(
             f"{json.dumps(payload_items, ensure_ascii=False)}"
         )
 
-        raw_reply = client.call_ai(system_prompt, user_prompt, preferred_key=key)
-        translated_items = parse_response_segments(raw_reply, text_field=target.text_field)
+        translated_items = []
+        last_err = None
+        for try_i in range(3):
+            try:
+                cur_key = key if try_i == 0 else client.get_key()
+                raw_reply = client.call_ai(system_prompt, user_prompt, preferred_key=cur_key)
+                translated_items = parse_response_segments(raw_reply, text_field=target.text_field)
+                if translated_items:
+                    break
+            except Exception as e:
+                last_err = e
+                time.sleep(1.0 * (try_i + 1))
+
+        if not translated_items:
+            # Fallback: dịch từng câu lẻ nếu cả lô bị lỗi
+            logger.warning(f"  ⚠ Lô {b_idx} lỗi parse ({last_err}), đang chuyển sang dịch từng câu lẻ...")
+            for s in batch:
+                try:
+                    s_payload = [payload_segment(s, cps_budget=cps)]
+                    s_prompt = f"Dịch câu thoại sau sang {target.name} ({target.text_field}):\n{json.dumps(s_payload, ensure_ascii=False)}"
+                    s_reply = client.call_ai(system_prompt, s_prompt)
+                    s_items = parse_response_segments(s_reply, text_field=target.text_field)
+                    if s_items:
+                        translated_items.extend(s_items)
+                except Exception as s_err:
+                    logger.warning(f"  ✗ Dịch câu #{s['id']} thất bại: {s_err}")
 
         trans_map = {item["id"]: item[target.text_field] for item in translated_items if "id" in item}
         batch_results = []
@@ -592,7 +628,13 @@ def translate_segments_direct(
             if checkpoint:
                 checkpoint.put(batch_results)
             completed_count += len(batch)
-            logger.info(f"  ✓ Lô {b_idx}/{total_batches} hoàn thành ({completed_count}/{len(segments)} câu) — {elapsed:.1f}s")
+            total_elapsed = time.time() - t_trans_start
+            rate = completed_count / total_elapsed if total_elapsed > 0 else 0
+            rem_count = max(0, len(segments) - completed_count)
+            rem_s = rem_count / rate if rate > 0 else 0
+            from autodub.utils import format_eta
+            eta_info = f" (⏱ Đã chạy: {format_eta(total_elapsed)} | ETA: ~{format_eta(rem_s)})" if rem_count > 0 else f" (⏱ Tổng: {format_eta(total_elapsed)})"
+            logger.info(f"  ✓ Lô {b_idx}/{total_batches} hoàn thành ({completed_count}/{len(segments)} câu) — {elapsed:.1f}s{eta_info}")
             if reporter:
                 reporter.emit("translate", "progress", detail=f"{completed_count}/{len(segments)} câu")
 
@@ -616,6 +658,30 @@ def translate_segments_direct(
                     logger.warning(f"Lô dịch bị bỏ qua do lỗi: {exc}")
 
     results = [translated_segments_map.get(s["id"], s) for s in segments]
+
+    # Hậu xử lý tự động chống sót chữ CJK (Tính năng cốt lõi của Gemini SRT)
+    cjk_untranslated = [
+        s for s in results
+        if _has_cjk(s.get(target.text_field, ""))
+    ]
+    if cjk_untranslated:
+        logger.info(f"[Hậu xử lý] Phát hiện {len(cjk_untranslated)} câu còn sót ký tự CJK — đang tiến hành dịch bù...")
+        for s in cjk_untranslated:
+            try:
+                single_payload = [payload_segment(s, cps_budget=cps)]
+                re_prompt = (
+                    f"Dịch câu thoại sau sang {target.name} ({target.text_field}), bắt buộc dịch hoàn toàn không để lại chữ Hán/Nhật/Hàn:\n"
+                    f"{json.dumps(single_payload, ensure_ascii=False)}"
+                )
+                re_reply = client.call_ai(system_prompt, re_prompt)
+                re_parsed = parse_response_segments(re_reply, text_field=target.text_field)
+                if re_parsed and target.text_field in re_parsed[0]:
+                    new_txt = re_parsed[0][target.text_field]
+                    if new_txt and not _has_cjk(new_txt):
+                        s[target.text_field] = ensure_terminal_punct(new_txt)
+                        logger.info(f"  ✓ Đã dịch bù thành công câu #{s['id']}: {new_txt}")
+            except Exception as exc:
+                logger.warning(f"  ✗ Dịch bù câu #{s['id']} không thành công: {exc}")
 
     if checkpoint_path and os.path.exists(checkpoint_path):
         try:

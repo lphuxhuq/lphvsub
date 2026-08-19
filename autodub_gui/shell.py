@@ -25,7 +25,7 @@ from autodub_gui.ui.effects import soft_shadow
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.style import clear_background, scoped_style
 
-BRAND_NAME = "VoxDub Studio"
+BRAND_NAME = "NovaSub"
 
 _LOGO_PX = 32
 _NAV_ICON_PX = 18
@@ -141,10 +141,13 @@ class Sidebar(QFrame):
     # -- Dựng giao diện ------------------------------------------------
     def _build_brand(self) -> QWidget:
         brand = QWidget()
-        clear_background(brand)
+        # Hairline separator beneath brand area (Ethereal Glass)
+        brand.setStyleSheet(
+            f"QWidget {{ background: transparent; "
+            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}")
         row = QHBoxLayout(brand)
         row.setContentsMargins(_DIVIDER_MARGIN, tokens.SP_5,
-                               _DIVIDER_MARGIN, tokens.SP_2)
+                               _DIVIDER_MARGIN, tokens.SP_3)
         row.setSpacing(tokens.SP_2)
         self._logo = QLabel()
         self._logo.setPixmap(icons.app_logo(_LOGO_PX))
@@ -283,9 +286,18 @@ class Sidebar(QFrame):
             self._user_card.setVisible(show_user)
 
     def set_width_mode(self, width: int) -> None:
-        """Đổi giữa chế độ đầy đủ và chế độ chỉ hiện biểu tượng."""
+        """Đổi giữa chế độ đầy đủ và chế độ chỉ hiện biểu tượng.
+
+        Animation: animate_width (200ms InOutCubic) — motivated: layout
+        transition giúp user theo dõi sidebar thu gọn thay vì giật ngay.
+        """
         icon_only = width <= tokens.SIDEBAR_W_ICON
-        self.setFixedWidth(width)
+        # Animate width — thước sidebar thay đổi theo breakpoint của sổ ứng dụng
+        try:
+            from autodub_gui.ui.animations import animate_width
+            animate_width(self, width, duration=tokens.ANIM_MID)
+        except Exception:  # noqa: BLE001 — fallback instant
+            self.setFixedWidth(width)
         if icon_only == self._icon_only:
             return
         self._icon_only = icon_only
@@ -333,10 +345,12 @@ class NotificationPopup(QFrame):
         # Chọn theo objectName để nền/viền không lan sang QScrollArea con
         # (QScrollArea cũng là một QFrame).
         panel.setStyleSheet(
-            f"QFrame#notifPanel {{ background: {tokens.BG_PANEL}; "
+            f"QFrame#notifPanel {{ background: {tokens.BG_ELEVATED}; "
             f"border: 1px solid {tokens.BORDER_DEFAULT}; "
+            f"border-top: 1px solid {tokens.GLASS_BORDER}; "
             f"border-radius: {tokens.RADIUS_LG}px; }}")
-        soft_shadow(panel)
+        from autodub_gui.ui.effects import popup_shadow
+        popup_shadow(panel)
         outer.addWidget(panel)
 
         root = QVBoxLayout(panel)
@@ -427,9 +441,10 @@ class NotificationPopup(QFrame):
 
     def _build_row(self, activity) -> QWidget:
         row = QWidget()
+        row.setObjectName("notifRow")  # ← styled by theme QWidget#notifRow:hover
         clear_background(row)
         layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(tokens.SP_2, tokens.SP_1, tokens.SP_2, tokens.SP_1)
         layout.setSpacing(tokens.SP_2)
         dot = QLabel("●")
         dot.setStyleSheet(
@@ -557,7 +572,12 @@ class AppHeader(QFrame):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setFixedHeight(tokens.HEADER_H)
-        self.setStyleSheet("QFrame { background: transparent; border: none; }")
+        # Glass bottom-border — header sits on BG_SIDEBAR, hairline divides it
+        # from the page content area below (Ethereal Glass aesthetic).
+        self.setStyleSheet(
+            f"QFrame {{ background: {tokens.BG_SIDEBAR}; "
+            f"border: none; "
+            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}")
         row = QHBoxLayout(self)
         row.setContentsMargins(28, tokens.SP_5, 28, 0)
         row.setSpacing(tokens.SP_3)

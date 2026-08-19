@@ -111,7 +111,7 @@ Hãy tạo nội dung đăng bài chuyên nghiệp, thu hút người xem cho Yo
 Chỉ trả về JSON thuần túy."""
 
     try:
-        raw = client.call_gemini("", prompt)
+        raw = client.call_ai("", prompt)
         clean = _strip_fences_and_citations(raw)
         data = json.loads(_slice_to_payload(clean))
         if isinstance(data, dict) and "title" in data:

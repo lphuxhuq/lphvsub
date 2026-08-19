@@ -49,9 +49,10 @@ def polish_combo(combo: QComboBox) -> None:
     view.setMouseTracking(True)      # cần cho trạng thái :hover của ::item
     view.setStyleSheet(f"""
         QAbstractItemView {{
-            background: {tokens.BG_PANEL};
+            background: {tokens.BG_ELEVATED};
             border: 1px solid {tokens.BORDER_DEFAULT};
-            border-radius: 10px;
+            border-top: 1px solid {tokens.GLASS_BORDER};
+            border-radius: {tokens.RADIUS_MD}px;
             outline: none;
             padding: 5px;
             color: {tokens.TEXT_PRIMARY};
@@ -59,10 +60,10 @@ def polish_combo(combo: QComboBox) -> None:
             selection-color: {tokens.TEXT_PRIMARY};
         }}
         QAbstractItemView::item {{
-            min-height: 30px;
-            padding: 4px 10px;
+            min-height: 34px;
+            padding: 4px 12px;
             border: none;
-            border-radius: 6px;
+            border-radius: {tokens.RADIUS_SM}px;
             color: {tokens.TEXT_PRIMARY};
             background: transparent;
         }}

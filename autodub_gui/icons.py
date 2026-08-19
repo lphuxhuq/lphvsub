@@ -883,7 +883,10 @@ def eye(color: str | None = None) -> QIcon:
 
 def eye_off(color: str | None = None) -> QIcon:
     return _make_icon(_draw_eye_off, color or tokens.TEXT_SECONDARY)
-    """Biểu trưng VoxDub: ô vuông bo góc và bốn vạch sóng âm."""
+
+
+def brand_logo(size: int = 32) -> QPixmap:
+    """Biểu trưng NovaSub: ô vuông bo góc và bốn vạch sóng âm."""
     px = QPixmap(size, size)
     px.fill(Qt.GlobalColor.transparent)
     p = QPainter(px)

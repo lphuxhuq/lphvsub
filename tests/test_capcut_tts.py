@@ -59,7 +59,7 @@ def test_catalog_names_are_unique():
 
 
 def test_lookup_finds_by_name_and_rejects_strangers():
-    entry = capcut_catalog.lookup("Thanh Lan")
+    entry = capcut_catalog.lookup("Nhỏ Ngọt Ngào")
     assert entry is not None and entry["voice_type"] == "BV421_vivn_streaming"
     assert capcut_catalog.lookup("Giọng Ma") is None
 
@@ -116,9 +116,9 @@ def test_device_id_follows_the_fingerprint(device_home, monkeypatch):
 def test_capcut_voice_works_without_vieneu_installed(settings):
     """Ca kiểm thử quan trọng nhất: CapCut phải độc lập hoàn toàn với VieNeu."""
     assert settings.vieneu_configured() is False
-    synth = get_synthesizer(get_target("vi"), settings, "Thanh Lan")
+    synth = get_synthesizer(get_target("vi"), settings, "Nhỏ Ngọt Ngào")
     assert type(synth).__name__ == "CapCutSynthesizer"
-    assert synth.voice_name == "Thanh Lan"
+    assert synth.voice_name == "Nhỏ Ngọt Ngào"
     assert synth.recommended_threads == capcut_vi.RECOMMENDED_THREADS
 
 
@@ -149,7 +149,7 @@ def test_blank_line_never_calls_the_network(settings, tmp_path, monkeypatch):
     """Dòng trống → clip im lặng; một dòng rỗng không được làm đổ cả video."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
 
     def _boom(text):
         raise AssertionError("không được gọi mạng cho dòng trống")
@@ -167,7 +167,7 @@ def test_network_failure_retries_then_raises_with_a_way_out(settings,
     from autodub.speech.tts import capcut_vi
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
     calls = []
 
     def _fail(**kwargs):
@@ -186,7 +186,7 @@ def test_a_transient_failure_is_survived(settings, monkeypatch):
     from autodub.speech.tts import capcut_vi
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
     attempts = []
 
     def _flaky(**kwargs):
@@ -260,7 +260,7 @@ def test_shark_block_switches_to_a_new_device_id(settings, monkeypatch):
     """Bị chặn thì phải đổi định danh máy, không gửi lại y hệt ID đã chết."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
     monkeypatch.setattr(capcut_vi.time, "sleep", lambda s: None)
     devices = _blocking_client(synth, monkeypatch, ok_after=2)
     assert synth._fetch_mp3("xin chào") == b"ID3fake"
@@ -272,7 +272,7 @@ def test_shark_block_gives_up_instead_of_rotating_forever(settings,
     """Chặn dai dẳng thì dừng sớm với lời khuyên, không đổi ID vô hạn."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
     monkeypatch.setattr(capcut_vi.time, "sleep", lambda s: None)
     devices = _blocking_client(synth, monkeypatch)
     with pytest.raises(RuntimeError) as excinfo:
@@ -286,7 +286,7 @@ def test_a_successful_read_restores_the_rotation_budget(settings, monkeypatch):
     """Video dài bị chặn rải rác vẫn phải chạy hết, không cụt giữa chừng."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
-    synth = CapCutSynthesizer(settings, voice_name="Thanh Lan")
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
     monkeypatch.setattr(capcut_vi.time, "sleep", lambda s: None)
     # Mỗi định danh chỉ đọc trôi đúng một câu rồi bị chặn — chặn rải rác.
     seen = set()
@@ -302,8 +302,31 @@ def test_a_successful_read_restores_the_rotation_budget(settings, monkeypatch):
         assert synth._fetch_mp3("xin chào") == b"ID3fake"
 
 
-def test_threads_stay_modest_enough_not_to_trip_the_block():
-
-    """6 luồng từng làm máy chủ chặn cả máy — mức an toàn đo được là 3."""
-    assert capcut_vi.RECOMMENDED_THREADS <= 3
+def test_threads_scale_safely_with_device_pool():
+    """Device pool đa thiết bị cho phép chạy 8-16 luồng song song an toàn."""
+    assert capcut_vi.RECOMMENDED_THREADS >= 8
     assert capcut_vi.MIN_GAP_S > 0
+
+
+def test_device_pool_generates_diverse_devices():
+    from autodub.speech.tts.capcut_device_pool import generate_fake_device, get_device_pool
+    dev1 = generate_fake_device(template_idx=0)
+    dev2 = generate_fake_device(template_idx=10)
+
+    assert dev1["device_platform"] == "mac"
+    assert dev2["device_platform"] == "windows"
+    assert dev1["device_id"] != dev2["device_id"]
+    assert len(dev1["device_id"]) == 19
+
+    pool = get_device_pool()
+    d_a = pool.get_device(0)
+    d_b = pool.get_device(1)
+    assert d_a and d_b
+
+
+def test_device_pool_cooldown_and_auto_replacement():
+    from autodub.speech.tts.capcut_device_pool import CapCutDevicePool
+    pool = CapCutDevicePool(size=8)
+    dev = pool.get_device(0)
+    rep = pool.report_block(dev, cooldown_seconds=60.0)
+    assert rep["device_id"] != dev["device_id"]

@@ -311,96 +311,22 @@ class VoiceSettingsPanel(CollapsibleSection):
 
 
 class ConnectionChecks(CollapsibleSection):
-    """Thử kết nối tới máy chủ VoxDub và hiện số Vox còn lại.
-
-    Không còn API Key nào để kiểm tra: mô hình và mã đều nằm trên máy chủ.
-    Thứ người dùng cần biết khi nghi ngờ chỉ còn hai điều — máy chủ có trả
-    lời không, và ví còn bao nhiêu.
-    """
+    """Stub rỗng — đã bỏ kiểm tra máy chủ SaaS."""
 
     def __init__(self, values_provider=None, parent: QWidget | None = None):
         super().__init__("Kiểm tra kết nối", expanded=False, parent=parent)
-        del values_provider     # giữ chữ ký cũ cho các nơi đang gọi
-        self._threads: dict[str, QThread] = {}
-        self._labels: dict[str, QLabel] = {}
-
-        row = QHBoxLayout()
-        row.setSpacing(tokens.SP_2)
-        button = GhostButton("Kiểm tra máy chủ VoxDub")
-        label = _hint_label("")
-        self._labels["server"] = label
-        button.clicked.connect(
-            lambda _c=False, b=button: self._run("server", b, self._probe_server))
-        row.addWidget(button)
-        row.addWidget(label, 1)
-        self.add_layout(row)
 
     def select_engine(self, engine: str) -> None:
-        """Giữ chữ ký cũ — không còn nơi dịch nào để chọn."""
-        del engine
-
-    def _run(self, key: str, button: GhostButton, probe) -> None:
-        """Chạy phép thử ở luồng nền để cửa sổ không bị đứng."""
-        label = self._labels[key]
-        button.set_loading(True, "Đang kiểm tra")
-        label.setText("")
-
-        class _Checker(QThread):
-            def __init__(self, parent):
-                super().__init__(parent)
-                self.text = ""
-
-            def run(self) -> None:
-                try:
-                    self.text = probe()
-                except Exception as e:  # noqa: BLE001 — báo lên giao diện
-                    self.text = f"Không kiểm tra được: {type(e).__name__}: {e}"
-
-        checker = _Checker(self)
-
-        def _done() -> None:
-            button.set_loading(False)
-            label.setText(checker.text)
-            self._threads.pop(key, None)
-
-        checker.finished.connect(_done)
-        self._threads[key] = checker
-        checker.start()
+        pass
 
     def cleanup(self) -> None:
-        """Chờ các luồng kiểm tra kết nối xong trước khi teardown."""
-        for checker in list(self._threads.values()):
-            if checker.isRunning():
-                checker.wait(10_000)
-
-    @staticmethod
-    def _probe_server() -> str:
-        from autodub.saas_client import SaasError, get_client, is_configured
-
-        if not is_configured():
-            return (f"{STATUS_OK} Đang chạy thuần trên máy — không cần máy "
-                    "chủ. Bước dịch làm tay theo hướng dẫn hiện trong app.")
-        client = get_client()
-        try:
-            device = client.ensure_session()
-            ai_status = client.get_ai_status()
-        except SaasError as e:
-            return f"{STATUS_WARN} {e}"
-
-        providers = ai_status.get("translateProviders", [])
-        if not providers:
-            return (f"{STATUS_WARN} Máy chủ kết nối được nhưng CHƯA CÓ API KEY dịch. "
-                    "Vui lòng điền Gemini API Key hoặc OpenRouter API Key vào bên dưới rồi bấm Lưu.")
-
-        prov_names = ", ".join(p.get("label") or p.get("name") for p in providers[:2])
-        balance_txt = f" (Ví còn {int(device.get('balance', 0)):,} Vox)" if device.get("creditEnabled", True) else ""
-        return f"{STATUS_OK} Sẵn sàng dịch. Nơi gọi mô hình: {prov_names}{balance_txt}."
+        pass
 
 
 class MaintenancePanel(CollapsibleSection):
     """Các nút mở thư mục, dọn dữ liệu tạm và xuất nhật ký chẩn đoán."""
 
-    DIAGNOSTIC_FILE = "voxdub_diagnostics.txt"
+    DIAGNOSTIC_FILE = "novasub_diagnostics.txt"
 
     def __init__(self, settings_provider, parent: QWidget | None = None):
         super().__init__("Bảo trì", expanded=False, parent=parent)
@@ -515,7 +441,7 @@ class MaintenancePanel(CollapsibleSection):
         except Exception as e:  # noqa: BLE001 — vẫn ghi được phần còn lại
             ready, output_dir, voice_count = {}, f"không đọc được ({e})", 0
         lines = [
-            "Nhật ký chẩn đoán VoxDub Studio",
+            "Nhật ký chẩn đoán NovaSub",
             f"Hệ điều hành: {platform.platform()}",
             f"Phiên bản Python: {sys.version.split()[0]}",
             f"Thư mục ứng dụng: {app_root()}",

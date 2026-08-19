@@ -182,3 +182,17 @@ def format_timestamp(seconds: float) -> str:
     hours, rem = divmod(secs_total, 3600)
     minutes, secs = divmod(rem, 60)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def format_eta(seconds: float | None) -> str:
+    """Đổi số giây thành chuỗi thời gian ước tính thân thiện (vd: '45s', '1m 30s', '1h 15m')."""
+    if seconds is None or seconds <= 0:
+        return "0s"
+    s = int(round(seconds))
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m {s:02d}s" if s > 0 else f"{m}m"
+    h, m = divmod(m, 60)
+    return f"{h}h {m:02d}m"

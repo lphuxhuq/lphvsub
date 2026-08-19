@@ -266,18 +266,34 @@ class DragDropZone(QWidget):
         outer = QPainterPath()
         outer.addRoundedRect(rect, tokens.RADIUS_LG, tokens.RADIUS_LG)
 
-        active = self._state == "dragover"
-        if active:
-            tint = QColor(tokens.ACCENT_BLUE)
-            tint.setAlpha(_DRAG_TINT_ALPHA)
-            painter.fillPath(outer, tint)
+        state = self._state
+        if state == "dragover":
+            # Active drag: blue-tinted bg + solid primary border
+            painter.fillPath(outer, QColor(tokens.DRAG_ACTIVE_BG))
             painter.setPen(QPen(QColor(tokens.BORDER_ACTIVE), 2))
+            painter.drawPath(outer)
+        elif state == "success":
+            # Success: green-tinted bg + success border
+            painter.fillPath(outer, QColor(tokens.SUCCESS_BG))
+            painter.setPen(QPen(QColor(tokens.SUCCESS), 1.5))
+            painter.drawPath(outer)
+        elif state == "error":
+            # Error: red-tinted bg + danger border
+            painter.fillPath(outer, QColor(tokens.DANGER_BG))
+            painter.setPen(QPen(QColor(tokens.DANGER), 1.5))
+            painter.drawPath(outer)
         else:
-            painter.fillPath(outer, QColor(tokens.BG_PANEL))
+            # Idle/busy: subtle gradient bg + dashed border
+            from PySide6.QtGui import QBrush, QLinearGradient
+            grad = QLinearGradient(
+                float(rect.left()), float(rect.top()),
+                float(rect.right()), float(rect.bottom()))
+            grad.setColorAt(0, QColor(tokens.UPLOAD_GRAD_A))
+            grad.setColorAt(1, QColor(tokens.UPLOAD_GRAD_B))
+            painter.fillPath(outer, QBrush(grad))
             painter.setPen(QPen(QColor(tokens.BORDER_UPLOAD), 1))
-        painter.drawPath(outer)
-
-        if not active:
+            painter.drawPath(outer)
+            # Inner dashed accent ring
             dashed = QPen(QColor(tokens.BORDER_DEFAULT), 1.5)
             dashed.setDashPattern(list(_DASH_PATTERN))
             painter.setPen(dashed)

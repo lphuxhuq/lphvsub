@@ -34,11 +34,13 @@ class ThinProgressBar(QProgressBar):
 
     def set_color(self, color: str) -> None:
         """Đổi màu phần đã chạy cho khớp trạng thái của mục."""
+        from autodub_gui.theme import _grad_h
+        chunk_grad = _grad_h(color, tokens.ACCENT_BLUE)
         self.setStyleSheet(
             f"QProgressBar {{ background: {tokens.TRACK_BG}; border: none; "
-            f"border-radius: {_BAR_H // 2 + 1}px; height: {_BAR_H}px; }}"
-            f"QProgressBar::chunk {{ background: {color}; "
-            f"border-radius: {_BAR_H // 2 + 1}px; }}")
+            f"border-radius: 2px; height: 4px; }}"
+            f"QProgressBar::chunk {{ background: {chunk_grad}; "
+            f"border-radius: 2px; }}")
 
     def set_indeterminate(self, on: bool) -> None:
         """Chế độ chưa rõ phần trăm, dùng khi đang chờ tác vụ chưa đo được."""

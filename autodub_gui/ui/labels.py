@@ -63,3 +63,9 @@ def title_label(text: str, parent: QWidget | None = None) -> QLabel:
     """Tiêu đề mục, cỡ 17px in đậm."""
     return styled_label(text, size=tokens.FS_SECTION,
                         color=tokens.TEXT_PRIMARY, weight=700, parent=parent)
+
+
+def caption_label(text: str, parent: QWidget | None = None) -> QLabel:
+    """Nhãn chú giải nhỏ, cỡ 11px màu TEXT_MUTED — dùng cho meta/hint."""
+    return styled_label(text, size=tokens.FS_META,
+                        color=tokens.TEXT_MUTED, weight=400, parent=parent)

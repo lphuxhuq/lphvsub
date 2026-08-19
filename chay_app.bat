@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title VoxDub Studio
+title NovaSub
 
 cd /d "%~dp0"
 

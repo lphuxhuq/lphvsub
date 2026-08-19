@@ -1119,7 +1119,9 @@ class DirtyBanner(QWidget):
         layout.addWidget(self.label)
         self.setStyleSheet(
             f"background: {tokens.WARNING_BG}; "
-            f"border: 1px solid {tokens.WARNING}; border-radius: 8px;")
+            f"border: 1px solid {tokens.WARNING}; "
+            f"border-radius: {tokens.RADIUS_MD}px;")
+
         self.setVisible(False)
 
     def set_count(self, voice_count: int, subtitle_count: int = 0) -> None:
