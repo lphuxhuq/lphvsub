@@ -89,9 +89,6 @@ def plan_placements(
             rep.segments_shifted += 1
             rep.max_shift_s = max(rep.max_shift_s, shift)
 
-        # Chồng còn lại với clip trước (sau khi đã dồn hết mức cho phép).
-        overlap_prev = max(0.0, (prev_end + min_gap_s) - t) if dur > 0 else 0.0
-
         # 2) Nén bất khả kháng: chỉ khi clip này (đặt tại t) sẽ ép câu SAU
         # vượt trần drift của chính nó. Nhìn trước một câu là đủ vì drift
         # lan truyền qua prev_end.
