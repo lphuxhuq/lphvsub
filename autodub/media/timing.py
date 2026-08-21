@@ -109,6 +109,9 @@ def plan_placements(
         if atempo > 1.0:
             rep.segments_compressed += 1
 
+        # Chồng còn lại với clip trước (sau khi đã dồn hết mức cho phép).
+        overlap_prev = max(0.0, (prev_end + min_gap_s) - t) if dur > 0 else 0.0
+
         issue: dict = {}
         if overlap_prev > 0.01:
             rep.segments_overlapped += 1

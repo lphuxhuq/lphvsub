@@ -145,14 +145,24 @@ def main() -> None:
         if language == "auto":
             language = None
 
+    initial_prompt = "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。" if (language or "").startswith("zh") else None
     try:
         raw_segments, info = model.transcribe(
             audio_path,
             language=language,
             beam_size=beam_size,
             vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
+            vad_parameters={
+                "threshold": 0.35,
+                "min_silence_duration_ms": 500,
+                "speech_pad_ms": 500,
+                "min_speech_duration_ms": 100,
+            },
+            condition_on_previous_text=False,
+            initial_prompt=initial_prompt,
             word_timestamps=True,
+            no_speech_threshold=0.6,
+            log_prob_threshold=-1.0,
         )
     except Exception as e:
         _die(proto_out, f"Lỗi khi nhận dạng: {e}")

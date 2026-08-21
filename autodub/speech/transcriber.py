@@ -384,7 +384,7 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
     mốc thời gian THẬT của từ, thay vì chia theo tỷ lệ ký tự (đoán). Mảng
     words bị loại khỏi kết quả cuối — transcript trên đĩa giữ format cũ.
     """
-    whisper_lang = WHISPER_LANG_MAP.get(language, language.split("-")[0])
+    whisper_lang = WHISPER_LANG_MAP.get(language, language.split("-")[0] if language else None)
     model_name = settings.whisper_model
 
     if whisper_cache is not None:
@@ -393,14 +393,24 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         logger.info(f"Loading Whisper model: {model_name} (first run downloads the model)")
         model, _device = _load_whisper_model(model_name, settings)
 
+    initial_prompt = "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。" if (whisper_lang or "").startswith("zh") else None
     logger.info(f"Starting transcription: {audio_path} (language: {whisper_lang})")
     raw_segments, info = model.transcribe(
         audio_path,
         language=whisper_lang,
         beam_size=settings.whisper_beam_size,
         vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 500},
+        vad_parameters={
+            "threshold": 0.35,
+            "min_silence_duration_ms": 500,
+            "speech_pad_ms": 500,
+            "min_speech_duration_ms": 100,
+        },
+        condition_on_previous_text=False,
+        initial_prompt=initial_prompt,
         word_timestamps=True,
+        no_speech_threshold=0.6,
+        log_prob_threshold=-1.0,
     )
     if whisper_lang is None and getattr(info, "language", None):
         logger.info(f"Ngôn ngữ tự nhận dạng: {info.language} "
@@ -488,6 +498,12 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
         # and Whisper zh transcripts.
         sentences = re.split(r'(?<=[.!?;。！？；])\s*', seg["text"].strip())
         sentences = [s for s in sentences if s]
+        
+        # If no sentence boundaries found, fallback to commas/colons/dashes
+        if len(sentences) <= 1:
+            sentences = re.split(r'(?<=[,，、：:\-])\s*', seg["text"].strip())
+            sentences = [s for s in sentences if s]
+
         if len(sentences) <= 1:
             # No sentence boundary found, keep as-is
             new_id += 1

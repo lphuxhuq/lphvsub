@@ -674,16 +674,25 @@ class NewProjectPage(BasePage):
         changes = {"voice_speed": data["voice_speed"],
                    "translate_enabled": bool(data["auto_translate"]),
                    "generate_metadata": bool(data["generate_metadata"])}
-        if "gemini_api_key" in data:
-            changes["gemini_api_key"] = data["gemini_api_key"]
-        if "gemini_model" in data and data["gemini_model"]:
-            changes["gemini_model"] = data["gemini_model"]
-        if "deepseek_api_key" in data:
-            changes["deepseek_api_key"] = data["deepseek_api_key"]
-        if "openrouter_api_key" in data:
-            changes["openrouter_api_key"] = data["openrouter_api_key"]
-        if "openai_api_key" in data:
-            changes["openai_api_key"] = data["openai_api_key"]
+        engine = data.get("translate_engine", "gemini")
+        if engine == "ai_studio":
+            changes["ai_studio_enabled"] = True
+            changes["gemini_api_key"] = ""
+            changes["deepseek_api_key"] = ""
+            changes["openrouter_api_key"] = ""
+            changes["openai_api_key"] = ""
+        else:
+            changes["ai_studio_enabled"] = False
+            if "gemini_api_key" in data:
+                changes["gemini_api_key"] = data["gemini_api_key"]
+            if "gemini_model" in data and data["gemini_model"]:
+                changes["gemini_model"] = data["gemini_model"]
+            if "deepseek_api_key" in data:
+                changes["deepseek_api_key"] = data["deepseek_api_key"]
+            if "openrouter_api_key" in data:
+                changes["openrouter_api_key"] = data["openrouter_api_key"]
+            if "openai_api_key" in data:
+                changes["openai_api_key"] = data["openai_api_key"]
         if merged != settings.translate_style_notes:
             changes["translate_style_notes"] = merged
         if data["asr_engine"]:
@@ -716,16 +725,21 @@ class NewProjectPage(BasePage):
         put("GENERATE_METADATA",
             bool_to_env(bool(data["generate_metadata"])),
             bool_to_env(settings.generate_metadata))
-        if "gemini_api_key" in data:
-            put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
-        if "gemini_model" in data and data["gemini_model"]:
-            put("GEMINI_MODEL", data["gemini_model"], settings.gemini_model)
-        if "deepseek_api_key" in data:
-            put("DEEPSEEK_API_KEY", data["deepseek_api_key"], settings.deepseek_api_key)
-        if "openrouter_api_key" in data:
-            put("OPENROUTER_API_KEY", data["openrouter_api_key"], settings.openrouter_api_key)
-        if "openai_api_key" in data:
-            put("OPENAI_API_KEY", data["openai_api_key"], settings.openai_api_key)
+        engine = data.get("translate_engine", "gemini")
+        put("AI_STUDIO_ENABLED",
+            bool_to_env(engine == "ai_studio"),
+            bool_to_env(settings.ai_studio_enabled))
+        if engine != "ai_studio":
+            if "gemini_api_key" in data:
+                put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
+            if "gemini_model" in data and data["gemini_model"]:
+                put("GEMINI_MODEL", data["gemini_model"], settings.gemini_model)
+            if "deepseek_api_key" in data:
+                put("DEEPSEEK_API_KEY", data["deepseek_api_key"], settings.deepseek_api_key)
+            if "openrouter_api_key" in data:
+                put("OPENROUTER_API_KEY", data["openrouter_api_key"], settings.openrouter_api_key)
+            if "openai_api_key" in data:
+                put("OPENAI_API_KEY", data["openai_api_key"], settings.openai_api_key)
         if data.get("asr_engine"):
             put("ASR_ENGINE", data["asr_engine"], settings.asr_engine)
         if data.get("whisper_model"):

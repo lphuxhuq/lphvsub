@@ -145,6 +145,35 @@ def test_constructing_with_a_non_capcut_name_is_rejected(settings):
 
 # ---------------------------------------------------------- tổng hợp ----- #
 
+def test_sanitize_strips_cjk_and_caps_length():
+    from autodub.speech.tts.capcut_vi import sanitize_capcut_text
+
+    assert "你好" not in sanitize_capcut_text("Xin chào 你好 thế")
+    long = "a" * 400
+    assert len(sanitize_capcut_text(long)) <= 281
+
+
+def test_invalid_text_skips_retries_and_writes_silence(settings, tmp_path, monkeypatch):
+    from autodub.speech.tts.capcut_vi import CapCutSynthesizer
+
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
+    calls = []
+
+    def _fail(text):
+        calls.append(text)
+        raise RuntimeError(
+            "TTS Task failed: {'data': {'tasks': [{'status': 'failed', "
+            "'err_code': 40402002, 'err_msg': 'TTSInvalidText'}]}}"
+        )
+
+    monkeypatch.setattr(synth, "_fetch_mp3", _fail)
+    out = str(tmp_path / "seg_invalid.wav")
+    result = synth.synthesize("câu bị từ chối", out)
+    assert result.rate_applied == "silence"
+    assert os.path.isfile(out)
+    assert len(calls) == 1
+
+
 def test_blank_line_never_calls_the_network(settings, tmp_path, monkeypatch):
     """Dòng trống → clip im lặng; một dòng rỗng không được làm đổ cả video."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
@@ -330,3 +359,33 @@ def test_device_pool_cooldown_and_auto_replacement():
     dev = pool.get_device(0)
     rep = pool.report_block(dev, cooldown_seconds=60.0)
     assert rep["device_id"] != dev["device_id"]
+
+
+def test_extract_speech_url_from_nested_payload():
+    from autodub.speech.tts.capcut_api.client import _extract_speech_url
+
+    url = "https://example.invalid/voice.mp3"
+    task = {
+        "status": "success",
+        "payload": json.dumps({"audio_subtitles": [{"speech_url": url}]}),
+    }
+    assert _extract_speech_url(task) == url
+    assert _extract_speech_url({"speech_url": url}) == url
+    assert _extract_speech_url({"payload": {"audios": [{"url": url}]}}) == url
+    assert _extract_speech_url({"payload": "{}"}) == ""
+
+
+def test_checked_json_raises_on_nonzero_ret():
+    from autodub.speech.tts.capcut_api.client import _checked_json_response
+    from autodub.speech.tts.capcut_api.exceptions import CapCutAPIError
+
+    class _Resp:
+        status_code = 200
+        text = '{"ret":"-6"}'
+
+        def json(self):
+            return {"ret": "-6", "errmsg": "shark block only"}
+
+    with pytest.raises(CapCutAPIError) as excinfo:
+        _checked_json_response(_Resp(), "create_tts_task")
+    assert "shark block" in str(excinfo.value).lower()

@@ -52,3 +52,7 @@ control_server/data/
 # Website
 website/node_modules/
 website/dist/
+
+# Gemini SRT UI uploads & outputs
+autodub/tools/gemini_srt_ui/uploads/
+autodub/tools/gemini_srt_ui/outputs/

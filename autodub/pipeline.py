@@ -1156,7 +1156,23 @@ class DubPipeline:
         if not settings.translate_enabled:
             return None
 
-        # 1. Ưu tiên gọi trực tiếp API Google Gemini AI / Gemini SRT nếu có API key
+        # 1. AI Studio trình duyệt (khi user chủ động chọn — bỏ qua API key)
+        if getattr(settings, "ai_studio_enabled", False):
+            logger.info("Bật dịch qua Google AI Studio (trình duyệt) — Phương thức dịch thứ 2")
+            try:
+                from autodub.text.translate_browser import translate_segments_browser
+                ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
+                return translate_segments_browser(
+                    segments, target, source_lang, settings, rep, checkpoint_path=ckpt
+                )
+            except PipelineCancelled:
+                raise
+            except Exception as e:
+                logger.warning(f"Dịch qua AI Studio lỗi ({e}) — chuyển sang dịch tay")
+                rep.emit("translate", "error", detail=str(e))
+                return None
+
+        # 2. Gọi trực tiếp API Google Gemini AI / Gemini SRT nếu có API key
         has_direct_key = bool(
             settings.gemini_api_key.strip()
             or settings.deepseek_api_key.strip()

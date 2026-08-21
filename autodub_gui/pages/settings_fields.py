@@ -346,6 +346,31 @@ FIELDS: tuple[Field, ...] = (
     Field("CUSTOM_AI_MODEL", TEXT, "Mô hình dịch AI", TAB_TRANSLATE,
           "Dịch AI tùy chỉnh", "deepseek-v4-flash",
           "Tên mô hình AI dùng để dịch thuật (ví dụ deepseek-v4-flash)."),
+
+    Field("AI_STUDIO_ENABLED", CHECK,
+          "Dịch qua Google AI Studio (miễn phí, không cần API Key)",
+          TAB_TRANSLATE, "Dịch qua AI Studio (Trình duyệt)", "false",
+          "Dùng Google AI Studio qua trình duyệt Chrome để dịch — tận dụng "
+          "tài khoản Google miễn phí, không cần API Key. Chậm hơn API trực "
+          "tiếp nhưng không tốn phí. Cần đăng nhập Google lần đầu. "
+          "Nếu ô Gemini/DeepSeek/OpenRouter/OpenAI còn API Key, pipeline vẫn "
+          "đi phương thức 1 — hãy xóa key hoặc chọn AI Studio ở bước tạo dự án. "
+          "Model miễn phí: Gemini 2.5 Flash / 2.0 Flash / 1.5 Flash."),
+    Field("AI_STUDIO_HEADLESS", CHECK,
+          "Chạy ẩn Chrome khi dịch", TAB_TRANSLATE,
+          "Dịch qua AI Studio (Trình duyệt)", "false",
+          "Bật: Chrome chạy ngầm (headless). Tắt: hiển thị cửa sổ Chrome "
+          "để quan sát quá trình dịch."),
+    Field("AI_STUDIO_SINGLE_CHAT", CHECK,
+          "Dịch toàn bộ trong 1 cuộc trò chuyện", TAB_TRANSLATE,
+          "Dịch qua AI Studio (Trình duyệt)", "true",
+          "Gửi toàn bộ phụ đề cùng prompt trong 1 chat AI Studio. Nhanh hơn, "
+          "ít lỗi Permission Denied. Tắt nếu video dài/quá nhiều câu."),
+    Field("AI_STUDIO_CHROME_PROFILE", TEXT, "Thư mục Chrome Profile",
+          TAB_TRANSLATE, "Dịch qua AI Studio (Trình duyệt)", "",
+          "Để trống = tự động dùng %LOCALAPPDATA%\\lphvsub\\ChromeProfile_AIStudio. "
+          "Thay đổi nếu muốn dùng profile Chrome khác.",
+          placeholder=r"%LOCALAPPDATA%\lphvsub\ChromeProfile_AIStudio"),
 )
 
 # Khóa do ứng dụng tự tính hoặc chỉ dùng nội bộ, không hiện thành ô nhập chữ.

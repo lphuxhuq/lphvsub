@@ -323,11 +323,12 @@ class TranslateStep(_StepPanel):
             "Công nghệ dịch",
             [
                 ("Gemini SRT Translator Pro / Gemini Direct (Google AI - Nhanh & Chuẩn)", "gemini"),
+                ("Google AI Studio qua Trình duyệt (Miễn phí, không cần API Key)", "ai_studio"),
                 ("DeepSeek API Trực tiếp (deepseek-chat)", "deepseek"),
                 ("OpenRouter API (Hàng trăm mô hình AI)", "openrouter"),
                 ("OpenAI API (GPT-4o, GPT-4o-mini)", "openai"),
             ],
-            "Chọn nơi xử lý dịch thuật: Gemini SRT Pro, API trực tiếp (DeepSeek/OpenRouter/OpenAI).")
+            "Chọn nơi xử lý dịch thuật: Gemini SRT Pro, AI Studio (trình duyệt, miễn phí), API trực tiếp (DeepSeek/OpenRouter/OpenAI).")
         self.engine.changed.connect(self._on_engine_changed)
 
         # 1. Các ô nhập cho Gemini SRT Pro
@@ -349,6 +350,27 @@ class TranslateStep(_StepPanel):
 
         self.btn_open_gemini_web = GhostButton("Mở Trình Dịch Web Gemini SRT Pro")
         self.btn_open_gemini_web.clicked.connect(self._open_gemini_web_tool)
+
+        self.btn_login_ai_studio = GhostButton("Đăng nhập Google AI Studio")
+        self.btn_login_ai_studio.setToolTip(
+            "Mở Chrome để đăng nhập Google lần đầu. Cookies sẽ được lưu cho các lần sau.")
+        self.btn_login_ai_studio.clicked.connect(self._open_ai_studio_login)
+
+        self.ai_studio_hint = QLabel(
+            "Dùng Google AI Studio miễn phí qua trình duyệt Chrome — không cần API Key. "
+            "Chậm hơn API trực tiếp nhưng không tốn phí. Cần đăng nhập Google lần đầu. "
+            "Lần chạy này bỏ qua API Key đã lưu (phương thức 1) để đi đường trình duyệt.")
+        self.ai_studio_hint.setWordWrap(True)
+        self.ai_studio_hint.setStyleSheet(
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
+            f"background: transparent;")
+        self.ai_studio_hint.setVisible(False)
+
+        self.ai_studio_login_status = QLabel("")
+        self.ai_studio_login_status.setWordWrap(True)
+        self.ai_studio_login_status.setStyleSheet(
+            f"font-size: {tokens.FS_META}px; background: transparent;")
+        self.ai_studio_login_status.setVisible(False)
 
         # 2. Các ô nhập cho DeepSeek, OpenRouter, OpenAI
         self.deepseek_key = LabeledLineEdit(
@@ -384,6 +406,9 @@ class TranslateStep(_StepPanel):
         self.body.addWidget(self.gemini_key)
         self.body.addWidget(self.gemini_model)
         self.body.addWidget(self.btn_open_gemini_web)
+        self.body.addWidget(self.btn_login_ai_studio)
+        self.body.addWidget(self.ai_studio_hint)
+        self.body.addWidget(self.ai_studio_login_status)
         self.body.addWidget(self.deepseek_key)
         self.body.addWidget(self.openrouter_key)
         self.body.addWidget(self.openai_key)
@@ -413,19 +438,115 @@ class TranslateStep(_StepPanel):
         except Exception:
             pass
 
+    def _open_ai_studio_login(self) -> None:
+        import threading
+        btn = self.btn_login_ai_studio
+        btn.setEnabled(False)
+        btn.setText("⏳ Đang mở cửa sổ đăng nhập...")
+
+        def worker():
+            try:
+                from autodub.text.translate_browser import AiStudioBrowserClient
+                client = AiStudioBrowserClient(headless=False)
+                client.open_login_window()
+            except Exception:
+                pass
+
+            def _finish():
+                btn.setEnabled(True)
+                btn.setText("Đăng nhập Google AI Studio")
+                self._check_ai_studio_login()
+            try:
+                from PySide6.QtWidgets import QApplication
+                from PySide6.QtCore import QEvent
+
+                class _Ev(QEvent):
+                    _TYPE = QEvent.Type(QEvent.registerEventType())
+                    def __init__(self, cb):
+                        super().__init__(self._TYPE)
+                        self.cb = cb
+
+                QApplication.instance().postEvent(self, _Ev(_finish))
+            except Exception:
+                _finish()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _check_ai_studio_login(self) -> None:
+        import threading
+        from autodub.text.translate_browser import get_cached_login_status, _has_google_session, _get_default_profile_dir
+
+        cached = get_cached_login_status()
+        if cached == "true":
+            self.ai_studio_login_status.setStyleSheet(
+                f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;")
+            self.ai_studio_login_status.setText("Đã đăng nhập Google AI Studio — sẵn sàng dịch!")
+            return
+
+        profile_dir = _get_default_profile_dir()
+        if not _has_google_session(profile_dir):
+            self.ai_studio_login_status.setStyleSheet(
+                f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;")
+            self.ai_studio_login_status.setText("Chưa đăng nhập — bấm nút 'Đăng nhập Google AI Studio' ở trên trước khi chạy.")
+            return
+
+        self.ai_studio_login_status.setStyleSheet(
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;")
+        self.ai_studio_login_status.setText("Đang kiểm tra đăng nhập...")
+
+        def worker():
+            from autodub.text.translate_browser import check_login_status
+            result = check_login_status()
+
+            def _update():
+                if result["logged_in"]:
+                    self.ai_studio_login_status.setStyleSheet(
+                        f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;")
+                    self.ai_studio_login_status.setText("Đã đăng nhập Google AI Studio — sẵn sàng dịch!")
+                else:
+                    self.ai_studio_login_status.setStyleSheet(
+                        f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;")
+                    msg = result.get("error") or "Chưa đăng nhập"
+                    self.ai_studio_login_status.setText(f"{msg} — bấm nút 'Đăng nhập' ở trên.")
+            try:
+                from PySide6.QtWidgets import QApplication
+                from PySide6.QtCore import QEvent
+
+                class _Ev(QEvent):
+                    _TYPE = QEvent.Type(QEvent.registerEventType())
+                    def __init__(self, cb):
+                        super().__init__(self._TYPE)
+                        self.cb = cb
+
+                QApplication.instance().postEvent(self, _Ev(_update))
+            except Exception:
+                _update()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def customEvent(self, event):
+        if hasattr(event, 'cb'):
+            event.cb()
+
     def _on_engine_changed(self) -> None:
         key = self.engine.current_key()
         self.gemini_key.setVisible(key in ("gemini", "gemini_srt"))
         self.gemini_model.setVisible(key in ("gemini", "gemini_srt"))
         self.btn_open_gemini_web.setVisible(key in ("gemini", "gemini_srt"))
+        self.btn_login_ai_studio.setVisible(key == "ai_studio")
+        self.ai_studio_hint.setVisible(key == "ai_studio")
+        self.ai_studio_login_status.setVisible(key == "ai_studio")
         self.deepseek_key.setVisible(key == "deepseek")
         self.openrouter_key.setVisible(key == "openrouter")
         self.openai_key.setVisible(key == "openai")
         self.changed.emit()
+        if key == "ai_studio":
+            self._check_ai_studio_login()
 
     def _on_auto_translate(self, checked: bool) -> None:
         for widget in (
             self.engine, self.gemini_key, self.gemini_model, self.btn_open_gemini_web,
+            self.btn_login_ai_studio, self.ai_studio_hint, self.ai_studio_login_status,
             self.deepseek_key, self.openrouter_key, self.openai_key, self.style, self.note
         ):
             widget.setEnabled(checked)
@@ -450,6 +571,7 @@ class TranslateStep(_StepPanel):
         }
 
     def load(self, data: dict) -> None:
+        fb_ai_studio = False
         try:
             from autodub.config import Settings
             settings = Settings.load()
@@ -460,10 +582,12 @@ class TranslateStep(_StepPanel):
             fb_deepseek_key = settings.deepseek_api_key
             fb_openrouter_key = settings.openrouter_api_key
             fb_openai_key = settings.openai_api_key
+            fb_ai_studio = bool(settings.ai_studio_enabled)
         except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
             fb_auto, fb_meta = True, True
             fb_gemini_key, fb_gemini_model = "", "gemini-2.5-flash"
             fb_deepseek_key, fb_openrouter_key, fb_openai_key = "", "", ""
+            fb_ai_studio = False
 
         self.auto_translate.setChecked(bool(data.get("auto_translate", fb_auto)))
         self.metadata.setChecked(bool(data.get("generate_metadata", fb_meta)))
@@ -485,6 +609,8 @@ class TranslateStep(_StepPanel):
                 engine_key = "openrouter"
             elif fb_openai_key:
                 engine_key = "openai"
+            elif fb_ai_studio:
+                engine_key = "ai_studio"
             else:
                 engine_key = "gemini"
         self.engine.set_key(engine_key)

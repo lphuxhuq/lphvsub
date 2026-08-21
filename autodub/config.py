@@ -247,6 +247,12 @@ class Settings:
     custom_ai_api_key: str = ""
     custom_ai_model: str = "deepseek-v4-flash"
 
+    # --- Dịch qua Google AI Studio (trình duyệt, miễn phí) ---------------
+    ai_studio_enabled: bool = False
+    ai_studio_headless: bool = False
+    ai_studio_single_chat: bool = True
+    ai_studio_chrome_profile: str = ""
+
     # --- Phụ đề -----------------------------------------------------------
     # Kiểu mặc định: "none" | "soft" (tệp rời) | "burn" (ghi thẳng vào hình)
     subtitle_mode: str = "none"
@@ -414,6 +420,10 @@ class Settings:
             custom_ai_base_url=env("CUSTOM_AI_BASE_URL", "https://hhtechapi.net/v1", "HHTECH_BASE_URL", "OPENAI_COMPAT_BASE_URL").strip() or "https://hhtechapi.net/v1",
             custom_ai_api_key=env("CUSTOM_AI_API_KEY", "", "HHTECH_API_KEY", "OPENAI_COMPAT_API_KEY").strip(),
             custom_ai_model=env("CUSTOM_AI_MODEL", "deepseek-v4-flash", "HHTECH_MODEL", "OPENAI_COMPAT_MODEL").strip() or "deepseek-v4-flash",
+            ai_studio_enabled=env_bool("AI_STUDIO_ENABLED", "false"),
+            ai_studio_headless=env_bool("AI_STUDIO_HEADLESS", "false"),
+            ai_studio_single_chat=env_bool("AI_STUDIO_SINGLE_CHAT", "true"),
+            ai_studio_chrome_profile=env("AI_STUDIO_CHROME_PROFILE").strip(),
             subtitle_mode=_one_of(env("SUBTITLE_MODE", "none"),
                                   ("none", "soft", "burn"), "none"),
             subtitle_preset=env("SUBTITLE_PRESET", "clean").strip() or "clean",

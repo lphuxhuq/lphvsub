@@ -184,13 +184,17 @@ class DownloadPage(BasePage):
 
     def _collect_urls(self) -> list[str]:
         """Lọc lấy các liên kết hợp lệ, bỏ dòng trống và dòng ghi chú."""
+        from autodub.media.douyin import extract_clean_url
         lines = self.urls_edit.toPlainText().splitlines()
         urls: list[str] = []
         for line in lines:
             text = line.strip()
             if not text or text.startswith("#"):
                 continue
-            if text.lower().startswith(("http://", "https://")):
+            clean = extract_clean_url(text)
+            if clean.lower().startswith(("http://", "https://")):
+                urls.append(clean)
+            elif text.lower().startswith(("http://", "https://")):
                 urls.append(text)
         return urls
 

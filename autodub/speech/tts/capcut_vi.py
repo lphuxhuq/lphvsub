@@ -5,6 +5,7 @@ Hỗ trợ Device Pool đa thiết bị (fake nhiều device.json) chạy đa lu
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
 import time
@@ -113,6 +114,38 @@ def _is_shark_block(error: Exception) -> bool:
     )
 
 
+def _is_invalid_text(error: Exception) -> bool:
+    text = str(error)
+    return (
+        "TTSInvalidText" in text
+        or "err_code': 40402002" in text
+        or "err_code\": 40402002" in text
+        or "40402002" in text and "invalid" in text.lower()
+    )
+
+
+_CJK_RE = re.compile(r"[\u3400-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]+")
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_WEIRD_RE = re.compile(r"[^\w\s.,!?;:…\-–—'\"()/%&+À-ỹ]+", re.UNICODE)
+
+
+def sanitize_capcut_text(text: str) -> str:
+    """Làm sạch câu trước khi gửi CapCut — tránh TTSInvalidText."""
+    cleaned = _CTRL_RE.sub("", text or "")
+    cleaned = _CJK_RE.sub(" ", cleaned)
+    cleaned = cleaned.replace("\u200b", "").replace("\ufeff", "")
+    cleaned = cleaned.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    cleaned = _WEIRD_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > 280:
+        cut = cleaned[:280]
+        sp = cut.rfind(" ")
+        cleaned = (cut[:sp] if sp > 80 else cut).rstrip(" ,;:-")
+        if cleaned and cleaned[-1] not in ".!?…":
+            cleaned += "."
+    return cleaned
+
+
 class CapCutSynthesizer:
     """Đọc từng câu bằng API CapCut rồi chuyển sang WAV cho pipeline."""
 
@@ -197,7 +230,7 @@ class CapCutSynthesizer:
                     texts=text, voice=self._voice_type,
                     resource_id=self._resource_id, wait=True,
                     timeout=TASK_TIMEOUT_S)
-                url = task.get("speech_url")
+                url = (task or {}).get("speech_url") or (task or {}).get("audio_url")
                 if not url:
                     raise RuntimeError(f"Máy chủ không trả link audio: {task}")
                 resp = client.session.get(url, timeout=DOWNLOAD_TIMEOUT_S)
@@ -209,6 +242,10 @@ class CapCutSynthesizer:
                 return resp.content
             except Exception as e:  # noqa: BLE001 — lỗi nào cũng đáng thử lại
                 last_error = e
+                if _is_invalid_text(e):
+                    raise RuntimeError(
+                        f"CapCut từ chối nội dung câu (TTSInvalidText): {text!r}"
+                    ) from e
                 if _is_shark_block(e):
                     if not self._reload_device(used):
                         raise RuntimeError(BLOCKED_HINT) from e
@@ -262,11 +299,20 @@ class CapCutSynthesizer:
         output_path = os.path.abspath(output_path)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        text = normalize_vi_text(text.strip())
+        text = sanitize_capcut_text(normalize_vi_text(text.strip()))
         if not text.strip(".,!?;: "):
             return write_silence(output_path)
 
-        self._to_wav(self._fetch_mp3(text), output_path)
+        try:
+            self._to_wav(self._fetch_mp3(text), output_path)
+        except RuntimeError as e:
+            if _is_invalid_text(e) or "TTSInvalidText" in str(e):
+                logger.warning(
+                    "CapCut từ chối câu %r — ghi clip im lặng, không dừng video.",
+                    text[:80],
+                )
+                return write_silence(output_path, duration_s=max(0.12, min(1.2, (target_duration or 0.4))))
+            raise
         duration = wav_duration_s(output_path) or 0.0
         return TTSResult(
             path=output_path,

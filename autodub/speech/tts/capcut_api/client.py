@@ -42,7 +42,51 @@ def _checked_json_response(resp: Any, label: str) -> Dict[str, Any]:
             status_code=resp.status_code,
             response_data=data,
         )
+    ret = str((data or {}).get("ret", "0"))
+    if ret not in ("0", "00", ""):
+        errmsg = (data or {}).get("errmsg") or (data or {}).get("logid") or data
+        raise CapCutAPIError(
+            f"{label} ret={ret}: {errmsg}",
+            status_code=resp.status_code,
+            response_data=data,
+        )
     return data
+
+
+def _extract_speech_url(task: Dict[str, Any]) -> str:
+    """Lấy URL audio từ payload TTS — API đổi field khá thường."""
+    if not isinstance(task, dict):
+        return ""
+    direct = task.get("speech_url") or task.get("audio_url")
+    if isinstance(direct, str) and direct.startswith("http"):
+        return direct
+    raw = task.get("payload")
+    payload: Any = raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("speech_url", "audio_url", "url"):
+        val = payload.get(key)
+        if isinstance(val, str) and val.startswith("http"):
+            return val
+    for group_key in ("audio_subtitles", "audios", "results", "data"):
+        group = payload.get(group_key)
+        if isinstance(group, dict):
+            group = [group]
+        if not isinstance(group, list):
+            continue
+        for item in group:
+            if not isinstance(item, dict):
+                continue
+            for key in ("speech_url", "audio_url", "url"):
+                val = item.get(key)
+                if isinstance(val, str) and val.startswith("http"):
+                    return val
+    return ""
 
 
 class CapCutClient:
@@ -374,30 +418,39 @@ class CapCutClient:
         if not tasks:
             raise CapCutTaskError(f"No task returned from API: {create_res}")
 
-        task_id = tasks[0]["id"]
-        token = tasks[0]["token"]
+        first = tasks[0] or {}
+        task_id = first.get("id") or first.get("task_id")
+        token = first.get("token") or ""
+        bind_id = first.get("bind_id") or create_res.get("bind_id") or ""
+        if not task_id:
+            raise CapCutTaskError(f"No task returned from API: {create_res}")
 
         start_time = time.time()
         time.sleep(0.08)
+        last_query: Dict[str, Any] = {}
         while time.time() - start_time < timeout:
-            query_res = self.query_tts_task(task_id, token)
+            query_res = self.query_tts_task(task_id, token, bind_id=bind_id)
+            last_query = query_res
             query_tasks = (query_res.get("data") or {}).get("tasks") or []
 
             if query_tasks:
-                status = query_tasks[0].get("status")
+                status = str(query_tasks[0].get("status") or "").lower()
 
-                if status in ("success", "succeed"):
-                    import json
-
-                    payload = json.loads(query_tasks[0]["payload"])
-                    query_tasks[0]["speech_url"] = payload["audio_subtitles"][0]["speech_url"]
-
+                if status in ("success", "succeed", "succeeds", "done", "finished"):
+                    url = _extract_speech_url(query_tasks[0])
+                    if not url:
+                        raise CapCutTaskError(
+                            f"TTS Task succeeded but no audio URL: {query_res}"
+                        )
+                    query_tasks[0]["speech_url"] = url
                     return query_tasks[0]
-                elif status == "failed":
+                if status in ("failed", "fail", "error"):
                     raise CapCutTaskError(f"TTS Task failed: {query_res}")
             time.sleep(poll_interval)
 
-        raise CapCutTaskError(f"TTS Task timed out after {timeout} seconds")
+        raise CapCutTaskError(
+            f"TTS Task timed out after {timeout} seconds: {last_query}"
+        )
 
     def upload_audio(self, file_path: Union[str, Path]) -> UploadResult:
         """

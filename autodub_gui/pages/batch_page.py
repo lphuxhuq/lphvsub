@@ -357,14 +357,17 @@ class BatchPage(BasePage):
         url = (url or "").strip()
         if not ok or not url:
             return
-        if not url.lower().startswith(("http://", "https://")):
+        from autodub.media.douyin import extract_clean_url
+        clean = extract_clean_url(url)
+        if not clean.lower().startswith(("http://", "https://")):
             TOASTS.warn("Liên kết phải bắt đầu bằng http:// hoặc https://")
             return
-        self._append([BatchItem(url=url)])
+        self._append([BatchItem(url=clean)])
 
     def _import_list(self) -> None:
         """Đọc một tệp chữ, mỗi dòng một liên kết, bỏ dòng bắt đầu bằng dấu thăng."""
         from PySide6.QtWidgets import QFileDialog
+        from autodub.media.douyin import extract_clean_url
 
         path, _ = QFileDialog.getOpenFileName(
             self, "Chọn tệp danh sách liên kết", "",
@@ -377,9 +380,14 @@ class BatchPage(BasePage):
         except OSError as e:
             TOASTS.error("Không đọc được tệp danh sách.", detail=str(e))
             return
-        urls = [line.strip() for line in lines
-                if line.strip() and not line.strip().startswith("#")]
-        urls = [u for u in urls if u.lower().startswith(("http://", "https://"))]
+        urls: list[str] = []
+        for line in lines:
+            line_str = line.strip()
+            if not line_str or line_str.startswith("#"):
+                continue
+            clean = extract_clean_url(line_str)
+            if clean.lower().startswith(("http://", "https://")):
+                urls.append(clean)
         if not urls:
             TOASTS.warn("Tệp này không có liên kết nào hợp lệ. Mỗi dòng cần "
                         "một liên kết bắt đầu bằng http:// hoặc https://")

@@ -1,15 +1,12 @@
 """Douyin downloader.
 
 Primary path (fast, reliable): resolve the short link to a numeric video id,
-fetch the mobile share page ``iesdouyin.com/share/video/<id>/`` whose embedded
-``window._ROUTER_DATA`` JSON carries the play address for exactly that video,
-then download the MP4 from the ``aweme/v1/play`` endpoint (no watermark).
+fetch the video info via API / mobile share page with embedded JSON,
+then download the MP4 (no watermark).
 
 Fallback path (slow): drive a headless Chromium (Playwright) on the share
 page and sniff CDN media requests. Only used when the share-page JSON is
-missing or the direct download fails. NOTE: the desktop douyin.com video page
-autoplays recommended-feed clips, so stream sniffing there can capture the
-WRONG video — the fallback therefore also pins the share page.
+missing or the direct download fails.
 
 yt-dlp cannot handle Douyin at all (the detail endpoint needs an `a_bogus`
 signature it can't generate), which is why this module exists.
@@ -38,12 +35,16 @@ _MOBILE_UA = (
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 )
 _REFERER = "https://www.douyin.com/"
+_IES_REFERER = "https://www.iesdouyin.com/"
 
 _DASH_VIDEO_RE = re.compile(r"/media-video-")
 _DASH_AUDIO_RE = re.compile(r"/media-audio-")
 _CDN_HOST_RE = re.compile(r"\.(zjcdn|douyinvod|douyincdn)\.com|\.bytecdntp\.com")
 _VIDEO_MIME_RE = re.compile(r"mime_type=video_mp4")
 _ROUTER_DATA_RE = re.compile(r"window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
+_SSR_DATA_RE = re.compile(r"window\._SSR_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
+_RENDER_DATA_RE = re.compile(r'<script id="RENDER_DATA"[^>]*>(.*?)</script>', re.DOTALL)
+_UNIVERSAL_DATA_RE = re.compile(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', re.DOTALL)
 
 # ID patterns seen across douyin URL shapes (canonical, share page, modal route)
 _ID_PATTERNS = (
@@ -51,20 +52,45 @@ _ID_PATTERNS = (
     re.compile(r"/share/video/(\d+)"),
     re.compile(r"[?&]modal_id=(\d+)"),
     re.compile(r"[?&]vid=(\d+)"),
+    re.compile(r"/note/(\d+)"),
 )
+
+
+def extract_clean_url(text: str) -> str:
+    """Tự động lọc URL sạch từ chuỗi văn bản (ví dụ chuỗi sao chép từ app Douyin/TikTok)."""
+    if not text:
+        return ""
+    raw = str(text).strip()
+    
+    # 1. Tìm URL có http/https
+    m = re.search(r"https?://[^\s<>\"']+", raw)
+    if m:
+        return m.group(0).rstrip(".,;!?/")
+        
+    # 2. Tìm domain douyin.com hoặc iesdouyin.com không có scheme
+    m_domain = re.search(r"(?:[a-zA-Z0-9-]+\.)?douyin\.com/[^\s<>\"']+", raw)
+    if m_domain:
+        return "https://" + m_domain.group(0).rstrip(".,;!?/")
+        
+    m_ies = re.search(r"(?:[a-zA-Z0-9-]+\.)?iesdouyin\.com/[^\s<>\"']+", raw)
+    if m_ies:
+        return "https://" + m_ies.group(0).rstrip(".,;!?/")
+        
+    return raw
 
 
 def is_douyin_url(url: str) -> bool:
     if not url:
         return False
-    url = url.strip()
-    # Link share dán từ app thường thiếu scheme ("v.douyin.com/xxx") —
-    # urlparse khi đó trả netloc rỗng và link bị đẩy nhầm sang yt-dlp.
-    if "://" not in url:
-        url = "https://" + url
-    host = urllib.parse.urlparse(url).netloc.lower()
-    return (host == "douyin.com" or host.endswith(".douyin.com")
-            or host == "iesdouyin.com" or host.endswith(".iesdouyin.com"))
+    clean = extract_clean_url(url)
+    if "://" not in clean:
+        clean = "https://" + clean
+    try:
+        host = urllib.parse.urlparse(clean).netloc.lower()
+        return (host == "douyin.com" or host.endswith(".douyin.com")
+                or host == "iesdouyin.com" or host.endswith(".iesdouyin.com"))
+    except Exception:
+        return False
 
 
 def _extract_video_id(url: str) -> str | None:
@@ -76,115 +102,181 @@ def _extract_video_id(url: str) -> str | None:
 
 
 def resolve_video_id(url: str) -> str | None:
-    """Resolve a Douyin URL (including v.douyin.com short links) to its video ID.
+    """Resolve a Douyin URL (including v.douyin.com short links) to its video ID."""
+    clean_url = extract_clean_url(url)
+    if "://" not in clean_url:
+        clean_url = "https://" + clean_url
 
-    Short links 302-redirect to an iesdouyin.com share URL that embeds the
-    numeric video id. We must pin the id before touching any page: feed/share
-    surfaces autoplay other clips, so "grab the first stream" is unreliable.
-    """
-    vid = _extract_video_id(url)
+    vid = _extract_video_id(clean_url)
     if vid:
         return vid
 
-    try:
-        resp = requests.get(
-            url,
-            headers={"User-Agent": _UA},
-            allow_redirects=True,
-            timeout=15,
-            stream=True,  # we only need the redirect chain, not the body
-        )
-        candidates = [resp.url] + [r.headers.get("Location", "") for r in resp.history]
-        resp.close()
-    except requests.RequestException as exc:
-        logger.warning(f"Short-link resolution failed for {url}: {exc}")
-        return None
+    # Follow redirect chain with Mobile User-Agent
+    for ua in (_MOBILE_UA, _UA):
+        try:
+            resp = requests.get(
+                clean_url,
+                headers={"User-Agent": ua, "Referer": _REFERER},
+                allow_redirects=True,
+                timeout=15,
+                stream=True,
+            )
+            candidates = [resp.url] + [r.headers.get("Location", "") for r in resp.history]
+            resp.close()
+            for candidate in candidates:
+                if candidate:
+                    vid = _extract_video_id(candidate)
+                    if vid:
+                        return vid
+        except requests.RequestException as exc:
+            logger.warning(f"Short-link resolution error with UA for {clean_url}: {exc}")
 
-    for candidate in candidates:
-        vid = _extract_video_id(candidate)
-        if vid:
-            return vid
     return None
 
 
 # --------------------------------------------------------------------------- #
-# Primary path: share-page JSON → direct MP4
+# Primary path: API / share-page JSON → direct no-watermark MP4
 # --------------------------------------------------------------------------- #
 
 def _fetch_share_info(video_id: str) -> dict | None:
-    """Fetch video metadata from the mobile share page's embedded JSON.
+    """Fetch video metadata from Douyin APIs or mobile share page embedded JSON.
 
-    Returns {"uri", "title", "duration_ms"} or None if the page layout changed.
+    Returns {"uri", "play_url", "title", "duration_ms"} or None.
     """
-    url = f"https://www.iesdouyin.com/share/video/{video_id}/"
+    # Strategy 1: Mobile API endpoint
+    api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
     try:
-        resp = requests.get(url, headers={"User-Agent": _MOBILE_UA}, timeout=20)
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        logger.warning(f"Share page fetch failed for {video_id}: {exc}")
-        return None
+        resp = requests.get(
+            api_url,
+            headers={"User-Agent": _MOBILE_UA, "Referer": _IES_REFERER, "Accept": "application/json"},
+            timeout=15
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("item_list", [])
+            if items:
+                item = items[0]
+                video_obj = item.get("video", {})
+                play_addr = video_obj.get("play_addr", {})
+                uri = play_addr.get("uri", "")
+                url_list = play_addr.get("url_list", [])
+                
+                # Replace playwm with play for watermark-free video
+                clean_play_url = ""
+                for u in url_list:
+                    if u:
+                        clean_play_url = u.replace("playwm", "play")
+                        break
+                        
+                title = (item.get("desc") or "").strip()
+                duration_ms = video_obj.get("duration") or item.get("duration") or 0
+                if clean_play_url or uri:
+                    return {
+                        "uri": uri,
+                        "play_url": clean_play_url,
+                        "title": title,
+                        "duration_ms": duration_ms,
+                    }
+    except Exception as exc:
+        logger.debug(f"Strategy 1 (iteminfo API) failed for {video_id}: {exc}")
 
-    m = _ROUTER_DATA_RE.search(resp.text)
-    if not m:
-        logger.warning(f"No _ROUTER_DATA found in share page for {video_id}")
-        return None
-
+    # Strategy 2: Mobile share page HTML extraction
+    share_url = f"https://www.iesdouyin.com/share/video/{video_id}/"
     try:
-        data = json.loads(m.group(1))
-        for loader_value in data.get("loaderData", {}).values():
-            if not isinstance(loader_value, dict):
-                continue
-            items = loader_value.get("videoInfoRes", {}).get("item_list", [])
-            if not items:
-                continue
-            item = items[0]
-            if str(item.get("aweme_id", "")) != video_id:
-                logger.warning(
-                    f"Share page returned aweme_id={item.get('aweme_id')} "
-                    f"instead of {video_id}"
-                )
-                return None
-            uri = item.get("video", {}).get("play_addr", {}).get("uri", "")
-            if not uri:
-                return None
-            return {
-                "uri": uri,
-                "title": (item.get("desc") or "").strip(),
-                "duration_ms": item.get("video", {}).get("duration") or 0,
-            }
-    except (ValueError, KeyError, TypeError) as exc:
-        logger.warning(f"Share page JSON parse failed for {video_id}: {exc}")
+        resp = requests.get(share_url, headers={"User-Agent": _MOBILE_UA}, timeout=20)
+        if resp.status_code == 200:
+            html = resp.text
+            
+            # Match router data or SSR data
+            for pattern in (_ROUTER_DATA_RE, _SSR_DATA_RE):
+                m = pattern.search(html)
+                if m:
+                    try:
+                        data = json.loads(m.group(1))
+                        for loader_value in data.get("loaderData", {}).values():
+                            if not isinstance(loader_value, dict):
+                                continue
+                            items = loader_value.get("videoInfoRes", {}).get("item_list", [])
+                            if not items:
+                                continue
+                            item = items[0]
+                            uri = item.get("video", {}).get("play_addr", {}).get("uri", "")
+                            url_list = item.get("video", {}).get("play_addr", {}).get("url_list", [])
+                            clean_play_url = url_list[0].replace("playwm", "play") if url_list else ""
+                            if uri or clean_play_url:
+                                return {
+                                    "uri": uri,
+                                    "play_url": clean_play_url,
+                                    "title": (item.get("desc") or "").strip(),
+                                    "duration_ms": item.get("video", {}).get("duration") or 0,
+                                }
+                    except Exception:
+                        pass
+                        
+            # Match RENDER_DATA
+            m_render = _RENDER_DATA_RE.search(html)
+            if m_render:
+                try:
+                    raw_json = urllib.parse.unquote(m_render.group(1))
+                    data = json.loads(raw_json)
+                    for key, val in data.items():
+                        if isinstance(val, dict) and "video" in val:
+                            uri = val["video"].get("play_addr", {}).get("uri", "")
+                            if uri:
+                                return {
+                                    "uri": uri,
+                                    "play_url": "",
+                                    "title": (val.get("desc") or "").strip(),
+                                    "duration_ms": val["video"].get("duration") or 0,
+                                }
+                except Exception:
+                    pass
+    except Exception as exc:
+        logger.warning(f"Strategy 2 (share page) failed for {video_id}: {exc}")
+
     return None
 
 
-def _download_play_url(uri: str, dest: Path) -> int:
-    """Download the MP4 via the aweme play endpoint (no watermark)."""
-    quoted = urllib.parse.quote(str(uri), safe="")
-    url = f"https://aweme.snssdk.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0"
+def _download_play_url(play_url: str, uri: str, dest: Path) -> int:
+    """Download the MP4 via direct play URL or snssdk aweme play endpoint (no watermark)."""
     headers = {"User-Agent": _MOBILE_UA, "Referer": _REFERER}
-    size = 0
-    # Ghi ra .part rồi os.replace: đứt mạng giữa chừng không để lại file
-    # cắt cụt ở đích trông như tải thành công.
     part = Path(str(dest) + ".part")
-    try:
-        with requests.get(url, headers=headers, stream=True,
-                          allow_redirects=True, timeout=120) as r:
-            r.raise_for_status()
-            content_type = r.headers.get("Content-Type", "")
-            if "video" not in content_type:
-                raise RuntimeError(f"Play endpoint returned {content_type}, not video")
-            with open(part, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1024 * 256):
-                    if chunk:
-                        f.write(chunk)
-                        size += len(chunk)
-        if size < 10_000:
-            raise RuntimeError(f"Play endpoint returned suspiciously small file ({size}B)")
-        os.replace(part, dest)
-    finally:
-        if part.exists():
-            part.unlink(missing_ok=True)
-    return size
+    
+    urls_to_try = []
+    if play_url:
+        urls_to_try.append(play_url)
+    if uri:
+        quoted = urllib.parse.quote(str(uri), safe="")
+        urls_to_try.append(f"https://aweme.snssdk.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0")
+        urls_to_try.append(f"https://api.amemv.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0")
+
+    last_exc = None
+    for candidate_url in urls_to_try:
+        size = 0
+        try:
+            with requests.get(candidate_url, headers=headers, stream=True,
+                              allow_redirects=True, timeout=120) as r:
+                r.raise_for_status()
+                content_type = r.headers.get("Content-Type", "").lower()
+                if "html" in content_type:
+                    continue
+                with open(part, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 256):
+                        if chunk:
+                            f.write(chunk)
+                            size += len(chunk)
+            if size >= 10_000:
+                os.replace(part, dest)
+                return size
+        except Exception as exc:
+            last_exc = exc
+        finally:
+            if part.exists():
+                part.unlink(missing_ok=True)
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Tất cả các link phát video Douyin đều không thể tải về.")
 
 
 # --------------------------------------------------------------------------- #
@@ -204,36 +296,30 @@ def _extract_via_playwright(
     wait_seconds: float = 20.0,
     headless: bool = True,
 ) -> dict:
-    """Open the Douyin page and capture direct CDN URLs for video + audio.
-
-    Douyin detects vanilla headless Chromium and refuses to start the player.
-    We launch with `--disable-blink-features=AutomationControlled` and a fully
-    populated UA + viewport to look like a real browser.
-    """
+    """Open the Douyin page and capture direct CDN URLs for video + audio."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        # playwright không đóng trong exe — người dùng cài qua file bat.
         raise RuntimeError(
             "Tính năng tải Douyin chưa được cài. Đúp chuột file "
             "'Cai dat tinh nang Douyin.bat' trong thư mục VoxDub, đợi cài "
-            "xong rồi mở lại app.") from None
+            "xong rồi mở lại app."
+        ) from None
 
     launch_args = [
         "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
         "--disable-features=IsolateOrigins,site-per-process",
     ]
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless, args=launch_args)
-        # try/finally BẮT BUỘC: goto timeout hay lỗi giữa chừng mà không đóng
-        # browser thì mỗi lần batch fail rò rỉ một tiến trình Chromium headless.
         try:
             context = browser.new_context(
                 user_agent=_UA,
-                viewport={"width": 1920, "height": 1080},
+                viewport={"width": 1280, "height": 800},
                 locale="zh-CN",
             )
-            # Hide webdriver flag — Douyin checks navigator.webdriver
             context.add_init_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
             )
@@ -296,14 +382,13 @@ def _extract_via_playwright(
         }
 
     raise RuntimeError(
-        f"No usable video stream captured from Douyin page (canonical={canonical})"
+        f"Không bắt được luồng phát video từ trang Douyin (canonical={canonical})"
     )
 
 
 def _download_stream(url: str, dest: Path) -> int:
     headers = {"User-Agent": _UA, "Referer": _REFERER}
     size = 0
-    # Ghi ra .part rồi os.replace — đứt mạng không để lại file cắt cụt.
     part = Path(str(dest) + ".part")
     try:
         with requests.get(url, headers=headers, stream=True, timeout=120) as r:
@@ -314,9 +399,7 @@ def _download_stream(url: str, dest: Path) -> int:
                         f.write(chunk)
                         size += len(chunk)
         if size < 10_000:
-            raise RuntimeError(
-                f"CDN returned suspiciously small file ({size}B) — likely an "
-                "error page, not the video")
+            raise RuntimeError(f"CDN trả về tệp quá nhỏ ({size}B)")
         os.replace(part, dest)
     finally:
         if part.exists():
@@ -362,11 +445,10 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path) -> 
     share_url = f"https://www.iesdouyin.com/share/video/{video_id}/"
     info = _extract_via_playwright(share_url)
 
-    # The share page may client-side redirect; verify we stayed on our video.
     if info["video_id"] and info["video_id"] != video_id:
         raise RuntimeError(
-            f"Douyin redirected to a different video (requested {video_id}, "
-            f"got {info['video_id']}). The video may be region-locked or removed."
+            f"Douyin chuyển hướng sang video khác (yêu cầu {video_id}, "
+            f"nhận {info['video_id']}). Video có thể đã bị ẩn hoặc xóa."
         )
 
     if info["mode"] == "progressive":
@@ -406,48 +488,49 @@ def download_douyin(
     """
     if not url:
         raise ValueError("URL cannot be empty")
-    url = url.strip()
-    if "://" not in url:   # link share dán từ app thường thiếu scheme
-        url = "https://" + url
+    clean_url = extract_clean_url(url)
+    if "://" not in clean_url:
+        clean_url = "https://" + clean_url
 
     ensure_dir(output_dir)
 
-    video_id = resolve_video_id(url)
+    video_id = resolve_video_id(clean_url)
     if not video_id:
         raise RuntimeError(
-            f"Could not resolve a Douyin video id from {url}. "
-            "Paste the video link copied from the share button."
+            f"Không thể trích xuất ID video Douyin từ '{url}'. "
+            "Hãy sao chép lại liên kết từ nút chia sẻ của video."
         )
-    logger.info(f"Douyin video id={video_id} ({url})")
+    logger.info(f"Douyin video id={video_id} ({clean_url})")
 
     out_dir = Path(output_dir)
     name = filename or f"Douyin_{video_id}.mp4"
     final_path = out_dir / name
     title = ""
 
-    # --- Primary: share-page JSON → direct MP4 (id-exact, no browser) ---
+    # --- Primary: API / share-page JSON → direct MP4 (id-exact, no watermark) ---
     share_info = _fetch_share_info(video_id)
     downloaded = False
     if share_info:
-        title = share_info["title"]
+        title = share_info.get("title", "")
+        play_url = share_info.get("play_url", "")
+        uri = share_info.get("uri", "")
         try:
-            size = _download_play_url(share_info["uri"], final_path)
-            logger.info(f"Direct download OK: {size:,}B (uri={share_info['uri']})")
+            size = _download_play_url(play_url, uri, final_path)
+            logger.info(f"Direct download OK: {size:,}B (video_id={video_id})")
             downloaded = True
         except (requests.RequestException, RuntimeError) as exc:
-            logger.warning(f"Direct play download failed: {exc}; "
-                           "falling back to browser capture.")
+            logger.warning(f"Direct play download failed: {exc}; falling back to browser capture.")
 
     # --- Fallback: Playwright stream sniffing (share page, id-verified) ---
     if not downloaded:
         info = _download_via_playwright(video_id, out_dir, final_path)
-        title = title or info["title"]
+        title = title or info.get("title", "")
 
     duration = _ffprobe_duration(final_path)
     logger.info(f"Saved: {final_path} ({duration:.1f}s)")
 
     return {
-        "input_url": url,
+        "input_url": clean_url,
         "canonical_url": f"https://www.douyin.com/video/{video_id}",
         "platform": "Douyin",
         "video_id": video_id,

@@ -119,8 +119,25 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
     """Phân tích kết quả trả về (JSON hoặc dòng đánh số) thành mảng các câu dịch."""
     raw = _strip_fences_and_citations(content)
 
+    candidates: List[str] = [raw, _slice_to_payload(raw), _repair_json(raw)]
+
+    # Trích xuất khối ```json ... ``` hoặc ``` ... ``` nếu AI trả về kèm suy nghĩ/lời giải thích
+    for fence_match in re.finditer(r"```(?:json)?\s*([\s\S]*?)\s*```", content, re.IGNORECASE):
+        fc = fence_match.group(1).strip()
+        if fc:
+            candidates.insert(0, fc)
+            candidates.insert(1, _slice_to_payload(fc))
+            candidates.insert(2, _repair_json(fc))
+
+    # Tìm khối mảng JSON [ ... ] xuất hiện bất kỳ đâu trong văn bản
+    array_match = re.search(r"(\[\s*\{[\s\S]*\}\s*\])", content)
+    if array_match:
+        ac = array_match.group(1).strip()
+        candidates.insert(0, ac)
+        candidates.insert(1, _repair_json(ac))
+
     # 1. Thử parse JSON chuẩn hoặc JSON đã sửa
-    for candidate in (raw, _slice_to_payload(raw), _repair_json(raw)):
+    for candidate in candidates:
         if not candidate:
             continue
         try:
@@ -140,7 +157,28 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
             if valid:
                 return valid
 
-    # 2. Fallback: Parse theo dạng dòng đánh số "1. Lời thoại..."
+    # 2. Fallback: Trích xuất từng object {"id": ..., "text_vi": "..."} qua Regex độc lập
+    # Bền bỉ ngay cả khi toàn bộ chuỗi JSON bị cắt cụt đuôi hoặc lẫn tạp âm UI AI Studio
+    obj_pattern = re.compile(
+        r'\{\s*"id"\s*:\s*(\d+)\s*,\s*"(?:'
+        + re.escape(text_field)
+        + r'|translation|text_vi|text)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"',
+        re.IGNORECASE,
+    )
+    regex_items: List[dict] = []
+    for m in obj_pattern.finditer(content):
+        sid = int(m.group(1))
+        raw_val = m.group(2)
+        try:
+            val_txt = json.loads(f'"{raw_val}"')
+        except Exception:
+            val_txt = raw_val
+        if val_txt and val_txt.strip():
+            regex_items.append({"id": sid, text_field: val_txt.strip()})
+    if regex_items:
+        return regex_items
+
+    # 3. Fallback: Parse theo dạng dòng đánh số "1. Lời thoại..."
     numbered_lines = []
     for line in raw.splitlines():
         line = line.strip()
@@ -157,8 +195,11 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
 
 
 def _build_system_prompt(target_field: str = "text_vi", style_notes: str = "") -> str:
-    prompt = f"""Bạn là chuyên gia dịch thuật và chuyển thể lồng tiếng video sang tiếng Việt tự nhiên cho AI TTS.
-Dịch các câu thoại đầu vào sang tiếng Việt tự nhiên, ngắn gọn, khớp thời lượng nói, không dịch thô cứng hay sót chữ Hán, số viết thành chữ để đọc (ví dụ 100 -> một trăm).
+    prompt = f"""Bạn là chuyên gia dịch thuật và chuyển thể lồng tiếng video sang tiếng Việt tự nhiên, khớp nhịp cho AI TTS.
+Nguyên tắc quan trọng:
+1. Độ dài câu: BẮT BUỘC khống chế độ dài ký tự của bản dịch không vượt quá trường 'max_chars' trong mỗi câu (nếu có). Câu dịch phải ngắn gọn, súc tích, lược bỏ từ thừa để AI đọc vừa khít thời lượng nói của video gốc, tránh bị lệch nhịp, chậm tiếng hay dồn đuôi chữ.
+2. Tự nhiên & chuẩn văn phong: Dịch thoát ý, tự nhiên theo ngữ cảnh phim/video, không dịch thô cứng hay sót chữ Hán.
+3. Số viết thành chữ để đọc chuẩn (ví dụ 100 -> một trăm, 2024 -> hai nghìn không trăm hai mươi tư).
 Bắt buộc trả về đúng định dạng mảng JSON duy nhất:
 [
   {{"id": 1, "{target_field}": "Bản dịch tiếng Việt."}}
@@ -614,6 +655,19 @@ def translate_segments_direct(
         for s in batch:
             sid = s["id"]
             txt = trans_map.get(sid, "")
+            if not txt or _has_cjk(txt):
+                # Nếu câu bị thiếu trong phản hồi của batch hoặc còn sót chữ CJK, thử dịch lại câu lẻ
+                try:
+                    s_payload = [payload_segment(s, cps_budget=cps)]
+                    s_prompt = f"Dịch câu thoại sau sang {target.name} ({target.text_field}), không để lại chữ Hán:\n{json.dumps(s_payload, ensure_ascii=False)}"
+                    s_reply = client.call_ai(system_prompt, s_prompt)
+                    s_items = parse_response_segments(s_reply, text_field=target.text_field)
+                    if s_items and target.text_field in s_items[0]:
+                        cand = s_items[0][target.text_field]
+                        if cand and not _has_cjk(cand):
+                            txt = cand
+                except Exception as s_err:
+                    logger.warning(f"  ✗ Dịch bù câu #{sid} thất bại: {s_err}")
             if not txt:
                 txt = s.get("text", "")
             new_seg = dict(s)

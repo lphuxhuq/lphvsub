@@ -111,13 +111,13 @@ def main() -> None:
 
     print(json.dumps({"ready": True}), file=proto_out, flush=True)
 
-    # VAD chunking mirrors faster-whisper's vad_filter (500 ms min silence).
+    # VAD chunking mirrors faster-whisper's vad_filter (500 ms min silence, 0.35 threshold).
     vad_cfg = sherpa_onnx.VadModelConfig()
     vad_cfg.silero_vad.model = vad_file
-    vad_cfg.silero_vad.threshold = 0.5
+    vad_cfg.silero_vad.threshold = 0.35
     vad_cfg.silero_vad.min_silence_duration = 0.5
-    vad_cfg.silero_vad.min_speech_duration = 0.25
-    vad_cfg.silero_vad.max_speech_duration = 15.0
+    vad_cfg.silero_vad.min_speech_duration = 0.1
+    vad_cfg.silero_vad.max_speech_duration = 20.0
     vad_cfg.sample_rate = 16000
     vad = sherpa_onnx.VoiceActivityDetector(vad_cfg, buffer_size_in_seconds=120)
 
