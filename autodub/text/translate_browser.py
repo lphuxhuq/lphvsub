@@ -809,6 +809,29 @@ def _apply_translated_map(
     return batch_results
 
 
+def _build_browser_system_prompt(target: TargetLang, source_lang: str, settings: Any = None) -> str:
+    target_field = target.text_field
+    domain = getattr(settings, "translate_domain", "general").strip() or "general"
+
+    style_guide = "phong cách review phim/kể chuyện YouTube/TikTok, tự nhiên, cuốn hút"
+    if "novel" in domain.lower() or "fiction" in domain.lower():
+        style_guide = "phong cách tiểu thuyết, kiếm hiệp, ngôn tình, xưng hô chuẩn bối cảnh"
+    elif "anime" in domain.lower():
+        style_guide = "phong cách anime, hoạt hình, năng động, trẻ trung"
+
+    return f"""Bạn là chuyên gia chuyển thể lồng tiếng video từ {source_lang} sang {target.name} cho AI TTS.
+NGUYÊN TẮC BẮT BUỘC:
+1. Độ dài câu: Khống chế độ dài ký tự của bản dịch không vượt quá trường 'max_chars' trong mỗi câu. Câu dịch phải ngắn gọn, súc tích, lược bỏ từ thừa để AI đọc vừa khít thời lượng video gốc.
+2. Ngôn ngữ: Dịch sang {target.name} ({style_guide}), xưng hô chuẩn xác theo vai vế, thuần Việt, tự nhiên.
+3. Chuyển ngữ toàn bộ: Tên nhân vật, địa danh, thuật ngữ phải được phiên âm hoặc dịch sang tiếng Việt, TUYỆT ĐỐI KHÔNG để lại chữ Hán/Nhật/Hàn.
+4. Định dạng đầu ra: BẮT BUỘC trả về DUY NHẤT một mảng JSON các object gồm đúng 2 trường: 'id' (giữ nguyên) và '{target_field}' (câu dịch). Ví dụ:
+[
+  {{"id": 1, "{target_field}": "Lời dịch câu 1."}},
+  {{"id": 2, "{target_field}": "Lời dịch câu 2."}}
+]
+5. TUYỆT ĐỐI KHÔNG giải thích, KHÔNG viết suy nghĩ (thoughts/reasoning), KHÔNG dùng tiếng Anh, KHÔNG thêm bất kỳ lời dẫn nào."""
+
+
 def translate_segments_browser(
     segments: List[dict],
     target: TargetLang,
@@ -829,13 +852,10 @@ def translate_segments_browser(
         else None
     )
 
-    system_prompt = build_translation_prompt(
+    system_prompt = _build_browser_system_prompt(
         target=target,
         source_lang=source_lang,
-        domain=getattr(settings, "translate_domain", "general").strip() or "general",
-        cps_budget=cps,
         settings=settings,
-        compact_output=True,
     )
 
     headless = getattr(settings, "ai_studio_headless", False)
