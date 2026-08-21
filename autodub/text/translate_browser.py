@@ -582,8 +582,14 @@ class AiStudioBrowserClient:
 
     def _check_error(self, response_text: str) -> str | None:
         lower = response_text.lower()
-        if "resource exhausted" in lower or "quota exceeded" in lower:
-            return "quota"
+        if (
+            "rate limit" in lower
+            or "rate_limit" in lower
+            or "resource exhausted" in lower
+            or "quota exceeded" in lower
+            or "try again later" in lower
+        ):
+            return "rate_limit"
         if "prohibited content" in lower:
             return "prohibited"
 
@@ -594,6 +600,8 @@ class AiStudioBrowserClient:
             ).first
             if err_banner.is_visible(timeout=100):
                 err_txt = err_banner.inner_text().lower()
+                if "rate limit" in err_txt or "quota" in err_txt:
+                    return "rate_limit"
                 if "internal error" in err_txt:
                     has_internal_error = True
                 if "permission" in err_txt or "denied" in err_txt:
@@ -642,9 +650,13 @@ class AiStudioBrowserClient:
 
                     lower_text = full_text.lower()
 
-                    # Check permission denied trên toàn bộ page (trước khi extract)
+                    # Check permission denied / rate limit trên toàn bộ page
                     if "permission denied" in lower_text or "failed to generate" in lower_text:
                         logger.warning("  ⚠ AI Studio báo permission denied — mở chat mới...")
+                        break
+                    if "rate limit" in lower_text or "reached your rate limit" in lower_text:
+                        logger.warning("  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại...")
+                        time.sleep(15)
                         break
 
                     response_text = self._extract_response_text(full_text, full_prompt) or ""
@@ -664,10 +676,10 @@ class AiStudioBrowserClient:
                     if err == "permission_denied":
                         logger.warning("  ⚠ AI Studio báo permission denied — mở chat mới...")
                         break
-                    if err == "quota":
-                        raise TranslateError(
-                            "AI Studio báo giới hạn hạn mức (Quota Exceeded)."
-                        )
+                    if err == "rate_limit":
+                        logger.warning("  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại...")
+                        time.sleep(15)
+                        break
                     if err == "prohibited":
                         raise TranslateError(
                             "Nội dung bị bộ lọc an toàn của AI Studio chặn."
@@ -1038,6 +1050,7 @@ def translate_segments_browser(
             for c_idx in range(0, len(cjk_untranslated), cjk_chunk_size):
                 sub_chunk = cjk_untranslated[c_idx : c_idx + cjk_chunk_size]
                 try:
+                    payload_items = [payload_segment(s, cps_budget=cps) for s in sub_chunk]
                     re_prompt = (
                         f"### CRITICAL REQUIREMENT (BẮT BUỘC):\n"
                         f"1. Dịch TẤT CẢ {len(sub_chunk)} câu thoại sang {target.name} ({target.text_field}), bắt buộc thoát ý hoàn toàn, không để lại chữ Hán/Nhật/Hàn.\n"
