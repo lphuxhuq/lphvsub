@@ -157,7 +157,7 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
             if valid:
                 return valid
 
-    # 2. Fallback: Trích xuất từng object {"id": ..., "text_vi": "..."} qua Regex độc lập
+    # 2. Fallback: Trích xuất từng object {"id": ..., "text_vi": "..."} hoặc {"text_vi": "...", "id": ...}
     # Bền bỉ ngay cả khi toàn bộ chuỗi JSON bị cắt cụt đuôi hoặc lẫn tạp âm UI AI Studio
     obj_pattern = re.compile(
         r'\{\s*"id"\s*:\s*(\d+)\s*,\s*"(?:'
@@ -166,6 +166,7 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
         re.IGNORECASE,
     )
     regex_items: List[dict] = []
+    seen_ids = set()
     for m in obj_pattern.finditer(content):
         sid = int(m.group(1))
         raw_val = m.group(2)
@@ -173,8 +174,28 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
             val_txt = json.loads(f'"{raw_val}"')
         except Exception:
             val_txt = raw_val
-        if val_txt and val_txt.strip():
+        if val_txt and val_txt.strip() and sid not in seen_ids:
             regex_items.append({"id": sid, text_field: val_txt.strip()})
+            seen_ids.add(sid)
+
+    if not regex_items:
+        obj_pattern_rev = re.compile(
+            r'\{\s*"(?:'
+            + re.escape(text_field)
+            + r'|translation|text_vi|text)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*,\s*"id"\s*:\s*(\d+)',
+            re.IGNORECASE,
+        )
+        for m in obj_pattern_rev.finditer(content):
+            raw_val = m.group(1)
+            sid = int(m.group(2))
+            try:
+                val_txt = json.loads(f'"{raw_val}"')
+            except Exception:
+                val_txt = raw_val
+            if val_txt and val_txt.strip() and sid not in seen_ids:
+                regex_items.append({"id": sid, text_field: val_txt.strip()})
+                seen_ids.add(sid)
+
     if regex_items:
         return regex_items
 

@@ -58,31 +58,47 @@ CHROME_ANTI_CRASH_ARGS = [
 
 def _safe_extract_page_text(page) -> str:
     """Trích xuất text từ Google AI Studio an toàn và tối ưu bộ nhớ.
-    Tránh gọi body.inner_text() liên tục trong lúc đang stream khiến Chrome layout reflow và crash."""
+    Tự động lọc bỏ các khối suy nghĩ (Model Thoughts) của Gemini 2.5 Flash để lấy chuẩn phần JSON kết quả."""
     if not page or page.is_closed():
         raise RuntimeError("Cửa sổ Chrome (AI Studio) đã bị đóng.")
     try:
         text = page.evaluate("""() => {
             try {
-                // 1. Thử lấy từ turn chat model cuối cùng
-                const turns = document.querySelectorAll('ms-chat-turn, .chat-turn, ms-cmark-node, .model-response-text, .response-container');
-                if (turns && turns.length > 0) {
-                    const lastTurn = turns[turns.length - 1];
-                    const t = lastTurn.innerText || lastTurn.textContent || '';
-                    if (t.trim().length > 0) {
-                        return t;
+                // 1. Tìm turn chat model cuối cùng
+                const modelTurns = document.querySelectorAll('ms-chat-turn:not(.user-turn), .model-turn, .chat-turn.model, ms-chat-turn:last-child');
+                const targetTurn = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : document.body;
+                
+                if (targetTurn) {
+                    // Thử tìm các node markdown / code không nằm trong thoughts
+                    const mdNodes = targetTurn.querySelectorAll('ms-cmark-node, markdown, .rendered-markdown, pre code, .model-response-text');
+                    if (mdNodes && mdNodes.length > 0) {
+                        let combined = '';
+                        for (const node of mdNodes) {
+                            if (!node.closest('ms-thought-chunk, ms-thought-node, .thought-content, .model-thoughts, ms-thought-view, .thoughts-container')) {
+                                combined += (node.innerText || node.textContent || '') + '\\n';
+                            }
+                        }
+                        if (combined.trim().length > 0) {
+                            return combined.trim();
+                        }
+                    }
+
+                    // Clone và loại bỏ các phần tử thought
+                    try {
+                        const clone = targetTurn.cloneNode(true);
+                        const thoughtEls = clone.querySelectorAll('ms-thought-chunk, ms-thought-node, .thought-content, .model-thoughts, ms-thought-view, .thoughts-container, [data-thought]');
+                        thoughtEls.forEach(el => el.remove());
+                        const cleanTxt = clone.innerText || clone.textContent || '';
+                        if (cleanTxt.trim().length > 0) {
+                            return cleanTxt.trim();
+                        }
+                    } catch (e) {}
+
+                    const rawTxt = targetTurn.innerText || targetTurn.textContent || '';
+                    if (rawTxt.trim().length > 0) {
+                        return rawTxt.trim();
                     }
                 }
-                // 2. Thử lấy từ container markdown
-                const md = document.querySelectorAll('markdown, .rendered-markdown');
-                if (md && md.length > 0) {
-                    const lastMd = md[md.length - 1];
-                    const t = lastMd.innerText || lastMd.textContent || '';
-                    if (t.trim().length > 0) {
-                        return t;
-                    }
-                }
-                // 3. Fallback lấy body text
                 return document.body ? (document.body.innerText || '') : '';
             } catch (e) {
                 return document.body ? (document.body.innerText || '') : '';
@@ -657,15 +673,25 @@ class AiStudioBrowserClient:
                             "Nội dung bị bộ lọc an toàn của AI Studio chặn."
                         )
 
-                    if response_text and len(response_text) > 50:
+                    if response_text and len(response_text) > 30:
                         current_len = len(response_text)
                         if current_len == last_response_len:
                             stable_ticks += 1
                         else:
                             stable_ticks = 0
                         last_response_len = current_len
-                        if not self._is_generating() or stable_ticks >= 3:
-                            return response_text
+
+                        has_json = ("[" in response_text and "{" in response_text) or '{"segments"' in response_text or "```" in response_text
+                        is_closed_json = ("]" in response_text or "}" in response_text)
+
+                        # Nếu đã có cấu trúc JSON hợp lệ và không còn generating hoặc ổn định:
+                        if has_json:
+                            if (not self._is_generating() and is_closed_json) or stable_ticks >= 2:
+                                return response_text
+                        else:
+                            # Chưa có JSON (có thể model đang suy nghĩ) -> chờ ít nhất 5 nhịp (10s) ổn định
+                            if not self._is_generating() and stable_ticks >= 5:
+                                return response_text
 
             except Exception as e:
                 logger.warning("  ✗ Lỗi trong lúc xử lý AI Studio (lần %d/%d): %s", attempt + 1, max_retries, e)
@@ -752,8 +778,11 @@ def _build_single_user_prompt(
     user_lines.append(_phonetic_glossary_lines())
     user_lines.append("")
     user_lines.append(
-        f"Dịch TẤT CẢ các câu thoại sau sang {target.name} ({target.text_field}). "
-        f"Trả về một mảng JSON duy nhất chứa {len(segments)} phần tử:\n"
+        f"### CRITICAL REQUIREMENT (BẮT BUỘC):\n"
+        f"1. Dịch TẤT CẢ {len(segments)} câu thoại sau sang {target.name} ({target.text_field}).\n"
+        f"2. BẮT BUỘC trả về ĐÚNG MỘT mảng JSON duy nhất, bắt đầu bằng `[` và kết thúc bằng `]`.\n"
+        f"3. TUYỆT ĐỐI KHÔNG giải thích, KHÔNG viết suy nghĩ (thoughts/reasoning), KHÔNG kèm bất kỳ lời dẫn tiếng Anh hay tiếng Việt nào.\n"
+        f"Dữ liệu đầu vào ({len(segments)} câu):\n"
         f"{json.dumps(payload_items, ensure_ascii=False)}"
     )
     return "\n".join(user_lines)
@@ -989,10 +1018,12 @@ def translate_segments_browser(
             for c_idx in range(0, len(cjk_untranslated), cjk_chunk_size):
                 sub_chunk = cjk_untranslated[c_idx : c_idx + cjk_chunk_size]
                 try:
-                    payload_items = [payload_segment(s, cps_budget=cps) for s in sub_chunk]
                     re_prompt = (
-                        f"Dịch TẤT CẢ các câu thoại sau sang {target.name} ({target.text_field}), "
-                        f"bắt buộc dịch hoàn toàn thoát ý, không để lại chữ Hán/Nhật/Hàn:\n"
+                        f"### CRITICAL REQUIREMENT (BẮT BUỘC):\n"
+                        f"1. Dịch TẤT CẢ {len(sub_chunk)} câu thoại sang {target.name} ({target.text_field}), bắt buộc thoát ý hoàn toàn, không để lại chữ Hán/Nhật/Hàn.\n"
+                        f"2. BẮT BUỘC trả về ĐÚNG MỘT mảng JSON duy nhất (bắt đầu bằng `[` và kết thúc bằng `]`).\n"
+                        f"3. TUYỆT ĐỐI KHÔNG giải thích, KHÔNG viết suy nghĩ (thoughts/reasoning), KHÔNG kèm bất kỳ lời dẫn tiếng Anh hay tiếng Việt nào.\n"
+                        f"Dữ liệu đầu vào ({len(sub_chunk)} câu):\n"
                         f"{json.dumps(payload_items, ensure_ascii=False)}"
                     )
                     re_reply = client.translate_batch(system_prompt, re_prompt, max_wait_secs=120)

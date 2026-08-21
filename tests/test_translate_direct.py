@@ -103,3 +103,22 @@ def test_get_direct_client_prioritizes_gemini():
     assert "Google Gemini" in desc
     assert client.keys == ["AIzaSyTestKey123"]
     assert client.model == "gemini-2.5-flash"
+
+
+def test_parse_response_segments_with_thoughts_and_reversed_keys():
+    raw_with_thoughts = (
+        "I'm currently focused on the translation parameters. I've noted the source is Mandarin Chinese...\n\n"
+        "```json\n"
+        "[\n"
+        '  {"text_vi": "Hà Nhân vừa hưởng lạc đêm xuân xong thì bị Ngự sử tố cáo.", "id": 1},\n'
+        '  {"id": 2, "text_vi": "Lại thêm một kẻ mang chứng cứ định đuổi anh khỏi kinh thành."}\n'
+        "]\n"
+        "```\n"
+        "Here is the finalized translation."
+    )
+    res = parse_response_segments(raw_with_thoughts, text_field="text_vi")
+    assert len(res) == 2
+    assert res[0]["id"] == 1
+    assert "Hà Nhân" in res[0]["text_vi"]
+    assert res[1]["id"] == 2
+
