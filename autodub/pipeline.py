@@ -643,10 +643,22 @@ class DubPipeline:
         # A long clip may run past the last segment's end — extend the mix
         # so the merge never cuts a clip at the timeline boundary.
         from autodub.media.audio import wav_duration_s
+        durations = []
         for seg in segments:
             dur = wav_duration_s(seg_wav_path(merge_dir, seg["id"]))
+            durations.append(dur)
             if dur:
                 total_duration = max(total_duration, seg["start"] + dur + 0.5)
+
+        # Xuất timing_report.json (Timing Guide) để người dùng theo dõi chênh lệch thời lượng từng câu
+        from autodub.media.timing import build_timing_guide, save_timing_guide
+        timing_guide_data = build_timing_guide(
+            segments, durations,
+            target_field=target.text_field,
+            source_url=getattr(req, "url", "") or "",
+            target_lang=target.name,
+        )
+        save_timing_guide(work_dir, timing_guide_data)
 
         logger.info("STEP 6: Merging audio segments")
         logger.info("Đang ghép giọng đọc với nhạc nền...")

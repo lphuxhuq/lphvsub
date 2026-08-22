@@ -215,3 +215,95 @@ def apply_soft_timing(
         logger.info("Sắp xếp thời gian các câu: mọi câu đều vừa khít, "
                     "không phải chỉnh gì")
     return out_dir, report
+
+
+def build_timing_guide(
+    segments: list[dict],
+    durations: list[float | None],
+    target_field: str = "text_vi",
+    tolerance_ratio: float = 0.3,
+    source_url: str = "",
+    target_lang: str = "vi-VN",
+) -> dict:
+    """Tạo báo cáo chi tiết so khớp thời lượng từng câu thoại giữa bản gốc và TTS."""
+    total_original = 0.0
+    total_tts = 0.0
+    need_edit = 0
+    seg_items = []
+
+    for i, seg in enumerate(segments):
+        orig_dur = float(seg.get("duration") or 0.0)
+        if orig_dur <= 0.0 and "end" in seg and "start" in seg:
+            orig_dur = max(0.0, float(seg["end"]) - float(seg["start"]))
+
+        actual_dur = durations[i] if (i < len(durations) and durations[i] is not None) else orig_dur
+        actual_dur = round(float(actual_dur), 2)
+        orig_dur = round(orig_dur, 2)
+
+        total_original += orig_dur
+        total_tts += actual_dur
+
+        diff = round(actual_dur - orig_dur, 2)
+        tol = orig_dur * tolerance_ratio
+
+        if abs(diff) <= max(0.2, tol):
+            status = "OK"
+            edit_hint = "OK"
+        elif diff > 0:
+            status = "TOO_LONG"
+            need_edit += 1
+            edit_hint = f"Dài hơn {abs(diff):.1f}s"
+        else:
+            status = "TOO_SHORT"
+            need_edit += 1
+            edit_hint = f"Ngắn hơn {abs(diff):.1f}s"
+
+        seg_items.append({
+            "id": seg.get("id", i + 1),
+            "text_original": str(seg.get("text", "")),
+            "text_target": str(seg.get(target_field, seg.get("text", ""))),
+            "start": round(float(seg.get("start", 0.0)), 2),
+            "end": round(float(seg.get("end", 0.0)), 2),
+            "original_duration": orig_dur,
+            "tts_duration": actual_dur,
+            "diff_seconds": diff,
+            "status": status,
+            "edit_hint": edit_hint,
+        })
+
+    total_original = round(total_original, 2)
+    total_tts = round(total_tts, 2)
+    ratio = round(total_tts / total_original, 2) if total_original > 0 else 1.0
+
+    return {
+        "summary": {
+            "total_segments": len(segments),
+            "total_original_duration": total_original,
+            "total_tts_duration": total_tts,
+            "ratio": ratio,
+            "segments_ok": len(segments) - need_edit,
+            "segments_need_edit": need_edit,
+        },
+        "source_url": source_url,
+        "target_language": target_lang,
+        "segments": seg_items,
+    }
+
+
+def save_timing_guide(
+    work_dir: str,
+    guide: dict,
+    filename: str = "timing_report.json",
+) -> str:
+    """Ghi timing guide ra file JSON trong thư mục data của dự án."""
+    import json
+    from autodub.workdir import data_path
+
+    out_path = data_path(work_dir, filename)
+    ensure_dir(os.path.dirname(out_path))
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(guide, f, ensure_ascii=False, indent=2)
+    logger.info("Timing report exported: %s (%d/%d OK)",
+                out_path, guide["summary"]["segments_ok"], guide["summary"]["total_segments"])
+    return out_path
+
