@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from autodub.languages import TargetLang
 from autodub.progress import ProgressReporter
+from autodub.text.glossary import _DEFAULT_PHONETIC_GLOSSARY
 from autodub.text.translate_common import TranslateCheckpoint, TranslateError
 from autodub.text.translate_direct import (
     _has_cjk,
@@ -738,27 +739,7 @@ class AiStudioBrowserClient:
 
 
 
-# Bảng phiên âm/ngữ âm mặc định cho AI Studio
-# Chỉ giữ các quy tắc đủ dài và đặc trưng để tránh làm hỏng từ Việt thông thường.
-# KHÔNG được thêm quy tắc ký tự đơn (i, e, a, x, v, z...) hoặc ký hiệu dấu câu (/, -).
-_DEFAULT_PHONETIC_GLOSSARY = [
-    # Âm cảm thán / tiếng lóng rõ ràng (>= 3 ký tự)
-    ('hắc hắc', 'ha ha'), ('hắc hắc hắc', 'ha ha ha'),
-    ('hic', 'hích'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
-    ('huh', 'Hửm'),
-    ('ừhm', 'ừ'), ('Ưhm', 'ừ'),
-    ('hmm', 'hừ'), ('Hmm', 'hừ'), ('Hmmm', 'hừ'),
-    # Từ tiếng Anh / nước ngoài đủ dài
-    ('cosplay', 'cốt bơ lay'),
-    ('NTR', 'Nờ Tê Rờ'),
-    ('bye', 'bai'),
-    ('app', 'áp'),
-    ('donate', 'đô nết'),
-    ('yes', 'dét'),
-    # Cụm từ Việt cụ thể đủ dài
-    ('tu vi', 'tu vy'), ('vi sư', 'vy sư'), ('vi diệu', 'vy diệu'),
-    ('xi măng', 'sy măng'),
-]
+
 
 
 def _phonetic_glossary_lines() -> str:

@@ -16,6 +16,7 @@ import requests
 
 from autodub.languages import TargetLang
 from autodub.progress import ProgressReporter
+from autodub.text.glossary import _DEFAULT_PHONETIC_GLOSSARY
 from autodub.text.translate_common import TranslateCheckpoint, TranslateError
 from autodub.text.translate_hint import annotate_slots, effective_cps, ensure_terminal_punct, payload_segment
 from autodub.utils import setup_logging
@@ -215,12 +216,27 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> List[d
     raise TranslateError(f"Không thể đọc kết quả dịch từ AI: {raw[:200]}")
 
 
+def _phonetic_section() -> str:
+    """Tạo phần hướng dẫn phiên âm dùng chung cho cả Direct API và Browser."""
+    lines = [
+        "### PHIÊN ÂM / TIẾNG LÓNG BẮT BUỘC",
+        "Khi gặp các từ/ngữ sau trong câu nguồn hoặc câu dịch, dùng dạng bên phải để AI TTS đọc đúng:",
+    ]
+    for src, dst in _DEFAULT_PHONETIC_GLOSSARY:
+        lines.append(f'  "{src}" → "{dst}"')
+    return "\n".join(lines)
+
+
 def _build_system_prompt(target_field: str = "text_vi", style_notes: str = "") -> str:
+    phonetic = _phonetic_section()
     prompt = f"""Bạn là chuyên gia dịch thuật và chuyển thể lồng tiếng video sang tiếng Việt tự nhiên, khớp nhịp cho AI TTS.
 Nguyên tắc quan trọng:
 1. Độ dài câu: BẮT BUỘC khống chế độ dài ký tự của bản dịch không vượt quá trường 'max_chars' trong mỗi câu (nếu có). Câu dịch phải ngắn gọn, súc tích, lược bỏ từ thừa để AI đọc vừa khít thời lượng nói của video gốc, tránh bị lệch nhịp, chậm tiếng hay dồn đuôi chữ.
 2. Tự nhiên & chuẩn văn phong: Dịch thoát ý, tự nhiên theo ngữ cảnh phim/video, không dịch thô cứng hay sót chữ Hán.
 3. Số viết thành chữ để đọc chuẩn (ví dụ 100 -> một trăm, 2024 -> hai nghìn không trăm hai mươi tư).
+
+{phonetic}
+
 Bắt buộc trả về đúng định dạng mảng JSON duy nhất:
 [
   {{"id": 1, "{target_field}": "Bản dịch tiếng Việt."}}

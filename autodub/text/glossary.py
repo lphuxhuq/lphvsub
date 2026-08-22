@@ -7,6 +7,28 @@ import re
 from typing import Dict, List, Tuple
 
 
+# Bảng phiên âm/ngữ âm mặc định cho AI TTS — dùng chung cho cả AI Studio và Direct API.
+# KHÔNG được thêm quy tắc ký tự đơn (i, e, a, x, v, z...) hoặc ký hiệu dấu câu (/, -).
+_DEFAULT_PHONETIC_GLOSSARY = [
+    # Âm cảm thán / tiếng lóng rõ ràng (>= 3 ký tự)
+    ('hắc hắc', 'ha ha'), ('hắc hắc hắc', 'ha ha ha'),
+    ('hic', 'hích'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
+    ('huh', 'Hửm'),
+    ('ừhm', 'ừ'), ('Ưhm', 'ừ'),
+    ('hmm', 'hừ'), ('Hmm', 'hừ'), ('Hmmm', 'hừ'),
+    # Từ tiếng Anh / nước ngoài đủ dài
+    ('cosplay', 'cốt bơ lay'),
+    ('NTR', 'Nờ Tê Rờ'),
+    ('bye', 'bai'),
+    ('app', 'áp'),
+    ('donate', 'đô nết'),
+    ('yes', 'dét'),
+    # Cụm từ Việt cụ thể đủ dài
+    ('tu vi', 'tu vy'), ('vi sư', 'vy sư'), ('vi diệu', 'vy diệu'),
+    ('xi măng', 'sy măng'),
+]
+
+
 def build_replacement_pattern(term: str, whole_word: bool = False) -> str:
     """Tạo biểu thức chính quy an toàn từ từ khóa tìm kiếm."""
     escaped = re.escape(term.strip())
