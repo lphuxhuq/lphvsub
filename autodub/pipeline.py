@@ -436,6 +436,14 @@ class DubPipeline:
                 "nhạc, hoặc chọn sai ngôn ngữ gốc). Kiểm tra lại ngôn ngữ "
                 "nguồn trong tab Lồng tiếng.")
 
+        # Thu hẹp biên VAD thô về biên speech thật (voice-sync): slot dịch
+        # và dub onset bám chỗ người nói thật, không phải biên coarse của
+        # VAD. Chạy cho cả transcript cache (resume) — rẻ và idempotent.
+        if self.settings.speech_boundary_refine:
+            from autodub.speech.boundaries import refine_speech_boundaries
+            segments = refine_speech_boundaries(segments, audio_path,
+                                                self.settings)
+
         # Real per-clip time window (until the next line starts) — drives the
         # translation character budget and the TTS target duration.
         from autodub.text.translate_hint import annotate_slots
@@ -562,6 +570,9 @@ class DubPipeline:
             rep.check_cancelled()
             logger.info("=" * 60)
             logger.info(f"STEP 5.5: Slowing video ({settings.video_speed}x)")
+            logger.warning("VIDEO_SPEED != 1.0 may affect visual speech/"
+                           "lip synchronization — ưu tiên để 1.0 và để "
+                           "scheduler tự fit tempo từng câu.")
             from autodub.media.retime import (apply_video_speed,
                                               defer_video_speed,
                                               rescale_blur_regions)
@@ -605,8 +616,18 @@ class DubPipeline:
         # ra cùng một mức âm lượng cảm nhận, hết click đầu
         # câu. VOICE_SPEED (atempo) gộp luôn vào cùng lệnh ffmpeg — mỗi câu
         # chỉ tốn MỘT tiến trình con thay vì hai.
+        # Voice-sync: VOICE_SPEED toàn cục chỉ còn ở chế độ legacy —
+        # scheduler timing.py fit tempo TỪNG câu; một hệ số chung sẽ nhân
+        # chồng lên tempo per-segment.
         merge_src = seg_dir
-        voice_speed = self.settings.voice_speed
+        voice_speed = (self.settings.voice_speed
+                       if self.settings.voice_speed_legacy else 1.0)
+        if self.settings.voice_speed_legacy \
+                and abs(self.settings.voice_speed - 1.0) >= 0.005:
+            logger.warning(
+                f"VOICE_SPEED={self.settings.voice_speed:.2f} (chế độ legacy) "
+                "— áp một tốc độ cho MỌI câu; scheduler per-segment có thể "
+                "nhân chồng hệ số này")
         speed_in_post = (settings.voice_postprocess
                          and abs(voice_speed - 1.0) >= 0.005)
         if settings.voice_postprocess:
@@ -1622,19 +1643,27 @@ class DubPipeline:
             if os.path.exists(seg_path) and os.path.getsize(seg_path) > 0:
                 # Chỉ cần thời lượng: đọc header WAV, đừng nạp cả sóng âm —
                 # resume video nghìn câu nhanh hơn hàng chục lần.
-                return {
+                res = {
                     "path": seg_path,
-                    "actual_duration": round(wav_duration_s(seg_path) or 0.0, 3),
+                    "actual_duration": round(
+                        wav_duration_s(seg_path) or 0.0, 3),
                     "speed_adjusted": False,
                     "rate_applied": "cached",
                 }
-            return _synth_for(seg).synthesize(
-                text=seg[text_field],
-                output_path=seg_path,
-                # Engines always render at natural pace now — timing is
-                # handled globally by VIDEO_SPEED/VOICE_SPEED, never per clip.
-                target_duration=None,
-            ).to_dict()
+            else:
+                res = _synth_for(seg).synthesize(
+                    text=seg[text_field],
+                    output_path=seg_path,
+                    # Engines always render at natural pace now — fitting là
+                    # việc của scheduler per-segment (timing.py), không phải
+                    # của engine.
+                    target_duration=None,
+                ).to_dict()
+            # Voice-sync: scheduler downstream đọc thời lượng TTS thật từ
+            # chính segment — không phải mò lại từ file.
+            seg["tts_actual_duration"] = round(
+                float(res.get("actual_duration") or 0.0), 3)
+            return res
 
         try:
             with ThreadPoolExecutor(max_workers=n_threads) as pool:
@@ -1696,13 +1725,14 @@ class DubPipeline:
 
     def _apply_voice_speed(self, segments: list[dict], seg_dir: str,
                            work_dir: str) -> str:
-        """Apply the user's VOICE_SPEED uniformly to every clip.
+        """Apply the user's VOICE_SPEED uniformly to every clip (LEGACY).
 
-        The ONLY voice-timing knob: no fitting, no trimming, no per-clip
-        decisions. Overlaps are accepted — lower VIDEO_SPEED (or raise
-        VOICE_SPEED) and re-run if lines collide. At 1.0 the raw renders
-        are used as-is.
+        Voice-sync: chỉ chạy khi ``voice_speed_legacy`` bật — mặc định scheduler
+        timing.py fit tempo TỪNG câu và hệ số toàn cục này bị vô hiệu. At
+        1.0 (hoặc legacy off) the raw renders are used as-is.
         """
+        if not self.settings.voice_speed_legacy:
+            return seg_dir
         speed = self.settings.voice_speed
         if abs(speed - 1.0) < 0.005:
             return seg_dir

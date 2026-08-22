@@ -1,11 +1,11 @@
 """Comprehensive test suite for timing alignment and sync engine (autodub.media.timing & autodub.media.retime)."""
 import pytest
-from autodub.media.timing import plan_placements, TimingReport
+from autodub.media.timing import plan_voice_placements, TimingReport
 from autodub.media.retime import rescale_segments, rescale_blur_regions
 
 
 def test_empty_segments():
-    placements, report = plan_placements([], [])
+    placements, report = plan_voice_placements([], [])
     assert placements == []
     assert report.segments_total == 0
     assert report.segments_shifted == 0
@@ -15,7 +15,7 @@ def test_empty_segments():
 
 def test_single_segment_zero_duration():
     segs = [{"id": 1, "start": 5.0, "end": 8.0}]
-    placements, report = plan_placements(segs, [0.0])
+    placements, report = plan_voice_placements(segs, [0.0])
     assert len(placements) == 1
     assert placements[0]["start"] == 5.0
     assert placements[0]["atempo"] == 1.0
@@ -31,8 +31,9 @@ def test_consecutive_extreme_overlaps_detail_logging():
         {"id": 40, "start": 3.0, "end": 4.0},
     ]
     durations = [4.0, 4.0, 4.0, 4.0]
-    placements, report = plan_placements(
-        segs, durations, max_drift_s=1.5, min_gap_s=0.1, max_atempo=1.1
+    placements, report = plan_voice_placements(
+        segs, durations, max_start_drift_s=0.15, min_gap_s=0.1,
+        max_speed=1.1
     )
 
     assert report.segments_total == 4

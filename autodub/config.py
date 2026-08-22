@@ -173,13 +173,14 @@ class Settings:
     # Số câu tạo giọng CapCut song song qua Device Pool (1–16, mặc định 8 luồng)
     capcut_threads: int = 8
 
-    # HAI nút vặn thời lượng — không tự căn, không cắt, không nén từng câu.
-    # Giọng luôn đọc ở voice_speed; video luôn chạy ở video_speed. Tiếng Việt
-    # dài hơn tiếng Trung khoảng 20% nên VIDEO_SPEED≈0.82 cho bản lồng tiếng
-    # đủ chỗ thở. Còn chồng tiếng thì hạ video_speed (hoặc tăng voice_speed)
-    # rồi chạy lại — giọng đọc đã có sẵn nên chạy lại rất nhanh.
-    video_speed: float = 1.0    # 1.0 = giữ nguyên; 0.82 = video dài thêm 22%
-    voice_speed: float = 1.0    # áp cố định cho mọi câu (0.5–2.0)
+    # Nút vặn thời lượng LEGACY — mặc định tắt ảnh hưởng (voice-sync):
+    # scheduler timing.py fit tempo TỪNG câu theo slot speech thật, video
+    # giữ tốc độ gốc. VIDEO_SPEED ≠ 1 làm chậm cả hình (môi không khớp);
+    # VOICE_SPEED áp một hệ số chung cho mọi câu (bật qua voice_speed_legacy).
+    video_speed: float = 1.0    # 1.0 = giữ nguyên (mặc định, khuyến nghị)
+    voice_speed: float = 1.0    # chỉ dùng khi voice_speed_legacy=true
+    # Bật lại hành vi cũ: VOICE_SPEED áp atempo toàn cục cho mọi clip.
+    voice_speed_legacy: bool = False
 
     # Ngân sách dịch (số ký tự trên mỗi giây khung thời gian). Số nhỏ hơn ép
     # bản dịch ngắn lại nên ít tràn hơn.
@@ -199,6 +200,16 @@ class Settings:
     # khoảng lặng kế tiếp (có trần tổng), tuyệt đối không đổi tốc độ đọc từng
     # câu. Chỉ khi kịch trần mới nén nhẹ và đều, với trần thấp.
     soft_timing_fit: bool = True
+    # Thu hẹp biên VAD thô về biên speech thật bằng RMS energy trước khi
+    # tính slot dịch/TTS (speech/boundaries.py). 0 cost khi transcript đã tốt.
+    speech_boundary_refine: bool = True
+    # Trần drift start của MỖI câu khi đặt dub (voice-sync scheduler mới).
+    # 0.15s ≈ ngưỡng lip-sync cảm nhận; scheduler cũ dùng 1.5s (quá rộng).
+    timing_max_start_drift_s: float = 0.15
+    # Khoảng [min, max] tempo per-segment khi fit TTS vào slot. KHÔNG kéo
+    # dài (min chỉ là chặn dưới hợp đồng — stretch bị vô hiệu).
+    voice_fit_min_speed: float = 0.90
+    voice_fit_max_speed: float = 1.15
     timing_max_drift_s: float = 1.5     # trần dồn trễ tích lũy
     timing_min_gap_s: float = 0.12      # khoảng thở tối thiểu giữa hai câu
     timing_max_atempo: float = 1.1      # trần nén bất khả kháng (mỗi câu)
@@ -393,6 +404,7 @@ class Settings:
             capcut_threads=max(1, min(16, env_int("CAPCUT_THREADS", "8"))),
             video_speed=min(1.0, max(0.5, env_float("VIDEO_SPEED", "1.0"))),
             voice_speed=min(2.0, max(0.5, env_float("VOICE_SPEED", "1.0"))),
+            voice_speed_legacy=env_bool("VOICE_SPEED_LEGACY", "false"),
             translate_cps_budget=env_float("TRANSLATE_CPS_BUDGET", "12.5"),
             hq_background=env_bool("HQ_BACKGROUND", _p["hq_background"]),
             voice_postprocess=env_bool("VOICE_POSTPROCESS", "true"),
@@ -400,6 +412,13 @@ class Settings:
             bg_duck_voice_db=min(0.0, max(-24.0,
                 env_float("BG_DUCK_VOICE_DB", "-7.0"))),
             soft_timing_fit=env_bool("SOFT_TIMING_FIT", "true"),
+            speech_boundary_refine=env_bool("SPEECH_BOUNDARY_REFINE", "true"),
+            timing_max_start_drift_s=min(1.5, max(0.0,
+                env_float("TIMING_MAX_START_DRIFT_S", "0.15"))),
+            voice_fit_min_speed=min(1.0, max(0.5,
+                env_float("VOICE_FIT_MIN_SPEED", "0.90"))),
+            voice_fit_max_speed=min(1.3, max(1.0,
+                env_float("VOICE_FIT_MAX_SPEED", "1.15"))),
             timing_max_drift_s=min(5.0, max(0.0,
                 env_float("TIMING_MAX_DRIFT_S", "1.5"))),
             timing_min_gap_s=min(1.0, max(0.0,

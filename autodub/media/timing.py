@@ -1,25 +1,23 @@
-"""Soft timing fit — đặt clip giọng lên timeline mà KHÔNG chồng tiếng.
+"""Voice-sync scheduler — đặt dub TIỆN speech thật, không drift tích luỹ.
 
-Ràng buộc số 1 (từ người dùng): tốc độ đọc phải đồng đều giữa các câu —
-người nghe không được cảm thấy "câu nhanh câu chậm". Vì vậy thứ tự ưu tiên
-khi một clip dài hơn khoảng trống của nó là:
+Chiến lược (voice-sync design C3, thay cho shift→compress→overlap cũ):
 
-1. **Dồn trễ (shift)** — câu sau bắt đầu muộn hơn một chút, phần trễ tự
-   tan ở khoảng lặng kế tiếp (drift tích luỹ có trần ``timing_max_drift_s``).
-   Tốc độ đọc không đổi — tai người nghe chỉ thấy nhịp video "thở" tự nhiên.
-2. **Nén nhẹ bất khả kháng** — chỉ khi dồn trễ đã kịch trần mà clip vẫn
-   tràn, nén ĐÚNG clip đó bằng atempo với trần rất thấp
-   (``timing_max_atempo``, mặc định 1.1× — dưới ngưỡng tai thường nhận ra).
-3. **Chấp nhận + ghi nhận** — phần tràn còn lại được chấp nhận (như kiến
-   trúc cũ) nhưng ghi vào báo cáo để người dùng biết chính xác câu nào cần
-   sửa tay (rút gọn bản dịch / hạ VIDEO_SPEED).
+1. **``dub_start ≈ speech_start``** (refined; fallback ``start``): drift
+   start mỗi câu bị chặn bởi ``timing_max_start_drift_s`` (0.15s — ngưỡng
+   lip-sync cảm nhận, thay cho 1.5s của scheduler cũ). Mỗi câu đối chiếu
+   timeline NGUỒN nên drift không bao giờ cộng dồn qua các câu.
+2. **Slot = speech_duration** (fallback ``duration``/``end-start``; câu
+   không biết slot → giữ natural, không fit).
+3. **Silence-aware**: clip dài hơn slot được mượn khoảng lặng TRƯỚC câu
+   kế (không ăn vào speech của câu kế) — câu cuối được đuôi 1s.
+4. **Per-segment tempo** qua ``_decide_tempo`` (media/voice_timing.py):
+   trần ``voice_fit_max_speed`` (1.15), KHÔNG stretch. Phần thiếu sau khi
+   đã chặn trần được chấp nhận rất nhỏ (≤150ms) hoặc flag
+   ``needs_compaction`` — KHÔNG ép quá giới hạn, KHÔNG shift dây chuyền.
 
-So với "auto-fit" cũ (đã xoá): bản cũ nén/cắt MỌI câu theo từng slot —
-tempo nhảy loạn giữa các dòng. Bản này không đụng vào tốc độ đọc trừ bước 2
-(hiếm, trần thấp, có công tắc), và không bao giờ cắt âm thanh.
-
-Toàn bộ là một lượt quét tuyến tính, thuần số học — chỉ các clip bị nén mới
-tốn thêm một lệnh ffmpeg.
+Timestamp emit: mutate ``start/end`` = dub (một nguồn sự thật cho SRT/
+merge) + gán field ``dub_*``, ``tempo_factor``, ``timing_adjustment``;
+``duration`` giữ nguyên = thời lượng câu GỐC cho report/timing_guide.
 """
 from __future__ import annotations
 
@@ -32,8 +30,14 @@ from autodub.utils import ensure_dir, seg_wav_path, setup_logging
 
 logger = setup_logging("autodub.timing")
 
-# Nén dưới mức này không bõ một lệnh ffmpeg (chênh <2% tai không thấy).
+# Nén dưới mức này không bõ một lệnh ffmpeg (chia sẻ với voice_timing).
 _MIN_WORTHWHILE_ATEMPO = 1.02
+#: Đuôi silence tối đa mượn cho câu CUỐI video (giây).
+TAIL_SILENCE_S = 1.0
+#: Phần thừa sau khi tempo đã chặn trần, nhỏ hơn đây thì chấp nhận (giây).
+ALLOWED_RESIDUAL_S = 0.150
+#: Slot tối thiểu (giây) — chống slot 0 làm tempo vô nghĩa.
+MIN_SLOT_S = 0.3
 
 
 @dataclass
@@ -59,54 +63,104 @@ class TimingReport:
         }
 
 
-def plan_placements(
+def _resolve_slot(seg: dict) -> float | None:
+    """Slot mục tiêu của một câu: speech_duration > duration > end-start.
+
+    ``None`` khi không có thông tin gì (transcript legacy chỉ có start) —
+    caller bỏ qua fitting, giữ natural cho câu đó.
+    """
+    if seg.get("speech_duration"):
+        slot = float(seg["speech_duration"])
+    elif seg.get("duration"):
+        slot = float(seg["duration"])
+    else:
+        end, start = float(seg.get("end", 0) or 0), float(seg.get("start", 0) or 0)
+        slot = end - start if end > start else None
+    return max(MIN_SLOT_S, slot) if slot is not None else None
+
+
+def plan_voice_placements(
     segments: list[dict],
     durations: list[float | None],
-    max_drift_s: float = 1.5,
+    *,
+    max_start_drift_s: float = 0.15,
     min_gap_s: float = 0.12,
-    max_atempo: float = 1.1,
+    min_speed: float = 0.90,
+    max_speed: float = 1.15,
 ) -> tuple[list[dict], TimingReport]:
-    """Tính vị trí đặt + hệ số nén (nếu buộc phải) cho từng clip.
+    """Tính vị trí đặt + tempo từng clip — THUẦN TOÁN, không đụng file.
 
-    Trả về ``(placements, report)`` — ``placements[i]`` gồm:
-    ``{"start": <giây>, "atempo": <1.0..max_atempo>}``. Thuần số học, không
-    đụng file — phần render nằm ở :func:`apply_soft_timing`.
+    Trả ``(placements, report)`` — ``placements[i]`` gồm ``{"start",
+    "atempo", "drift", "adjustment", "reason", "slot", "available"}``.
+    Render nằm ở :func:`apply_soft_timing`.
     """
+    from autodub.media.voice_timing import _decide_tempo
+
     rep = TimingReport(segments_total=len(segments))
     placements: list[dict] = []
     prev_end = float("-inf")
 
+    def _natural(seg: dict) -> float:
+        return float(seg.get("speech_start", seg.get("start", 0.0)) or 0.0)
+
     for i, seg in enumerate(segments):
-        natural = float(seg["start"])
+        natural = _natural(seg)
         dur = durations[i] or 0.0
 
-        # 1) Dồn trễ: bắt đầu tại mốc gốc, trừ khi clip trước còn đang nói.
+        # 1) Onset: giữ mốc speech, chỉ trượt khi clip trước còn đang nói
+        #    — và không trượt quá max_start_drift_s (tham chiếu nguồn,
+        #    drift không cộng dồn).
         t = max(natural, prev_end + min_gap_s) if dur > 0 else natural
-        if t - natural > max_drift_s:
-            t = natural + max_drift_s  # kịch trần — phần thiếu tính là chồng
-        shift = t - natural
-        if shift > 0.05:
+        t = min(t, natural + max_start_drift_s)
+        drift = t - natural
+        if drift > 0.05:
             rep.segments_shifted += 1
-            rep.max_shift_s = max(rep.max_shift_s, shift)
+            rep.max_shift_s = max(rep.max_shift_s, drift)
 
-        # 2) Nén bất khả kháng: chỉ khi clip này (đặt tại t) sẽ ép câu SAU
-        # vượt trần drift của chính nó. Nhìn trước một câu là đủ vì drift
-        # lan truyền qua prev_end.
-        atempo = 1.0
-        if dur > 0 and i + 1 < len(segments):
-            next_natural = float(segments[i + 1]["start"])
-            latest_end = next_natural + max_drift_s - min_gap_s
-            available = latest_end - t
-            if 0 < available < dur:
-                want = dur / available
-                if want >= _MIN_WORTHWHILE_ATEMPO:
-                    atempo = min(max_atempo, want)
+        # 2) Slot + silence-aware availability: mượn khoảng lặng TRƯỚC
+        #    speech của câu kế, không bao giờ ăn vào speech kế.
+        slot = _resolve_slot(seg)
+        next_natural = _natural(segments[i + 1]) if i + 1 < len(segments) \
+            else None
+        if next_natural is not None:
+            usable_end = next_natural - min_gap_s
+        else:
+            usable_end = t + (slot if slot else TAIL_SILENCE_S) \
+                + TAIL_SILENCE_S
+        available = max(slot, usable_end - t) if slot is not None else None
 
-        final_dur = dur / atempo if atempo > 1.0 else dur
-        if atempo > 1.0:
+        # 3) Per-segment tempo.
+        tempo = 1.0
+        adjustment = "none"
+        reason = ""
+        if available is not None and dur > 0:
+            tempo = _decide_tempo(dur, available, min_speed, max_speed,
+                                  _MIN_WORTHWHILE_ATEMPO)
+            final = dur / tempo if tempo > 1.0 else dur
+            residual = (t + final) - usable_end
+            if dur <= slot:
+                adjustment = "none"
+            elif tempo > 1.0:
+                if residual > ALLOWED_RESIDUAL_S:
+                    adjustment = "overlap"
+                    reason = "needs_compaction"
+                elif available > slot + 1e-9:
+                    adjustment = "silence+tempo"
+                else:
+                    adjustment = "tempo"
+            else:
+                # tempo 1.0 mà vẫn tràn → lấp đầy bằng silence thôi.
+                adjustment = "silence" if residual <= 0 else (
+                    "overlap" if residual <= ALLOWED_RESIDUAL_S
+                    else "silence+overlap")
+                if residual > ALLOWED_RESIDUAL_S:
+                    reason = "needs_compaction"
+        if tempo > 1.0:
             rep.segments_compressed += 1
 
-        # Chồng còn lại với clip trước (sau khi đã dồn hết mức cho phép).
+        final_dur = dur / tempo if tempo > 1.0 else dur
+
+        # Chồng còn lại với clip trước (sau khi đã giới hạn drift onset).
         overlap_prev = max(0.0, (prev_end + min_gap_s) - t) if dur > 0 else 0.0
 
         issue: dict = {}
@@ -114,15 +168,23 @@ def plan_placements(
             rep.segments_overlapped += 1
             rep.total_overlap_s += overlap_prev
             issue["overlap_prev_s"] = round(overlap_prev, 3)
-        if shift > 0.05:
-            issue["shift_s"] = round(shift, 3)
-        if atempo > 1.0:
-            issue["atempo"] = round(atempo, 3)
+        if drift > 0.05:
+            issue["shift_s"] = round(drift, 3)
+        if tempo > 1.0:
+            issue["atempo"] = round(tempo, 3)
         if issue:
             issue["id"] = seg.get("id")
             rep.details.append(issue)
 
-        placements.append({"start": round(t, 3), "atempo": round(atempo, 4)})
+        placements.append({
+            "start": round(t, 3),
+            "atempo": round(tempo, 4),
+            "drift": round(drift, 3),
+            "adjustment": adjustment,
+            "reason": reason,
+            "slot": round(slot, 3) if slot is not None else None,
+            "available": round(available, 3) if available is not None else None,
+        })
         if dur > 0:
             prev_end = max(prev_end, t + final_dur)
 
@@ -150,11 +212,12 @@ def apply_soft_timing(
 
     durations = [wav_duration_s(seg_wav_path(src_dir, s["id"]))
                  for s in segments]
-    placements, report = plan_placements(
+    placements, report = plan_voice_placements(
         segments, durations,
-        max_drift_s=settings.timing_max_drift_s,
+        max_start_drift_s=settings.timing_max_start_drift_s,
         min_gap_s=settings.timing_min_gap_s,
-        max_atempo=settings.timing_max_atempo,
+        min_speed=settings.voice_fit_min_speed,
+        max_speed=settings.voice_fit_max_speed,
     )
 
     needs_render = any(p["atempo"] > 1.0 for p in placements)
@@ -186,16 +249,42 @@ def apply_soft_timing(
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             list(pool.map(_one, range(len(segments))))
 
-    # Mutate start/end lên timeline THẬT (sau shift + nén) — SRT, merge và
+    # Mutate start/end lên timeline THẬT (dub) — SRT, merge và
     # total_duration cùng nhìn một sự thật. GIỮ NGUYÊN seg["duration"] (thời
     # lượng câu GỐC) — report/timing_guide vẫn so được dub với nguồn.
     from autodub.media.audio import wav_duration_s as _dur
+    total = len(segments)
+    log_every = 1 if total <= 60 else max(10, total // 100)
     for i, seg in enumerate(segments):
-        t = placements[i]["start"]
+        p = placements[i]
+        t = p["start"]
         final = _dur(seg_wav_path(out_dir, seg["id"])) or durations[i] or \
             float(seg.get("duration", 0) or 0)
         seg["start"] = round(t, 3)
         seg["end"] = round(t + final, 3)
+        seg["dub_start"] = round(t, 3)
+        seg["dub_end"] = round(t + final, 3)
+        seg["dub_duration"] = round(final, 3)
+        seg["tempo_factor"] = p["atempo"]
+        seg["timing_adjustment"] = p["adjustment"]
+        seg["timing_reason"] = p["reason"]
+        natural = float(seg.get("speech_start",
+                                seg.get("vad_start", t)) or t)
+        if (i % log_every == 0 or p["atempo"] > 1.0
+                or p["adjustment"] == "overlap"):
+            logger.info(
+                "[VOICE-SYNC] segment=%s source: %.3f→%.3f (d=%.3f) "
+                "tts: natural=%.3f available=%s tempo=%.3f final: "
+                "%.3f→%.3f adjustment=%s drift=%.3f%s",
+                seg.get("id"), natural,
+                float(seg.get("speech_end", seg.get("vad_end", t)) or t),
+                float(seg.get("speech_duration",
+                              seg.get("duration", 0)) or 0),
+                durations[i] or 0.0,
+                f"{p['available']:.3f}" if p["available"] is not None
+                else "n/a",
+                p["atempo"], t, t + final, p["adjustment"], p["drift"],
+                f" ({p['reason']})" if p["reason"] else "")
 
     if report.segments_shifted or report.segments_compressed \
             or report.segments_overlapped:
