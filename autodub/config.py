@@ -129,6 +129,10 @@ class Settings:
     asr_venv_python: str = ""       # mặc định: <app>/.venv-asr/Scripts/python.exe
     paraformer_model_dir: str = ""  # mặc định: <app>/models/paraformer-zh
     asr_num_threads: int = 4
+    # Đệm (giây) hai bên mỗi VAD chunk trước khi decode — silero hay cắt mất
+    # vài trăm ms đầu/cuối câu. Timestamp vẫn lấy biên VAD gốc nên timeline
+    # không trượt. 0 = tắt.
+    asr_vad_pad_s: float = 0.3
     # Beam size của Whisper (1–10). 5 là mặc định của thư viện — giữ nguyên
     # chất lượng. Máy CPU yếu có thể hạ (vd 1) để nhanh gấp 2–3 lần, đổi lại
     # kém chính xác hơn một chút — đây là lựa chọn CHỦ ĐỘNG, không tự hạ.
@@ -139,6 +143,15 @@ class Settings:
     # đã cài trong môi trường hiện tại (dev) hoặc báo lỗi nếu thiếu (exe).
     whisper_venv_python: str = ""   # mặc định: <app>/.venv-whisper/Scripts/python.exe
     whisper_model_dir: str = ""     # mặc định: <app>/models/whisper (cache HuggingFace)
+
+    # --- OCR hard-sub (selective fallback cho ASR) --------------------------
+    # Tắt mặc định — bật khi video Douyin có hard-sub Trung và Paraformer bỏ
+    # sót chữ. RapidOCR chạy CPU/ONNX trong .venv-ocr (scripts/setup_ocr.py),
+    # chỉ OCR các suspect window chứ không quét cả video.
+    ocr_enabled: bool = False
+    ocr_venv_python: str = ""       # mặc định: <app>/.venv-ocr/Scripts/python.exe
+    ocr_fps: int = 3                # frame/giây khi OCR suspect window
+    ocr_region_height: float = 0.18  # vùng phụ đề: 18% chiều cao dưới cùng
 
     # --- Giọng đọc tiếng Việt (VieNeu — bộ giọng DUY NHẤT) -----------------
     # Chạy trong venv riêng (.venv-vieneu) qua tiến trình con — cài một lần
@@ -355,7 +368,14 @@ class Settings:
             asr_venv_python=env("ASR_VENV_PYTHON"),
             paraformer_model_dir=env("PARAFORMER_MODEL_DIR"),
             asr_num_threads=max(1, min(16, env_int("ASR_NUM_THREADS", "4"))),
+            asr_vad_pad_s=min(1.0, max(0.0,
+                env_float("ASR_VAD_PAD_S", "0.3"))),
             whisper_beam_size=max(1, min(10, env_int("WHISPER_BEAM_SIZE", "5"))),
+            ocr_enabled=env_bool("OCR_ENABLED", "false"),
+            ocr_venv_python=env("OCR_VENV_PYTHON"),
+            ocr_fps=max(1, min(10, env_int("OCR_FPS", "3"))),
+            ocr_region_height=min(0.5, max(0.05,
+                env_float("OCR_REGION_HEIGHT", "0.18"))),
             vieneu_venv_python=env("VIENEU_VENV_PYTHON"),
             vieneu_model_dir=env("VIENEU_MODEL_DIR"),
             vieneu_voice=env("VIENEU_VOICE", "").strip(),
@@ -533,6 +553,13 @@ class Settings:
         return (os.path.isfile(self.asr_venv_python_path())
                 and os.path.isfile(os.path.join(self.paraformer_model_dir_path(),
                                                 "installed_ok.json")))
+
+    def ocr_venv_python_path(self) -> str:
+        """Trình thông dịch Python của venv dành riêng cho RapidOCR."""
+        if self.ocr_venv_python:
+            return self.ocr_venv_python
+        exe = "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        return os.path.join(app_root(), ".venv-ocr", *exe.split("/"))
 
     def whisper_venv_python_path(self) -> str:
         """Trình thông dịch Python của venv dành riêng cho Whisper."""

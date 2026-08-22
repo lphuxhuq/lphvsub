@@ -156,12 +156,17 @@ class WhisperCache:
 
 
 def transcribe(audio_path: str, language: str, settings: Settings,
-               whisper_cache: "WhisperCache | None" = None) -> list[dict]:
+               whisper_cache: "WhisperCache | None" = None,
+               meta: dict | None = None) -> list[dict]:
     """Transcribe audio with the configured local ASR (free, offline).
 
     Engines: Whisper (default, multilingual) or Paraformer (Chinese only,
     CPU/ONNX in .venv-asr — more accurate on zh sources). Paraformer failures
     or misconfiguration fall back to Whisper so a run never dies here.
+
+    ``meta`` (optional) nhận phụ trầm từ engine — hiện Paraformer ghi
+    ``"empty_chunks"`` (khoảng có tiếng nhưng decode rỗng) cho bước
+    suspect-detection; nhánh Whisper không ghi key nào.
 
     Segments keep the engine's fragment granularity — translation, subtitles,
     the editor AND the voice all follow the source video's own per-fragment
@@ -179,7 +184,8 @@ def transcribe(audio_path: str, language: str, settings: Settings,
             try:
                 from autodub.speech.paraformer_transcriber import (
                     transcribe_paraformer)
-                segments = transcribe_paraformer(audio_path, settings)
+                segments = transcribe_paraformer(audio_path, settings,
+                                                 meta=meta)
             except Exception as e:
                 logger.warning(f"Paraformer lỗi ({e}) — chuyển sang Whisper")
     if segments is None:

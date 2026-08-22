@@ -8,13 +8,17 @@ punctuation with the CT-Transformer model when present in
 
 CLI:
     python asr_paraformer_worker.py --audio in.wav --model-dir models/paraformer-zh
-        [--num-threads 4] [--no-punct]
+        [--num-threads 4] [--no-punct] [--vad-pad 0.3]
 
 stdout protocol (one JSON per line, everything else goes to stderr):
     {"ready": true}
     {"seg": true, "text": "...", "start": 1.02, "end": 4.31}
-    {"done": true, "num_segments": 42}
+    {"empty": true, "start": 5.0, "end": 6.4}   # VAD có tiếng, decode rỗng
+    {"done": true, "num_segments": 42, "num_empty": 1}
   | {"error": "..."}          then exit code 1
+
+Timestamp của "seg"/"empty" luôn là biên VAD GỐC — decoding dùng bản đệm
+pad hai bên (--vad-pad) nhưng timeline không trượt.
 """
 import argparse
 import json
@@ -45,6 +49,23 @@ def _read_wav(path: str):
     return samples, rate
 
 
+def padded_range(seg_start: int, seg_end: int, prev_end: int,
+                 next_start: int, n_samples: int,
+                 pad_samples: int) -> tuple[int, int]:
+    """Khoảng sample dùng để decode: VAD chunk ``[seg_start, seg_end)`` mở
+    rộng hai bên ``pad_samples``, clamp vào ``[0, n_samples)`` và vào biên
+    GỐC của hai chunk kề (``prev_end``/``next_start``).
+
+    Nhờ clamp hai phía, speech của mỗi chunk chỉ được decode đúng một lần
+    (lần của chính nó) — force-split 20s hay gap ngắn không lặp chữ, và
+    không có audio nào bị bỏ qua.
+    """
+    s = max(0, seg_start - pad_samples, prev_end)
+    e = min(n_samples, seg_end + pad_samples,
+            max(next_start, s + 1))
+    return s, e
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -60,6 +81,8 @@ def main() -> None:
                              "silero_vad.onnx (+ punct/)")
     parser.add_argument("--num-threads", type=int, default=4)
     parser.add_argument("--no-punct", action="store_true")
+    parser.add_argument("--vad-pad", type=float, default=0.3,
+                        help="giây đệm hai bên mỗi VAD chunk trước khi decode")
     args = parser.parse_args()
 
     model_file = os.path.join(args.model_dir, "model.int8.onnx")
@@ -122,44 +145,61 @@ def main() -> None:
     vad = sherpa_onnx.VoiceActivityDetector(vad_cfg, buffer_size_in_seconds=120)
 
     window = 512  # samples per VAD feed (silero requirement at 16 kHz)
+    pad_samples = max(0, int(round(args.vad_pad * rate)))
     n_segments = 0
+    n_empty = 0
 
-    def emit(seg_samples, start_sample: int) -> None:
-        nonlocal n_segments
-        stream = recognizer.create_stream()
-        stream.accept_waveform(16000, seg_samples)
-        recognizer.decode_stream(stream)
-        text = stream.result.text.strip()
-        if not text:
-            return
-        if punct is not None:
-            try:
-                text = punct.add_punctuation(text)
-            except Exception as e:
-                print(f"add_punctuation failed ({e}) — keeping raw text",
-                      file=sys.stderr, flush=True)
-        start = start_sample / 16000.0
-        end = start + len(seg_samples) / 16000.0
-        n_segments += 1
-        print(json.dumps({"seg": True, "text": text,
-                          "start": round(start, 3), "end": round(end, 3)},
-                         ensure_ascii=False), file=proto_out, flush=True)
-
+    # Pass 1: quét VAD hết file thu thập biên các chunk — cần biên chunk SAU
+    # để clamp decode range (xem padded_range), nên decode dồn sang pass 2.
+    chunks: list[tuple[int, int]] = []
     i = 0
     while i < len(samples):
         vad.accept_waveform(samples[i:i + window])
         i += window
         while not vad.empty():
             seg = vad.front
-            emit(seg.samples, seg.start)
+            chunks.append((seg.start, seg.start + len(seg.samples)))
             vad.pop()
     vad.flush()
     while not vad.empty():
         seg = vad.front
-        emit(seg.samples, seg.start)
+        chunks.append((seg.start, seg.start + len(seg.samples)))
         vad.pop()
 
-    print(json.dumps({"done": True, "num_segments": n_segments}),
+    # Pass 2: decode từng chunk với padding clamp theo hai chunk kề.
+    for idx, (orig_start, orig_end) in enumerate(chunks):
+        prev_end = chunks[idx - 1][1] if idx > 0 else 0
+        next_start = chunks[idx + 1][0] if idx + 1 < len(chunks) \
+            else len(samples)
+        s, e = padded_range(orig_start, orig_end, prev_end, next_start,
+                            len(samples), pad_samples)
+        stream = recognizer.create_stream()
+        stream.accept_waveform(rate, samples[s:e])
+        recognizer.decode_stream(stream)
+        text = stream.result.text.strip()
+        if not text:
+            # VAD bắt được tiếng nhưng decode rỗng — báo ra ngoài thay vì
+            # nuốt im lặng để phía trên (suspect detection) còn biết mà xử lý.
+            n_empty += 1
+            print(json.dumps({"empty": True,
+                              "start": round(orig_start / rate, 3),
+                              "end": round(orig_end / rate, 3)}),
+                  file=proto_out, flush=True)
+            continue
+        if punct is not None:
+            try:
+                text = punct.add_punctuation(text)
+            except Exception as e_punct:
+                print(f"add_punctuation failed ({e_punct}) — keeping raw "
+                      "text", file=sys.stderr, flush=True)
+        n_segments += 1
+        print(json.dumps({"seg": True, "text": text,
+                          "start": round(orig_start / rate, 3),
+                          "end": round(orig_end / rate, 3)},
+                         ensure_ascii=False), file=proto_out, flush=True)
+
+    print(json.dumps({"done": True, "num_segments": n_segments,
+                      "num_empty": n_empty}),
           file=proto_out, flush=True)
 
 
