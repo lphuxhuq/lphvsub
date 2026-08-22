@@ -739,28 +739,24 @@ class AiStudioBrowserClient:
 
 
 # Bảng phiên âm/ngữ âm mặc định cho AI Studio
+# Chỉ giữ các quy tắc đủ dài và đặc trưng để tránh làm hỏng từ Việt thông thường.
+# KHÔNG được thêm quy tắc ký tự đơn (i, e, a, x, v, z...) hoặc ký hiệu dấu câu (/, -).
 _DEFAULT_PHONETIC_GLOSSARY = [
-    ('vi', 'vy'), ('tu vi', 'tu vy'), ('vi sư', 'vy sư'), ('vi diệu', 'vy diệu'),
+    # Âm cảm thán / tiếng lóng rõ ràng (>= 3 ký tự)
     ('hắc hắc', 'ha ha'), ('hắc hắc hắc', 'ha ha ha'),
-    ('ừm', 'ừ'), ('ừhm', 'ừ'), ('Ừm', 'ừ'), ('ừm', 'ừ'),
-    ('ưhm', 'ừ'), ('Ưhm', 'ừ'),
-    ('quặng', 'coặng'),
-    ('/', 'phần'), ('-', 'đến'),
+    ('hic', 'hích'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
+    ('huh', 'Hửm'),
+    ('ừhm', 'ừ'), ('Ưhm', 'ừ'),
+    ('hmm', 'hừ'), ('Hmm', 'hừ'), ('Hmmm', 'hừ'),
+    # Từ tiếng Anh / nước ngoài đủ dài
     ('cosplay', 'cốt bơ lay'),
     ('NTR', 'Nờ Tê Rờ'),
-    ('uh', 'ừ'), ('uhm', 'ừ'), ('huh', 'Hửm'),
-    ('hic', 'hích'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
-    ('hừm', 'hừ'), ('hmm', 'hừ'), ('Hừm', 'hừ'), ('Hmm', 'hừ'), ('Hmmm', 'hừ'),
-    ('bye', 'bai'), ('app', 'áp'),
-    ('a', 'oa'), ('A', 'oa'), ('aa', 'oa'), ('Aaaa', 'oa oa oa'), ('Aaa', 'oa oa oa'),
-    ('Aa', 'oa'), ('AA', 'oa'),
-    ('e', 'ê'), ('ee', 'ê ê'), ('E', 'ê'), ('EE', 'ê ê'),
-    ('i', 'y'), ('i i', 'y y'),
-    ('x', 'ích'), ('x x', 'ích ích'),
-    ('v', 'vê'), ('z', 'dét'), ('yes', 'dét'),
-    ('Vi', 'vy'), ('vs', 'với'),
+    ('bye', 'bai'),
+    ('app', 'áp'),
     ('donate', 'đô nết'),
-    ('Chết', 'Chớt'), ('chết', 'Chớt'), ('Giết', 'Giớt'),
+    ('yes', 'dét'),
+    # Cụm từ Việt cụ thể đủ dài
+    ('tu vi', 'tu vy'), ('vi sư', 'vy sư'), ('vi diệu', 'vy diệu'),
     ('xi măng', 'sy măng'),
 ]
 
