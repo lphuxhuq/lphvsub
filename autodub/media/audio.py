@@ -236,6 +236,40 @@ def slow_segments(
 # clicks/pops at clip boundaries, short enough to be inaudible as a fade.
 _VOICE_FADE_MS = 15
 
+# Trim khoảng lặng đầu clip TTS: CapCut trả về 0-2s im lặng (breath/pause
+# render) trước tiếng nói — không trim thì giọng Việt vào trễ từng câu so
+# với động tác miệng, nghe như mất đồng bộ.
+_LEAD_TRIM_THRESHOLD = 0.01   # ~ -40 dBFS, RMS cửa sổ 20 ms
+_LEAD_TRIM_SUSTAIN_S = 0.05   # phải đạt ngưỡng LIÊN TỤC (bỏ qua click lẻ)
+_LEAD_TRIM_GUARD_S = 0.12     # đệm giữ lại trước tiếng nói thật
+
+
+def lead_silence_s(samples, rate: int,
+                   threshold: float = _LEAD_TRIM_THRESHOLD,
+                   window_s: float = 0.02) -> float:
+    """Số giây cần BỎ ở đầu clip để sát tiếng nói (đã trừ guard, ≥ 0).
+
+    Quét RMS cửa sổ 20 ms: chỗ đầu tiên giữ mức ≥ threshold liên tục
+    ``_LEAD_TRIM_SUSTAIN_S`` là bắt đầu tiếng nói — click/tick đơn lẻ bị
+    bỏ qua. Toàn clip im lặng → 0 (caller giữ nguyên).
+    """
+    import numpy as np
+
+    win = max(1, int(window_s * rate))
+    frames = len(samples) // win
+    if frames < 1:
+        return 0.0
+    rms = np.sqrt((samples[:frames * win].reshape(frames, win) ** 2)
+                  .mean(axis=1))
+    need = max(1, int(round(_LEAD_TRIM_SUSTAIN_S / window_s)))
+    above = (rms >= threshold).astype(np.int32)
+    conv = np.convolve(above, np.ones(need, dtype=np.int32))
+    full = np.nonzero(conv >= need)[0]
+    if not len(full):
+        return 0.0
+    speech_s = (full[0] - need + 1) * window_s
+    return max(0.0, round(speech_s - _LEAD_TRIM_GUARD_S, 3))
+
 
 def postprocess_voice_clip(src: str, dst: str,
                            target_lufs: float = -16.0,
@@ -261,23 +295,36 @@ def postprocess_voice_clip(src: str, dst: str,
     # loudnorm nội bộ chạy ở 192 kHz và GIỮ mức đó ở đầu ra nếu không ép
     # lại — file phình 8 lần và mọi bước sau chậm theo. Ép về rate gốc.
     src_rate = 24000
+    trim_s = 0.0
     try:
         import wave as _wave
         with _wave.open(src, "rb") as w:
             src_rate = w.getframerate()
-    except (OSError, EOFError):
+            n_ch = w.getnchannels()
+            import numpy as np
+            data = (np.frombuffer(w.readframes(w.getnframes()),
+                                  dtype=np.int16).astype(np.float32)
+                    / 32768.0)
+        if n_ch > 1:
+            data = data.reshape(-1, n_ch).mean(axis=1)
+        trim_s = lead_silence_s(data, src_rate)
+    except (OSError, EOFError, ValueError):
         pass
+    # Trim xong còn quá ngắn cho loudnorm (gần như toàn im lặng) — giữ nguyên.
+    if dur - trim_s < 0.15:
+        trim_s = 0.0
     fade_s = _VOICE_FADE_MS / 1000.0
     # atempo gộp luôn vào đây: mỗi câu chỉ còn MỘT lệnh ffmpeg thay vì hai
     # (hậu kỳ rồi VOICE_SPEED). Fade phải tính trên thời lượng SAU khi đổi
-    # tốc độ, nên atempo đứng trước afade.
+    # tốc độ, nên atempo đứng trước afade. Khoảng lặng đầu clip bỏ qua -ss
+    # seek trước input (wav seek chính xác từng mẫu).
     tempo = speed if speed > 0 else 1.0
     speed_filter = ""
-    out_dur = dur
+    out_dur = dur - trim_s
     if abs(tempo - 1.0) >= 0.005:
         tempo = min(2.0, max(0.5, tempo))
         speed_filter = f"atempo={tempo:.3f},"
-        out_dur = dur / tempo
+        out_dur = (dur - trim_s) / tempo
     filters = (
         f"highpass=f=80,"
         f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11,"
@@ -289,7 +336,8 @@ def postprocess_voice_clip(src: str, dst: str,
     try:
         with FFMPEG_SLOTS:
             result = subprocess.run(
-                ["ffmpeg", "-y", "-i", src, "-filter:a", filters,
+                ["ffmpeg", "-y", "-ss", f"{trim_s:.3f}", "-i", src,
+                 "-filter:a", filters,
                  "-ar", str(src_rate), "-acodec", "pcm_s16le", tmp],
                 capture_output=True, text=True, timeout=_SEG_TIMEOUT_S,
             )
