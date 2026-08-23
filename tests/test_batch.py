@@ -279,3 +279,69 @@ def test_observer_receives_events(env):
 
     assert events == [(0, 1, "https://a.com/1", "start"),
                       (0, 1, "https://a.com/1", "success")]
+
+
+# ------------------------------------------------------------ _Prefetcher --- #
+
+def _fake_download_video(url, dest):
+    """Tải giả: ghi file vào dest và trả đường dẫn (không đụng mạng)."""
+    os.makedirs(dest, exist_ok=True)
+    p = os.path.join(dest, f"vid_{url.rsplit('/', 1)[-1]}.mp4")
+    with open(p, "w") as f:
+        f.write("data")
+    return p
+
+
+def test_prefetcher_sliding_window_depth_two(tmp_path, monkeypatch):
+    """Depth 2: cả item 1 lẫn item 2 được tải trước khi cần."""
+    from autodub import batch
+    from autodub.media import downloader
+
+    monkeypatch.setattr(downloader, "download_video", _fake_download_video)
+    items = [batch.BatchItem(url=f"https://a.com/{i}") for i in range(4)]
+    pf = batch._Prefetcher(str(tmp_path), depth=2)
+
+    pf.ensure_window(0, items)
+    assert pf.take(1, timeout=10) is not None
+    assert pf.take(2, timeout=10) is not None   # depth 2 → sẵn cả item 2
+    assert pf.take(3) is None                   # ngoài cửa sổ: chưa lên lịch
+    pf.cleanup()
+
+
+def test_prefetcher_depth_one_legacy(tmp_path, monkeypatch):
+    """Depth 1 = hành vi cũ: chỉ video kế tiếp được tải trước."""
+    from autodub import batch
+    from autodub.media import downloader
+
+    monkeypatch.setattr(downloader, "download_video", _fake_download_video)
+    items = [batch.BatchItem(url=f"https://a.com/{i}") for i in range(4)]
+    pf = batch._Prefetcher(str(tmp_path), depth=1)
+
+    pf.ensure_window(0, items)
+    assert pf.take(1, timeout=10) is not None
+    assert pf.take(2) is None                   # depth 1 → item 2 không có
+    pf.cleanup()
+
+
+def test_prefetcher_skips_local_files(tmp_path, monkeypatch):
+    """Item là file local (không url) → không tiêu tốn lượt tải nền."""
+    from autodub import batch
+    from autodub.media import downloader
+
+    called = []
+
+    def _record(url, dest):
+        called.append(url)
+        return _fake_download_video(url, dest)
+
+    monkeypatch.setattr(downloader, "download_video", _record)
+    items = [batch.BatchItem(url="https://a.com/0"),
+             batch.BatchItem(file_path="C:/x/local.mp4"),
+             batch.BatchItem(url="https://a.com/2")]
+    pf = batch._Prefetcher(str(tmp_path), depth=2)
+
+    pf.ensure_window(0, items)
+    assert pf.take(1) is None                   # file local → không lên lịch
+    assert pf.take(2, timeout=10) is not None   # chỉ item có URL được tải
+    assert called == ["https://a.com/2"]
+    pf.cleanup()

@@ -75,56 +75,86 @@ BatchObserver = Callable[[int, int, BatchItem, str, str], None]
 
 
 class _Prefetcher:
-    """Tải trước video KẾ TIẾP trong khi video hiện tại đang xử lý.
+    """Tải trước video theo CỬA SỔ TRƯỢT trong khi các video trước xử lý.
 
     Tải mạng hoàn toàn độc lập với các bước GPU/CPU của video đang chạy —
-    chồng lấn hai việc là thời gian tải gần như miễn phí. Mỗi lúc chỉ tải
-    trước một video (không tải cả danh sách: tốn đĩa và băng thông vô ích
-    khi người dùng hủy giữa chừng).
+    chồng lấn hai việc là thời gian tải gần như miễn phí. Một thread tải
+    TUẦN TỰ hàng đợi tới ``depth`` video kế tiếp (mặc định 2): sâu hơn về
+    phía trước mà KHÔNG thêm kết nối CDN song song. Tốn đĩa tối đa ~depth
+    video (1-2GB với video dài) — chỉnh qua ``BATCH_PREFETCH_DEPTH``
+    (1 = hành vi cũ, chỉ video kế tiếp).
 
     File tải trước nằm ở ``<output_dir>/_prefetch/<n>/``; khi video chạy
     xong thành công, file được dọn vào work_dir của chính video đó (resume
     tự tìm thấy như video tải bình thường).
     """
 
-    def __init__(self, root_dir: str):
+    def __init__(self, root_dir: str, depth: int = 2):
         self._root = os.path.join(root_dir, "_prefetch")
-        self._thread: threading.Thread | None = None
-        self._result: dict = {}
+        self._depth = max(1, int(depth))
+        self._worker: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self._queue: dict[int, BatchItem] = {}   # index -> item chờ tải
+        self._events: dict[int, threading.Event] = {}
+        self._results: dict[int, dict] = {}
 
-    def start(self, index: int, item: BatchItem) -> None:
-        """Bắt đầu tải nền cho ``item`` (bỏ qua nếu là file local)."""
-        self._thread = None
-        self._result = {}
-        if not item.url or item.file_path:
-            return
-        dest = os.path.join(self._root, str(index))
-        result = self._result
+    def ensure_window(self, current_index: int,
+                      items: list[BatchItem]) -> None:
+        """Lên lịch tải ``current+1 .. current+depth`` (bỏ qua file local)."""
+        with self._lock:
+            # Mục đã đi qua mà chưa kịp tải → bỏ; đánh thức ai đang chờ nó.
+            for idx in [k for k in self._queue if k <= current_index]:
+                self._queue.pop(idx, None)
+                ev = self._events.pop(idx, None)
+                if ev is not None:
+                    ev.set()
+            for idx in range(current_index + 1,
+                             min(current_index + 1 + self._depth,
+                                 len(items))):
+                item = items[idx]
+                if (not item.url or item.file_path
+                        or idx in self._queue or idx in self._events):
+                    continue
+                self._queue[idx] = item
+                self._events[idx] = threading.Event()
+            if self._queue and self._worker is None:
+                self._worker = threading.Thread(
+                    target=self._work, daemon=True, name="batch-prefetch")
+                self._worker.start()
 
-        def _work():
+    def _work(self) -> None:
+        while True:
+            with self._lock:
+                if not self._queue:
+                    self._worker = None
+                    return
+                idx = min(self._queue)   # luôn tải theo thứ tự video
+                item = self._queue.pop(idx)
+                ev = self._events[idx]
             try:
                 from autodub.media.downloader import download_video
-                result["path"] = download_video(item.url, dest)
+                dest = os.path.join(self._root, str(idx))
+                path = download_video(item.url, dest)
+                with self._lock:
+                    self._results[idx] = {"path": path}
             except Exception as e:  # noqa: BLE001 — video này sẽ tải lại bình thường
                 logger.warning(f"Tải trước thất bại ({item.label}): {e}")
-                result["error"] = str(e)
+                with self._lock:
+                    self._results[idx] = {"error": str(e)}
+            finally:
+                ev.set()
 
-        logger.info(f"Tải trước video kế tiếp: {item.label}")
-        t = threading.Thread(target=_work, daemon=True,
-                             name="batch-prefetch")
-        t.start()
-        self._thread = t
-
-    def take(self, timeout: float = 3600.0) -> str | None:
-        """Chờ lượt tải nền xong; trả về đường dẫn file hoặc None."""
-        t, self._thread = self._thread, None
-        if t is None:
-            return None
-        t.join(timeout)
-        if t.is_alive():
+    def take(self, index: int, timeout: float = 3600.0) -> str | None:
+        """Chờ đúng ``index`` tải xong; trả đường dẫn file hoặc None."""
+        with self._lock:
+            ev = self._events.get(index)
+        if ev is None:
+            return None   # không được lên lịch (file local / ngoài cửa sổ)
+        if not ev.wait(timeout):
             logger.warning("Tải trước quá lâu — video sẽ tự tải lại")
             return None
-        return self._result.get("path")
+        with self._lock:
+            return self._results.get(index, {}).get("path")
 
     @staticmethod
     def adopt(prefetched: str, work_dir: str) -> None:
@@ -157,7 +187,12 @@ class _Prefetcher:
 
     def cleanup(self) -> None:
         """Xoá các file tải trước còn sót (video lỗi giữ nguyên để resume)."""
-        self._thread = None
+        with self._lock:
+            self._queue.clear()
+            for ev in self._events.values():
+                ev.set()
+            self._events.clear()
+            self._results.clear()
         try:
             if os.path.isdir(self._root) and not os.listdir(self._root):
                 os.rmdir(self._root)
@@ -215,7 +250,12 @@ def _run_items(
     from autodub.languages import get_target
     prefetch_root = (req_template.output_dir
                      or pipeline.default_output_dir(get_target(req_template.target)))
-    prefetcher = _Prefetcher(prefetch_root)
+    # FakePipeline của test không có settings — depth 2 là mặc định hợp lý.
+    pf_settings = getattr(pipeline, "settings", None)
+    prefetcher = _Prefetcher(
+        prefetch_root,
+        depth=getattr(pf_settings, "batch_prefetch_depth", 2),
+    )
 
     for i, item in enumerate(items):
         logger.info(f"[{i + 1}/{len(items)}] Processing: {item.label}")
@@ -223,11 +263,10 @@ def _run_items(
             on_start(item)
         if observer:
             observer(i, len(items), item, "start", "")
-        # Video này đã được tải trước trong lúc video trước xử lý?
-        prefetched = prefetcher.take()
-        # Bắt đầu tải nền video KẾ TIẾP ngay khi video này khởi động.
-        if i + 1 < len(items):
-            prefetcher.start(i + 1, items[i + 1])
+        # Video này đã được tải trước trong lúc các video trước xử lý?
+        prefetched = prefetcher.take(i)
+        # Lên lịch tải nền cửa sổ các video kế tiếp ngay khi video này khởi động.
+        prefetcher.ensure_window(i, items)
         try:
             # Video này từng chạy dở (lỗi, thiếu Vox…)? Chạy TIẾP đúng thư
             # mục cũ: phần đã tải/nghe-chép/dịch được dùng lại, không tạo

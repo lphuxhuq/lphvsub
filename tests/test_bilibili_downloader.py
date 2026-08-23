@@ -54,6 +54,86 @@ def test_get_optimized_opts_headers():
     assert "merge_output_format" in opts
 
 
+def test_get_optimized_opts_prefers_smaller_codecs():
+    """Level 0 ưu tiên HEVC/AV1 (nhỏ hơn ~30-50%) trước chuỗi cũ; an toàn CDN
+    giữ nguyên (retries/timeout/headers không đổi)."""
+    opts = _get_optimized_opts("/tmp/dummy")
+    fmt = opts["format"]
+    hev = fmt.index("[vcodec^=hev]")
+    av01 = fmt.index("[vcodec^=av01]")
+    plain = fmt.index("bestvideo[height<=1080]+bestaudio[abr<=100]")
+    assert hev < av01 < plain
+    # concurrent fragments cho format phân mảnh (HLS); vô hại với DASH.
+    assert opts["concurrent_fragment_downloads"] >= 2
+
+
+def test_get_optimized_opts_fallback_level_unchanged():
+    """Đường cứu lỗi 720p (fallback_level >= 1) giữ nguyên đúng chuỗi cũ."""
+    opts = _get_optimized_opts("/tmp/dummy", fallback_level=1)
+    assert opts["format"] == (
+        "bestvideo[height<=720]+30232/"
+        "bestvideo[height<=720]+30216/"
+        "bestvideo[height<=720]+bestaudio/"
+        "best[height<=720]/best"
+    )
+    assert opts["retries"] == 3
+    assert opts["socket_timeout"] == 60
+
+
+def test_download_one_isolated_moves_file_and_meta(tmp_path, monkeypatch):
+    """Isolated download: file + video_meta.json về output_dir, tmp được dọn."""
+    from autodub.media import downloader
+
+    def fake_download_one(url, output_dir, cookies_from_browser=None,
+                          cookies_file=None):
+        tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
+        video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
+        with open(video, "w") as f:
+            f.write("data")
+        meta_dir = os.path.join(tmp_dir, "data")
+        os.makedirs(meta_dir, exist_ok=True)
+        with open(os.path.join(meta_dir, "video_meta.json"), "w") as f:
+            f.write('{"title": "t"}')
+        return {"input_url": url, "filepath": video}
+
+    monkeypatch.setattr(downloader, "download_one", fake_download_one)
+    entry = downloader.download_one_isolated(
+        "https://www.bilibili.com/video/BV1xx411c7mD", str(tmp_path))
+
+    dst = os.path.join(str(tmp_path), "BiliBili_BV1xx411c7mD.mp4")
+    assert entry["filepath"] == dst
+    assert os.path.isfile(dst)
+    assert os.path.isfile(os.path.join(str(tmp_path), "data",
+                                       "video_meta.json"))
+    assert not os.path.exists(os.path.join(str(tmp_path), ".dl_tmp"))
+
+
+def test_download_one_isolated_name_collision_no_overwrite(tmp_path,
+                                                           monkeypatch):
+    """Trùng tên (tải lại cùng video) → hậu tố thời gian, không ghi đè."""
+    from autodub.media import downloader
+
+    existing = os.path.join(str(tmp_path), "BiliBili_BV1xx411c7mD.mp4")
+    with open(existing, "w") as f:
+        f.write("old")
+
+    def fake_download_one(url, output_dir, cookies_from_browser=None,
+                          cookies_file=None):
+        tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
+        video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
+        with open(video, "w") as f:
+            f.write("new")
+        return {"input_url": url, "filepath": video}
+
+    monkeypatch.setattr(downloader, "download_one", fake_download_one)
+    entry = downloader.download_one_isolated("https://x", str(tmp_path))
+
+    with open(existing) as f:
+        assert f.read() == "old"          # bản gốc còn nguyên
+    assert os.path.isfile(entry["filepath"])   # bản mới bên cạnh, tên khác
+    assert entry["filepath"] != existing
+
+
 def test_is_partial_name():
     """Test detection of partial/intermediate download files."""
     assert _is_partial_name("video.part") is True

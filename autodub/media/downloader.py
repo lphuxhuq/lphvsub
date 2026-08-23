@@ -1,6 +1,8 @@
 """Video download via yt-dlp, with Douyin routed through Playwright."""
 import os
 import re
+import shutil
+import time
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import requests
@@ -135,7 +137,13 @@ def _get_optimized_opts(
     template = outtmpl or os.path.join(output_dir, "%(id)s.%(ext)s")
 
     if fallback_level == 0:
+        # Ưu tiên codec nén tốt trước (HEVC/AV1 nhỏ hơn AVC ~30-50% ở cùng
+        # 1080p): ít byte hơn không chỉ nhanh hơn mà còn tải xong TRƯỚC ngưỡng
+        # CDN ngắt kết nối (~85MB/~100s) → giảm cả lỗi retry. ``vcodec^=hev``
+        # khớp cả "hev1" lẫn "hevc1" (bilibili ghi "hev1.1.6...").
         fmt = (
+            "bestvideo[height<=1080][vcodec^=hev]+bestaudio[abr<=100]/"
+            "bestvideo[height<=1080][vcodec^=av01]+bestaudio[abr<=100]/"
             "bestvideo[height<=1080]+bestaudio[abr<=100]/"
             "bestvideo[height<=1080]+bestaudio/"
             "best[height<=1080]/best"
@@ -157,6 +165,9 @@ def _get_optimized_opts(
         "noplaylist": True,
         "retries": 3,
         "fragment_retries": 3,
+        # Chỉ tác dụng với format phân mảnh (HLS...) — tải song song các mảnh;
+        # vô hại với bilibili DASH (file đơn). Giữ single-stream mỗi file.
+        "concurrent_fragment_downloads": 4,
         "socket_timeout": 60,
         "http_headers": {
             "User-Agent": _UA,
@@ -404,3 +415,54 @@ def download_one(
         "duration": target_info.get("duration", 0),
         "filepath": filepath,
     }
+
+
+def download_one_isolated(
+    url: str,
+    output_dir: str,
+    cookies_from_browser: str | None = None,
+    cookies_file: str | None = None,
+) -> dict:
+    """``download_one`` vào thư mục riêng rồi gỡ file về ``output_dir``.
+
+    An toàn khi NHIỀU URL tải song song vào cùng ``output_dir``:
+    ``_clean_broken_partials`` xóa mọi ``.part`` trong thư mục nó thấy nên
+    hai lượt tải chung thư mục sẽ giết file đang dở của nhau — mỗi lượt tải
+    trong ``.dl_tmp`` riêng, xong mới move kết quả ra ngoài.
+
+    Trade-off đã biết: đường này bỏ qua cơ chế "already downloaded" của
+    yt-dlp giữa các lần chạy (file hoàn tất vẫn nằm ở ``output_dir`` như
+    thường). Trùng tên file (tải lại cùng video trong một lượt) → thêm hậu
+    tố thời gian thay vì ghi đè.
+    """
+    ensure_dir(output_dir)
+    tmp_dir = os.path.join(output_dir, ".dl_tmp")
+    ensure_dir(tmp_dir)
+    entry = download_one(url, tmp_dir,
+                         cookies_from_browser=cookies_from_browser,
+                         cookies_file=cookies_file)
+    try:
+        src = entry["filepath"]
+        dst = os.path.join(output_dir, os.path.basename(src))
+        if os.path.abspath(src) != os.path.abspath(dst):
+            if os.path.exists(dst):
+                base, ext = os.path.splitext(os.path.basename(src))
+                dst = os.path.join(output_dir,
+                                   f"{base}_{int(time.time())}{ext}")
+            shutil.move(src, dst)
+            entry["filepath"] = dst
+        # video_meta.json (title/uploader) theo video về chỗ cũ của nó.
+        meta_src = os.path.join(tmp_dir, "data", "video_meta.json")
+        if os.path.isfile(meta_src):
+            from autodub.workdir import data_path
+            meta_dst = data_path(output_dir, "video_meta.json",
+                                 create_dir=True)
+            try:
+                if os.path.exists(meta_dst):
+                    os.remove(meta_dst)
+                shutil.move(meta_src, meta_dst)
+            except OSError as e:
+                logger.warning(f"Không chuyển được video_meta.json: {e}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    return entry

@@ -601,19 +601,26 @@ class DownloadWorker(QThread):
 
     def __init__(self, urls: list[str], output_dir: str,
                  cookies_from_browser: str | None = None,
-                 cookies_file: str | None = None, parent=None):
+                 cookies_file: str | None = None,
+                 max_workers: int | None = None, parent=None):
         super().__init__(parent)
         self._urls = urls
         self._output_dir = output_dir
         self._cookies_browser = cookies_from_browser or None
         self._cookies_file = cookies_file or None
+        self._max_workers = max_workers
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
         self._cancel_event.set()
 
+    def _worker_count(self) -> int:
+        if self._max_workers is not None:
+            return max(1, self._max_workers)
+        return Settings.load().download_page_workers
+
     def run(self) -> None:
-        from autodub.media.downloader import download_one
+        from autodub.media.downloader import download_one, download_one_isolated
         from autodub.utils import ensure_dir
 
         handler = attach_gui_logging(self.log)
@@ -621,19 +628,61 @@ class DownloadWorker(QThread):
         try:
             ensure_dir(self._output_dir)
             total = len(self._urls)
-            for i, url in enumerate(self._urls):
-                if self._cancel_event.is_set():
+            workers = self._worker_count()
+            if workers <= 1:
+                for i, url in enumerate(self._urls):
+                    if self._cancel_event.is_set():
+                        self.cancelled.emit()
+                        return
+                    self.item_status.emit(i, total, url, "start", "")
+                    try:
+                        entry = download_one(url, self._output_dir,
+                                             self._cookies_browser, self._cookies_file)
+                        success += 1
+                        self.item_status.emit(i, total, url, "success", entry["filepath"])
+                    except Exception as e:  # noqa: BLE001 — per-item failure
+                        failed += 1
+                        self.item_status.emit(i, total, url, "failed", str(e)[:200])
+            else:
+                # Tải song song qua thư mục isolate riêng (download_one_isolated)
+                # — _clean_broken_partials của lượt này không thể xóa .part
+                # đang dở của lượt kia như khi chung một thư mục.
+                from concurrent.futures import (ThreadPoolExecutor,
+                                                as_completed)
+
+                def _one(i: int, url: str) -> str:
+                    """Kết quả một URL: "success" | "failed" | "cancelled"."""
+                    if self._cancel_event.is_set():
+                        return "cancelled"
+                    self.item_status.emit(i, total, url, "start", "")
+                    try:
+                        entry = download_one_isolated(
+                            url, self._output_dir,
+                            self._cookies_browser, self._cookies_file)
+                    except Exception as e:  # noqa: BLE001 — per-item failure
+                        self.item_status.emit(i, total, url, "failed",
+                                              str(e)[:200])
+                        return "failed"
+                    self.item_status.emit(i, total, url, "success",
+                                          entry["filepath"])
+                    return "success"
+
+                with ThreadPoolExecutor(max_workers=workers,
+                                        thread_name_prefix="dl-page") as pool:
+                    futures = [pool.submit(_one, i, url)
+                               for i, url in enumerate(self._urls)]
+                    saw_cancel = False
+                    for fut in as_completed(futures):
+                        outcome = fut.result()
+                        if outcome == "success":
+                            success += 1
+                        elif outcome == "failed":
+                            failed += 1
+                        else:
+                            saw_cancel = True
+                if saw_cancel:
                     self.cancelled.emit()
                     return
-                self.item_status.emit(i, total, url, "start", "")
-                try:
-                    entry = download_one(url, self._output_dir,
-                                         self._cookies_browser, self._cookies_file)
-                    success += 1
-                    self.item_status.emit(i, total, url, "success", entry["filepath"])
-                except Exception as e:  # noqa: BLE001 — per-item failure
-                    failed += 1
-                    self.item_status.emit(i, total, url, "failed", str(e)[:200])
             self.finished_ok.emit(success, failed)
         except Exception as e:  # noqa: BLE001 — e.g. thư mục lưu không tạo được
             self.failed.emit(str(e))
