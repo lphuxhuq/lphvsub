@@ -43,6 +43,8 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
         "--num-threads", str(settings.asr_num_threads),
         "--vad-pad", str(settings.asr_vad_pad_s),
     ]
+    if not getattr(settings, "asr_gap_rescan", True):
+        cmd.append("--no-gap-rescan")
     logger.info("Nhận dạng tiếng Trung bằng Paraformer (sherpa-onnx, CPU)...")
 
     proc = subprocess.Popen(
@@ -90,13 +92,16 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
             if msg.get("seg"):
                 start = float(msg["start"])
                 end = float(msg["end"])
-                segments.append({
+                seg = {
                     "id": len(segments) + 1,
                     "text": str(msg["text"]).strip(),
                     "start": round(start, 3),
                     "end": round(end, 3),
                     "duration": round(end - start, 3),
-                })
+                }
+                if msg.get("rescan"):
+                    seg["rescan"] = True   # bắt ở pass 3 (khoảng trống VAD)
+                segments.append(seg)
                 elapsed = time.time() - t0
                 eta_text = ""
                 if total_audio_dur > 0 and end > 0:
@@ -130,6 +135,13 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
                     s.close()
                 except Exception:
                     pass
+
+    # Gap-rescan (pass 3 của worker) phát segment SAU các chunk thường nên
+    # thứ tự arrival lệch thứ tự thời gian — chốt theo mốc bắt đầu, đánh lại
+    # id tăng dần (mọi consumer dưới stream đều giả định thứ tự thời gian).
+    segments.sort(key=lambda s: s["start"])
+    for i, seg in enumerate(segments, start=1):
+        seg["id"] = i
 
     tail = "\n".join(stderr_tail)
     if not done:

@@ -117,3 +117,77 @@ def test_no_segments_raises(monkeypatch):
     lines = [json.dumps({"done": True, "num_segments": 0, "num_empty": 2})]
     with pytest.raises(RuntimeError, match="không nhận dạng được câu nào"):
         _run(monkeypatch, lines)
+
+
+# ------------------------------------------------------------ gap-rescan --- #
+
+def test_rescan_segments_sorted_and_renumbered(monkeypatch):
+    """Pass 3 phát segment SAU các chunk thường (lệch thứ tự) — driver phải
+    sort theo mốc thời gian và đánh lại id, giữ cờ rescan."""
+    lines = [
+        json.dumps({"seg": True, "text": "第二句", "start": 7.5, "end": 8.9}),
+        json.dumps({"seg": True, "text": "第一句", "start": 1.02, "end": 4.31}),
+        json.dumps({"seg": True, "text": "漏掉的句子", "start": 5.0,
+                    "end": 6.4, "rescan": True}),
+        json.dumps({"done": True, "num_segments": 3, "num_empty": 0}),
+    ]
+    segments, _cmd = _run(monkeypatch, lines)
+
+    assert [s["id"] for s in segments] == [1, 2, 3]
+    assert [s["start"] for s in segments] == [1.02, 5.0, 7.5]
+    assert segments[1]["text"] == "漏掉的句子"
+    assert segments[1].get("rescan") is True
+    assert "rescan" not in segments[0]
+
+
+def _cmd_for_settings(monkeypatch, settings):
+    lines = [json.dumps({"done": True, "num_segments": 0, "num_empty": 0})]
+    proc_cmd = {}
+
+    def _popen(cmd, **kwargs):
+        proc_cmd["cmd"] = cmd
+        return _FakeProc(lines)
+
+    monkeypatch.setattr(pt.subprocess, "Popen", _popen)
+    with pytest.raises(RuntimeError, match="không nhận dạng được câu nào"):
+        pt.transcribe_paraformer("no_such_file.wav", settings, meta=None)
+    return proc_cmd["cmd"]
+
+
+def test_cmd_no_gap_rescan_when_disabled(monkeypatch):
+    settings = Settings()
+    settings.asr_gap_rescan = False
+    assert "--no-gap-rescan" in _cmd_for_settings(monkeypatch, settings)
+
+
+def test_cmd_gap_rescan_default_on(monkeypatch):
+    assert "--no-gap-rescan" not in _cmd_for_settings(monkeypatch, Settings())
+
+
+# ------------------------------------------------- worker: uncovered_spans -- #
+
+def test_uncovered_spans_between_and_around():
+    from autodub.speech.asr_paraformer_worker import uncovered_spans
+    rate = 16000
+    # ok: 0.5-3s và 5-6s; gap đầu 0.5s (<1s bỏ), giữa 3→5s, cuối 6→8s
+    ok = [(rate // 2, 3 * rate), (5 * rate, 6 * rate)]
+    spans = uncovered_spans(8 * rate, ok, min_samples=rate)
+    assert spans == [(3 * rate, 5 * rate), (6 * rate, 8 * rate)]
+
+
+def test_uncovered_spans_empty_chunk_counts_as_uncovered():
+    """Chunk decode rỗng KHÔNG nằm trong ok_spans → vùng của nó được quét lại."""
+    from autodub.speech.asr_paraformer_worker import uncovered_spans
+    rate = 16000
+    # ok: 0.5-2s và 5-6s; chunk rỗng 3-4s không có trong ok → gap liền 2→5s
+    ok = [(rate // 2, 2 * rate), (5 * rate, 6 * rate)]
+    spans = uncovered_spans(6 * rate, ok, min_samples=rate)
+    assert spans == [(2 * rate, 5 * rate)]
+
+
+def test_uncovered_spans_min_filter():
+    from autodub.speech.asr_paraformer_worker import uncovered_spans
+    rate = 16000
+    ok = [(rate, 9 * rate)]   # gap đầu 1s, cuối 1s — min 1.5s thì bỏ hết
+    spans = uncovered_spans(10 * rate, ok, min_samples=3 * rate // 2)
+    assert spans == []

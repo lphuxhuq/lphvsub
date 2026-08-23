@@ -13,12 +13,20 @@ CLI:
 stdout protocol (one JSON per line, everything else goes to stderr):
     {"ready": true}
     {"seg": true, "text": "...", "start": 1.02, "end": 4.31}
+    {"seg": true, ..., "rescan": true}          # bắt lại ở pass 3 (xem dưới)
     {"empty": true, "start": 5.0, "end": 6.4}   # VAD có tiếng, decode rỗng
     {"done": true, "num_segments": 42, "num_empty": 1}
   | {"error": "..."}          then exit code 1
 
 Timestamp của "seg"/"empty" luôn là biên VAD GỐC — decoding dùng bản đệm
 pad hai bên (--vad-pad) nhưng timeline không trượt.
+
+Pass 3 (gap-rescan, bật mặc định -- tắt bằng --no-gap-rescan): silero VAD
+bỏ sót lời nói mờ/ngắn (thoại chìm dưới nhạc nền, tiếng phản ứng). Với mỗi
+khoảng trống ≥ --gap-min giây giữa các chunk decode THÀNH CÔNG (chunk decode
+rỗng bị coi như trống), decode thẳng cửa sổ không qua VAD — có chữ là
+segment thật mang cờ "rescan" (pipeline chính sẽ sort lại theo mốc thời
+gian và thu hẹp biên bằng RMS).
 """
 import argparse
 import json
@@ -26,11 +34,33 @@ import os
 import sys
 import wave
 
+#: Cửa sổ gap-rescan tối đa — dài hơn (nhạc outro...) chỉ quét 30 giây đầu.
+_GAP_RESCAN_MAX_S = 30.0
+
 
 def _die(proto_out, msg: str) -> None:
     print(json.dumps({"error": msg}, ensure_ascii=False),
           file=proto_out, flush=True)
     sys.exit(1)
+
+
+def uncovered_spans(n_samples: int, ok_spans: list[tuple[int, int]],
+                    min_samples: int) -> list[tuple[int, int]]:
+    """Khoảng sample KHÔNG thuộc chunk nào decode thành công, dài ≥ min.
+
+    Chunk decode rỗng không tính là "đã phủ" — vùng của nó được gộp vào
+    khoảng trống để quét lại ở pass 3 (padding hai bên đã thử rồi mà vẫn
+    rỗng thì chỉ còn hy vọng decode thẳng với cửa sổ rộng hơn).
+    """
+    out: list[tuple[int, int]] = []
+    cur = 0
+    for a, b in sorted(ok_spans):
+        if a > cur and a - cur >= min_samples:
+            out.append((cur, a))
+        cur = max(cur, b)
+    if n_samples - cur >= min_samples:
+        out.append((cur, n_samples))
+    return out
 
 
 def _read_wav(path: str):
@@ -83,6 +113,10 @@ def main() -> None:
     parser.add_argument("--no-punct", action="store_true")
     parser.add_argument("--vad-pad", type=float, default=0.3,
                         help="giây đệm hai bên mỗi VAD chunk trước khi decode")
+    parser.add_argument("--no-gap-rescan", action="store_true",
+                        help="tắt pass 3 quét lại khoảng trống bắt lời VAD bỏ sót")
+    parser.add_argument("--gap-min", type=float, default=1.0,
+                        help="khoảng trống tối thiểu (giây) để quét lại ở pass 3")
     args = parser.parse_args()
 
     model_file = os.path.join(args.model_dir, "model.int8.onnx")
@@ -167,6 +201,7 @@ def main() -> None:
         vad.pop()
 
     # Pass 2: decode từng chunk với padding clamp theo hai chunk kề.
+    ok_spans: list[tuple[int, int]] = []   # chunk decode RA CHỮ (đã phủ)
     for idx, (orig_start, orig_end) in enumerate(chunks):
         prev_end = chunks[idx - 1][1] if idx > 0 else 0
         next_start = chunks[idx + 1][0] if idx + 1 < len(chunks) \
@@ -186,6 +221,7 @@ def main() -> None:
                               "end": round(orig_end / rate, 3)}),
                   file=proto_out, flush=True)
             continue
+        ok_spans.append((orig_start, orig_end))
         if punct is not None:
             try:
                 text = punct.add_punctuation(text)
@@ -197,6 +233,39 @@ def main() -> None:
                           "start": round(orig_start / rate, 3),
                           "end": round(orig_end / rate, 3)},
                          ensure_ascii=False), file=proto_out, flush=True)
+
+    # Pass 3 (gap-rescan): quét lại khoảng trống ≥ gap-min giây mà không
+    # chunk nào phủ — decode thẳng KHÔNG qua VAD. Biên cửa sổ thô; pipeline
+    # chính thu hẹp lại bằng RMS (refine_speech_boundaries chỉ thu hẹp).
+    if not args.no_gap_rescan:
+        min_gap = max(1, int(round(args.gap_min * rate)))
+        max_span = int(_GAP_RESCAN_MAX_S * rate)
+        recovered = 0
+        for s, e in uncovered_spans(len(samples), ok_spans, min_gap):
+            if e - s > max_span:
+                e = s + max_span   # outro/nhạc dài — chỉ quét 30 giây đầu
+            stream = recognizer.create_stream()
+            stream.accept_waveform(rate, samples[s:e])
+            recognizer.decode_stream(stream)
+            text = stream.result.text.strip()
+            if not text:
+                continue
+            if punct is not None:
+                try:
+                    text = punct.add_punctuation(text)
+                except Exception as e_punct:
+                    print(f"add_punctuation failed ({e_punct}) — keeping "
+                          "raw text", file=sys.stderr, flush=True)
+            recovered += 1
+            n_segments += 1
+            print(json.dumps({"seg": True, "text": text,
+                              "start": round(s / rate, 3),
+                              "end": round(e / rate, 3),
+                              "rescan": True},
+                             ensure_ascii=False), file=proto_out, flush=True)
+        if recovered:
+            print(f"gap-rescan: phát hiện thêm {recovered} đoạn thoại trong "
+                  "khoảng trống mà VAD bỏ sót", file=sys.stderr, flush=True)
 
     print(json.dumps({"done": True, "num_segments": n_segments,
                       "num_empty": n_empty}),

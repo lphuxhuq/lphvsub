@@ -102,3 +102,31 @@ def test_fit_cache_hit_no_second_render(tmp_path, monkeypatch):
     second = fit_voice_to_slot(str(src), 2.0, str(out))
     assert second.rendered is False  # cache
     assert calls["n"] == 0
+
+
+# --- stretch (VOICE_FIT_STRETCH) — opt-in ----------------------------------
+
+def test_stretch_disabled_by_default():
+    """Mặc định vẫn KHÔNG kéo dài kể cả khi slot dài gấp nhiều lần."""
+    assert _decide_tempo(1.0, 10.0, min_speed=0.5) == 1.0
+
+
+def test_stretch_enabled_floors_at_min_speed():
+    """1.6s vào slot 2.0s: muốn 0.8 nhưng chặn tại min_speed 0.90."""
+    assert abs(_decide_tempo(1.6, 2.0, min_speed=0.90,
+                             allow_stretch=True) - 0.90) < 0.001
+
+
+def test_stretch_within_floor_uses_exact_ratio():
+    """2.0s vào slot 2.1s: want 0.952 ≥ 0.90 → kéo đúng 0.952."""
+    assert abs(_decide_tempo(2.0, 2.1, min_speed=0.90,
+                             allow_stretch=True) - 2.0 / 2.1) < 0.001
+
+
+def test_stretch_skips_tiny_difference():
+    """1.98s vào 2.0s (chênh 1%): dưới ngưỡng đáng kéo — giữ natural."""
+    assert _decide_tempo(1.98, 2.0, min_speed=0.90, allow_stretch=True) == 1.0
+
+
+def test_stretch_does_not_change_compress_path():
+    assert _decide_tempo(3.0, 2.0, max_speed=1.15, allow_stretch=True) == 1.15

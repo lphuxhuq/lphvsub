@@ -8,8 +8,10 @@ cục) và render bằng atempo khi thật sự cần:
 - ``want = actual/target`` vượt ``max_speed`` → chặn tại ``max_speed``;
   phần thiếu còn lại là quyết định của scheduler (silence/overlap/flag) —
   fit không bao giờ ép quá giới hạn.
-- KHÔNG bao giờ kéo dài (tempo < 1.0): giọng đọc nhân tạo bị méo — câu
-  ngắn hơn slot được giữ nguyên theo design.
+- Mặc định KHÔNG kéo dài (tempo < 1.0): giọng đọc nhân tạo bị méo. Bật
+  ``allow_stretch`` (setting VOICE_FIT_STRETCH) để cho phép đọc chậm lại
+  CHẶN TẠI ``min_speed`` — lấp bớt khoảng lặng cuối câu khi clip ngắn
+  hơn hẳn khung thoại gốc.
 
 Cache theo mtime + thời lượng kỳ vọng (copy pattern segments_timed của
 timing.py): đổi tempo giữa hai lần chạy thì render lại đúng clip đó.
@@ -23,7 +25,7 @@ from autodub.utils import ensure_dir, setup_logging
 
 logger = setup_logging("autodub.voicefit")
 
-#: Nén dưới mức này không đáng một lệnh ffmpeg (giống timing.py).
+#: Nén/kéo dưới mức này không đáng một lệnh ffmpeg (giống timing.py).
 MIN_WORTHWHILE_ATEMPO = 1.02
 #: Sai lệch thời lượng chấp nhận khi kiểm tra cache (giây).
 CACHE_TOLERANCE_S = 0.05
@@ -38,15 +40,23 @@ class FitResult:
 
 def _decide_tempo(actual: float, target: float, min_speed: float = 0.90,
                   max_speed: float = 1.15,
-                  min_worthwhile: float = MIN_WORTHWHILE_ATEMPO) -> float:
+                  min_worthwhile: float = MIN_WORTHWHILE_ATEMPO,
+                  allow_stretch: bool = False) -> float:
     """Tempo cho clip ``actual`` giây vào slot ``target`` giây.
 
     Thuần toán — scheduler gọi trực tiếp để quyết định placement mà không
-    đụng file. ``min_speed`` là chặn dưới HỢP ĐỒNG (stretch bị vô hiệu hoá
-    theo design): hàm không bao giờ trả < 1.0.
+    đụng file. Mặc định chỉ NÉN (≥ 1.0): ``min_speed`` là chặn dưới khi
+    ``allow_stretch`` bật — hàm không bao giờ trả dưới ``min_speed``.
     """
-    if actual <= 0 or target <= 0 or actual <= target:
+    if actual <= 0 or target <= 0:
         return 1.0
+    if actual <= target:
+        if not allow_stretch:
+            return 1.0
+        want = actual / target          # < 1.0: cần đọc chậm lại cho vừa slot
+        if want > 1.0 / min_worthwhile:  # chênh lệch nhỏ quá — bỏ qua
+            return 1.0
+        return float(max(min_speed, want))
     want = actual / target
     if want < min_worthwhile:
         return 1.0

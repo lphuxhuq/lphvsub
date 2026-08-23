@@ -47,6 +47,7 @@ class TimingReport:
     segments_shifted: int = 0        # câu bị dồn trễ > 50 ms
     max_shift_s: float = 0.0
     segments_compressed: int = 0     # câu phải nén atempo (bất khả kháng)
+    segments_stretched: int = 0      # câu được kéo dài atempo (VOICE_FIT_STRETCH)
     segments_overlapped: int = 0     # câu vẫn còn chồng sau mọi biện pháp
     total_overlap_s: float = 0.0
     details: list[dict] = field(default_factory=list)  # per-segment issues
@@ -57,6 +58,7 @@ class TimingReport:
             "segments_shifted": self.segments_shifted,
             "max_shift_s": round(self.max_shift_s, 3),
             "segments_compressed": self.segments_compressed,
+            "segments_stretched": self.segments_stretched,
             "segments_overlapped": self.segments_overlapped,
             "total_overlap_s": round(self.total_overlap_s, 3),
             "details": self.details,
@@ -87,11 +89,14 @@ def plan_voice_placements(
     min_gap_s: float = 0.12,
     min_speed: float = 0.90,
     max_speed: float = 1.15,
+    allow_stretch: bool = False,
 ) -> tuple[list[dict], TimingReport]:
     """Tính vị trí đặt + tempo từng clip — THUẦN TOÁN, không đụng file.
 
     Trả ``(placements, report)`` — ``placements[i]`` gồm ``{"start",
     "atempo", "drift", "adjustment", "reason", "slot", "available"}``.
+    ``allow_stretch`` (VOICE_FIT_STRETCH) cho phép clip NGẮN hơn slot được
+    kéo dài (atempo < 1.0, chặn ``min_speed``) lấp bớt khoảng lặng cuối câu.
     Render nằm ở :func:`apply_soft_timing`.
     """
     from autodub.media.voice_timing import _decide_tempo
@@ -129,17 +134,29 @@ def plan_voice_placements(
                 + TAIL_SILENCE_S
         available = max(slot, usable_end - t) if slot is not None else None
 
-        # 3) Per-segment tempo.
+        # 3) Per-segment tempo. Clip TRÀN slot → nén theo ``available``
+        #    (mượn khoảng lặng trước câu kế). Clip NGẮN hơn slot → chỉ
+        #    stretch tới SLOT (không lấn khoảng lặng trước câu kế) và chỉ
+        #    khi VOICE_FIT_STRETCH bật.
         tempo = 1.0
         adjustment = "none"
         reason = ""
         if available is not None and dur > 0:
-            tempo = _decide_tempo(dur, available, min_speed, max_speed,
-                                  _MIN_WORTHWHILE_ATEMPO)
-            final = dur / tempo if tempo > 1.0 else dur
+            if dur > available:
+                tempo = _decide_tempo(dur, available, min_speed, max_speed,
+                                      _MIN_WORTHWHILE_ATEMPO)
+            elif allow_stretch and slot is not None and slot > dur:
+                # Stretch chỉ hướng tới SLOT (không lấn khoảng lặng trước
+                # câu kế) và chỉ khi VOICE_FIT_STRETCH bật.
+                tempo = _decide_tempo(dur, slot, min_speed, max_speed,
+                                      _MIN_WORTHWHILE_ATEMPO,
+                                      allow_stretch=True)
+            else:
+                tempo = 1.0
+            final = dur / tempo if tempo != 1.0 else dur
             residual = (t + final) - usable_end
             if dur <= slot:
-                adjustment = "none"
+                adjustment = "stretch" if tempo < 1.0 else "none"
             elif tempo > 1.0:
                 if residual > ALLOWED_RESIDUAL_S:
                     adjustment = "overlap"
@@ -157,8 +174,10 @@ def plan_voice_placements(
                     reason = "needs_compaction"
         if tempo > 1.0:
             rep.segments_compressed += 1
+        elif tempo < 1.0:
+            rep.segments_stretched += 1
 
-        final_dur = dur / tempo if tempo > 1.0 else dur
+        final_dur = dur / tempo if tempo != 1.0 else dur
 
         # Chồng còn lại với clip trước (sau khi đã giới hạn drift onset).
         overlap_prev = max(0.0, (prev_end + min_gap_s) - t) if dur > 0 else 0.0
@@ -170,7 +189,7 @@ def plan_voice_placements(
             issue["overlap_prev_s"] = round(overlap_prev, 3)
         if drift > 0.05:
             issue["shift_s"] = round(drift, 3)
-        if tempo > 1.0:
+        if tempo != 1.0:
             issue["atempo"] = round(tempo, 3)
         if issue:
             issue["id"] = seg.get("id")
@@ -218,9 +237,10 @@ def apply_soft_timing(
         min_gap_s=settings.timing_min_gap_s,
         min_speed=settings.voice_fit_min_speed,
         max_speed=settings.voice_fit_max_speed,
+        allow_stretch=bool(getattr(settings, "voice_fit_stretch", False)),
     )
 
-    needs_render = any(p["atempo"] > 1.0 for p in placements)
+    needs_render = any(p["atempo"] != 1.0 for p in placements)
     out_dir = src_dir
     if needs_render:
         out_dir = ensure_dir(dst_dir)
@@ -240,7 +260,7 @@ def apply_soft_timing(
                 have = wav_duration_s(dst) or -1.0
                 if abs(have - want) < 0.05:
                     return
-            if atempo > 1.0:
+            if atempo != 1.0:
                 apply_atempo(src, dst, atempo)
             else:
                 # Copy thay vì link: dst_dir có thể bị xoá độc lập.
@@ -270,7 +290,7 @@ def apply_soft_timing(
         seg["timing_reason"] = p["reason"]
         natural = float(seg.get("speech_start",
                                 seg.get("vad_start", t)) or t)
-        if (i % log_every == 0 or p["atempo"] > 1.0
+        if (i % log_every == 0 or p["atempo"] != 1.0
                 or p["adjustment"] == "overlap"):
             logger.info(
                 "[VOICE-SYNC] segment=%s source: %.3f→%.3f (d=%.3f) "
@@ -287,7 +307,7 @@ def apply_soft_timing(
                 f" ({p['reason']})" if p["reason"] else "")
 
     if report.segments_shifted or report.segments_compressed \
-            or report.segments_overlapped:
+            or report.segments_stretched or report.segments_overlapped:
         parts = []
         if report.segments_shifted:
             parts.append(f"{report.segments_shifted} câu được lùi nhẹ vào "
@@ -296,6 +316,9 @@ def apply_soft_timing(
         if report.segments_compressed:
             parts.append(f"{report.segments_compressed} câu đọc nhanh hơn "
                          "một chút cho vừa chỗ")
+        if report.segments_stretched:
+            parts.append(f"{report.segments_stretched} câu đọc chậm nhẹ để "
+                         "lấp bớt khoảng lặng cuối câu")
         if report.segments_overlapped:
             parts.append(f"{report.segments_overlapped} câu vẫn còn chồng "
                          "tiếng nhẹ")
