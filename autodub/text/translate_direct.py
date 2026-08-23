@@ -250,7 +250,8 @@ Không giải thích, không thêm chữ ngoài mảng JSON."""
 class GeminiDirectClient:
     """Gọi trực tiếp Google Gemini API với cơ chế luân chuyển nhiều API Key và Fallback Model."""
 
-    def __init__(self, api_keys: List[str] | str, model: str = "gemini-2.5-flash", timeout_s: int = 120):
+    def __init__(self, api_keys: List[str] | str, model: str = "gemini-2.5-flash", timeout_s: int = 120,
+                 thinking: bool = False):
         if isinstance(api_keys, str):
             raw_tokens = re.split(r"[,;\n]+", api_keys)
             self.keys = [k.strip().strip("'\"") for k in raw_tokens if k.strip().strip("'\"")]
@@ -263,6 +264,9 @@ class GeminiDirectClient:
         self._lock = threading.Lock()
         self.model = model.strip() if model else "gemini-2.5-flash"
         self.timeout_s = timeout_s
+        # TRANSLATE_THINKING: model 2.5 "nghĩ" hàng chục giây trước khi trả
+        # JSON — dịch theo schema không cần, mặc định tắt cho nhanh.
+        self.thinking = bool(thinking)
         self.session = requests.Session()
 
     def get_key(self, index: Optional[int] = None) -> str:
@@ -294,13 +298,20 @@ class GeminiDirectClient:
             current_model = models[model_idx]
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
 
+            gen_cfg = {
+                "temperature": 0.3,
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 16384,
+            }
+            # Tắt thinking cho model 2.5 flash: dịch theo schema JSON không
+            # cần "suy nghĩ" — chênh lệch là hàng chục giây mỗi call. Model
+            # 1.5 từ chối field lạ (400), 2.5-pro không cho tắt (floor 128).
+            if ("2.5" in current_model and "pro" not in current_model
+                    and not self.thinking):
+                gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
             payload = {
                 "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "responseMimeType": "application/json",
-                    "maxOutputTokens": 8192,
-                },
+                "generationConfig": gen_cfg,
             }
             if system_instruction and system_instruction.strip():
                 payload["systemInstruction"] = {
@@ -556,7 +567,9 @@ def get_direct_client(settings: Any) -> Tuple[Any, str]:
     gemini_key = getattr(settings, "gemini_api_key", "").strip()
     if gemini_key:
         model = getattr(settings, "gemini_model", "gemini-2.5-flash") or "gemini-2.5-flash"
-        return GeminiDirectClient(gemini_key, model=model), f"Google Gemini ({model})"
+        thinking = bool(getattr(settings, "translate_thinking", False))
+        return (GeminiDirectClient(gemini_key, model=model, thinking=thinking),
+                f"Google Gemini ({model})")
 
     # 2. DeepSeek API trực tiếp
     deepseek_key = getattr(settings, "deepseek_api_key", "").strip()
@@ -574,6 +587,45 @@ def get_direct_client(settings: Any) -> Tuple[Any, str]:
         return OpenAICompatDirectClient(openai_key, base_url="https://api.openai.com/v1", model="gpt-4o-mini"), "OpenAI (gpt-4o-mini)"
 
     raise ValueError("Chưa cấu hình Google Gemini API Key trong Cài đặt hoặc bước Tạo dự án.")
+
+
+def _default_workers(num_keys: int, configured: int, is_compat: bool) -> int:
+    """Số luồng dịch: cấu hình tường minh (>0) hoặc tự động theo số key.
+
+    Tự động: proxy compat 2 luồng; Gemini tối thiểu 2 (1 key vẫn song song —
+    API chấp nhận, rate limiter giữ nhịp, 429 thì client tự xoay key),
+    tối đa 4 theo số key.
+    """
+    if configured > 0:
+        return max(1, min(8, configured))
+    if is_compat:
+        return 2
+    return max(2, min(4, num_keys))
+
+
+def _plan_batches(segment_count: int, batch_size: int, workers: int,
+                  floor: int) -> List[Tuple[int, int, int]]:
+    """[(batch_index, begin, end)] chia ĐỀU ``segment_count`` câu thành lô.
+
+    Mặc định theo ``batch_size``; khi số luồng nhiều hơn số lô thì chia nhỏ
+    thêm (tối đa tới ``floor`` câu/lô) để mọi luồng đều có việc — 38 câu
+    với batch 40 không phải ngồi 1 luồng cho 1 lô khổng lồ nữa.
+    """
+    if segment_count <= 0:
+        return []
+    n = max(1, (segment_count + batch_size - 1) // batch_size)
+    if workers > 1 and floor > 0:
+        n_max = max(1, segment_count // floor)
+        n = max(n, min(workers, n_max))
+    n = min(n, segment_count)
+    base, rem = divmod(segment_count, n)
+    out: List[Tuple[int, int, int]] = []
+    start = 0
+    for i in range(n):
+        size = base + (1 if i < rem else 0)
+        out.append((i + 1, start, start + size))
+        start += size
+    return out
 
 
 def translate_segments_direct(
@@ -595,19 +647,20 @@ def translate_segments_direct(
     max_bs = 8 if is_compat else 40
     batch_size = max(1, min(int(getattr(settings, "translate_batch_size", default_bs) or default_bs), max_bs))
 
-    batches: List[Tuple[int, List[dict]]] = []
-    for i in range(0, len(segments), batch_size):
-        b_idx = (i // batch_size) + 1
-        batches.append((b_idx, segments[i:i + batch_size]))
+    num_keys = len(client.keys)
+    configured_workers = int(getattr(settings, "translate_direct_workers", 0) or 0)
+    max_workers = _default_workers(num_keys, configured_workers, is_compat)
+    # Chia lô thích nghi: ít lô hơn số luồng thì chia nhỏ để đủ việc cho
+    # mọi luồng (floor câu/lô) — không còn "1 lô 38 câu chạy 1 luồng".
+    floor = 5 if is_compat else 8
+    batches: List[Tuple[int, List[dict]]] = [
+        (b_idx, segments[s:e])
+        for b_idx, s, e in _plan_batches(len(segments), batch_size,
+                                         max_workers, floor)
+    ]
 
     total_batches = len(batches)
-    num_keys = len(client.keys)
-    # Với proxy bên thứ 3 (HHTech), cho phép 2 luồng song song dù chỉ có 1 key
-    # để lô bị kẹt không chặn toàn bộ pipeline mà không quá tải proxy
-    if is_compat:
-        max_workers = min(2, total_batches)
-    else:
-        max_workers = max(1, min(num_keys, 4, total_batches))
+    max_workers = min(max_workers, total_batches)
 
     checkpoint = (
         TranslateCheckpoint(checkpoint_path, text_field=target.text_field)
@@ -674,18 +727,23 @@ def translate_segments_direct(
                 time.sleep(1.0 * (try_i + 1))
 
         if not translated_items:
-            # Fallback: dịch từng câu lẻ nếu cả lô bị lỗi
+            # Fallback: dịch từng câu lẻ nếu cả lô bị lỗi. Các câu độc lập
+            # nhau — chạy song song (executor.map giữ đúng thứ tự).
             logger.warning(f"  ⚠ Lô {b_idx} lỗi parse ({last_err}), đang chuyển sang dịch từng câu lẻ...")
-            for s in batch:
+
+            def _single(s):
                 try:
                     s_payload = [payload_segment(s, cps_budget=cps)]
                     s_prompt = f"Dịch câu thoại sau sang {target.name} ({target.text_field}):\n{json.dumps(s_payload, ensure_ascii=False)}"
                     s_reply = client.call_ai(system_prompt, s_prompt)
-                    s_items = parse_response_segments(s_reply, text_field=target.text_field)
-                    if s_items:
-                        translated_items.extend(s_items)
+                    return parse_response_segments(s_reply, text_field=target.text_field) or []
                 except Exception as s_err:
                     logger.warning(f"  ✗ Dịch câu #{s['id']} thất bại: {s_err}")
+                    return []
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for items in pool.map(_single, batch):
+                    translated_items.extend(items)
 
         trans_map = {item["id"]: item[target.text_field] for item in translated_items if "id" in item}
         batch_results = []
@@ -757,7 +815,8 @@ def translate_segments_direct(
     ]
     if cjk_untranslated:
         logger.info(f"[Hậu xử lý] Phát hiện {len(cjk_untranslated)} câu còn sót ký tự CJK — đang tiến hành dịch bù...")
-        for s in cjk_untranslated:
+
+        def _fix_cjk(s):
             try:
                 single_payload = [payload_segment(s, cps_budget=cps)]
                 re_prompt = (
@@ -773,6 +832,10 @@ def translate_segments_direct(
                         logger.info(f"  ✓ Đã dịch bù thành công câu #{s['id']}: {new_txt}")
             except Exception as exc:
                 logger.warning(f"  ✗ Dịch bù câu #{s['id']} không thành công: {exc}")
+
+        # Các câu độc lập — dịch bù song song thay vì từng câu tuần tự.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(_fix_cjk, cjk_untranslated))
 
     if checkpoint_path and os.path.exists(checkpoint_path):
         try:

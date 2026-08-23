@@ -122,3 +122,101 @@ def test_parse_response_segments_with_thoughts_and_reversed_keys():
     assert "Hà Nhân" in res[0]["text_vi"]
     assert res[1]["id"] == 2
 
+
+
+# ----------------------------------------------- speedup: plan/workers/thinking #
+
+def test_plan_batches_splits_for_workers():
+    """38 câu, batch 40, 4 luồng → phải chia 4 lọ cân bằng thay vì 1 lô khổng lồ."""
+    from autodub.text.translate_direct import _plan_batches
+    spans = _plan_batches(38, batch_size=40, workers=4, floor=8)
+    assert len(spans) == 4
+    sizes = [e - s for _b, s, e in spans]
+    assert sizes == [10, 10, 9, 9]
+    # phủ kín, không chồng lấn
+    assert spans[0][1] == 0 and spans[-1][2] == 38
+    for (_b1, _s1, e1), (_b2, s2, _e2) in zip(spans, spans[1:]):
+        assert e1 == s2
+
+
+def test_plan_batches_respects_floor_when_short():
+    """Ít câu hơn floor → không chia lẻ được, giữ 1 lô."""
+    from autodub.text.translate_direct import _plan_batches
+    spans = _plan_batches(6, batch_size=40, workers=4, floor=8)
+    assert spans == [(1, 0, 6)]
+
+
+def test_plan_batches_keeps_normal_batching():
+    from autodub.text.translate_direct import _plan_batches
+    spans = _plan_batches(100, batch_size=25, workers=4, floor=8)
+    assert len(spans) == 4
+    assert all(e - s == 25 for _b, s, e in spans)
+    # 1 luồng → số lô theo batch_size, chia cân bằng (mỗi lô ≤ batch_size)
+    spans1 = _plan_batches(20, batch_size=6, workers=1, floor=8)
+    assert len(spans1) == 4
+    assert all(e - s == 5 for _b, s, e in spans1)
+
+
+def test_default_workers():
+    from autodub.text.translate_direct import _default_workers
+    assert _default_workers(1, 0, is_compat=False) == 2   # 1 key vẫn 2 luồng
+    assert _default_workers(9, 0, is_compat=False) == 4
+    assert _default_workers(1, 0, is_compat=True) == 2
+    assert _default_workers(1, 5, is_compat=False) == 5   # cấu hình đè
+    assert _default_workers(1, 99, is_compat=False) == 8  # trần 8
+
+
+class _FakeResp:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"candidates": [{"content": {"parts": [{"text": "[]"}]}}]}
+
+
+def _capture_payload(model, thinking=False):
+    from autodub.text.translate_direct import GeminiDirectClient as G
+    client = G("k1", model=model, thinking=thinking)
+    captured = {}
+
+    class _Sess:
+        def post(self, url, params=None, headers=None, json=None, timeout=None):
+            captured["payload"] = json
+            return _FakeResp()
+
+    client.session = _Sess()
+    client.call_ai("sys", "prompt")
+    return captured["payload"]
+
+
+def test_thinking_disabled_for_25_flash():
+    cfg = _capture_payload("gemini-2.5-flash")["generationConfig"]
+    assert cfg["thinkingConfig"] == {"thinkingBudget": 0}
+    assert cfg["maxOutputTokens"] == 16384
+
+
+def test_thinking_not_sent_for_15_models():
+    # Model 1.5 từ chối field lạ (400) — không được gửi thinkingConfig.
+    cfg = _capture_payload("gemini-1.5-flash")["generationConfig"]
+    assert "thinkingConfig" not in cfg
+
+
+def test_thinking_not_sent_for_25_pro():
+    # 2.5-pro không cho tắt thinking (floor 128) — không gửi budget 0.
+    cfg = _capture_payload("gemini-2.5-pro")["generationConfig"]
+    assert "thinkingConfig" not in cfg
+
+
+def test_thinking_setting_reenables():
+    cfg = _capture_payload("gemini-2.5-flash", thinking=True)["generationConfig"]
+    assert "thinkingConfig" not in cfg
+
+
+def test_get_direct_client_passes_thinking_setting():
+    from autodub.text.translate_direct import get_direct_client
+    client_on, _ = get_direct_client(Settings(
+        gemini_api_key="AIzaSyTestKey123", translate_thinking=True))
+    assert client_on.thinking is True
+    client_off, _ = get_direct_client(Settings(
+        gemini_api_key="AIzaSyTestKey123"))
+    assert client_off.thinking is False
