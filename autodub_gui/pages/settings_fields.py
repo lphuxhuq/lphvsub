@@ -113,6 +113,11 @@ FIELDS: tuple[Field, ...] = (
           "Nghe và chép lời video gốc", "zh-CN",
           "Ngôn ngữ được chọn sẵn mỗi khi bạn tạo dự án mới.",
           options=consts.SOURCE_LANGS),
+    Field("ASR_GAP_RESCAN", CHECK, "Quét lại khoảng lặng bắt lời bị bỏ sót",
+          TAB_BASIC, "Nghe và chép lời video gốc", "true",
+          "Sau khi nghe chính, ứng dụng quét thử các khoảng lặng dài giữa "
+          "các câu — bắt lại những câu nói nhỏ lẫn trong nhạc nền mà bước "
+          "nghe thường bỏ qua. Tắt đi nếu video có nhiều tiếng ồn nền."),
     Field("VIDEO_SPEED", SLIDER, "Tốc độ video", TAB_BASIC,
           "Tốc độ", "1.00",
           "Làm chậm toàn bộ video để giọng tiếng Việt có đủ chỗ. "
@@ -229,6 +234,18 @@ FIELDS: tuple[Field, ...] = (
     Field("HQ_BACKGROUND", CHECK, "Giữ nhạc nền chất lượng cao",
           TAB_PERF, "Hiệu năng", "true",
           "Tắt đi thì chạy nhanh hơn nhưng nhạc nền kém hơn một chút."),
+    Field("BATCH_PREFETCH_DEPTH", NUMBER, "Số video tải trước trong hàng đợi",
+          TAB_PERF, "Tải video", "2",
+          "Khi chạy hàng đợi, ứng dụng tải sẵn bấy nhiêu video kế tiếp "
+          "trong lúc video hiện tại đang xử lý — gần như hết thời gian "
+          "chờ tải. Số càng lớn càng tốn chỗ đĩa (mỗi video tới vài GB).",
+          minimum=1, maximum=5, step=1, decimals=0),
+    Field("DOWNLOAD_PAGE_WORKERS", NUMBER, "Số video tải cùng lúc",
+          TAB_PERF, "Tải video", "2",
+          "Ở trang Tải video, nhiều liên kết được tải song song với nhau. "
+          "1 là tải lần lượt như trước. Quá 2-3 dễ bị trang web bóp băng "
+          "thông từng đường truyền.",
+          minimum=1, maximum=4, step=1, decimals=0),
 
     # -- Thẻ Nâng cao -------------------------------------------------
     Field("TRANSLATE_ANALYSIS", CHECK, "Đọc hiểu video trước khi dịch",
@@ -268,6 +285,12 @@ FIELDS: tuple[Field, ...] = (
           "Căn thời gian", "1.15",
           "Câu quá dài có thể được đọc nhanh hơn tối đa bấy nhiêu lần.",
           suffix="x", minimum=1.0, maximum=1.6, step=0.01),
+    Field("VOICE_FIT_STRETCH", CHECK, "Kéo dài giọng đọc lấp khoảng lặng",
+          TAB_ADVANCED, "Căn thời gian", "false",
+          "Câu tiếng Việt đọc xong sớm hơn lời gốc thì đọc chậm lại một chút "
+          "(tối đa 10 phần trăm) cho hết khoảng lặng cuối câu. Giọng nghe "
+          "chậm hơn nhẹ — chỉ bật khi bạn thấy khoảng lặng cuối câu nhiều "
+          "quá."),
     Field("AUTO_CLEAN_INTERMEDIATES", CHECK, "Tự dọn tệp trung gian sau khi xuất",
           TAB_ADVANCED, "Dung lượng đĩa", "false",
           "Xuất video xong là dọn ngay các tệp trung gian nặng. Tiết kiệm "
@@ -282,6 +305,15 @@ FIELDS: tuple[Field, ...] = (
           "Lô nhỏ hơn thì chậm hơn một chút nhưng mạch dịch bám ngữ cảnh sát "
           "hơn.",
           minimum=1, maximum=100, step=5, decimals=0),
+    Field("TRANSLATE_DIRECT_WORKERS", NUMBER, "Số luồng dịch song song",
+          TAB_TRANSLATE, "Dịch tự động", "0",
+          "0 để tự chọn theo số API Key (tối thiểu 2). Nhiều luồng dịch "
+          "nhanh hơn nhiều; đặt quá cao dễ bị hạn tốc 429.",
+          minimum=0, maximum=8, step=1, decimals=0),
+    Field("TRANSLATE_THINKING", CHECK, "Để AI suy nghĩ kỹ trước khi dịch",
+          TAB_TRANSLATE, "Dịch tự động", "false",
+          "Bật để model Gemini 2.5 suy nghĩ nhiều bước trước khi dịch — chậm "
+          "hơn gấp nhiều lần, chỉ đáng bật khi bản dịch hay sai nghĩa."),
 
     # Khóa API dịch AI
     Field("GEMINI_API_KEY", MULTILINE, "Danh sách Google Gemini API Key", TAB_TRANSLATE,

@@ -173,6 +173,15 @@ class Settings:
     # Số câu tạo giọng CapCut song song qua Device Pool (1–16, mặc định 8 luồng)
     capcut_threads: int = 8
 
+    # --- Tải video ---------------------------------------------------------
+    # Batch: số video tải trước bằng cửa sổ trượt (1 = hành vi cũ, chỉ video
+    # kế tiếp). 2 giấu hoàn toàn thời gian tải sau thời gian xử lý pipeline;
+    # tốn đĩa tối đa ~2 video (1-2GB với video dài).
+    batch_prefetch_depth: int = 2
+    # Trang Tải video: số URL tải song song (1 = tuần tự như cũ). Trần 4 —
+    # nhiều hơn dễ bị CDN bóp băng thông từng kết nối.
+    download_page_workers: int = 2
+
     # Nút vặn thời lượng LEGACY — mặc định tắt ảnh hưởng (voice-sync):
     # scheduler timing.py fit tempo TỪNG câu theo slot speech thật, video
     # giữ tốc độ gốc. VIDEO_SPEED ≠ 1 làm chậm cả hình (môi không khớp);
@@ -203,6 +212,12 @@ class Settings:
     # Thu hẹp biên VAD thô về biên speech thật bằng RMS energy trước khi
     # tính slot dịch/TTS (speech/boundaries.py). 0 cost khi transcript đã tốt.
     speech_boundary_refine: bool = True
+    # Quét lại khoảng trống giữa các chunk VAD (decode thẳng, không qua VAD)
+    # — bắt lời nói mờ/ngắn bị silero bỏ sót (thoại chìm dưới nhạc nền).
+    asr_gap_rescan: bool = True
+    # Cho phép kéo dài giọng đọc (atempo < 1.0, chặn tại voice_fit_min_speed)
+    # để lấp bớt khoảng lặng cuối câu khi clip TTS ngắn hơn khung thoại gốc.
+    voice_fit_stretch: bool = False
     # Trần drift start của MỖI câu khi đặt dub (voice-sync scheduler mới).
     # 0.15s ≈ ngưỡng lip-sync cảm nhận; scheduler cũ dùng 1.5s (quá rộng).
     timing_max_start_drift_s: float = 0.15
@@ -261,6 +276,11 @@ class Settings:
     translate_enabled: bool = True
     # Số câu mỗi lượt gửi lên máy chủ (trần cứng phía máy chủ là 120).
     translate_batch_size: int = 40
+    # Số luồng dịch song song qua API trực tiếp (0 = tự động theo số key).
+    translate_direct_workers: int = 0
+    # Để model Gemini 2.5 "suy nghĩ" trước khi dịch — chậm hơn nhiều lần,
+    # mặc định tắt (dịch theo schema JSON không cần thinking).
+    translate_thinking: bool = False
     # Khóa API của các dịch vụ dịch AI (tự động đồng bộ sang máy chủ khi chạy)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
@@ -402,6 +422,10 @@ class Settings:
             parallel_workers=max(1, min(16, env_int("PARALLEL_WORKERS",
                                                     auto_workers))),
             capcut_threads=max(1, min(16, env_int("CAPCUT_THREADS", "8"))),
+            batch_prefetch_depth=max(1, min(5,
+                env_int("BATCH_PREFETCH_DEPTH", "2"))),
+            download_page_workers=max(1, min(4,
+                env_int("DOWNLOAD_PAGE_WORKERS", "2"))),
             video_speed=min(1.0, max(0.5, env_float("VIDEO_SPEED", "1.0"))),
             voice_speed=min(2.0, max(0.5, env_float("VOICE_SPEED", "1.0"))),
             voice_speed_legacy=env_bool("VOICE_SPEED_LEGACY", "false"),
@@ -413,6 +437,8 @@ class Settings:
                 env_float("BG_DUCK_VOICE_DB", "-7.0"))),
             soft_timing_fit=env_bool("SOFT_TIMING_FIT", "true"),
             speech_boundary_refine=env_bool("SPEECH_BOUNDARY_REFINE", "true"),
+            asr_gap_rescan=env_bool("ASR_GAP_RESCAN", "true"),
+            voice_fit_stretch=env_bool("VOICE_FIT_STRETCH", "false"),
             timing_max_start_drift_s=min(1.5, max(0.0,
                 env_float("TIMING_MAX_START_DRIFT_S", "0.15"))),
             voice_fit_min_speed=min(1.0, max(0.5,
@@ -451,6 +477,9 @@ class Settings:
                               not in ("0", "false", "no"),
             translate_batch_size=max(1, min(100,
                 env_int("TRANSLATE_BATCH_SIZE", "40"))),
+            translate_direct_workers=max(0, min(8,
+                env_int("TRANSLATE_DIRECT_WORKERS", "0"))),
+            translate_thinking=env_bool("TRANSLATE_THINKING", "false"),
             gemini_api_key=env("GEMINI_API_KEY", "", "GOOGLE_API_KEY", "SEED_GEMINI_API_KEY").strip(),
             gemini_model=env("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash",
             openrouter_api_key=env("OPENROUTER_API_KEY", "", "SEED_OPENROUTER_API_KEY").strip(),

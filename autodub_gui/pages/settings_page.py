@@ -46,8 +46,8 @@ _UI_STATE_FILE = "settings_ui.json"
 # trước khi dùng. Các nhóm còn lại gập lại, bấm tiêu đề là mở.
 _EXPANDED_GROUPS: dict[str, set[str]] = {
     spec.TAB_BASIC: {"Chất lượng tổng thể", "Nghe và chép lời video gốc"},
-    spec.TAB_PERF: {"Hiệu năng"},
-    spec.TAB_ADVANCED: set(),
+    spec.TAB_PERF: {"Hiệu năng", "Tải video"},
+    spec.TAB_ADVANCED: {"Căn thời gian"},
 }
 
 
