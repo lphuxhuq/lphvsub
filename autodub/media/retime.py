@@ -125,6 +125,12 @@ def slow_background(background_path: str, output_path: str,
 def rescale_segments(segments: list[dict], scale: float) -> None:
     """Stretch every timestamp by ``scale`` (>1 = longer timeline), in place.
 
+    Bao gồm cả field ``speech_*``/``vad_*`` của voice-sync khi có — scheduler
+    timing đặt onset theo ``speech_start`` nên field nào sót sẽ giữ timeline
+    cũ và kéo giọng lệch khỏi hình khi VIDEO_SPEED < 1.0. Field ``dub_*``
+    không tồn tại ở đây (rescale luôn chạy trước ``apply_soft_timing``);
+    caller tương lai nào rescale sau soft-timing phải tự xử lý chúng.
+
     Callers must re-run :func:`autodub.text.translate_hint.annotate_slots`
     afterwards so slots reflect the stretched gaps.
     """
@@ -132,6 +138,14 @@ def rescale_segments(segments: list[dict], scale: float) -> None:
         seg["start"] = round(float(seg["start"]) * scale, 3)
         seg["end"] = round(float(seg["end"]) * scale, 3)
         seg["duration"] = round(seg["end"] - seg["start"], 3)
+        for a, b in (("speech_start", "speech_end"),
+                     ("vad_start", "vad_end")):
+            if a in seg and b in seg:
+                seg[a] = round(float(seg[a]) * scale, 3)
+                seg[b] = round(float(seg[b]) * scale, 3)
+        if "speech_duration" in seg:
+            seg["speech_duration"] = round(
+                float(seg["speech_duration"]) * scale, 3)
 
 
 def rescale_blur_regions(blur_regions: list[dict], scale: float) -> list[dict]:
