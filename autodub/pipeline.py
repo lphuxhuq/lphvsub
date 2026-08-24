@@ -96,7 +96,14 @@ class DubRequest:
     subtitle_style: dict | None = None  # libass styling; None → Settings default
     aspect_preset: str | None = None   # "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
 
+    # Speaker Diarization & Multi-Speaker Voice options per request
+    diarization_enabled: bool | None = None
+    diarization_num_speakers: int | None = None
+    diarization_max_speakers: int | None = None
+    speaker_voices: dict[int, str] = field(default_factory=dict)
+
     # The dub target is always Vietnamese now.
+
 
     target: str = "vi"
 
@@ -447,25 +454,28 @@ class DubPipeline:
                                                 self.settings)
 
         # --- Step 3.6: Speaker Diarization (nhận diện và phân tách người nói) ---
-        if getattr(settings, "diarization_enabled", True) and segments:
+        diar_enabled = req.diarization_enabled if req.diarization_enabled is not None else getattr(settings, "diarization_enabled", True)
+        if diar_enabled and segments:
             rep.check_cancelled()
             logger.info("=" * 60)
             logger.info("STEP 3.6: Speaker Diarization (phân cụm người nói)")
             rep.emit("diarize", "start")
             try:
                 from autodub.speech.diarization import diarize_segments
-                k_override = settings.diarization_num_speakers if settings.diarization_num_speakers > 0 else None
+                k_override = req.diarization_num_speakers if req.diarization_num_speakers is not None and req.diarization_num_speakers > 0 else (settings.diarization_num_speakers if settings.diarization_num_speakers > 0 else None)
+                max_spk = req.diarization_max_speakers if req.diarization_max_speakers is not None else getattr(settings, "diarization_max_speakers", 4)
                 segments = diarize_segments(
                     audio_path,
                     segments,
                     settings=settings,
                     num_speakers=k_override,
-                    max_speakers=settings.diarization_max_speakers,
+                    max_speakers=max_spk,
                 )
             except Exception as e:
                 logger.warning(f"Diarization gặp lỗi ({e}) — fallback gán speaker_id=0")
                 for s in segments:
                     s.setdefault("speaker_id", 0)
+
 
             save_transcript(segments, transcript_orig_path)
             spk_set = {s.get("speaker_id", 0) for s in segments}
@@ -582,9 +592,12 @@ class DubPipeline:
                     "bước lâu nhất, tiến độ hiện ở khung bên trái...")
         seg_dir = ensure_dir(data_path(work_dir, "segments", create_dir=True))
         self._ensure_render_mode(work_dir, seg_dir)
-        tts_results = self._synthesize_segments(target, req.voice, segments,
-                                                seg_dir, synth=tts_synth)
+        tts_results = self._synthesize_segments(
+            target, req.voice, segments, seg_dir,
+            synth=tts_synth, speaker_voices=req.speaker_voices,
+        )
         # Free the TTS workers' VRAM before the NVENC video encode — unless a
+
         # batch cache owns them (the next video reuses the warm pool).
         if (self._synth_cache is None and tts_synth is not None
                 and hasattr(tts_synth, "close")):
@@ -1608,6 +1621,7 @@ class DubPipeline:
     def _synthesize_segments(
         self, target: TargetLang, voice: str | None,
         segments: list[dict], seg_dir: str, synth=None,
+        speaker_voices: dict[int, str] | None = None,
     ) -> list[dict]:
         """Step 5: per-segment TTS with caching (resume-safe), fanned out over
         one dispatch thread per live TTS worker (``recommended_threads``).
@@ -1634,7 +1648,9 @@ class DubPipeline:
         # vài câu lẻ không đáng nhân đôi RAM của cả nhóm worker.
         from autodub.speech.tts import voices as voice_catalog
         run_voice = voice_catalog.resolve(self.settings, voice)
-        speaker_voices = getattr(self.settings, "speaker_voices_map", lambda: {})() if hasattr(self.settings, "speaker_voices_map") else {}
+        merged_speaker_voices = dict(getattr(self.settings, "speaker_voices_map", lambda: {})() if hasattr(self.settings, "speaker_voices_map") else {})
+        if speaker_voices and isinstance(speaker_voices, dict):
+            merged_speaker_voices.update(speaker_voices)
         extra_synths: dict[str, object] = {}
         extra_lock = threading.Lock()
 
@@ -1642,11 +1658,12 @@ class DubPipeline:
             seg_voice = str(seg.get("voice", "")).strip()
             if not seg_voice and "speaker_id" in seg:
                 spk_id = seg["speaker_id"]
-                if isinstance(speaker_voices, dict):
-                    seg_voice = str(speaker_voices.get(spk_id, speaker_voices.get(str(spk_id), "")) or "").strip()
+                if isinstance(merged_speaker_voices, dict):
+                    seg_voice = str(merged_speaker_voices.get(spk_id, merged_speaker_voices.get(str(spk_id), "")) or "").strip()
             if not seg_voice:
                 return synth
             name = voice_catalog.resolve(self.settings, seg_voice)
+
             if name == run_voice:
                 return synth
             with extra_lock:

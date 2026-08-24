@@ -103,3 +103,20 @@ def test_speaker_voices_map_settings():
     s = Settings(speaker_voices='{"0": "male_1", "1": "female_1"}')
     spk_map = s.speaker_voices_map()
     assert spk_map == {0: "male_1", 1: "female_1"}
+
+
+def test_dub_request_diarization_and_speaker_voices():
+    from autodub.pipeline import DubRequest
+    req = DubRequest(
+        diarization_enabled=True,
+        diarization_num_speakers=2,
+        diarization_max_speakers=5,
+        speaker_voices={0: "male_voice", 1: "female_voice"},
+        aspect_preset="tiktok_9_16",
+    )
+    assert req.diarization_enabled is True
+    assert req.diarization_num_speakers == 2
+    assert req.diarization_max_speakers == 5
+    assert req.speaker_voices[1] == "female_voice"
+    assert req.aspect_preset == "tiktok_9_16"
+
