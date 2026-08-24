@@ -435,19 +435,21 @@ _DUCK_RELEASE_S = 0.22
 
 def _duck_envelope(n: int, b0: int, rate: int,
                    intervals: list[tuple[float, float]],
-                   duck_db: float):
-    """Gain multiplier (n,) cho một block nhạc nền: 1.0 ngoài lời thoại,
-    ``10^(duck_db/20)`` trong lời thoại.
+                   duck_db: float,
+                   attack_s: float = _DUCK_ATTACK_S,
+                   release_s: float = _DUCK_RELEASE_S):
+    """Gain multiplier (n,) cho một block nhạc nền: 1.0 ngoài khoảng duck,
+    ``10^(duck_db/20)`` trong khoảng.
 
-    Sử dụng đường cong S-curve Cosine mượt mà với dốc Attack (80ms) và
-    Release (220ms), tạo hiệu ứng sidechain ducking chuẩn phòng thu.
+    Sử dụng đường cong S-curve Cosine mượt mà với dốc Attack/Release có thể
+    cấu hình, tạo hiệu ứng sidechain ducking chuẩn phòng thu.
     Các câu thoại sát nhau tự động hòa làm một vùng duck liền mạch."""
     import numpy as np
 
     env = np.ones(n, dtype=np.float32)
     duck_gain = 10.0 ** (duck_db / 20.0)
-    att = _DUCK_ATTACK_S
-    rel = _DUCK_RELEASE_S
+    att = attack_s
+    rel = release_s
     t0 = b0 / rate
     t1 = (b0 + n) / rate
     for s, e in intervals:
@@ -538,6 +540,10 @@ def merge_segments(
     background_path: str | None = None,
     background_gain_db: float = 0.0,
     duck_voice_db: float = 0.0,
+    speech_intervals: list[tuple[float, float]] | None = None,
+    speech_duck_db: float = 0.0,
+    duck_attack_s: float = _DUCK_ATTACK_S,
+    duck_release_s: float = _DUCK_RELEASE_S,
 ) -> str:
     """Mix per-segment dub audio onto a background track, block by block.
 
@@ -546,9 +552,14 @@ def merge_segments(
     ``background_gain_db`` to a negative value (e.g. -12.0 ≈ 25% volume) so the
     original speech sits under the new narration instead of competing with it.
 
-    ``duck_voice_db`` < 0 bật sidechain-style ducking: nhạc nền tự nhỏ đi
-    đúng bấy nhiêu dB trong lúc có giọng đọc (ramp 120 ms hai mép) và hồi
-    lại ở khoảng lặng — giọng luôn nổi trên nhạc mà không phải hạ nền cả bài.
+    Hai chế độ duck:
+
+    - ``speech_intervals`` (chế độ bg="duck" — dubbing thực tế): nền dip
+      ``speech_duck_db`` trong **khoảng tiếng nói GỐC** (speech_start→
+      speech_end của transcript) — nhân vật còn nói thì còn dip, bất kể
+      giọng Việt đã dứt chưa. Attack/release từ ``duck_attack_s/release_s``.
+    - ``duck_voice_db`` < 0 (chế độ demucs): nền nhạc dip khi có GIỌNG VIỆT
+      (sidechain theo placement dub) — giữ cho nhạc nền nhường giọng đọc.
 
     Streaming design: the background is normalised once by ffmpeg (rate,
     gain, duration) into a temp WAV on disk, then mixed with the segments in
@@ -611,10 +622,15 @@ def merge_segments(
         seg_index.append((float(seg["start"]), float(seg["start"]) + dur, seg))
     seg_index.sort(key=lambda x: x[0])
 
-    # Khoảng có giọng đọc — nguồn cho envelope ducking của nhạc nền.
-    duck_intervals = ([(s, e) for s, e, _ in seg_index]
-                      if (duck_voice_db and duck_voice_db < 0
-                          and bg_wave is not None) else [])
+    # Chọn nguồn duck: speech segment tiếng gốc (dub mode) > giọng VI (demucs).
+    if (speech_intervals and speech_duck_db < 0 and bg_wave is not None):
+        duck_intervals = [tuple(iv) for iv in speech_intervals if iv[1] > iv[0]]
+        duck_db = speech_duck_db
+    elif duck_voice_db and duck_voice_db < 0 and bg_wave is not None:
+        duck_intervals = [(s, e) for s, e, _ in seg_index]
+        duck_db = duck_voice_db
+    else:
+        duck_intervals, duck_db = [], 0.0
 
     out = wave.open(output_path, "wb")
     out.setnchannels(ch)
@@ -639,7 +655,8 @@ def merge_segments(
                 block = block.reshape(-1, ch)
                 if duck_intervals:
                     env = _duck_envelope(n, b0, rate, duck_intervals,
-                                         duck_voice_db)
+                                         duck_db, duck_attack_s,
+                                         duck_release_s)
                     block = (block * env[:, None]).astype(np.int32)
             else:
                 block = np.zeros((n, ch), dtype=np.int32)

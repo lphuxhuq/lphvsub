@@ -205,6 +205,15 @@ class Settings:
     voice_target_lufs: float = -16.0
     # Nhạc nền tự nhỏ đi khi có giọng và hồi lại ở khoảng lặng. 0 = tắt.
     bg_duck_voice_db: float = -7.0
+    # --- Dubbing thực tế (bg_mode="duck") -----------------------------------
+    # Mức TỔNG của tiếng gốc khi nhân vật ĐANG NÓI (duck theo speech segment
+    # tiếng gốc). Ngoài speech nền giữ mức bg_duck_db của dự án.
+    # Preset: NATURAL −16 · CLEAR VIETNAMESE −20 · BALANCED −12.
+    original_voice_duck_db: float = -16.0
+    duck_attack_ms: int = 80      # thời gian trượt xuống khi bắt đầu nói
+    duck_release_ms: int = 140    # thời gian trượt lên khi hết nói
+    # Đẩy sớm onset giọng Việt so với speech_start (ms). 0 = đúng onset.
+    dub_pre_roll_ms: int = 0
     # Chống chồng tiếng "mềm": câu dài hơn khung thì DỒN TRỄ các câu sau vào
     # khoảng lặng kế tiếp (có trần tổng), tuyệt đối không đổi tốc độ đọc từng
     # câu. Chỉ khi kịch trần mới nén nhẹ và đều, với trần thấp.
@@ -435,6 +444,14 @@ class Settings:
             voice_target_lufs=env_float("VOICE_TARGET_LUFS", "-16.0"),
             bg_duck_voice_db=min(0.0, max(-24.0,
                 env_float("BG_DUCK_VOICE_DB", "-7.0"))),
+            original_voice_duck_db=min(0.0, max(-30.0,
+                env_float("ORIGINAL_VOICE_DUCK_DB", "-16.0"))),
+            duck_attack_ms=max(10, min(500,
+                env_int("DUCK_ATTACK_MS", "80"))),
+            duck_release_ms=max(10, min(1000,
+                env_int("DUCK_RELEASE_MS", "140"))),
+            dub_pre_roll_ms=max(0, min(80,
+                env_int("DUB_PRE_ROLL_MS", "0"))),
             soft_timing_fit=env_bool("SOFT_TIMING_FIT", "true"),
             speech_boundary_refine=env_bool("SPEECH_BOUNDARY_REFINE", "true"),
             asr_gap_rescan=env_bool("ASR_GAP_RESCAN", "true"),

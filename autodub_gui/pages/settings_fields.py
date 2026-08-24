@@ -270,6 +270,27 @@ FIELDS: tuple[Field, ...] = (
           TAB_ADVANCED, "Xử lý âm thanh", "-8.0",
           "Nhạc nền tự nhỏ đi bấy nhiêu mỗi khi có lời thoại tiếng Việt.",
           suffix=" dB", minimum=-24.0, maximum=0.0, step=0.5, decimals=1),
+    Field("ORIGINAL_VOICE_DUCK_DB", SLIDER, "Giảm tiếng gốc khi nhân vật nói",
+          TAB_ADVANCED, "Xử lý âm thanh", "-16.0",
+          "Chế độ nhạc nền Giữ âm gốc: khi nhân vật đang nói, tiếng gốc chìm "
+          "xuống bấy nhiêu để giọng Việt nổi lên mà vẫn nghe rõ nền — cảm "
+          "giác thuyết minh chân thật. Mức gợi ý: tự nhiên -16, rõ tiếng "
+          "Việt -20, cân bằng -12.",
+          suffix=" dB", minimum=-30.0, maximum=0.0, step=0.5, decimals=1),
+    Field("DUCK_ATTACK_MS", NUMBER, "Thời gian chìm tiếng gốc", TAB_ADVANCED,
+          "Xử lý âm thanh", "80",
+          "Tiếng gốc trượt xuống trong bao nhiêu mili-giây khi nhân vật bắt "
+          "đầu nói — ngắn là đột ngột, dài là mềm mà hơi trễ.",
+          suffix=" mili-giây", minimum=10, maximum=500, step=10, decimals=0),
+    Field("DUCK_RELEASE_MS", NUMBER, "Thời gian hồi tiếng gốc", TAB_ADVANCED,
+          "Xử lý âm thanh", "140",
+          "Tiếng gốc trượt lại lên sau khi nhân vật ngừng nói.",
+          suffix=" mili-giây", minimum=10, maximum=1000, step=10, decimals=0),
+    Field("DUB_PRE_ROLL_MS", NUMBER, "Đẩy sớm giọng Việt", TAB_ADVANCED,
+          "Căn thời gian", "0",
+          "Bắt đầu giọng Việt sớm hơn chút xíu so với lúc nhân vật ngừng "
+          "lặng (0-80). 0 là bám đúng khoảnh khắc nhân vật cất tiếng.",
+          suffix=" mili-giây", minimum=0, maximum=80, step=5, decimals=0),
     Field("SOFT_TIMING_FIT", CHECK, "Tự căn lại thời điểm từng câu",
           TAB_ADVANCED, "Căn thời gian", "true",
           "Dịch nhẹ thời điểm các câu để lời thoại không chồng lên nhau."),

@@ -36,6 +36,7 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+.zcode/
 
 # Build exe
 *.spec.bak

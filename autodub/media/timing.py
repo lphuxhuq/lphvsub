@@ -90,6 +90,7 @@ def plan_voice_placements(
     min_speed: float = 0.90,
     max_speed: float = 1.15,
     allow_stretch: bool = False,
+    pre_roll_s: float = 0.0,
 ) -> tuple[list[dict], TimingReport]:
     """Tính vị trí đặt + tempo từng clip — THUẦN TOÁN, không đụng file.
 
@@ -97,6 +98,8 @@ def plan_voice_placements(
     "atempo", "drift", "adjustment", "reason", "slot", "available"}``.
     ``allow_stretch`` (VOICE_FIT_STRETCH) cho phép clip NGẮN hơn slot được
     kéo dài (atempo < 1.0, chặn ``min_speed``) lấp bớt khoảng lặng cuối câu.
+    ``pre_roll_s`` (DUB_PRE_ROLL_MS) đẩy onset giọng Việt sớm hơn
+    ``speech_start`` bấy nhiêu (mặc định 0 — dubbing thực tế bật 0…80ms).
     Render nằm ở :func:`apply_soft_timing`.
     """
     from autodub.media.voice_timing import _decide_tempo
@@ -106,7 +109,8 @@ def plan_voice_placements(
     prev_end = float("-inf")
 
     def _natural(seg: dict) -> float:
-        return float(seg.get("speech_start", seg.get("start", 0.0)) or 0.0)
+        t = float(seg.get("speech_start", seg.get("start", 0.0)) or 0.0)
+        return max(0.0, t - pre_roll_s)
 
     for i, seg in enumerate(segments):
         natural = _natural(seg)
@@ -238,6 +242,7 @@ def apply_soft_timing(
         min_speed=settings.voice_fit_min_speed,
         max_speed=settings.voice_fit_max_speed,
         allow_stretch=bool(getattr(settings, "voice_fit_stretch", False)),
+        pre_roll_s=(getattr(settings, "dub_pre_roll_ms", 0) or 0) / 1000.0,
     )
 
     needs_render = any(p["atempo"] != 1.0 for p in placements)

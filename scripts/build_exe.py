@@ -125,7 +125,8 @@ def step_assemble() -> None:
     scripts_dst = os.path.join(DIST_DIR, "scripts")
     os.makedirs(scripts_dst, exist_ok=True)
     for script in ("setup_vieneu.py", "setup_paraformer.py",
-                   "setup_whisper.py", "setup_douyin.py"):
+                   "setup_whisper.py", "setup_douyin.py",
+                   "setup_gpu.py"):
         shutil.copy2(os.path.join(PROJECT_ROOT, "scripts", script),
                      scripts_dst)
 
@@ -140,7 +141,8 @@ def step_assemble() -> None:
             ("Cai dat giong VieNeu.bat", SETUP_VIENEU_BAT),
             ("Cai dat Whisper ASR.bat", SETUP_WHISPER_BAT),
             ("Cai dat ASR tieng Trung (Paraformer).bat", SETUP_PARAFORMER_BAT),
-            ("Cai dat tinh nang Douyin.bat", SETUP_DOUYIN_BAT)):
+            ("Cai dat tinh nang Douyin.bat", SETUP_DOUYIN_BAT),
+            ("Cai dat GPU tach nhac (Demucs).bat", SETUP_GPU_BAT)):
         with open(os.path.join(DIST_DIR, name), "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -309,43 +311,58 @@ echo.
 pause
 """
 
+SETUP_GPU_BAT = r"""@echo off
+chcp 65001 >nul
+title Cai dat GPU tach nhac (Demucs) cho VoxDub Studio
+echo.
+echo  Script nay cai PyTorch CUDA 12.4 + Demucs vao .venv-gpu (~2 GB).
+echo  Yeu cau: card NVIDIA voi CUDA support + driver cap nhat.
+echo  Neu khong co GPU, Demucs van chay duoc bang CPU (cham hon).
+echo  Yeu cau: da cai Python 3.10-3.12 (xem HUONG_DAN_CAI_DAT.md).
+echo.
+cd /d "%~dp0"
+py -3.12 scripts\setup_gpu.py 2>nul || py -3.11 scripts\setup_gpu.py 2>nul || py -3.10 scripts\setup_gpu.py 2>nul || py scripts\setup_gpu.py || python scripts\setup_gpu.py
+if errorlevel 1 (
+    echo.
+    echo  !! Cai dat that bai. Kiem tra da cai Python chua: py --version
+    echo     Cap nhat driver NVIDIA tai: https://www.nvidia.com/download/index.aspx
+    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
+)
+echo.
+pause
+"""
+
 GUIDE_MD = """# Hướng dẫn cài đặt VoxDub Studio
 
 VoxDub Studio lồng tiếng video tự động sang tiếng Việt: tải video → nhận dạng
 giọng nói → dịch → đọc giọng Việt (clone giọng) → ghép lại thành video.
 
-Nhận dạng giọng nói, đọc giọng Việt và ghép video đều chạy **trên máy của
-bạn**; riêng bước dịch chạy qua máy chủ VoxDub và tính bằng **Vox**. Bạn cần
-cài vài công cụ trước khi dùng — làm đúng thứ tự dưới đây, mỗi bước chỉ làm
-**một lần duy nhất**.
-
-> **Cài tối thiểu để chạy được ngay:** Bước 1 (FFmpeg) + Bước 3 (giọng đọc
-> VieNeu). Máy mới được tặng sẵn Vox dùng thử, không cần mua gì để thử.
-
-> **Máy cần có:** Windows 10/11 64-bit, card đồ họa NVIDIA (khuyến nghị,
-> để chạy nhanh), ~10 GB dung lượng trống, kết nối mạng để tải model.
+> **Cách nhanh nhất:** Đúp chuột **VoxDub.exe** → Wizard cài đặt tự hiện,
+> hướng dẫn bạn qua từng bước ngay trong app — không cần gõ lệnh.
 
 ---
 
-## Bước 1 — Cài FFmpeg (xử lý âm thanh/video)
+## Cách cài bằng Wizard (khuyến nghị)
 
-Mở **PowerShell** (bấm phím Windows, gõ `powershell`, Enter) rồi chạy:
+1. Đúp chuột **VoxDub.exe**.
+2. Wizard cài đặt tự hiện ở lần mở đầu tiên.
+3. Bấm **"Bắt đầu cài đặt"** → wizard tự cài FFmpeg, VieNeu TTS và Whisper ASR
+   (các thành phần bắt buộc), hiện thanh tiến trình + log theo thời gian thực.
+4. **Paraformer ASR** (tùy chọn, cho video tiếng Trung): bấm "Tiếp theo" hoặc
+   "Bỏ qua" nếu bạn không làm video tiếng Trung.
+5. **Tính năng thêm** (tùy chọn): GPU Demucs (tách nhạc siêu nhanh) và Douyin
+   — cài ngay trong wizard hoặc bỏ qua rồi làm sau.
+6. Nhập mã kích hoạt nếu có, hoặc bỏ qua → bấm **"Bắt đầu dùng VoxDub Studio"**.
 
-```
-winget install Gyan.FFmpeg
-```
+Máy mới được tặng sẵn Vox dùng thử, không cần mua gì để thử.
 
-Xong **đóng PowerShell và mở lại**, gõ `ffmpeg -version` — thấy số phiên
-bản là được.
+---
 
-*Không dùng được winget?* Tải bản "release full" tại
-<https://www.gyan.dev/ffmpeg/builds/>, giải nén, rồi chép 2 file
-`ffmpeg.exe` và `ffprobe.exe` trong thư mục `bin` vào **cùng thư mục với
-VoxDub.exe** — app sẽ tự nhận, không cần chỉnh PATH.
+## Cài thủ công (đường dự phòng khi Wizard không chạy được)
 
-## Bước 2 — Cài Python (để cài giọng đọc VieNeu)
+Thứ tự khuyến nghị:
 
-Trong PowerShell:
+### Bước 1 — Python 3.12 (để script cài chạy được)
 
 ```
 winget install Python.Python.3.12
@@ -353,66 +370,38 @@ winget install Python.Python.3.12
 
 Đóng và mở lại PowerShell, gõ `py --version` — thấy `Python 3.12.x` là được.
 
-> Nếu máy đã có Python 3.10–3.12 thì bỏ qua bước này.
+> Nếu máy đã có Python 3.10–3.12 thì bỏ qua.
 
-## Bước 3 — Cài giọng đọc VieNeu (bắt buộc, ~300 MB, chạy CPU)
+### Bước 2 — Giọng đọc VieNeu (bắt buộc, ~300 MB)
 
-Đúp chuột vào file **`Cai dat giong VieNeu.bat`** trong thư mục VoxDub Studio.
+Đúp chuột **`Cai dat giong VieNeu.bat`**.
 
-Script tự tạo môi trường riêng (`.venv-vieneu`), tải model (~300 MB) và
-chạy thử. Chỉ mất vài phút, **không cần card đồ họa** — đây là bộ giọng
-đọc của app với hàng chục giọng nam/nữ.
+### Bước 3 — Whisper ASR (bắt buộc, ~1.5 GB)
 
-## Bước 4 — Vox (tài nguyên dịch)
+Đúp chuột **`Cai dat Whisper ASR.bat`**.
 
-Bước dịch chạy qua máy chủ VoxDub nên bạn **không phải đăng ký tài khoản
-hay lấy API key của ai cả**. Máy này đã được tặng sẵn Vox dùng thử — mở app
-là dịch được ngay.
+### Tùy chọn
+
+| Tính năng | File .bat | Ghi chú |
+|---|---|---|
+| Nhận dạng tiếng Trung (Paraformer) | `Cai dat ASR tieng Trung (Paraformer).bat` | ~520 MB, CPU |
+| Tải video Douyin | `Cai dat tinh nang Douyin.bat` | Playwright + Chromium ~210 MB |
+| GPU Demucs (tách nhạc nhanh) | `Cai dat GPU tach nhac (Demucs).bat` | ~2 GB, cần card NVIDIA |
+
+---
+
+## Vox (tài nguyên dịch)
+
+Bước dịch chạy qua máy chủ VoxDub — không cần đăng ký hay lấy API key của ai.
+Máy mới được tặng sẵn Vox dùng thử.
 
 Hết Vox thì mua thêm:
-
-1. Vào trang web VoxDub, chọn gói (hoặc tự nhập số tiền bạn muốn).
-2. Chuyển khoản theo mã QR hiện trên màn hình. **Giữ nguyên nội dung chuyển
-   khoản** — đó là mã đơn hàng, ghi sai thì hệ thống không khớp được.
-3. Vài giây sau bạn nhận **mã kích hoạt** dạng `VOX-XXXX-XXXX-XXXX` (hiện
-   trên web và gửi vào email nếu bạn có điền).
+1. Vào trang web VoxDub, chọn gói → chuyển khoản theo mã QR.
+2. Giữ nguyên nội dung chuyển khoản (mã đơn hàng).
+3. Nhận mã kích hoạt VOX-XXXX-XXXX-XXXX qua web/email.
 4. Mở **VoxDub.exe → Tài khoản**, dán mã, bấm **Kích hoạt**.
 
-> Mỗi mã chỉ kích hoạt được **một lần trên một máy**. Vox gắn với chiếc máy
-> này chứ không gắn với tài khoản, nên cài lại app hay xóa cấu hình đều
-> không mất Vox. Đổi máy thì liên hệ hỗ trợ kèm mã máy (xem ở trang Tài
-> khoản) để được chuyển sang.
-
-## Bước 5 — Mở VoxDub Studio và kiểm tra
-
-1. Đúp chuột **VoxDub.exe**.
-2. Kiểm tra nhanh:
-   - Trang **Tài khoản**: xem số Vox còn lại.
-   - Trang **Giọng đọc AI**: chọn giọng bạn thích, bấm **Nghe thử**.
-   - Trang **Dịch thuật**: điền ngữ cảnh video nếu muốn bản dịch bám đúng
-     chủ đề và xưng hô của kênh bạn (không bắt buộc).
-3. Về tab **Lồng tiếng**, dán link video YouTube, bấm chạy. Lần chạy đầu
-   app tự tải model nhận dạng giọng nói (~1.5 GB, một lần duy nhất).
-
-Video kết quả nằm trong thư mục `output` cạnh VoxDub.exe.
-
-## Tùy chọn
-
-- **Tải video Douyin:** đúp chuột **`Cai dat tinh nang Douyin.bat`** (cài
-  thư viện + Chromium, ~210 MB, một lần). YouTube và link trực tiếp không
-  cần bước này.
-- **Nhận dạng tiếng Trung chính xác hơn:** đúp chuột
-  **`Cai dat ASR tieng Trung (Paraformer).bat`** (~520 MB, chạy CPU). Video
-  tiếng Trung sẽ được nghe-chép bằng Paraformer thay vì Whisper — chính xác
-  hơn rõ rệt; ngôn ngữ khác tự dùng Whisper như cũ.
-- **Tiêu đề, mô tả và hashtag tự động:** bật/tắt ở trang **Dịch thuật**,
-  mục "Nội dung đăng bài". Tốn thêm một khoản Vox nhỏ mỗi video.
-- **Giọng đọc riêng:** thu một file WAV 5–10 giây giọng bạn muốn clone
-  (rõ, không nhạc nền) + file `.txt` cùng tên chứa đúng nội dung câu nói,
-  rồi chọn nó trong tab Cài đặt.
-- **Dịch đúng ngữ cảnh hơn:** vào trang **Dịch thuật**, mục **"Ngữ cảnh
-  video"** — điền chủ đề, xưng hô và thuật ngữ cố định; bản dịch sẽ bám đúng
-  văn phong kênh của bạn.
+> Mỗi mã chỉ dùng được một lần trên một máy. Đổi máy thì liên hệ hỗ trợ.
 
 ---
 
@@ -420,33 +409,35 @@ Video kết quả nằm trong thư mục `output` cạnh VoxDub.exe.
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| `ffmpeg` không nhận sau khi cài | Đóng mở lại PowerShell/app; hoặc chép `ffmpeg.exe`+`ffprobe.exe` vào cạnh `VoxDub.exe` |
-| `py` không nhận | Cài lại Python bằng winget (Bước 2), nhớ mở PowerShell mới |
-| App báo hết Vox | Mở trang Tài khoản để nạp thêm, rồi chạy tiếp dự án đang dở — phần đã dịch xong không bị tính tiền lại |
-| Mã kích hoạt báo "đã dùng trên máy khác" | Mỗi mã chỉ dùng cho một máy. Nếu bạn chưa từng dùng mã này, liên hệ hỗ trợ kèm mã đơn hàng |
-| App báo không kết nối được máy chủ | Kiểm tra mạng. Các bước chạy trên máy (nghe chép, giọng đọc, xuất video) vẫn dùng bình thường |
-| App báo chưa cài bộ giọng VieNeu | Chạy `Cai dat giong VieNeu.bat` (Bước 3) |
-| Chạy chậm, GPU không dùng | Cần card NVIDIA + driver mới (`nvidia-smi` trong PowerShell phải chạy được) |
-| Antivirus chặn VoxDub.exe | Thêm thư mục VoxDub Studio vào danh sách loại trừ — app không có mã độc, exe đóng gói bằng PyInstaller hay bị nhận nhầm |
+| Wizard không hiện khi mở app | Xóa file cache/setup_wizard_done trong thư mục dữ liệu app rồi mở lại |
+| ffmpeg không nhận sau khi cài | Đóng mở lại app; hoặc chép ffmpeg.exe+ffprobe.exe vào cạnh VoxDub.exe |
+| py không nhận | Cài lại Python bằng winget (Bước 1), mở PowerShell mới |
+| App báo hết Vox | Mở trang Tài khoản để nạp thêm |
+| GPU không được dùng | nvidia-smi trong PowerShell phải chạy được; cập nhật driver NVIDIA |
+| Antivirus chặn VoxDub.exe | Thêm thư mục VoxDub Studio vào danh sách loại trừ |
 
 ## Cấu trúc thư mục sau khi cài đủ
 
 ```
 VoxDub Studio/
-├── VoxDub.exe             ← mở app tại đây
-├── _internal/             ← thư viện của app (không đụng vào)
-├── Cai dat giong VieNeu.bat            ← Bước 3 (giọng đọc, bắt buộc)
-├── Cai dat ASR tieng Trung (Paraformer).bat ← tùy chọn, nghe tiếng Trung chuẩn hơn
-├── Cai dat tinh nang Douyin.bat        ← tùy chọn, tải video Douyin
+├── VoxDub.exe                                  <- mở app tại đây
+├── _internal/                                  <- thư viện app (không đụng)
+├── Cai dat giong VieNeu.bat                    <- dự phòng (wizard đã lo)
+├── Cai dat Whisper ASR.bat                     <- dự phòng
+├── Cai dat ASR tieng Trung (Paraformer).bat    <- tùy chọn
+├── Cai dat tinh nang Douyin.bat                <- tùy chọn
+├── Cai dat GPU tach nhac (Demucs).bat          <- tùy chọn, cần NVIDIA
 ├── scripts/
-├── libs/                  ← thư viện Douyin (sau khi cài, nếu dùng)
-├── models/vieneu/         ← model VieNeu (sau Bước 3)
-├── models/paraformer-zh/  ← model Paraformer (nếu cài)
-├── .venv-vieneu/          ← môi trường VieNeu (sau Bước 3)
-├── .venv-asr/             ← môi trường Paraformer (nếu cài)
-├── pw-browsers/           ← Chromium (nếu dùng Douyin)
-├── .env                   ← app tự tạo khi bạn Lưu cài đặt
-└── output/                ← video kết quả
+├── models/vieneu/         <- model VieNeu (sau khi cài)
+├── models/paraformer-zh/  <- model Paraformer (nếu cài)
+├── models/whisper/        <- model Whisper (sau khi cài)
+├── .venv-vieneu/          <- môi trường VieNeu
+├── .venv-whisper/         <- môi trường Whisper
+├── .venv-asr/             <- môi trường Paraformer (nếu cài)
+├── .venv-gpu/             <- môi trường GPU/Demucs (nếu cài)
+├── pw-browsers/           <- Chromium (nếu dùng Douyin)
+├── .env                   <- app tự tạo khi Lưu cài đặt
+└── output/                <- video kết quả
 ```
 """
 

@@ -453,21 +453,8 @@ class MainWindow(QMainWindow):
             self.sidebar.status_card.set_row(key, text, ok)
 
     # -- Kiểm tra tiền chuyến bay --------------------------------------
-    def _maybe_first_run(self) -> None:
-        """Hiện wizard cài đặt nếu đây là lần chạy đầu tiên trên máy này."""
-        try:
-            from autodub_gui.setup_wizard import maybe_show_setup_wizard
-            showed = maybe_show_setup_wizard(self)
-        except Exception:  # noqa: BLE001 — wizard hỏng không được chặn app
-            showed = False
-
-        # Fallback: nếu wizard không hiện thì vẫn kiểm tra first_run cũ
-        if not showed:
-            try:
-                from autodub_gui.first_run import maybe_show_first_run
-                maybe_show_first_run(self)
-            except Exception:  # noqa: BLE001
-                pass
+    # _maybe_first_run đã được chuyển thành call site trực tiếp trong main()
+    # (xem dưới hàm main). Không còn ở đây để tránh dead-code nhầm lẫn.
 
     def _check_updates(self) -> None:
         """Hỏi bản mới ở luồng nền; chỉ báo nhẹ khi thực sự có bản mới."""
@@ -796,8 +783,17 @@ def main() -> int:
     window = MainWindow()      # phím tắt được cửa sổ tự đăng ký khi dựng
     window.show()
 
+    # Wizard cài đặt lần đầu — hiện ngay sau window.show() để dialog modal
+    # hiển thị đúng. Bỏ qua khi AUTODUB_SMOKE=1 (phiên test tự động).
+    if os.environ.get("AUTODUB_SMOKE") != "1":
+        try:
+            from autodub_gui.setup_wizard import maybe_show_setup_wizard
+            maybe_show_setup_wizard(window)
+        except Exception:  # noqa: BLE001 — wizard hỏng không được chặn app
+            pass
+
     # Tải + enroll voice library nếu chưa có (chỉ khi VieNeu đã cài).
-    # Chạy SAU window.show() để app loop đã khởi động, dialog mới hiển thị đúng.
+    # Chạy SAU wizard để không chen vào giữa wizard đang mở.
     if os.environ.get("AUTODUB_SMOKE") != "1":
         from autodub_gui.voice_setup_dialog import VoiceSetupDialog
         VoiceSetupDialog.ensure_voices(settings, window)

@@ -681,6 +681,20 @@ class DubPipeline:
         )
         save_timing_guide(work_dir, timing_guide_data)
 
+        # Dubbing thực tế (bg_mode=duck): dip nền theo SPEECH SEGMENT tiếng
+        # gốc — nhân vật còn nói thì tiếng gốc còn chìm, bất kể giọng Việt
+        # đã dứt chưa. Tổng mức khi nói = original_voice_duck_db.
+        speech_intervals: list[tuple[float, float]] | None = None
+        speech_dip_db = 0.0
+        if req.bg_mode == "duck":
+            speech_intervals = sorted(
+                (float(s.get("speech_start", s.get("start", 0)) or 0),
+                 float(s.get("speech_end", s.get("end", 0)) or 0))
+                for s in segments)
+            speech_intervals = [iv for iv in speech_intervals if iv[1] > iv[0]]
+            speech_dip_db = min(0.0, settings.original_voice_duck_db
+                                - background_gain_db)
+
         logger.info("STEP 6: Merging audio segments")
         logger.info("Đang ghép giọng đọc với nhạc nền...")
         merged_audio_path = data_path(work_dir, target.audio_name)
@@ -690,6 +704,10 @@ class DubPipeline:
             background_path=background_path,
             background_gain_db=background_gain_db,
             duck_voice_db=settings.bg_duck_voice_db,
+            speech_intervals=speech_intervals,
+            speech_duck_db=speech_dip_db,
+            duck_attack_s=settings.duck_attack_ms / 1000.0,
+            duck_release_s=settings.duck_release_ms / 1000.0,
         )
         rep.emit("merge_audio", "done", detail=merged_audio_path)
 
