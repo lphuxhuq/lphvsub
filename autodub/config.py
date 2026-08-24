@@ -7,10 +7,12 @@ sự cần tới, qua :meth:`Settings.require`, và lỗi thiếu cấu hình l�
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
+
 
 from autodub.utils import app_root
 
@@ -237,6 +239,19 @@ class Settings:
     timing_max_drift_s: float = 1.5     # trần dồn trễ tích lũy
     timing_min_gap_s: float = 0.12      # khoảng thở tối thiểu giữa hai câu
     timing_max_atempo: float = 1.1      # trần nén bất khả kháng (mỗi câu)
+
+    # --- Phân tách người nói (Speaker Diarization) -----------------------------
+    #: Bật/tắt tự động phân tách người nói sau bước nhận dạng ASR
+    diarization_enabled: bool = True
+    #: Số người nói chỉ định (0 = tự động nhận diện K qua Auto-K / Silhouette)
+    diarization_num_speakers: int = 0
+    #: Giới hạn số người nói tối đa khi chạy chế độ tự động
+    diarization_max_speakers: int = 4
+    #: Ngưỡng khoảng cách cosine tối thiểu để kích hoạt phân tách nhiều người
+    diarization_threshold: float = 0.30
+    #: Bảng ánh xạ giọng đọc theo người nói dạng JSON, vd: '{"0": "male", "1": "female"}'
+    speaker_voices: str = ""
+
 
     # --- Ngữ cảnh dịch do người dùng cung cấp (đều không bắt buộc) ---------
     translate_domain: str = ""       # chủ đề, vd "review công nghệ"
@@ -472,6 +487,10 @@ class Settings:
                 env_float("TIMING_MIN_GAP_S", "0.12"))),
             timing_max_atempo=min(1.3, max(1.0,
                 env_float("TIMING_MAX_ATEMPO", "1.1"))),
+            diarization_enabled=env_bool("DIARIZATION_ENABLED", "true"),
+            diarization_num_speakers=max(0, min(16, env_int("DIARIZATION_NUM_SPEAKERS", "0"))),
+            diarization_max_speakers=max(2, min(16, env_int("DIARIZATION_MAX_SPEAKERS", "4"))),
+            diarization_threshold=min(1.0, max(0.05, env_float("DIARIZATION_THRESHOLD", "0.30"))),
             translate_analysis=env_bool("TRANSLATE_ANALYSIS",
                                         _p["translate_analysis"]),
             translate_review=env_bool("TRANSLATE_REVIEW",
@@ -571,7 +590,22 @@ class Settings:
                 f"Điền vào trang Cài đặt (hoặc tệp .env) rồi chạy lại."
             )
 
+    # --- Phân tách người nói -----------------------------------------------
+
+    def speaker_voices_map(self) -> dict[int, str]:
+        """Bảng ánh xạ người nói {speaker_id: voice_name} đọc từ JSON."""
+        if not self.speaker_voices:
+            return {}
+        try:
+            val = json.loads(self.speaker_voices)
+            if isinstance(val, dict):
+                return {int(k): str(v).strip() for k, v in val.items() if str(k).isdigit() and str(v).strip()}
+        except Exception:
+            pass
+        return {}
+
     # --- Phụ đề ------------------------------------------------------------
+
 
     def subtitle_style(self) -> dict:
         """Kiểu phụ đề truyền cho ffmpeg/libass.

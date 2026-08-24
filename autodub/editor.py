@@ -231,6 +231,63 @@ def set_segment_voice(work_dir: str, seg_id: int, voice: str,
     return True
 
 
+def set_segment_speaker(
+    work_dir: str, seg_id: int, speaker_id: int, target_key: str = "vi"
+) -> bool:
+    """Gán speaker_id cho MỘT câu thoại trong transcript."""
+    target = get_target(target_key)
+    path = _transcript_path(work_dir, target)
+    if not os.path.exists(path):
+        raise EditorError(f"Chưa có bản dịch trong dự án ({target.transcript_name})")
+    with open(path, encoding="utf-8") as f:
+        segments = json.load(f)
+    seg = next((s for s in segments if s.get("id") == int(seg_id)), None)
+    if seg is None:
+        raise EditorError(f"Không tìm thấy câu số: {seg_id}")
+
+    new_spk = max(0, int(speaker_id))
+    if seg.get("speaker_id") == new_spk:
+        return False
+    seg["speaker_id"] = new_spk
+    save_json_atomic(segments, path)
+    logger.info(f"Câu {seg_id}: speaker_id = {new_spk}")
+    return True
+
+
+def set_speaker_voice(
+    work_dir: str, speaker_id: int, voice: str, target_key: str = "vi"
+) -> None:
+    """Gán giọng đọc cho một speaker_id trong render_opts.json."""
+    opts = load_render_opts(work_dir)
+    speaker_voices = dict(opts.get("speaker_voices", {}))
+    spk_key = str(int(speaker_id))
+    voice = (voice or "").strip()
+    if voice:
+        speaker_voices[spk_key] = voice
+    else:
+        speaker_voices.pop(spk_key, None)
+    opts["speaker_voices"] = speaker_voices
+    save_render_opts(work_dir, opts)
+    logger.info(f"Speaker {speaker_id}: voice mapping = {voice or '(mặc định)'}")
+
+
+def resolve_segment_voice(
+    seg: dict,
+    speaker_voices: dict[int | str, str] | None,
+    default_voice: str,
+) -> str:
+    """Resolve TTS voice: Segment Override > Speaker Voice Map > Default Voice."""
+    if seg.get("voice"):
+        return str(seg["voice"]).strip()
+    if speaker_voices:
+        spk_id = seg.get("speaker_id", 0)
+        if spk_id in speaker_voices:
+            return speaker_voices[spk_id]
+        if str(spk_id) in speaker_voices:
+            return speaker_voices[str(spk_id)]
+    return default_voice
+
+
 def _stale_derived_paths(work_dir: str, target: TargetLang, seg_id: int) -> list[str]:
     """Files that no longer match a re-synthesized segment and must be removed.
 
@@ -304,8 +361,14 @@ def resynth_segment(
     # Câu có giọng riêng thì đọc bằng giọng đó — nhưng chỉ khi synth do chính
     # hàm này tạo; synth truyền vào là do nơi gọi đã gom nhóm theo giọng.
     seg_voice = str(seg.get("voice", "")).strip()
+    if not seg_voice and "speaker_id" in seg and hasattr(settings, "speaker_voices_map"):
+        spk_map = settings.speaker_voices_map()
+        spk_id = seg["speaker_id"]
+        if spk_id in spk_map or str(spk_id) in spk_map:
+            seg_voice = str(spk_map.get(spk_id, spk_map.get(str(spk_id), ""))).strip()
     if synth is None and seg_voice:
         voice = seg_voice
+
 
     seg_dir = data_path(work_dir, "segments", create_dir=True)
     os.makedirs(seg_dir, exist_ok=True)
@@ -372,7 +435,15 @@ def resynth_segments(
     path = _transcript_path(work_dir, target)
     with open(path, encoding="utf-8") as f:
         segments = json.load(f)
-    voice_of = {s.get("id"): str(s.get("voice", "")).strip() for s in segments}
+    spk_map = settings.speaker_voices_map() if hasattr(settings, "speaker_voices_map") else {}
+    voice_of = {}
+    for s in segments:
+        v = str(s.get("voice", "")).strip()
+        if not v and "speaker_id" in s:
+            spk_id = s["speaker_id"]
+            if spk_id in spk_map or str(spk_id) in spk_map:
+                v = str(spk_map.get(spk_id, spk_map.get(str(spk_id), ""))).strip()
+        voice_of[s.get("id")] = v
     main_voice = voice_catalog.resolve(settings, voice)
     by_voice: dict[str, list[int]] = {}
     for seg_id in seg_ids:
@@ -380,6 +451,7 @@ def resynth_segments(
         by_voice.setdefault(name, []).append(seg_id)
     # Giọng chung đi trước để giữ thứ tự tiến độ quen thuộc.
     voice_order = sorted(by_voice, key=lambda n: (n != main_voice, n))
+
 
     done = 0
     for name in voice_order:
@@ -1006,6 +1078,7 @@ def add_segment(work_dir: str, after_id: int, start: float, end: float,
         "end": float(end),
         "duration": round(float(end) - float(start), 3),
         "text": source_text or "",
+        "speaker_id": 0,
         target.text_field: (text or "").strip(),
     }
     old_ids = [int(s.get("id", -1)) for s in segments]
@@ -1073,13 +1146,16 @@ def split_segment(work_dir: str, seg_id: int, at_time: float,
     left_text, right_text = _split_text(
         str(segment.get(target.text_field, "")), ratio)
     left_source, right_source = _split_text(str(segment.get("text", "")), ratio)
+    spk_id = int(segment.get("speaker_id", 0))
 
     left = dict(segment)
     left.update({"end": at_time, "duration": round(at_time - start, 3),
-                 target.text_field: left_text, "text": left_source})
+                 target.text_field: left_text, "text": left_source,
+                 "speaker_id": spk_id})
     right = dict(segment)
     right.update({"start": at_time, "duration": round(end - at_time, 3),
-                  target.text_field: right_text, "text": right_source})
+                  target.text_field: right_text, "text": right_source,
+                  "speaker_id": spk_id})
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     # Cả hai nửa đều phải đọc lại vì lời thoại đã khác, nên bỏ tệp giọng cũ.
@@ -1123,6 +1199,7 @@ def merge_segments(work_dir: str, seg_ids: list[int],
         str(s.get(target.text_field, "")).strip() for s in group).strip()
     merged["text"] = " ".join(
         str(s.get("text", "")).strip() for s in group).strip()
+    merged["speaker_id"] = int(group[0].get("speaker_id", 0))
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     for seg_id in ids:

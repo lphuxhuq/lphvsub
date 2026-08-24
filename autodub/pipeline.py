@@ -446,6 +446,35 @@ class DubPipeline:
             segments = refine_speech_boundaries(segments, audio_path,
                                                 self.settings)
 
+        # --- Step 3.6: Speaker Diarization (nhận diện và phân tách người nói) ---
+        if getattr(settings, "diarization_enabled", True) and segments:
+            rep.check_cancelled()
+            logger.info("=" * 60)
+            logger.info("STEP 3.6: Speaker Diarization (phân cụm người nói)")
+            rep.emit("diarize", "start")
+            try:
+                from autodub.speech.diarization import diarize_segments
+                k_override = settings.diarization_num_speakers if settings.diarization_num_speakers > 0 else None
+                segments = diarize_segments(
+                    audio_path,
+                    segments,
+                    settings=settings,
+                    num_speakers=k_override,
+                    max_speakers=settings.diarization_max_speakers,
+                )
+            except Exception as e:
+                logger.warning(f"Diarization gặp lỗi ({e}) — fallback gán speaker_id=0")
+                for s in segments:
+                    s.setdefault("speaker_id", 0)
+
+            save_transcript(segments, transcript_orig_path)
+            spk_set = {s.get("speaker_id", 0) for s in segments}
+            logger.info(f"Phân tách người nói xong: phát hiện {len(spk_set)} giọng nói {sorted(spk_set)}")
+            rep.emit("diarize", "done", detail=f"{len(spk_set)} speakers")
+        else:
+            for s in segments:
+                s.setdefault("speaker_id", 0)
+
         # Real per-clip time window (until the next line starts) — drives the
         # translation character budget and the TTS target duration.
         from autodub.text.translate_hint import annotate_slots
@@ -1407,7 +1436,10 @@ class DubPipeline:
         # Slots too: hand-made files (and pre-slot work dirs) lack them.
         from autodub.text.translate_hint import annotate_slots, ensure_terminal_punct
         annotate_slots(segments)
+        orig_spk = {s.get("id"): s.get("speaker_id", 0) for s in original_segments}
         for seg in segments:
+            if "speaker_id" not in seg:
+                seg["speaker_id"] = orig_spk.get(seg.get("id"), 0)
             seg[target.text_field] = ensure_terminal_punct(
                 str(seg[target.text_field]))
         return segments
@@ -1602,11 +1634,16 @@ class DubPipeline:
         # vài câu lẻ không đáng nhân đôi RAM của cả nhóm worker.
         from autodub.speech.tts import voices as voice_catalog
         run_voice = voice_catalog.resolve(self.settings, voice)
+        speaker_voices = getattr(self.settings, "speaker_voices_map", lambda: {})() if hasattr(self.settings, "speaker_voices_map") else {}
         extra_synths: dict[str, object] = {}
         extra_lock = threading.Lock()
 
         def _synth_for(seg: dict):
             seg_voice = str(seg.get("voice", "")).strip()
+            if not seg_voice and "speaker_id" in seg:
+                spk_id = seg["speaker_id"]
+                if isinstance(speaker_voices, dict):
+                    seg_voice = str(speaker_voices.get(spk_id, speaker_voices.get(str(spk_id), "")) or "").strip()
             if not seg_voice:
                 return synth
             name = voice_catalog.resolve(self.settings, seg_voice)
@@ -1622,6 +1659,7 @@ class DubPipeline:
                                         num_workers=1)
                     extra_synths[name] = s
                 return s
+
 
         total = len(segments)
         # Mỗi câu một dòng nhật ký sẽ ngập giao diện khi video dài — lấy mẫu

@@ -997,6 +997,63 @@ class EditorPage(VoiceAndExportMixin, BasePage):
     def redo(self) -> None:
         self._undo.redo()
 
+    def split_current_segment(self) -> None:
+        """Tách câu tại vị trí con trỏ phát (Ctrl+B)."""
+        if not self._work_dir or not self._segments:
+            return
+        pos = self.player.position()
+        # 1. Tìm câu đang nằm dưới con trỏ phát
+        target_seg = None
+        for seg in self._segments:
+            if float(seg.get("start", 0.0)) <= pos <= float(seg.get("end", 0.0)):
+                target_seg = seg
+                break
+
+        # 2. Nếu con trỏ không nằm trong câu nào, lấy câu đang chọn (nếu có)
+        if target_seg is None:
+            selected_id = self.subtitles.selected_id()
+            if selected_id > 0:
+                target_seg = self._segment(selected_id)
+
+        if target_seg is None:
+            TOASTS.warn("Không tìm thấy câu nào tại vị trí con trỏ phát để tách.")
+            return
+
+        seg_id = int(target_seg["id"])
+        start = float(target_seg.get("start", 0.0))
+        end = float(target_seg.get("end", 0.0))
+
+        if start <= pos <= end:
+            split_time = pos
+            if not (start + 0.2 <= split_time <= end - 0.2):
+                TOASTS.warn("Vị trí con trỏ phát quá sát đầu hoặc cuối câu (tối thiểu 0.2s).")
+                return
+        else:
+            split_time = round((start + end) / 2.0, 3)
+
+        if not (start + 0.2 <= split_time <= end - 0.2):
+            TOASTS.warn("Câu này quá ngắn (dưới 0.4s), không thể tách tiếp.")
+            return
+
+        self._undo.push(SplitSegmentCommand(self, seg_id, split_time))
+        TOASTS.info(f"Đã tách câu {seg_id} tại {split_time:.2f}s.")
+
+    def merge_current_segment(self) -> None:
+        """Gộp câu đang chọn hoặc câu dưới con trỏ phát với câu liền sau (Ctrl+J)."""
+        if not self._work_dir or not self._segments:
+            return
+        selected_id = self.subtitles.selected_id()
+        if selected_id <= 0:
+            pos = self.player.position()
+            for seg in self._segments:
+                if float(seg.get("start", 0.0)) <= pos <= float(seg.get("end", 0.0)):
+                    selected_id = int(seg.get("id", 0))
+                    break
+        if selected_id <= 0:
+            TOASTS.warn("Vui lòng chọn một câu hoặc đặt con trỏ phát vào câu cần gộp.")
+            return
+        self._merge_with_next(selected_id)
+
     def save_now(self) -> None:
         """Lưu ngay, dùng cho phím tắt Ctrl+S."""
         self._save_timer.stop()

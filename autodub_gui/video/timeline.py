@@ -804,8 +804,7 @@ class Timeline(QWidget):
         self.zoom_slider.setRange(int(MIN_ZOOM * 10), int(MAX_ZOOM * 10))
         self.zoom_slider.setValue(int(MIN_ZOOM * 10))
         self.zoom_slider.setToolTip("Phóng to hoặc thu nhỏ dải thời gian")
-        self.zoom_slider.valueChanged.connect(
-            lambda v: self.canvas.set_zoom(v / 10))
+        self.zoom_slider.valueChanged.connect(self._on_slider_changed)
         row.addWidget(self.zoom_slider, 1)
 
         for icon, tip, handler in (
@@ -823,6 +822,10 @@ class Timeline(QWidget):
             f"background: transparent;")
         row.addWidget(self.zoom_label)
         return bar
+
+    def _on_slider_changed(self, value: int) -> None:
+        self.canvas.set_zoom(value / 10.0)
+        self.zoom_label.setText(f"{value / 10.0:.1f}x")
 
     def _zoom_in(self) -> None:
         self.canvas.zoom_in()
