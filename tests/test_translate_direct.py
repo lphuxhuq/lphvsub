@@ -65,7 +65,7 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
 
     keys_used = set()
 
-    def _mock_call(self, system_instruction, user_prompt, preferred_key=None, max_retries=4):
+    def _mock_call(self, system_instruction, user_prompt, preferred_key=None, max_retries=4, **kwargs):
         if preferred_key:
             keys_used.add(preferred_key)
         # Trích xuất id từ prompt
@@ -75,6 +75,7 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
             return json.dumps([{"id": item["id"], "text_vi": f"Dịch câu {item['id']}"} for item in items])
         except Exception:
             return json.dumps([])
+
 
     monkeypatch.setattr(GeminiDirectClient, "call_ai", _mock_call)
 
@@ -220,3 +221,25 @@ def test_get_direct_client_passes_thinking_setting():
     client_off, _ = get_direct_client(Settings(
         gemini_api_key="AIzaSyTestKey123"))
     assert client_off.thinking is False
+
+
+def test_response_schema_in_gemini_payload():
+    from autodub.text.translate_direct import GeminiDirectClient
+    client = GeminiDirectClient("k1", model="gemini-2.5-flash")
+    captured = {}
+
+    class _Sess:
+        def post(self, url, params=None, headers=None, json=None, timeout=None):
+            captured["payload"] = json
+            return _FakeResp()
+
+    client.session = _Sess()
+    schema = {
+        "type": "ARRAY",
+        "items": {"type": "OBJECT", "properties": {"id": {"type": "INTEGER"}}},
+    }
+    client.call_ai("sys", "prompt", response_schema=schema)
+    cfg = captured["payload"]["generationConfig"]
+    assert cfg["responseMimeType"] == "application/json"
+    assert cfg["responseSchema"] == schema
+

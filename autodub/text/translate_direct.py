@@ -288,21 +288,26 @@ class GeminiDirectClient:
         user_prompt: str,
         preferred_key: Optional[str] = None,
         max_retries: int = 4,
+        response_schema: Optional[dict] = None,
     ) -> str:
         models = [self.model] + [m for m in _FALLBACK_GEMINI_MODELS if m != self.model]
         model_idx = 0
         current_key = preferred_key or self.get_key()
+        include_schema = bool(response_schema)
 
         for attempt in range(max_retries):
             KEY_LIMITER.acquire(current_key)
             current_model = models[model_idx]
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent"
 
-            gen_cfg = {
+            gen_cfg: dict[str, Any] = {
                 "temperature": 0.3,
                 "responseMimeType": "application/json",
                 "maxOutputTokens": 16384,
             }
+            if include_schema and response_schema:
+                gen_cfg["responseSchema"] = response_schema
+
             # Tắt thinking cho model 2.5 flash: dịch theo schema JSON không
             # cần "suy nghĩ" — chênh lệch là hàng chục giây mỗi call. Model
             # 1.5 từ chối field lạ (400), 2.5-pro không cho tắt (floor 128).
@@ -353,6 +358,11 @@ class GeminiDirectClient:
                     logger.warning(f"Lỗi đọc dữ liệu từ Gemini: {e}")
 
             err_text = resp.text[:300]
+            if resp.status_code == 400 and include_schema:
+                logger.warning(f"Model {current_model} từ chối responseSchema (400), thử lại không kèm schema...")
+                include_schema = False
+                continue
+
             if resp.status_code == 401:
                 masked = f"...{current_key[-6:]}" if len(current_key) > 6 else "***"
                 logger.error(f"Khóa API Gemini không hợp lệ ({masked}): HTTP 401")
@@ -378,6 +388,7 @@ class GeminiDirectClient:
             time.sleep(2.0 * (attempt + 1))
 
         raise TranslateError(f"Không thể gọi Gemini API sau {max_retries} lần thử: HTTP {resp.status_code} - {err_text}")
+
 
 
 class OpenAICompatDirectClient:
@@ -427,6 +438,8 @@ class OpenAICompatDirectClient:
         user_prompt: str,
         preferred_key: Optional[str] = None,
         max_retries: int = 6,
+        response_format: Optional[dict] = None,
+        response_schema: Optional[dict] = None,
     ) -> str:
         current_key = preferred_key or self.get_key()
         # Fallback model nếu model chính bị nghẽn trên HHTech proxy
@@ -436,6 +449,7 @@ class OpenAICompatDirectClient:
                 if alt not in fallback_models:
                     fallback_models.append(alt)
 
+        include_fmt = bool(response_format)
         for attempt in range(max_retries):
             KEY_LIMITER.acquire(current_key)
             current_model = fallback_models[attempt % len(fallback_models)]
@@ -448,7 +462,7 @@ class OpenAICompatDirectClient:
                 "Content-Type": "application/json",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             }
-            payload = {
+            payload: dict[str, Any] = {
                 "model": current_model,
                 "messages": [
                     {"role": "system", "content": system_instruction},
@@ -458,6 +472,8 @@ class OpenAICompatDirectClient:
                 "max_tokens": 1500,
                 "stream": True,  # Stream để không bị timeout giữa chừng khi proxy bận
             }
+            if include_fmt and response_format:
+                payload["response_format"] = response_format
 
             _t_req = time.time()
             try:
@@ -475,6 +491,12 @@ class OpenAICompatDirectClient:
                 self.session = requests.Session()
                 time.sleep(1.0 * (attempt + 1))
                 continue
+
+            if resp.status_code == 400 and include_fmt:
+                logger.warning(f"Model {current_model} từ chối response_format (400), thử lại không kèm format...")
+                include_fmt = False
+                continue
+
 
             if resp.status_code != 200:
                 err_text = resp.text[:300]
@@ -699,6 +721,18 @@ def translate_segments_direct(
     if reporter and completed_count > 0:
         reporter.emit("translate", "progress", detail=f"{completed_count}/{len(segments)} câu")
 
+    batch_schema = {
+        "type": "ARRAY",
+        "items": {
+            "type": "OBJECT",
+            "properties": {
+                "id": {"type": "INTEGER"},
+                target.text_field: {"type": "STRING"},
+            },
+            "required": ["id", target.text_field],
+        },
+    }
+
     def _worker(b_idx: int, batch: List[dict], key: str):
         if reporter:
             reporter.check_cancelled()
@@ -718,7 +752,12 @@ def translate_segments_direct(
         for try_i in range(3):
             try:
                 cur_key = key if try_i == 0 else client.get_key()
-                raw_reply = client.call_ai(system_prompt, user_prompt, preferred_key=cur_key)
+                raw_reply = client.call_ai(
+                    system_prompt,
+                    user_prompt,
+                    preferred_key=cur_key,
+                    response_schema=batch_schema,
+                )
                 translated_items = parse_response_segments(raw_reply, text_field=target.text_field)
                 if translated_items:
                     break
@@ -735,7 +774,7 @@ def translate_segments_direct(
                 try:
                     s_payload = [payload_segment(s, cps_budget=cps)]
                     s_prompt = f"Dịch câu thoại sau sang {target.name} ({target.text_field}):\n{json.dumps(s_payload, ensure_ascii=False)}"
-                    s_reply = client.call_ai(system_prompt, s_prompt)
+                    s_reply = client.call_ai(system_prompt, s_prompt, response_schema=batch_schema)
                     return parse_response_segments(s_reply, text_field=target.text_field) or []
                 except Exception as s_err:
                     logger.warning(f"  ✗ Dịch câu #{s['id']} thất bại: {s_err}")
@@ -755,7 +794,7 @@ def translate_segments_direct(
                 try:
                     s_payload = [payload_segment(s, cps_budget=cps)]
                     s_prompt = f"Dịch câu thoại sau sang {target.name} ({target.text_field}), không để lại chữ Hán:\n{json.dumps(s_payload, ensure_ascii=False)}"
-                    s_reply = client.call_ai(system_prompt, s_prompt)
+                    s_reply = client.call_ai(system_prompt, s_prompt, response_schema=batch_schema)
                     s_items = parse_response_segments(s_reply, text_field=target.text_field)
                     if s_items and target.text_field in s_items[0]:
                         cand = s_items[0][target.text_field]
@@ -763,6 +802,7 @@ def translate_segments_direct(
                             txt = cand
                 except Exception as s_err:
                     logger.warning(f"  ✗ Dịch bù câu #{sid} thất bại: {s_err}")
+
             if not txt:
                 txt = s.get("text", "")
             new_seg = dict(s)

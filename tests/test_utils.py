@@ -1,8 +1,9 @@
 import os
 import logging
 from autodub.utils import (
-    setup_logging, ensure_dir, format_timestamp, seg_wav_path,
+    setup_logging, ensure_dir, format_timestamp, seg_wav_path, ffmpeg_escape_path,
 )
+
 
 
 def test_setup_logging_returns_logger():
@@ -56,3 +57,21 @@ def test_seg_wav_path_prefers_new_name_when_both_exist(tmp_path):
     (tmp_path / "seg_007.wav").write_bytes(b"x")
     (tmp_path / "seg_00007.wav").write_bytes(b"x")
     assert seg_wav_path(str(tmp_path), 7) == str(tmp_path / "seg_00007.wav")
+
+
+def test_ffmpeg_escape_path_empty():
+    assert ffmpeg_escape_path("") == ""
+    assert ffmpeg_escape_path(None) == ""
+
+
+def test_ffmpeg_escape_path_windows_drive():
+    path = r"C:\Users\Admin\Video\sub.srt"
+    expected = "C\\:/Users/Admin/Video/sub.srt"
+    assert ffmpeg_escape_path(path) == expected
+
+
+def test_ffmpeg_escape_path_single_quotes():
+    path = r"D:\Project\O'Brien's Video\test.srt"
+    expected = r"D\:/Project/O'\''Brien'\''s Video/test.srt"
+    assert ffmpeg_escape_path(path) == expected
+

@@ -196,3 +196,20 @@ def format_eta(seconds: float | None) -> str:
         return f"{m}m {s:02d}s" if s > 0 else f"{m}m"
     h, m = divmod(m, 60)
     return f"{h}h {m:02d}m"
+
+
+def ffmpeg_escape_path(path: str) -> str:
+    """Thoát đường dẫn an toàn để dùng làm giá trị trong bộ lọc (filtergraph) FFmpeg.
+
+    Trên Windows và các hệ điều hành:
+    1. Đổi dấu gạch chéo ngược ``\\`` thành ``/`` (FFmpeg chấp nhận và tránh bị hiểu là ký tự escape).
+    2. Thoát dấu hai chấm ``:`` của ổ đĩa (vd: ``C\\:``) để FFmpeg không nhầm với dấu phân cách tham số bộ lọc.
+    3. Thoát dấu nháy đơn ``'`` bằng ``'\\''`` (đóng nháy, chèn nháy thoát, mở lại nháy) để an toàn khi bọc trong ``'...'``.
+    """
+    if not path:
+        return ""
+    escaped = str(path).replace("\\", "/")
+    escaped = escaped.replace(":", "\\:")
+    escaped = escaped.replace("'", r"'\''")
+    return escaped
+

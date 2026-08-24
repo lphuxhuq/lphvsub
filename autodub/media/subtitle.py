@@ -156,17 +156,12 @@ def safe_font_name(font: str) -> str:
 def escape_subtitles_path(path: str) -> str:
     """Thoát đường dẫn để dùng làm giá trị của bộ lọc ``subtitles=``.
 
-    Trên Windows cần ba phép đổi: dấu ``\\`` thành ``/`` (ffmpeg chấp nhận và
-    chúng không còn là ký tự thoát), dấu hai chấm của ổ đĩa được thoát để bộ
-    đọc bộ lọc không hiểu nhầm là dấu ngăn tùy chọn, và dấu nháy đơn dùng
-    cách nối ``'\\''`` (đóng nháy, nháy đã thoát, mở lại) vì bên trong nháy
-    đơn của ffmpeg thì dấu ``\\`` là ký tự thường — viết ``\\'`` sẽ KHÔNG
-    thoát được dấu nháy và đường dẫn kiểu ``O'Brien`` làm hỏng cả filtergraph.
+    Ủy quyền cho :func:`autodub.utils.ffmpeg_escape_path` để dùng chung quy tắc
+    thoát đường dẫn cho mọi bộ lọc FFmpeg.
     """
-    escaped = path.replace("\\", "/")
-    escaped = escaped.replace(":", "\\:")
-    escaped = escaped.replace("'", r"'\''")
-    return escaped
+    from autodub.utils import ffmpeg_escape_path
+    return ffmpeg_escape_path(path)
+
 
 
 def build_force_style(style: dict | None = None) -> str:
