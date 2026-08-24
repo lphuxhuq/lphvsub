@@ -176,3 +176,22 @@ def test_resolve_filepath_direct_and_multipart(tmp_path):
     }
     resolved_p1 = _resolve_filepath(info_p1, out_dir)
     assert resolved_p1 == p1_file
+
+
+def test_update_ytdlp_success(monkeypatch):
+    from autodub.media.downloader import update_ytdlp
+    class Ok:
+        returncode = 0
+        stderr = ""
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: Ok())
+    assert update_ytdlp() is True
+
+
+def test_update_ytdlp_failure(monkeypatch):
+    from autodub.media.downloader import update_ytdlp
+    class Bad:
+        returncode = 1
+        stderr = "error"
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: Bad())
+    assert update_ytdlp() is False
+

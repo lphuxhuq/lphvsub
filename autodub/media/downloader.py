@@ -183,6 +183,27 @@ def _get_optimized_opts(
     return opts
 
 
+def update_ytdlp() -> bool:
+    """Tự động cập nhật yt-dlp lên phiên bản mới nhất qua pip."""
+    import subprocess
+    import sys
+    logger.info("Đang kiểm tra và nâng cấp yt-dlp lên phiên bản mới nhất...")
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        res = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+            capture_output=True, text=True, timeout=60,
+            creationflags=flags,
+        )
+        if res.returncode == 0:
+            logger.info("Đã cập nhật yt-dlp thành công.")
+            return True
+        logger.warning(f"Cập nhật yt-dlp không thành công: {res.stderr[:200]}")
+    except Exception as e:
+        logger.warning(f"Lỗi khi cập nhật yt-dlp: {e}")
+    return False
+
+
 _MAX_OUTER_RETRIES = 3
 
 
@@ -235,6 +256,10 @@ def download_video(url: str, output_dir: str) -> str:
         except Exception as e:
             last_error = e
             logger.warning(f"Lần thử {attempt}/{_MAX_OUTER_RETRIES} thất bại: {e}")
+            if attempt == _MAX_OUTER_RETRIES - 1:
+                # Thử tự cập nhật yt-dlp trước lượt thử cuối cùng nếu lỗi do extractor cũ
+                update_ytdlp()
+
 
     if last_error is not None:
         raise RuntimeError(

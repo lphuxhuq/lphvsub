@@ -210,12 +210,63 @@ def _to_pixels(region: dict, video_w: int, video_h: int) -> tuple[int, int, int,
     return x, y, w - (w % 2), h - (h % 2)
 
 
+def build_aspect_ratio_filter(
+    aspect_preset: str | None,
+    video_w: int,
+    video_h: int,
+) -> tuple[str, int, int] | None:
+    """Tạo filtergraph đổi tỷ lệ khung hình với nền làm mờ (blur-pad) nếu cần.
+
+    Trả về (filter_str, target_w, target_h) hoặc None nếu giữ nguyên tỷ lệ gốc.
+    """
+    if not aspect_preset or aspect_preset in ("original", "none"):
+        return None
+
+    preset = aspect_preset.strip().lower()
+    if preset in ("tiktok_9_16", "9:16", "vertical"):
+        target_ratio = 9.0 / 16.0
+    elif preset in ("youtube_16_9", "16:9", "horizontal"):
+        target_ratio = 16.0 / 9.0
+    elif preset in ("square_1_1", "1:1", "square"):
+        target_ratio = 1.0
+    else:
+        return None
+
+    curr_ratio = float(video_w) / float(video_h)
+    if abs(curr_ratio - target_ratio) < 0.02:
+        return None
+
+    if target_ratio < 1.0:  # 9:16
+        th = video_h if video_h >= video_w else int(round(video_w / target_ratio))
+        th = th + (th % 2)
+        tw = int(round(th * target_ratio))
+        tw = tw + (tw % 2)
+    elif target_ratio > 1.0:  # 16:9
+        tw = video_w if video_w >= video_h else int(round(video_h * target_ratio))
+        tw = tw + (tw % 2)
+        th = int(round(tw / target_ratio))
+        th = th + (th % 2)
+    else:  # 1:1
+        dim = max(video_w, video_h)
+        dim = dim + (dim % 2)
+        tw = th = dim
+
+    flt = (
+        f"split[asp_bg][asp_fg];"
+        f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=25:5[asp_bgb];"
+        f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
+        f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2"
+    )
+    return flt, tw, th
+
+
 def build_filter_complex(
     blur_regions: list[dict] | None,
     video_w: int,
     video_h: int,
     srt_path: str | None = None,
     style: dict | None = None,
+    aspect_preset: str | None = None,
 ) -> str | None:
     """Dựng chuỗi ``-filter_complex``, hoặc None khi không cần lọc gì.
 
@@ -224,11 +275,17 @@ def build_filter_complex(
     vẽ sau cùng nên luôn nằm trên vùng đã che. Chuỗi luôn kết ở ``[vout]``.
     """
     regions = list(blur_regions or [])
-    if not regions and not srt_path:
+    asp_res = build_aspect_ratio_filter(aspect_preset, video_w, video_h)
+    if not regions and not srt_path and not asp_res:
         return None
 
     parts: list[str] = []
     current = "0:v"
+
+    if asp_res:
+        asp_flt, video_w, video_h = asp_res
+        parts.append(f"[{current}]{asp_flt}[vasp]")
+        current = "vasp"
 
     for i, region in enumerate(regions):
         x, y, w, h = _to_pixels(region, video_w, video_h)
@@ -266,3 +323,4 @@ def build_filter_complex(
         parts.append(f"[{current}]null[vout]")
 
     return ";".join(parts)
+

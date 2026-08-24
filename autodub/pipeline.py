@@ -94,8 +94,10 @@ class DubRequest:
     # cover hardcoded source captions. Any region forces a video re-encode.
     blur_regions: list[dict] = field(default_factory=list)
     subtitle_style: dict | None = None  # libass styling; None → Settings default
+    aspect_preset: str | None = None   # "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
 
     # The dub target is always Vietnamese now.
+
     target: str = "vi"
 
     #: Luồng wizard: giữ chỗ Vox sau ASR, chạy tới hết ghép audio rồi DỪNG
@@ -948,7 +950,9 @@ class DubPipeline:
                 subtitle_lang=target.iso639_2,
                 speed=deferred_speed[0] if deferred_speed else None,
                 fps=deferred_speed[1] if deferred_speed else None,
+                aspect_preset=req.aspect_preset or getattr(settings, "video_aspect_preset", "original"),
             )
+
             rep.emit("merge_video", "done", detail=dubbed_video_path)
         else:
             # Luồng wizard dừng trước khi sinh phụ đề — xuất chỉ-âm-thanh

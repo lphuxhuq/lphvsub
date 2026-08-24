@@ -230,3 +230,24 @@ def test_vieneu_workers_capped_by_cores(monkeypatch):
     # 4 nhân → tối đa 2 tiến trình dù RAM dư
     monkeypatch.setattr("autodub.config.os.cpu_count", lambda: 4)
     assert Settings.load().vieneu_max_workers == 2
+
+
+def test_resolved_whisper_model_with_vram():
+    s = Settings(whisper_model="auto")
+    # CPU
+    assert s.resolved_whisper_model(cuda_available=False) == "medium"
+    # GPU VRAM cao
+    assert s.resolved_whisper_model(cuda_available=True, vram_gb=8.0) == "large-v3"
+    # GPU VRAM thấp (vd: GTX 1650 4GB -> free 2.5GB)
+    assert s.resolved_whisper_model(cuda_available=True, vram_gb=2.5) == "medium"
+    # GPU VRAM cực thấp (< 2.0GB)
+    assert s.resolved_whisper_model(cuda_available=True, vram_gb=1.2) == "small"
+    # Explicit model beats auto
+    s_custom = Settings(whisper_model="tiny")
+    assert s_custom.resolved_whisper_model(cuda_available=True, vram_gb=8.0) == "tiny"
+
+
+def test_video_aspect_preset_setting():
+    s = Settings(video_aspect_preset="tiktok_9_16")
+    assert s.video_aspect_preset == "tiktok_9_16"
+

@@ -26,3 +26,14 @@ def test_posix_fallback_math(monkeypatch):
     assert sysinfo.total_ram_gb() == 8.0
     assert sysinfo.available_ram_gb() == 4.0
     sysinfo.total_ram_gb.cache_clear()
+
+
+def test_vram_readings_mock(monkeypatch):
+    monkeypatch.setattr(sysinfo, "gpu_vram_status_gb", lambda: (6.0, 4.2))
+    assert sysinfo.available_vram_gb() == 4.2
+
+
+def test_vram_readings_none(monkeypatch):
+    monkeypatch.setattr(sysinfo, "gpu_vram_status_gb", lambda: None)
+    assert sysinfo.available_vram_gb() is None
+

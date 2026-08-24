@@ -342,6 +342,10 @@ class Settings:
     # Danh sách vùng làm mờ/che phụ đề mặc định (dạng chuỗi JSON)
     blur_regions: str = ""
 
+    # Bố cục tỷ lệ khung hình xuất video: "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
+    video_aspect_preset: str = "original"
+
+
     # ------------------------------------------------------------------ #
 
     @classmethod
@@ -678,13 +682,18 @@ class Settings:
             return self.vietnamese_output_dir
         return os.path.join(self.output_dir, "VN")
 
-    def resolved_whisper_model(self, cuda_available: bool) -> str:
-        """Tên model Whisper thật khi chọn "auto" (large-v3 GPU / medium CPU).
+    def resolved_whisper_model(self, cuda_available: bool, vram_gb: float | None = None) -> str:
+        """Tên model Whisper thật khi chọn "auto" (large-v3 GPU / medium CPU / small GPU ít VRAM).
 
-        large-v3 int8 cần khoảng 3 GB VRAM — vẫn vừa card 6 GB vì ASR chạy
-        một mình trên card (Demucs xong, giọng đọc chạy CPU). Trên CPU thì
-        large-v3 chậm gấp nhiều lần medium nên "auto" chỉ nâng khi có CUDA.
+        large-v3 int8/float16 cần khoảng 3-4 GB VRAM. Nếu card đồ họa có ít hơn
+        3.5 GB VRAM khả dụng, tự động hạ cấp xuống "medium" hoặc "small" để tránh
+        lỗi CUDA Out-Of-Memory (OOM).
         """
         if self.whisper_model.strip().lower() != "auto":
             return self.whisper_model
-        return "large-v3" if cuda_available else "medium"
+        if not cuda_available:
+            return "medium"
+        if vram_gb is not None and vram_gb < 3.5:
+            return "medium" if vram_gb >= 2.0 else "small"
+        return "large-v3"
+

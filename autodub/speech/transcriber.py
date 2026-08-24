@@ -65,8 +65,8 @@ def asr_will_use_gpu(settings: Settings, language: str) -> bool:
 def _load_whisper_model(model_name: str, settings: Settings):
     """Load faster-whisper on GPU when possible, falling back to CPU.
 
-    ``model_name`` may be "auto": large-v3 when CUDA works (ASR runs
-    GPU-exclusive so the ~3 GB fits even on 6 GB cards), medium on CPU —
+    ``model_name`` may be "auto": large-v3 when CUDA works and VRAM >= 3.5GB
+    (ASR runs GPU-exclusive), medium when VRAM is lower or on CPU —
     the accuracy gap on Chinese sources is the single biggest translation-
     quality lever upstream of the translator itself.
 
@@ -76,7 +76,11 @@ def _load_whisper_model(model_name: str, settings: Settings):
     from faster_whisper import WhisperModel
 
     if _enable_cuda_dlls():
-        resolved = settings.resolved_whisper_model(cuda_available=True)
+        from autodub.sysinfo import available_vram_gb
+        free_vram = available_vram_gb()
+        if free_vram is not None:
+            logger.info(f"VRAM khả dụng trước khi nạp Whisper: {free_vram:.1f} GB")
+        resolved = settings.resolved_whisper_model(cuda_available=True, vram_gb=free_vram)
         # GPU_LOCK chỉ quanh lúc NẠP: đây là đoạn xin VRAM, cũng là chỗ chen
         # với Demucs thì OOM. Giữ lock suốt lượt nghe sẽ chặn Demucs hàng chục
         # phút mà không cần thiết. Xem autodub/resources.py.
@@ -101,19 +105,10 @@ def _load_whisper_model(model_name: str, settings: Settings):
 
 def _gpu_total_vram_gb() -> float:
     """Tổng VRAM (GB) của card lớn nhất; 0.0 nếu không đọc được."""
-    import subprocess
+    from autodub.sysinfo import gpu_vram_status_gb
+    st = gpu_vram_status_gb()
+    return st[0] if st is not None else 0.0
 
-    try:
-        out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if out.returncode == 0 and out.stdout.strip():
-            return max(float(x) for x in out.stdout.split()) / 1024.0
-    except Exception:
-        pass
-    return 0.0
 
 
 class WhisperCache:

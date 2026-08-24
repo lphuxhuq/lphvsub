@@ -188,3 +188,17 @@ def test_probe_dimensions_raises_on_bad_output(monkeypatch):
     monkeypatch.setattr(video_mod.subprocess, "run", lambda cmd, **kw: Ok())
     with pytest.raises(RuntimeError, match="Could not read dimensions"):
         video_mod.probe_dimensions("x.mp4")
+
+
+def test_aspect_preset_forces_reencode(paths, captured):
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        aspect_preset="tiktok_9_16",
+    )
+    cmd = captured[0]
+    assert "-filter_complex" in cmd
+    fc = get_opt(cmd, "-filter_complex")
+    assert "boxblur" in fc
+    assert "force_original_aspect_ratio=increase" in fc
+    assert get_opt(cmd, "-c:v") == "libx264"
+

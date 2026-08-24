@@ -74,3 +74,44 @@ def available_ram_gb() -> float | None:
     if status is None:
         return None
     return status[1] / _BYTES_PER_GB
+
+
+def gpu_vram_status_gb() -> tuple[float, float] | None:
+    """(total_vram_gb, free_vram_gb) từ PyTorch CUDA hoặc nvidia-smi, hoặc None."""
+    # 1. Thử qua PyTorch nếu torch có sẵn và hỗ trợ CUDA
+    try:
+        import torch
+        if torch.cuda.is_available():
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            return total_bytes / _BYTES_PER_GB, free_bytes / _BYTES_PER_GB
+    except Exception:
+        pass
+
+    # 2. Thử qua nvidia-smi trên Windows / Linux
+    try:
+        import subprocess
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=flags,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            lines = out.stdout.strip().splitlines()
+            if lines:
+                parts = [float(x.strip()) for x in lines[0].split(",")]
+                if len(parts) >= 2:
+                    total_mb, free_mb = parts[0], parts[1]
+                    return total_mb / 1024.0, free_mb / 1024.0
+    except Exception:
+        pass
+
+    return None
+
+
+def available_vram_gb() -> float | None:
+    """VRAM khả dụng (GB); None nếu máy không có card NVIDIA / CUDA."""
+    status = gpu_vram_status_gb()
+    return status[1] if status is not None else None
+

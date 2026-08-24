@@ -199,8 +199,10 @@ def merge_video(
     subtitle_lang: str = "und",
     speed: float | None = None,
     fps: str | None = None,
+    aspect_preset: str | None = None,
 ) -> str:
-    """Mux the dubbed audio into the video, optionally adding subtitles/blur.
+
+    """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect conversion.
 
     ``subtitle_mode``:
 
@@ -213,12 +215,8 @@ def merge_video(
     optional ``t_start``/``t_end``). Any blur forces a re-encode, so it is
     applied in the same pass as burned-in subtitles.
 
-    ``speed`` (< 1.0) slows the video INSIDE the same encode pass
-    (``setpts=PTS/speed,fps=<fps>`` prepended to the filtergraph) — the
-    fused path for ``VIDEO_SPEED`` when a re-encode happens anyway. Callers
-    must pass blur/subtitle timestamps already rescaled to the slowed
-    timeline. Requires ``fps`` (ffprobe rational); forces a re-encode even
-    without subs/blur.
+    ``aspect_preset`` converts the canvas ratio with blurred background padding
+    (e.g., "tiktok_9_16", "youtube_16_9", "square_1_1"). Forces a re-encode.
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -236,11 +234,12 @@ def merge_video(
 
     burn_srt = srt_path if subtitle_mode == "burn" else None
     filter_complex = None
-    if blur_regions or burn_srt:
+    if blur_regions or burn_srt or (aspect_preset and aspect_preset not in ("original", "none")):
         width, height = probe_dimensions(video_path)
         filter_complex = build_filter_complex(
-            blur_regions, width, height, burn_srt, subtitle_style
+            blur_regions, width, height, burn_srt, subtitle_style, aspect_preset=aspect_preset
         )
+
 
     apply_speed = speed is not None and speed < 0.999
     if apply_speed:
