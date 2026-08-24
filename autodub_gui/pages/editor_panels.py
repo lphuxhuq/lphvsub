@@ -108,6 +108,14 @@ class SegmentRow(QWidget):
             f"color: {tokens.PRIMARY}; font-size: {tokens.FS_META}px; "
             f"font-family: {tokens.FONT_MONO}; background: transparent;")
         head.addWidget(self.time_label)
+        self._speaker_id = segment.get("speaker_id")
+        if self._speaker_id is not None:
+            self._spk_badge = QLabel(f"Người nói {self._speaker_id}")
+            self._spk_badge.setStyleSheet(
+                f"color: {tokens.PRIMARY}; font-size: {tokens.FS_BADGE}px; "
+                f"background: {tokens.BG_SELECTED_SOFT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
+                f"border-radius: 6px; padding: 0 4px; font-weight: 500;")
+            head.addWidget(self._spk_badge)
         head.addStretch()
         # Chip giọng riêng — chỉ hiện khi câu này có giọng khác giọng chung.
         from PySide6.QtWidgets import QPushButton
@@ -130,6 +138,7 @@ class SegmentRow(QWidget):
             f"background: transparent;")
         head.addWidget(self.index_label)
         root.addLayout(head)
+
 
         self.editor = self._text_box(str(segment.get(text_field, "")),
                                      tokens.TEXT_PRIMARY)
