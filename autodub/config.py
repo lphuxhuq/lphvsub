@@ -356,9 +356,12 @@ class Settings:
 
     # Danh sách vùng làm mờ/che phụ đề mặc định (dạng chuỗi JSON)
     blur_regions: str = ""
+    # Tự động quét và che phụ đề cứng gốc bằng thị giác máy tính
+    auto_mask_hardsub: bool = False
 
     # Bố cục tỷ lệ khung hình xuất video: "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
     video_aspect_preset: str = "original"
+
 
 
     # ------------------------------------------------------------------ #
@@ -407,8 +410,12 @@ class Settings:
             """Mục nhiều dòng, lưu trên một dòng .env với ký tự \\n."""
             return env(key).replace("\\n", "\n").strip()
 
-        def env_bool(key: str, default: str) -> bool:
-            return env(key, default).strip().lower() in ("1", "true", "yes")
+        def env_bool(key: str, default: str | bool = "false") -> bool:
+            val = env(key, "true" if default is True else ("false" if default is False else str(default)))
+            if isinstance(val, bool):
+                return val
+            return str(val).strip().lower() in ("1", "true", "yes")
+
 
         # Mức chất lượng: nền mặc định cho các mục chi tiết. Biến môi trường
         # tường minh vẫn thắng (env() đọc chúng trước khi dùng tới preset).
@@ -566,7 +573,9 @@ class Settings:
             karaoke_alignment=env_bool("KARAOKE_ALIGNMENT",
                                        _p["karaoke_alignment"]),
             blur_regions=env("BLUR_REGIONS", "").strip(),
+            auto_mask_hardsub=env_bool("AUTO_MASK_HARDSUB", False),
         )
+
 
     def blur_regions_list(self) -> list[dict]:
         """Danh sách vùng làm mờ phụ đề mặc định."""

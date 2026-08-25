@@ -506,11 +506,20 @@ def resolve_existing_background(
             original = data_path(work_dir, name)
             if os.path.exists(original):
                 return original, bg_duck_db
-        return None, bg_duck_db
     return None, 0.0
 
 
+def auto_detect_hardsub_regions(work_dir: str) -> list[dict]:
+    """Tự động quét và trả về danh sách vùng phụ đề cứng cho video trong thư mục dự án."""
+    video_path = _find_source_video(work_dir)
+    if not video_path or not os.path.exists(video_path):
+        return []
+    from autodub.media.hardsub_detector import detect_hardsub_regions
+    return detect_hardsub_regions(video_path)
+
+
 def _render_options(state: EditorState, settings: Settings,
+
                     subtitle_mode: str | None, blur_regions: list[dict] | None,
                     subtitle_style: dict | None) -> tuple[str, list[dict], dict]:
     """Chốt bộ tùy chọn xuất video và ghi lại vào ``render_opts.json``.

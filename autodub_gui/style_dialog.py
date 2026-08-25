@@ -601,12 +601,18 @@ class StyleDialog(QDialog):
         b.setContentsMargins(0, 0, 0, 0)
         b.setSpacing(6)
         panel_l.addLayout(b)
+        self.btn_auto_detect = QPushButton("Dò tự động")
+        self.btn_auto_detect.setToolTip("Quét video tự động tìm và khoanh vùng phụ đề cứng gốc")
+
+        self.btn_auto_detect.clicked.connect(self._on_auto_detect_clicked)
         self.btn_undo = QPushButton("Xoá vùng cuối")
         self.btn_undo.clicked.connect(self.canvas.clear_last)
         self.btn_clear = QPushButton("Xoá tất cả")
         self.btn_clear.clicked.connect(self.canvas.clear_all)
+        b.addWidget(self.btn_auto_detect)
         b.addWidget(self.btn_undo)
         b.addWidget(self.btn_clear)
+
         panel_l.addStretch()
         panel_scroll.setWidget(panel)
         body.addWidget(panel_scroll, 4)
@@ -668,6 +674,42 @@ class StyleDialog(QDialog):
         """Hiện cảnh báo nhẹ; không đóng dialog — phụ đề vẫn chỉnh được."""
         from autodub_gui.ui.toast import TOASTS
         TOASTS.warn(f"Không lấy được frame video: {message}")
+
+    def _on_auto_detect_clicked(self) -> None:
+        """Tự động quét video để tìm dải phụ đề cứng gốc."""
+        if not self._video_path or not os.path.exists(self._video_path):
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Tự động dò phụ đề",
+                "Cần có tệp video nguồn trên máy để thực hiện quét tự động."
+            )
+            return
+
+        from autodub.media.hardsub_detector import detect_hardsub_regions
+        self.btn_auto_detect.setEnabled(False)
+        self.btn_auto_detect.setText("Đang dò...")
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+        try:
+            regs = detect_hardsub_regions(self._video_path)
+            if regs:
+                self.canvas.set_rects_from_normalized(regs)
+                from autodub_gui.ui.toast import TOASTS
+                TOASTS.info(f"Đã phát hiện {len(regs)} vùng phụ đề cứng.")
+            else:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self, "Tự động dò phụ đề",
+                    "Không phát hiện thấy dải phụ đề cứng cố định nào trong video."
+                )
+        except Exception as e:
+            from autodub_gui.ui.toast import TOASTS
+            TOASTS.warn(f"Lỗi khi quét phụ đề: {e}")
+        finally:
+            self.btn_auto_detect.setEnabled(True)
+            self.btn_auto_detect.setText("Dò tự động")
+
+
 
     # ------------------------------------------------------- controls ----- #
 

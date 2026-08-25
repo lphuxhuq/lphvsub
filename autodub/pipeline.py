@@ -101,8 +101,11 @@ class DubRequest:
     diarization_num_speakers: int | None = None
     diarization_max_speakers: int | None = None
     speaker_voices: dict[int, str] = field(default_factory=dict)
+    # Tự động quét và che phụ đề cứng gốc bằng thị giác máy tính
+    auto_mask_hardsub: bool = False
 
     # The dub target is always Vietnamese now.
+
 
 
     target: str = "vi"
@@ -953,6 +956,16 @@ class DubPipeline:
         dubbed_video_path = None
         if not req.skip_video:
             rep.check_cancelled()
+            if (req.auto_mask_hardsub or getattr(self.settings, "auto_mask_hardsub", False)) and not req.blur_regions and os.path.exists(video_path):
+                try:
+                    from autodub.media.hardsub_detector import detect_hardsub_regions
+                    detected = detect_hardsub_regions(video_path)
+                    if detected:
+                        req.blur_regions = detected
+                        logger.info(f"Auto Masking: Áp dụng {len(detected)} vùng che phụ đề cứng tự động.")
+                except Exception as e:
+                    logger.warning(f"Lỗi khi tự động quét phụ đề ({e}) — tiếp tục ghép video.")
+
             logger.info("=" * 60)
             logger.info("STEP 7: Creating dubbed video")
             logger.info("Đang xuất video hoàn chỉnh"
@@ -966,6 +979,7 @@ class DubPipeline:
                 "blur_regions": req.blur_regions,
                 "subtitle_style": subtitle_style,
             })
+
         else:
             # Chỉ xuất âm thanh: vẫn ghim kiểu phụ đề của LẦN CHẠY NÀY để
             # Trình chỉnh sửa mở lên thấy đúng lựa chọn, nhưng không đè
