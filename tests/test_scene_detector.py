@@ -34,3 +34,27 @@ def test_plan_voice_placements_with_scene_cuts():
     # Điểm kết thúc của câu phải trước hoặc tại scene cut
     dub_end = placements[0]["start"] + durations[0] / placements[0]["atempo"]
     assert dub_end <= 3.101
+
+
+def test_snap_to_scene_boundaries_left_and_right_edge():
+    from autodub.media.scene_detector import snap_to_scene_boundaries, find_prev_scene_boundary
+    cuts = [0.0, 5.0, 10.0, 15.0]
+
+    assert find_prev_scene_boundary(5.2, cuts) == 5.0
+    assert find_prev_scene_boundary(4.9, cuts) == 0.0
+
+    # 1. Left-Edge Snapping: ASR start = 4.75s (trước scene cut 5.0s 250ms), câu kéo dài tới 7.5s
+    s, e = snap_to_scene_boundaries(4.75, 7.50, cuts)
+    assert s == 5.02  # Đã snap lên sau scene cut
+    assert e == 7.50
+
+    # 2. Câu bình thường nằm giữa cảnh
+    s2, e2 = snap_to_scene_boundaries(5.30, 7.50, cuts)
+    assert s2 == 5.30
+    assert e2 == 7.50
+
+    # 3. Right-Edge Snapping: Câu kết thúc lúc 10.15s (tràn 150ms qua cut 10.0s)
+    s3, e3 = snap_to_scene_boundaries(8.00, 10.15, cuts)
+    assert s3 == 8.00
+    assert e3 == 9.98  # Đã clamp trước scene cut
+
