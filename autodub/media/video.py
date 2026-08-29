@@ -215,6 +215,7 @@ def merge_video(
     smart_flip: bool = False,
     micro_zoom: bool = False,
     color_filter: str = "none",
+    reframe_mode: str = "blur",
 ) -> str:
 
     """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
@@ -238,6 +239,7 @@ def merge_video(
     ``smart_flip`` mirrors base video horizontally without flipping subtitles/logo.
     ``micro_zoom`` slightly zooms (103%) and drifts camera to bypass Content ID.
     ``color_filter`` applies cinematic grading preset.
+    ``reframe_mode`` defines reframe layout (blur, top_split, center_crop).
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -278,6 +280,7 @@ def merge_video(
             smart_flip=smart_flip,
             micro_zoom=micro_zoom,
             color_filter=color_filter,
+            reframe_mode=reframe_mode,
         )
 
 

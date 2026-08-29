@@ -266,4 +266,32 @@ def test_build_filter_complex_with_micro_zoom_and_color_grading():
     assert graph.endswith("null[vout]")
 
 
+def test_build_aspect_ratio_filter_reframe_modes():
+    from autodub.media.subtitle import build_aspect_ratio_filter
+
+    # 1. Blur mode 9:16
+    res_blur = build_aspect_ratio_filter("tiktok_9_16", 1920, 1080, reframe_mode="blur")
+    assert res_blur is not None
+    flt_blur, tw, th = res_blur
+    assert "boxblur" in flt_blur
+    assert abs((tw / th) - (9.0 / 16.0)) < 0.02
+
+    # 2. Top-Split mode 9:16
+    res_top = build_aspect_ratio_filter("tiktok_9_16", 1920, 1080, reframe_mode="top_split")
+    assert res_top is not None
+    flt_top, tw_top, th_top = res_top
+    assert "overlay=(W-w)/2:H*0.12" in flt_top
+    assert abs((tw_top / th_top) - (9.0 / 16.0)) < 0.02
+
+    # 3. Center Crop mode 9:16
+    res_crop = build_aspect_ratio_filter("tiktok_9_16", 1920, 1080, reframe_mode="center_crop")
+    assert res_crop is not None
+    flt_crop, tw_crop, th_crop = res_crop
+    assert "crop=" in flt_crop
+    assert abs((tw_crop / th_crop) - (9.0 / 16.0)) < 0.02
+
+
+
+
+
 

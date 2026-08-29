@@ -214,8 +214,14 @@ def build_aspect_ratio_filter(
     aspect_preset: str | None,
     video_w: int,
     video_h: int,
+    reframe_mode: str = "blur",
 ) -> tuple[str, int, int] | None:
-    """Tạo filtergraph đổi tỷ lệ khung hình với nền làm mờ (blur-pad) nếu cần.
+    """Tạo filtergraph đổi tỷ lệ khung hình với các chế độ Reframe linh hoạt.
+
+    Các chế độ:
+    - 'blur': Nền làm mờ nghệ thuật + tối nhẹ và tăng bão hòa, video gốc ở giữa.
+    - 'top_split': Video gốc ở nửa trên (căn top ~12%), nửa dưới thoáng cho phụ đề lớn.
+    - 'center_crop': Phóng to vừa khít tỷ lệ đích và cắt chính giữa (Full canvas).
 
     Trả về (filter_str, target_w, target_h) hoặc None nếu giữ nguyên tỷ lệ gốc.
     """
@@ -223,7 +229,7 @@ def build_aspect_ratio_filter(
         return None
 
     preset = aspect_preset.strip().lower()
-    if preset in ("tiktok_9_16", "9:16", "vertical"):
+    if preset in ("tiktok_9_16", "9:16", "vertical", "shorts"):
         target_ratio = 9.0 / 16.0
     elif preset in ("youtube_16_9", "16:9", "horizontal"):
         target_ratio = 16.0 / 9.0
@@ -251,12 +257,28 @@ def build_aspect_ratio_filter(
         dim = dim + (dim % 2)
         tw = th = dim
 
-    flt = (
-        f"split[asp_bg][asp_fg];"
-        f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=25:5[asp_bgb];"
-        f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
-        f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2"
-    )
+    mode = (reframe_mode or "blur").strip().lower()
+
+    if mode in ("center_crop", "crop", "fill"):
+        # Phóng to vừa khít và cắt chính giữa
+        flt = f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th}"
+    elif mode in ("top_split", "top", "split"):
+        # Video ở nửa trên (căn top ~12% chiều cao), nền mờ tối ở sau
+        flt = (
+            f"split[asp_bg][asp_fg];"
+            f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=30:8,eq=brightness=-0.12:saturation=1.2[asp_bgb];"
+            f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
+            f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:H*0.12"
+        )
+    else:  # 'blur' (default)
+        # Nền mờ nghệ thuật cân đối ở giữa
+        flt = (
+            f"split[asp_bg][asp_fg];"
+            f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=30:8,eq=brightness=-0.08:saturation=1.15[asp_bgb];"
+            f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
+            f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2"
+        )
+
     return flt, tw, th
 
 
@@ -369,6 +391,7 @@ def build_filter_complex(
     smart_flip: bool = False,
     micro_zoom: bool = False,
     color_filter: str = "none",
+    reframe_mode: str = "blur",
 ) -> str | None:
     """Dựng chuỗi ``-filter_complex``, hoặc None khi không cần lọc gì.
 
@@ -376,14 +399,14 @@ def build_filter_complex(
     1. Lật gương thông minh video gốc (smart_flip)
     2. Zoom động & trượt camera vi mô (micro_zoom)
     3. Bộ lọc màu điện ảnh (color_filter)
-    4. Chuyển đổi tỷ lệ khung hình (aspect_preset)
+    4. Chuyển đổi tỷ lệ khung hình (aspect_preset) với reframe_mode
     5. Che/làm mờ các vùng phụ đề cũ (blur_regions)
     6. Chèn logo thương hiệu (logo_path)
     7. Chèn watermark chìm chuyển động (watermark_text)
     8. Ghi đè phụ đề mới (subtitles=...)
     """
     regions = list(blur_regions or [])
-    asp_res = build_aspect_ratio_filter(aspect_preset, video_w, video_h)
+    asp_res = build_aspect_ratio_filter(aspect_preset, video_w, video_h, reframe_mode=reframe_mode)
     has_logo = bool(logo_path and str(logo_path).strip())
     has_wm = bool(watermark_text and str(watermark_text).strip())
     c_flt = _build_color_filter(color_filter)
