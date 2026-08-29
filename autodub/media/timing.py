@@ -105,15 +105,28 @@ def plan_voice_placements(
     Render nằm ở :func:`apply_soft_timing`.
     """
     from autodub.media.voice_timing import _decide_tempo
-    from autodub.media.scene_detector import find_next_scene_boundary
+    from autodub.media.scene_detector import (find_next_scene_boundary,
+                                              find_prev_scene_boundary,
+                                              snap_to_scene_boundaries)
 
     rep = TimingReport(segments_total=len(segments))
     placements: list[dict] = []
     prev_end = float("-inf")
 
     def _natural(seg: dict) -> float:
-        t = float(seg.get("speech_start", seg.get("start", 0.0)) or 0.0)
-        return max(0.0, t - pre_roll_s)
+        raw_s = float(seg.get("speech_start", seg.get("start", 0.0)) or 0.0)
+        raw_e = float(seg.get("speech_end", seg.get("end", raw_s)) or raw_s)
+        if scene_cuts:
+            snap_s, _ = snap_to_scene_boundaries(raw_s, raw_e, scene_cuts)
+        else:
+            snap_s = raw_s
+
+        t_cand = snap_s - pre_roll_s
+        if pre_roll_s > 0 and scene_cuts:
+            prev_cut = find_prev_scene_boundary(snap_s, scene_cuts)
+            if prev_cut is not None and t_cand < prev_cut:
+                t_cand = max(t_cand, prev_cut + 0.02)
+        return max(0.0, t_cand)
 
     for i, seg in enumerate(segments):
         natural = _natural(seg)
@@ -230,6 +243,7 @@ def apply_soft_timing(
     dst_dir: str,
     settings,
     max_workers: int = 4,
+    scene_cuts: list[float] | None = None,
 ) -> tuple[str, TimingReport]:
     """Đặt lại timeline cho các clip trong ``src_dir`` (mutate ``segments``).
 
@@ -262,6 +276,7 @@ def apply_soft_timing(
         max_speed=settings.voice_fit_max_speed,
         allow_stretch=bool(getattr(settings, "voice_fit_stretch", False)),
         pre_roll_s=(getattr(settings, "dub_pre_roll_ms", 0) or 0) / 1000.0,
+        scene_cuts=scene_cuts,
     )
 
     needs_render = any(p["atempo"] != 1.0 for p in placements)

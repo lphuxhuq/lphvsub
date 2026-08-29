@@ -168,3 +168,28 @@ def test_apply_soft_timing_mutates_timeline(tmp_path):
     assert segments[0]["dub_start"] == 0.0
     assert segments[0]["dub_duration"] == pytest.approx(d1, abs=0.05)
     assert "timing_adjustment" in segments[0]
+
+
+def test_plan_voice_placements_with_left_edge_scene_cut():
+    # ASR start lúc 4.80s (trước scene cut 5.0s 200ms)
+    # Với Left-Edge Scene Guard, onset phải được snap lên >= 5.0s để không nói trước cảnh
+    segments = [{"id": 1, "start": 4.80, "end": 7.00, "speech_start": 4.80, "duration": 2.20}]
+    durations = [2.0]
+    scene_cuts = [5.0]
+    placements, _ = plan_voice_placements(segments, durations, scene_cuts=scene_cuts)
+    assert placements[0]["start"] >= 5.0
+
+
+def test_apply_soft_timing_with_scene_cuts(tmp_path):
+    seg_dir = tmp_path / "segs"
+    seg_dir.mkdir()
+    _write_tone(str(seg_dir / "seg_00001.wav"), 2.0)
+    segments = [
+        {"id": 1, "start": 4.75, "end": 7.00, "duration": 2.25},
+    ]
+    settings = Settings()
+    scene_cuts = [5.0]
+    out_dir, report = apply_soft_timing(
+        segments, str(seg_dir), str(tmp_path / "timed"), settings, scene_cuts=scene_cuts)
+    assert segments[0]["start"] >= 5.0
+
