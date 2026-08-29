@@ -260,6 +260,93 @@ def build_aspect_ratio_filter(
     return flt, tw, th
 
 
+def _logo_overlay_coords(position: str, margin: int) -> tuple[str, str]:
+    """Tính toán biểu thức tọa độ x, y cho bộ lọc overlay của logo."""
+    pos = (position or "top_right").lower().strip()
+    if pos in ("top_left", "tl"):
+        return f"{margin}", f"{margin}"
+    if pos in ("bottom_left", "bl"):
+        return f"{margin}", f"main_h-overlay_h-{margin}"
+    if pos in ("bottom_right", "br"):
+        return f"main_w-overlay_w-{margin}", f"main_h-overlay_h-{margin}"
+    if pos in ("top_center", "tc"):
+        return f"(main_w-overlay_w)/2", f"{margin}"
+    if pos in ("bottom_center", "bc"):
+        return f"(main_w-overlay_w)/2", f"main_h-overlay_h-{margin}"
+    if pos in ("center", "middle"):
+        return f"(main_w-overlay_w)/2", f"(main_h-overlay_h)/2"
+    # Mặc định top_right
+    return f"main_w-overlay_w-{margin}", f"{margin}"
+
+
+def _build_drawtext_watermark_filter(
+    text: str,
+    opacity: float = 0.28,
+    font_size: int = 26,
+    color: str = "white",
+    speed: int = 40,
+    motion: str = "bounce",
+) -> str:
+    """Tạo bộ lọc drawtext cho chữ watermark chìm chuyển động quanh video."""
+    from autodub.utils import bundled_font_files
+    escaped_text = text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
+    op = max(0.05, min(1.0, float(opacity if opacity is not None else 0.28)))
+    fs = max(12, min(120, int(font_size if font_size is not None else 26)))
+    sp_x = max(10, int(speed if speed is not None else 40))
+    sp_y = max(8, int(sp_x * 0.72))
+    margin = 24
+
+    font_arg = ""
+    font_files = bundled_font_files()
+    if font_files:
+        escaped_font = escape_subtitles_path(font_files[0])
+        font_arg = f":fontfile='{escaped_font}'"
+
+    clean_color = color.strip() if color else "white"
+    if clean_color.startswith("#"):
+        clean_color = clean_color[1:]
+
+    font_color_arg = f"{clean_color}@{op:.2f}"
+
+    if motion == "bounce":
+        x_expr = f"{margin}+abs(mod(t*{sp_x},2*(w-tw-{2*margin}))-(w-tw-{2*margin}))"
+        y_expr = f"{margin}+abs(mod(t*{sp_y},2*(h-th-{2*margin}))-(h-th-{2*margin}))"
+    elif motion == "bottom_left":
+        x_expr = f"{margin}"
+        y_expr = f"h-th-{margin}"
+    elif motion == "bottom_right":
+        x_expr = f"w-tw-{margin}"
+        y_expr = f"h-th-{margin}"
+    elif motion == "top_left":
+        x_expr = f"{margin}"
+        y_expr = f"{margin}"
+    else:  # top_right or static
+        x_expr = f"w-tw-{margin}"
+        y_expr = f"{margin}"
+
+    return (f"drawtext=text='{escaped_text}'{font_arg}:fontsize={fs}"
+            f":fontcolor={font_color_arg}:shadowcolor=black@{op*0.5:.2f}:shadowx=1:shadowy=1"
+            f":x='{x_expr}':y='{y_expr}'")
+
+
+def _build_color_filter(filter_name: str | None) -> str | None:
+    """Tạo bộ lọc màu điện ảnh bằng FFmpeg."""
+    if not filter_name or str(filter_name).lower().strip() in ("none", "original", ""):
+        return None
+    fn = str(filter_name).lower().strip()
+    if fn in ("cinematic_warm", "warm"):
+        return "colorbalance=rs=0.08:gs=0.02:bs=-0.06:rm=0.06:gm=0.02:bm=-0.04,eq=contrast=1.06:saturation=1.12"
+    if fn in ("teal_orange", "blockbuster"):
+        return "colorbalance=rs=0.12:gs=0.02:bs=-0.08:rh=-0.08:gh=0.04:bh=0.10,eq=contrast=1.10:saturation=1.15"
+    if fn in ("vintage", "retro"):
+        return "eq=contrast=0.96:brightness=0.02:saturation=0.86,colorbalance=rs=0.06:gs=0.03:bs=-0.04"
+    if fn in ("moody_dark", "dark"):
+        return "eq=contrast=1.14:brightness=-0.03:saturation=0.92,colorbalance=rs=-0.02:gs=-0.02:bs=0.04"
+    if fn in ("clean_film", "sharp"):
+        return "unsharp=5:5:0.8:5:5:0.0,eq=contrast=1.04:saturation=1.08"
+    return None
+
+
 def build_filter_complex(
     blur_regions: list[dict] | None,
     video_w: int,
@@ -267,21 +354,63 @@ def build_filter_complex(
     srt_path: str | None = None,
     style: dict | None = None,
     aspect_preset: str | None = None,
+    logo_path: str | None = None,
+    logo_position: str = "top_right",
+    logo_scale: float = 0.12,
+    logo_opacity: float = 0.85,
+    logo_margin: int = 24,
+    logo_motion: str = "static",
+    watermark_text: str | None = None,
+    watermark_opacity: float = 0.28,
+    watermark_font_size: int = 26,
+    watermark_color: str = "white",
+    watermark_speed: int = 40,
+    watermark_motion: str = "bounce",
+    smart_flip: bool = False,
+    micro_zoom: bool = False,
+    color_filter: str = "none",
 ) -> str | None:
     """Dựng chuỗi ``-filter_complex``, hoặc None khi không cần lọc gì.
 
-    Mỗi vùng che được cắt khỏi khung hình, làm mờ rồi dán trở lại đúng chỗ.
-    Vùng có ``t_start``/``t_end`` chỉ được dán trong đúng khoảng đó. Phụ đề
-    vẽ sau cùng nên luôn nằm trên vùng đã che. Chuỗi luôn kết ở ``[vout]``.
+    Thứ tự áp dụng:
+    1. Lật gương thông minh video gốc (smart_flip)
+    2. Zoom động & trượt camera vi mô (micro_zoom)
+    3. Bộ lọc màu điện ảnh (color_filter)
+    4. Chuyển đổi tỷ lệ khung hình (aspect_preset)
+    5. Che/làm mờ các vùng phụ đề cũ (blur_regions)
+    6. Chèn logo thương hiệu (logo_path)
+    7. Chèn watermark chìm chuyển động (watermark_text)
+    8. Ghi đè phụ đề mới (subtitles=...)
     """
     regions = list(blur_regions or [])
     asp_res = build_aspect_ratio_filter(aspect_preset, video_w, video_h)
-    if not regions and not srt_path and not asp_res:
+    has_logo = bool(logo_path and str(logo_path).strip())
+    has_wm = bool(watermark_text and str(watermark_text).strip())
+    c_flt = _build_color_filter(color_filter)
+
+    if (not regions and not srt_path and not asp_res and not has_logo
+            and not has_wm and not smart_flip and not micro_zoom and not c_flt):
         return None
 
     parts: list[str] = []
     current = "0:v"
 
+    # 1. Lật gương thông minh (chỉ lật hình ảnh nền, không lật chữ phụ đề/logo)
+    if smart_flip:
+        parts.append(f"[{current}]hflip[vflip]")
+        current = "vflip"
+
+    # 2. Phóng to nhẹ 103% và trượt camera vi mô
+    if micro_zoom:
+        parts.append(f"[{current}]scale=1.03*iw:1.03*ih,crop=iw/1.03:ih/1.03:(iw-ow)/2+sin(t*0.6)*6:(ih-oh)/2+cos(t*0.5)*6[vzoom]")
+        current = "vzoom"
+
+    # 3. Bộ lọc màu điện ảnh
+    if c_flt:
+        parts.append(f"[{current}]{c_flt}[vcolor]")
+        current = "vcolor"
+
+    # 4. Chuyển đổi tỷ lệ khung hình
     if asp_res:
         asp_flt, video_w, video_h = asp_res
         parts.append(f"[{current}]{asp_flt}[vasp]")
@@ -305,6 +434,38 @@ def build_filter_complex(
         parts.append(f"[{base}][{blurred}]{overlay}[{nxt}]")
         current = nxt
 
+    if has_logo:
+        escaped_logo = escape_subtitles_path(str(logo_path).strip())
+        target_w = max(16, int(video_w * float(logo_scale or 0.12)))
+        if target_w % 2 != 0:
+            target_w += 1
+        opacity = max(0.05, min(1.0, float(logo_opacity if logo_opacity is not None else 0.85)))
+        margin = int(logo_margin if logo_margin is not None else 24)
+
+        if logo_motion == "bounce":
+            sp_x = max(10, int(watermark_speed or 40))
+            sp_y = max(8, int(sp_x * 0.72))
+            ox = f"{margin}+abs(mod(t*{sp_x},2*(main_w-overlay_w-{2*margin}))-(main_w-overlay_w-{2*margin}))"
+            oy = f"{margin}+abs(mod(t*{sp_y},2*(main_h-overlay_h-{2*margin}))-(main_h-overlay_h-{2*margin}))"
+        else:
+            ox, oy = _logo_overlay_coords(logo_position or "top_right", margin)
+
+        parts.append(f"movie='{escaped_logo}',scale={target_w}:-1,format=rgba,colorchannelmixer=aa={opacity:.2f}[logo]")
+        parts.append(f"[{current}][logo]overlay=x='{ox}':y='{oy}'[vlogo]")
+        current = "vlogo"
+
+    if has_wm:
+        wm_flt = _build_drawtext_watermark_filter(
+            str(watermark_text).strip(),
+            opacity=watermark_opacity,
+            font_size=watermark_font_size,
+            color=watermark_color,
+            speed=watermark_speed,
+            motion=watermark_motion,
+        )
+        parts.append(f"[{current}]{wm_flt}[vwm]")
+        current = "vwm"
+
     if srt_path:
         # Tệp .ass đã mang sẵn kiểu chữ và hiệu ứng của từng dòng bên trong —
         # force_style sẽ đè mất, nên chỉ áp cho tệp .srt.
@@ -319,7 +480,7 @@ def build_filter_complex(
             subs += f":force_style='{build_force_style(style)}'"
         parts.append(f"[{current}]{subs}[vout]")
     else:
-        # Không còn gì để vẽ — đặt tên đầu ra cho bước làm mờ cuối cùng.
+        # Không còn gì để vẽ — đặt tên đầu ra cho bước cuối cùng.
         parts.append(f"[{current}]null[vout]")
 
     return ";".join(parts)

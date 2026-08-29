@@ -359,8 +359,34 @@ class Settings:
     # Tự động quét và che phụ đề cứng gốc bằng thị giác máy tính
     auto_mask_hardsub: bool = False
 
+    # Logo/Watermark thương hiệu chèn vào video
+    logo_path: str = ""
+    logo_position: str = "top_right"
+    logo_scale: float = 0.12
+    logo_opacity: float = 0.85
+    logo_margin: int = 24
+    logo_motion: str = "static"
+
+    # Watermark chữ chìm chuyển động (chống reup bản quyền)
+    watermark_text: str = ""
+    watermark_opacity: float = 0.28
+    watermark_font_size: int = 26
+    watermark_color: str = "white"
+    watermark_speed: int = 40
+    watermark_motion: str = "bounce"
+
     # Bố cục tỷ lệ khung hình xuất video: "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
     video_aspect_preset: str = "original"
+
+    # Xử lý video chống quét bản quyền / Reup (Anti-Content ID)
+    smart_flip: bool = False
+    micro_zoom: bool = False
+    color_filter: str = "none"
+
+    # Cải tiến Voice Sync (3-Tier Adaptive Sync)
+    voice_vad_trim_enabled: bool = True
+    voice_compact_translate_enabled: bool = True
+    voice_scene_guard_enabled: bool = True
 
 
 
@@ -574,6 +600,23 @@ class Settings:
                                        _p["karaoke_alignment"]),
             blur_regions=env("BLUR_REGIONS", "").strip(),
             auto_mask_hardsub=env_bool("AUTO_MASK_HARDSUB", False),
+            logo_path=env("LOGO_PATH", "").strip(),
+            logo_position=env("LOGO_POSITION", "top_right").strip() or "top_right",
+            logo_scale=min(0.50, max(0.02, env_float("LOGO_SCALE", 0.12))),
+            logo_opacity=min(1.0, max(0.05, env_float("LOGO_OPACITY", 0.85))),
+            logo_margin=max(0, env_int("LOGO_MARGIN", 24)),
+            logo_motion=env("LOGO_MOTION", "static").strip() or "static",
+            watermark_text=env("WATERMARK_TEXT", "").strip(),
+            watermark_opacity=min(1.0, max(0.05, env_float("WATERMARK_OPACITY", 0.28))),
+            watermark_font_size=max(12, min(120, env_int("WATERMARK_FONT_SIZE", 26))),
+            watermark_color=env("WATERMARK_COLOR", "white").strip() or "white",
+            watermark_speed=max(10, min(300, env_int("WATERMARK_SPEED", 40))),
+            smart_flip=env_bool("SMART_FLIP", False),
+            micro_zoom=env_bool("MICRO_ZOOM", False),
+            color_filter=env("COLOR_FILTER", "none").strip() or "none",
+            voice_vad_trim_enabled=env_bool("VOICE_VAD_TRIM_ENABLED", True),
+            voice_compact_translate_enabled=env_bool("VOICE_COMPACT_TRANSLATE_ENABLED", True),
+            voice_scene_guard_enabled=env_bool("VOICE_SCENE_GUARD_ENABLED", True),
         )
 
 

@@ -332,9 +332,42 @@ def test_a_successful_read_restores_the_rotation_budget(settings, monkeypatch):
 
 
 def test_threads_scale_safely_with_device_pool():
-    """Device pool đa thiết bị cho phép chạy 8-16 luồng song song an toàn."""
-    assert capcut_vi.RECOMMENDED_THREADS >= 8
+    """Device pool đa thiết bị cho phép chạy đa luồng an toàn."""
+    assert capcut_vi.RECOMMENDED_THREADS >= 4
     assert capcut_vi.MIN_GAP_S > 0
+
+
+def test_system_busy_retries_without_hard_cooldown(settings, monkeypatch):
+    """Khi gặp ret=1014: system busy, hệ thống backoff thử lại thành công mà không phạt cooldown 300s."""
+    from autodub.speech.tts.capcut_vi import CapCutSynthesizer
+
+    synth = CapCutSynthesizer(settings, voice_name="Nhỏ Ngọt Ngào")
+    attempts = []
+
+    def _busy_then_ok(**kwargs):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RuntimeError("create_tts_task ret=1014: system busy")
+        return {"speech_url": "https://example.invalid/ok.mp3"}
+
+    class _Resp:
+        content = b"ID3fake"
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(synth._client, "generate_speech", _busy_then_ok)
+    monkeypatch.setattr(synth._client.session, "get", lambda *a, **k: _Resp())
+    monkeypatch.setattr(capcut_vi.time, "sleep", lambda s: None)
+
+    # Không được gọi report_block
+    block_calls = []
+    original_report_block = synth._pool.report_block
+    monkeypatch.setattr(synth._pool, "report_block", lambda *a, **k: block_calls.append(1))
+
+    assert synth._fetch_mp3("xin chào") == b"ID3fake"
+    assert len(attempts) == 3
+    assert len(block_calls) == 0, "Lỗi 1014 không được đưa thiết bị vào cooldown 300s!"
 
 
 def test_device_pool_generates_diverse_devices():

@@ -888,7 +888,7 @@ class BackgroundPanel(CollapsibleSection):
         super().__init__("Nhạc nền", expanded=True, parent=parent)
         self.mode = LabeledCombo("Cách xử lý", consts.BG_MODES,
                                  "Cách xử lý âm thanh gốc của video")
-        self.mode.changed.connect(self.changed.emit)
+        self.mode.changed.connect(lambda *_a: self.changed.emit())
         self.duck = LabeledSlider(
             "Mức giảm tiếng gốc", -40.0, 0.0, 1.0,
             "Càng âm thì tiếng gốc càng nhỏ.", " dB", decimals=0)
@@ -926,6 +926,9 @@ class ExportPanel(CollapsibleSection):
     export_srt_requested = Signal()
     export_ass_requested = Signal()
     export_audio_mp3_requested = Signal()
+    open_thumb_requested = Signal()
+    copy_title_requested = Signal()
+    copy_desc_requested = Signal()
     changed = Signal()
 
     def __init__(self, parent: QWidget | None = None):
@@ -934,13 +937,13 @@ class ExportPanel(CollapsibleSection):
 
         self.subtitle = LabeledCombo("Kiểu phụ đề", consts.SUBTITLE_MODES,
                                      "Cách hiện phụ đề trên video kết quả")
-        self.subtitle.changed.connect(self.changed.emit)
+        self.subtitle.changed.connect(lambda *_a: self.changed.emit())
         self.add_widget(self.subtitle)
 
         self.preset = LabeledCombo(
             "Bộ kiểu chữ", PRESET_CHOICES,
             "Đổi bộ kiểu rồi bấm Ghi lại phụ đề là thấy ngay trên video.")
-        self.preset.changed.connect(self.changed.emit)
+        self.preset.changed.connect(lambda *_a: self.changed.emit())
         self.add_widget(self.preset)
 
         row = QHBoxLayout()
@@ -1024,6 +1027,34 @@ class ExportPanel(CollapsibleSection):
             row2.addWidget(button)
             row2.addStretch()
             self.add_layout(row2)
+
+        # --- Đăng bài & Thumbnail -------------------------------------------
+        sep_post = QLabel("Đăng bài & Thumbnail")
+        sep_post.setStyleSheet(
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
+            f"font-weight: 600; background: transparent; "
+            f"border-top: 1px solid {tokens.BORDER_SUBTLE}; "
+            f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;")
+        self.add_widget(sep_post)
+
+        self.btn_open_thumb = GhostButton("Xem ảnh bìa Thumbnail")
+        self.btn_open_thumb.setToolTip("Mở ảnh bìa Thumbnail được tự động thiết kế riêng cho video này.")
+        self.btn_open_thumb.clicked.connect(self.open_thumb_requested.emit)
+
+        self.btn_copy_title = GhostButton("Chép tiêu đề (YouTube/TikTok)")
+        self.btn_copy_title.setToolTip("Sao chép nhanh tiêu đề giật tít tiếng Việt vào Clipboard.")
+        self.btn_copy_title.clicked.connect(self.copy_title_requested.emit)
+
+        self.btn_copy_desc = GhostButton("Chép mô tả & hashtag")
+        self.btn_copy_desc.setToolTip("Sao chép nội dung mô tả và hashtag SEO vào Clipboard.")
+        self.btn_copy_desc.clicked.connect(self.copy_desc_requested.emit)
+
+        for button in (self.btn_open_thumb, self.btn_copy_title, self.btn_copy_desc):
+            row_post = QHBoxLayout()
+            row_post.setSpacing(tokens.SP_2)
+            row_post.addWidget(button)
+            row_post.addStretch()
+            self.add_layout(row_post)
 
         # --- Lịch sử bản xuất -----------------------------------------------
         self._hist_section = CollapsibleSection(

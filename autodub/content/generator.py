@@ -81,81 +81,207 @@ def generate_social_metadata_direct(
     settings,
     video_title: str = "",
 ) -> dict:
-    """Tạo tiêu đề, mô tả, hashtag trực tiếp bằng Gemini API (không qua server)."""
-    api_keys = getattr(settings, "gemini_api_key", "").strip()
-    if not api_keys:
+    """Tạo tiêu đề, mô tả, hashtag trực tiếp bằng AI API Key (Gemini, DeepSeek, OpenAI, v.v.)."""
+    if not settings:
         return {}
 
-    from autodub.text.translate_direct import GeminiDirectClient, _slice_to_payload, _strip_fences_and_citations
-
-    model = getattr(settings, "gemini_model", "gemini-2.5-flash")
-    client = GeminiDirectClient(api_keys, model=model)
-    prompt = f"""Dựa vào nội dung video và bản dịch tiếng Việt dưới đây:
-Tiêu đề gốc: {video_title}
-Lời thoại video tiếng Việt: {script_translated[:4000]}
-
-Hãy tạo nội dung đăng bài chuyên nghiệp, thu hút người xem cho YouTube, TikTok, Facebook dưới định dạng JSON:
-{{
-  "title": "Tiêu đề video tiếng Việt hấp dẫn (dưới 70 ký tự)",
-  "description": "Mô tả ngắn gọn thu hút người xem (tóm tắt nội dung chính và bài học/điểm nhấn)",
-  "hashtags": ["#shorts", "#phimhay", "#review", "#trending", "#viral"],
-  "tiktok": {{
-    "title": "Caption ngắn gọn, giật gân, cuốn hút cho TikTok",
-    "hashtags": ["#fyp", "#viral", "#xuhuong"]
-  }},
-  "facebook": {{
-    "title": "Caption tương tác, khơi gợi bình luận cho Facebook Reels/Video",
-    "hashtags": ["#reels", "#trending"]
-  }}
-}}
-Chỉ trả về JSON thuần túy."""
+    from autodub.text.translate_direct import (
+        get_direct_client, _slice_to_payload, _strip_fences_and_citations
+    )
 
     try:
-        raw = client.call_ai("", prompt)
+        client, provider_name = get_direct_client(settings)
+    except Exception:
+        return {}
+
+    system_instruction = (
+        "Bạn là chuyên gia sáng tạo nội dung mạng xã hội và tối ưu SEO video hàng đầu "
+        "(YouTube, TikTok, Facebook Reels). Nhiệm vụ của bạn là đọc kịch bản video và tạo ra bộ "
+        "tiêu đề, mô tả, hashtag hấp dẫn, kích thích lượt xem (CTR cao) nhưng không giật tít lừa đảo."
+    )
+
+    domain = getattr(settings, "translate_domain", "").strip()
+    topic_context = f"\nChủ đề/Thể loại: {domain}" if domain else ""
+    orig_title_context = f"\nTiêu đề gốc: {video_title}" if video_title else ""
+
+    user_prompt = f"""Dựa vào nội dung kịch bản video tiếng Việt dưới đây:{orig_title_context}{topic_context}
+Lời thoại video:
+\"\"\"
+{script_translated[:6000]}
+\"\"\"
+
+Hãy tạo gói nội dung đăng bài chuyên nghiệp, chuẩn SEO và tối ưu tương tác cho cả 3 nền tảng:
+1. YouTube (Video / Shorts):
+   - title: Tiêu đề tiếng Việt hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự, có thể kèm emoji tinh tế hoặc từ khóa hot).
+   - description: Mô tả chi tiết 3 phần: (1) Đoạn mở đầu hook 2 câu tóm tắt gay cấn; (2) Điểm nổi bật / bài học chính trong video; (3) Lời kêu gọi hành động (Đăng ký kênh, để lại bình luận).
+   - hashtags: 10-15 hashtag chất lượng cao (gồm các từ khóa ngách cụ thể và hashtag thịnh hành, viết liền có dấu #).
+2. TikTok:
+   - title: Caption ngắn gọn (1-2 câu), giật gân, khơi gợi tranh luận hoặc tò mò ngay giây đầu.
+   - hashtags: 5-8 hashtag thịnh hành (#fyp, #xuhuong, #viral + các hashtag chủ đề video).
+3. Facebook (Reels / Video Post):
+   - title: Caption tự nhiên, mang tính kết nối cộng đồng, đặt câu hỏi để người xem comment.
+   - hashtags: 3-5 hashtag cô đọng (#reels, #trending + hashtag chủ đề).
+
+Bắt buộc trả về đúng duy nhất định dạng JSON thuần túy sau:
+{{
+  "title": "Tiêu đề YouTube...",
+  "description": "Nội dung mô tả YouTube...",
+  "hashtags": ["#tag1", "#tag2", ...],
+  "tiktok": {{
+    "title": "Caption TikTok...",
+    "hashtags": ["#fyp", "#xuhuong", ...]
+  }},
+  "facebook": {{
+    "title": "Caption Facebook...",
+    "hashtags": ["#reels", "#trending", ...]
+  }}
+}}
+Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích thêm."""
+
+    try:
+        raw = client.call_ai(system_instruction, user_prompt)
         clean = _strip_fences_and_citations(raw)
         data = json.loads(_slice_to_payload(clean))
         if isinstance(data, dict) and "title" in data:
-            logger.info(f"Đã tạo nội dung đăng bài trực tiếp: «{data.get('title', '')[:50]}»")
+            logger.info(f"Đã tạo nội dung đăng bài qua {provider_name}: «{data.get('title', '')[:50]}»")
             return data
     except Exception as e:
-        logger.warning(f"Tạo nội dung đăng bài trực tiếp lỗi ({e}) — bỏ qua")
+        logger.warning(f"Tạo nội dung đăng bài qua {provider_name} lỗi ({e}) — bỏ qua")
     return {}
+
+
+def generate_social_metadata_browser(
+    script_original: str,
+    script_translated: str,
+    settings,
+    video_title: str = "",
+) -> dict:
+    """Tạo tiêu đề, mô tả, hashtag trực tiếp bằng Google AI Studio (Playwright browser)."""
+    if not settings or not getattr(settings, "ai_studio_enabled", False):
+        return {}
+
+    try:
+        from autodub.text.translate_browser import AiStudioBrowserClient
+        from autodub.text.translate_direct import _slice_to_payload, _strip_fences_and_citations
+
+        domain = getattr(settings, "translate_domain", "").strip()
+        topic_context = f"\nChủ đề/Thể loại: {domain}" if domain else ""
+        orig_title_context = f"\nTiêu đề gốc: {video_title}" if video_title else ""
+
+        user_prompt = f"""Dựa vào nội dung kịch bản video tiếng Việt dưới đây:{orig_title_context}{topic_context}
+Lời thoại video:
+\"\"\"
+{script_translated[:6000]}
+\"\"\"
+
+Hãy tạo gói nội dung đăng bài chuyên nghiệp, chuẩn SEO và tối ưu tương tác cho cả 3 nền tảng:
+1. YouTube (Video / Shorts):
+   - title: Tiêu đề tiếng Việt hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự).
+   - description: Mô tả chi tiết 3 phần (hook 2 câu mở đầu, điểm nổi bật chính, kêu gọi Like/Đăng ký kênh).
+   - hashtags: 10-15 hashtag chất lượng cao (#shorts, #phimhay, #review, #trending, #viral...).
+2. TikTok:
+   - title: Caption ngắn gọn (1-2 câu), giật gân, cuốn hút.
+   - hashtags: 5-8 hashtag thịnh hành (#fyp, #xuhuong, #viral...).
+3. Facebook (Reels / Post):
+   - title: Caption tự nhiên, tăng tương tác và bình luận.
+   - hashtags: 3-5 hashtag cô đọng (#reels, #trending...).
+
+Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau:
+{{
+  "title": "Tiêu đề YouTube...",
+  "description": "Nội dung mô tả YouTube...",
+  "hashtags": ["#tag1", "#tag2", ...],
+  "tiktok": {{
+    "title": "Caption TikTok...",
+    "hashtags": ["#fyp", "#xuhuong", ...]
+  }},
+  "facebook": {{
+    "title": "Caption Facebook...",
+    "hashtags": ["#reels", "#trending", ...]
+  }}
+}}
+Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích thêm."""
+
+        headless = getattr(settings, "ai_studio_headless", False)
+        profile_dir = getattr(settings, "ai_studio_chrome_profile", "")
+        client = AiStudioBrowserClient(profile_dir=profile_dir, headless=headless)
+        try:
+            raw = client.translate_batch("", user_prompt, max_wait_secs=90)
+            clean = _strip_fences_and_citations(raw)
+            data = json.loads(_slice_to_payload(clean))
+            if isinstance(data, dict) and "title" in data:
+                logger.info(f"Đã tạo nội dung đăng bài qua Google AI Studio: «{data.get('title', '')[:50]}»")
+                return data
+        finally:
+            client.close()
+    except Exception as e:
+        logger.warning(f"Tạo nội dung đăng bài qua Google AI Studio lỗi ({e}) — bỏ qua")
+    return {}
+
+
+def _generate_fallback_metadata(script_translated: str, video_title: str = "") -> dict:
+    """Tạo metadata dự phòng tự nhiên dựa trên tiêu đề gốc và kịch bản khi không có AI."""
+    title = video_title.strip() if video_title else ""
+    if not title:
+        first_line = script_translated.split(".")[0].strip()
+        title = first_line[:60] if first_line else "Video Lồng Tiếng Mới Nhất"
+    desc = f"{title}\n\nXem video trọn vẹn và đừng quên bấm Like & Đăng ký kênh để theo dõi những video hấp dẫn tiếp theo nhé!"
+    tags = ["#shorts", "#review", "#phimhay", "#trending", "#viral", "#xuhuong"]
+    return {
+        "title": title,
+        "description": desc,
+        "hashtags": tags,
+        "tiktok": {
+            "title": f"{title} | Xem ngay!",
+            "hashtags": ["#fyp", "#xuhuong", "#viral", "#shorts"]
+        },
+        "facebook": {
+            "title": f"Mọi người thấy video này thế nào? Bình luận bên dưới nhé!\n{title}",
+            "hashtags": ["#reels", "#trending", "#viral"]
+        }
+    }
 
 
 def generate_social_metadata(script_original: str, script_translated: str,
                              video_title: str = "", job_id: str = "",
                              settings=None) -> dict:
-    """Nhờ máy chủ hoặc gọi trực tiếp Gemini viết tiêu đề, mô tả và hashtag."""
-    if settings and getattr(settings, "gemini_api_key", "").strip():
-        return generate_social_metadata_direct(
+    """Tạo tiêu đề, mô tả và hashtag tự động qua API Key trực tiếp, AI Studio hoặc máy chủ."""
+    if settings:
+        res = generate_social_metadata_direct(
             script_original, script_translated, settings, video_title=video_title
         )
+        if res:
+            return res
+
+        if getattr(settings, "ai_studio_enabled", False):
+            res_browser = generate_social_metadata_browser(
+                script_original, script_translated, settings, video_title=video_title
+            )
+            if res_browser:
+                return res_browser
 
     from autodub.saas_client import (
         InsufficientCreditError, SaasError, get_client, is_configured,
         new_job_id)
     from autodub.text.translate_common import HOLD
 
-    if not is_configured():
-        # Chạy thuần trên máy — không có máy chủ để nhờ viết. Video vẫn xong.
-        logger.info("Chưa cấu hình máy chủ — bỏ qua phần nội dung đăng bài")
-        return {}
+    if is_configured():
+        try:
+            metadata = get_client().generate_post(
+                script_original, script_translated,
+                job_id=job_id or new_job_id(), video_title=video_title,
+                hold_id=HOLD.hold_id)
+            if metadata:
+                logger.info("Đã viết xong nội dung đăng bài qua server: "
+                            f"«{str(metadata.get('title', ''))[:50]}»")
+                return metadata
+        except InsufficientCreditError:
+            raise
+        except SaasError as e:
+            logger.error(f"Viết nội dung đăng bài lỗi ({str(e)[:120]})")
 
-    try:
-        metadata = get_client().generate_post(
-            script_original, script_translated,
-            job_id=job_id or new_job_id(), video_title=video_title,
-            hold_id=HOLD.hold_id)
-    except InsufficientCreditError:
-        raise
-    except SaasError as e:
-        logger.error(f"Viết nội dung đăng bài lỗi ({str(e)[:120]}) — bỏ qua "
-                     "phần đăng bài (không ảnh hưởng video)")
-        return {}
-    if metadata:
-        logger.info("Đã viết xong nội dung đăng bài: "
-                    f"«{str(metadata.get('title', ''))[:50]}»")
-    return metadata or {}
+    # Dự phòng thông minh: luôn tạo metadata để youtube_post.txt không bao giờ bị rỗng
+    return _generate_fallback_metadata(script_translated, video_title=video_title)
 
 
 # ------------------------------------------------------------- ghi ra tệp -- #
@@ -194,9 +320,7 @@ def generate_content(
     video_title: str = "",
     job_id: str = "",
 ) -> dict:
-    """Sinh phần nội dung đăng bài của một dự án."""
-    del video_path
-
+    """Sinh phần nội dung đăng bài của một dự án (Metadata, Thumbnail High-CTR, Publishing Package)."""
     result: dict = {"metadata": {}, "metadata_file": None}
 
     script_original = extract_script_text(
@@ -207,16 +331,46 @@ def generate_content(
     if source_url:
         fetch_original_thumbnail(source_url, output_dir)
 
-    result["metadata"] = generate_social_metadata(
-        script_original, script_translated, video_title=video_title,
-        job_id=job_id, settings=settings)
-
     metadata_path = os.path.join(output_dir, "youtube_metadata.json")
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(result["metadata"], f, ensure_ascii=False, indent=2)
+    post_path = os.path.join(output_dir, "youtube_post.txt")
+
+    meta: dict = {}
+    # Nếu đã có metadata trích xuất từ trước (ví dụ từ bản dịch Google AI Studio):
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                saved_meta = json.load(f)
+            if isinstance(saved_meta, dict) and saved_meta.get("title"):
+                meta = saved_meta
+                logger.info(f"Dùng lại tiêu đề, mô tả đã có: «{str(saved_meta.get('title'))[:50]}»")
+        except Exception:
+            pass
+
+    if not meta or not meta.get("title"):
+        meta = generate_social_metadata(
+            script_original, script_translated, video_title=video_title,
+            job_id=job_id, settings=settings)
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+    result["metadata"] = meta
     result["metadata_file"] = metadata_path
 
-    post_path = os.path.join(output_dir, "youtube_post.txt")
-    _write_post_file(post_path, result["metadata"])
+    _write_post_file(post_path, meta)
     result["post_file"] = post_path
+
+    # Tự động sinh Thumbnail High-CTR (16:9 và 9:16) nếu có video_path
+    if video_path and os.path.exists(video_path):
+        from autodub.media.thumbnail import generate_high_ctr_thumbnail
+        thumb_title = meta.get("title") or video_title or "VIDEO MỚI NHẤT"
+        thumb_landscape = os.path.join(output_dir, "thumbnail_landscape.jpg")
+        thumb_portrait = os.path.join(output_dir, "thumbnail_portrait.jpg")
+        try:
+            generate_high_ctr_thumbnail(video_path, thumb_title, thumb_landscape, aspect="16:9")
+            result["thumbnail_landscape"] = thumb_landscape
+            generate_high_ctr_thumbnail(video_path, thumb_title, thumb_portrait, aspect="9:16")
+            result["thumbnail_portrait"] = thumb_portrait
+        except Exception as e:
+            logger.warning(f"Lỗi khi tự động tạo thumbnail: {e}")
+
     return result

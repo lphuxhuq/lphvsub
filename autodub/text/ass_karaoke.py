@@ -116,15 +116,17 @@ def resolve_word_times(
         # lượng — nếu không, chữ sẽ sáng lên sai nhịp.
         words = None if has_subtitle_override(seg, text_field) else aligned.get(sid)
         if not words:
-            dur = (wav_duration_s(seg_wav_path(merge_dir, sid))
+            wav_file = seg_wav_path(merge_dir, sid)
+            dur = (wav_duration_s(wav_file)
                    or float(seg.get("end", 0)) - float(seg.get("start", 0)))
-            words = estimate_word_times(text, float(seg["start"]), dur)
+            from autodub.speech.acoustic_align import acoustic_word_times
+            words = acoustic_word_times(text, wav_file, float(seg["start"]), dur)
             n_est += 1
         if words:
             out[sid] = words
     if n_est and use_align:
-        logger.info(f"Phụ đề kiểu cụm chữ: {n_est}/{len(segments)} câu chia "
-                    "đều theo thời lượng (không bắt được nhịp giọng đọc)")
+        logger.info(f"Phụ đề kiểu cụm chữ: {n_est}/{len(segments)} câu canh theo "
+                    "phổ năng lượng âm thanh WAV (acoustic fallback)")
     return out
 
 

@@ -91,6 +91,7 @@ def plan_voice_placements(
     max_speed: float = 1.15,
     allow_stretch: bool = False,
     pre_roll_s: float = 0.0,
+    scene_cuts: list[float] | None = None,
 ) -> tuple[list[dict], TimingReport]:
     """Tính vị trí đặt + tempo từng clip — THUẦN TOÁN, không đụng file.
 
@@ -100,9 +101,11 @@ def plan_voice_placements(
     kéo dài (atempo < 1.0, chặn ``min_speed``) lấp bớt khoảng lặng cuối câu.
     ``pre_roll_s`` (DUB_PRE_ROLL_MS) đẩy onset giọng Việt sớm hơn
     ``speech_start`` bấy nhiêu (mặc định 0 — dubbing thực tế bật 0…80ms).
+    ``scene_cuts`` danh sách điểm chuyển cảnh để chặn tràn giọng sang cảnh khác.
     Render nằm ở :func:`apply_soft_timing`.
     """
     from autodub.media.voice_timing import _decide_tempo
+    from autodub.media.scene_detector import find_next_scene_boundary
 
     rep = TimingReport(segments_total=len(segments))
     placements: list[dict] = []
@@ -136,6 +139,13 @@ def plan_voice_placements(
         else:
             usable_end = t + (slot if slot else TAIL_SILENCE_S) \
                 + TAIL_SILENCE_S
+
+        # Giới hạn bởi điểm chuyển cảnh video kế tiếp (Scene Drift Guard)
+        if scene_cuts:
+            next_scene = find_next_scene_boundary(t, scene_cuts)
+            if next_scene is not None:
+                usable_end = min(usable_end, next_scene - 0.02)
+
         available = max(slot, usable_end - t) if slot is not None else None
 
         # 3) Per-segment tempo. Clip TRÀN slot → nén theo ``available``
@@ -231,7 +241,16 @@ def apply_soft_timing(
       (mọi câu nằm gọn trong chỗ của nó) trả về ``(src_dir, report)`` —
       không copy vô ích.
     """
-    from autodub.media.audio import apply_atempo, wav_duration_s
+    from autodub.media.audio import wav_duration_s
+    from autodub.media.voice_stretch import apply_formant_preserved_stretch
+    from autodub.speech.tts_trimmer import trim_tts_silence
+
+    # 1) Cắt tỉa khoảng lặng thừa đầu/đuôi file TTS nếu được bật
+    if getattr(settings, "voice_vad_trim_enabled", True):
+        for s in segments:
+            wav_file = seg_wav_path(src_dir, s["id"])
+            if os.path.exists(wav_file):
+                trim_tts_silence(wav_file, wav_file)
 
     durations = [wav_duration_s(seg_wav_path(src_dir, s["id"]))
                  for s in segments]
@@ -266,7 +285,7 @@ def apply_soft_timing(
                 if abs(have - want) < 0.05:
                     return
             if atempo != 1.0:
-                apply_atempo(src, dst, atempo)
+                apply_formant_preserved_stretch(src, dst, atempo)
             else:
                 # Copy thay vì link: dst_dir có thể bị xoá độc lập.
                 shutil.copyfile(src, dst)

@@ -232,11 +232,27 @@ def _output_format_block(target: TargetLang, compact: bool) -> str:
 - Every `"{out_field}"` value MUST end with terminal punctuation: `.`, `!`, `?` or `…`. If the sentence has no natural ending mark, append a period. NEVER end on a comma, a dash, or nothing.
 - Output strictly valid JSON ONLY — DO NOT use markdown code blocks, fences, or introductory/ending commentary."""
     return f"""### OUTPUT FORMAT (STRICT)
-- Return EXACTLY ONE valid JSON array with the exact same length, order, and `id`s as the input.
-- Preserve every original field (`id`, `text`, `start`, `end`, `duration`).
-- ADD one new string field per segment: `"{out_field}"`.
-- `"{out_field}"` must contain the final {target.name} translation of the `text` field.
-- Every `"{out_field}"` value MUST end with terminal punctuation: `.`, `!`, `?` or `…`. If the sentence has no natural ending mark, append a period. NEVER end on a comma, a dash, or nothing.
+- Return EXACTLY ONE valid JSON object containing both the translated segments and social media post metadata:
+{{
+  "title": "Tiêu đề video tiếng Việt hấp dẫn, chuẩn SEO (dưới 70 ký tự)",
+  "description": "Mô tả chi tiết 3 phần (hook tóm tắt gay cấn, điểm nhấn nội dung, kêu gọi Like & Đăng ký)",
+  "hashtags": ["#shorts", "#phimhay", "#review", "#trending", "#viral"],
+  "tiktok": {{
+    "title": "Caption TikTok ngắn gọn (1-2 câu), giật gân, cuốn hút",
+    "hashtags": ["#fyp", "#xuhuong", "#viral"]
+  }},
+  "facebook": {{
+    "title": "Caption Facebook tương tác cao, khơi gợi bình luận",
+    "hashtags": ["#reels", "#trending"]
+  }},
+  "segments": [
+    ...
+  ]
+}}
+- In the `segments` array:
+  * Preserve every original field (`id`, `text`, `start`, `end`, `duration`).
+  * ADD one new string field per segment: `"{out_field}"` containing the {target.name} translation.
+  * Every `"{out_field}"` value MUST end with terminal punctuation: `.`, `!`, `?` or `…`.
 - Output strictly valid JSON ONLY — DO NOT use markdown code blocks, fences, or introductory/ending commentary."""
 
 
@@ -364,14 +380,10 @@ def write_hint(work_dir: str, target: TargetLang, source_lang: str,
 lời thoại rồi dừng lại chờ bản dịch của bạn. Cách làm ở dưới, khoảng 2-3 phút.
 
 MUỐN APP TỰ DỊCH: mở Cài đặt, bật "Dịch tự động" — app dịch giúp bạn toàn bộ
-lời thoại, tính thêm 2 Vox mỗi câu."""
+lời thoại."""
     else:
-        why = """App đã nghe xong lời thoại nhưng máy chủ dịch đang gặp sự cố.
-Không sao — bạn nhờ một AI miễn phí (ChatGPT, Gemini...) dịch giúp theo 3
-bước dưới đây, mất khoảng 2-3 phút.
-
-HOẶC: đợi một lúc rồi chạy lại video này. Phần đã nghe-chép được dùng lại
-nên không mất công, và phần nào đã dịch rồi cũng không bị tính Vox lần hai."""
+        why = """App đã nghe xong lời thoại. Bạn có thể nhờ Google AI Studio / ChatGPT / Gemini
+dịch giúp theo 3 bước dưới đây, mất khoảng 1-2 phút."""
 
     money = f"\n{refund_note}\n" if refund_note else ""
 
@@ -393,19 +405,18 @@ Mở file này bằng Notepad rồi copy TOÀN BỘ nội dung:
 (File nằm trong thư mục "data" cạnh file hướng dẫn này.)
 
 
-BƯỚC 2 — NHỜ AI DỊCH
----------------------
-1. Mở chatgpt.com hoặc gemini.google.com (đăng nhập miễn phí).
+BƯỚC 2 — NHỜ AI DỊCH & TẠO TIÊU ĐỀ, MÔ TẢ, HASHTAG
+----------------------------------------------------
+1. Mở https://aistudio.google.com hoặc https://chatgpt.com / https://gemini.google.com
 2. Copy nguyên khối "LỜI NHẮN GỬI AI" ở cuối file này, dán vào ô chat.
 3. Dán tiếp nội dung đã copy ở Bước 1 vào ngay phía sau, rồi gửi.
-4. AI sẽ trả về một đoạn văn bản dài bắt đầu bằng dấu [ — copy toàn bộ
-   đoạn đó. (Nếu đầu/cuối có dòng ```json hoặc ``` thì bỏ mấy dòng đó đi,
-   chỉ lấy phần từ dấu [ đến dấu ] cuối cùng.)
+4. AI sẽ trả về một chuỗi JSON chứa toàn bộ bản dịch VÀ tiêu đề, mô tả, hashtag cho YouTube, TikTok, Facebook.
+   Copy toàn bộ nội dung JSON đó. (Nếu đầu/cuối có dòng ```json hoặc ``` thì bỏ mấy dòng đó đi).
 
 
 BƯỚC 3 — LƯU BẢN DỊCH VÀ CHẠY TIẾP
 -----------------------------------
-1. Mở Notepad, dán bản dịch vừa copy.
+1. Mở Notepad, dán bản dịch JSON vừa copy.
 2. Bấm "Save as" (Lưu thành), lưu với ĐÚNG tên file:
 
        {out_file}
@@ -415,8 +426,8 @@ BƯỚC 3 — LƯU BẢN DỊCH VÀ CHẠY TIẾP
        {d_dir}
 
    Mục "Encoding" chọn UTF-8 (Notepad thường để sẵn).
-3. Quay lại app, bấm nút "Đã dịch xong, tiếp tục". App sẽ tự làm nốt
-   phần còn lại (đọc giọng, ghép video).
+3. Quay lại app, bấm nút "Đã dịch xong, tiếp tục". App sẽ tự động trích xuất tiêu đề, mô tả, hashtag
+   vào thư mục `youtube/` và hoàn thành video lồng tiếng.
 
 Nếu app báo lỗi sau khi bấm tiếp tục: thường do file lưu sai tên, sai thư
 mục, hoặc còn sót dòng ```json — kiểm tra lại 3 điểm đó rồi bấm lại.
@@ -427,7 +438,7 @@ LỜI NHẮN GỬI AI (copy nguyên khối bên dưới, không cần đọc hi�
 ==================================================================
 {build_translation_prompt(target, source_lang, settings=settings, compact_output=False)}
 
-Now translate this JSON, return only the translated JSON array:
+Now translate this JSON, return only the JSON with title, description, hashtags and segments:
 
 (dán nội dung transcript_original.json vào đây)
 ==================================================================

@@ -245,14 +245,29 @@ class CapCutDevicePool:
                 logger.info("Tất cả thiết bị trong pool đang cooldown — tự động cấp thiết bị mới...")
                 new_dev = generate_fake_device()
                 self._devices.append(new_dev)
+                if len(self._devices) > 24:
+                    self._devices.pop(0)
                 available = [new_dev]
 
             if worker_index is not None:
                 return available[worker_index % len(available)]
             return random.choice(available)
 
+    def rotate_device(self, current_device: dict) -> dict:
+        """Chuyển sang một thiết bị khác đang sẵn sàng trong pool mà không phạt cooldown."""
+        now = time.monotonic()
+        curr_id = current_device.get("device_id", "")
+        with self._lock:
+            available = [
+                d for d in self._devices
+                if d.get("device_id") != curr_id and self._cooldowns.get(d.get("device_id", ""), 0.0) <= now
+            ]
+            if available:
+                return random.choice(available)
+            return current_device
+
     def report_block(self, blocked_device: dict, cooldown_seconds: float = 300.0) -> dict:
-        """Báo cáo thiết bị bị chặn (shark block / ret -6) và nhận thiết bị thay thế mới."""
+        """Báo cáo thiết bị bị chặn thật sự (shark block / ret -6) và nhận thiết bị thay thế mới."""
         did = blocked_device.get("device_id", "")
         with self._lock:
             self._cooldowns[did] = time.monotonic() + cooldown_seconds
@@ -263,6 +278,8 @@ class CapCutDevicePool:
             # Sinh một thiết bị mới bổ sung vào pool
             replacement = generate_fake_device()
             self._devices.append(replacement)
+            if len(self._devices) > 24:
+                self._devices.pop(0)
             self._save_pool()
             return replacement
 

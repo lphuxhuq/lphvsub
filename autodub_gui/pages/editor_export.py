@@ -223,9 +223,25 @@ class VoiceAndExportMixin:
         except Exception:  # noqa: BLE001
             pass
 
+        logo_opts = {
+            "logo_path": getattr(self, "_logo_path", ""),
+            "logo_position": getattr(self, "_logo_position", "top_right"),
+            "logo_scale": getattr(self, "_logo_scale", 0.12),
+            "logo_opacity": getattr(self, "_logo_opacity", 0.85),
+            "logo_motion": getattr(self, "_logo_motion", "static"),
+        }
+        wm_opts = {
+            "watermark_text": getattr(self, "_watermark_text", ""),
+            "watermark_motion": getattr(self, "_watermark_motion", "bounce"),
+            "watermark_opacity": getattr(self, "_watermark_opacity", 0.28),
+            "watermark_font_size": getattr(self, "_watermark_font_size", 26),
+            "watermark_speed": getattr(self, "_watermark_speed", 40),
+        }
         dialog = StyleDialog(video, style,
                              list(getattr(self, "_blur_regions", [])), self,
-                             preview_text=preview_text)
+                             preview_text=preview_text,
+                             logo_options=logo_opts,
+                             watermark_options=wm_opts)
         if not dialog.exec():
             return
         self._subtitle_style = dialog.style()
@@ -234,6 +250,21 @@ class VoiceAndExportMixin:
         self.export_panel.preset.set_key("custom")
         if video:
             self._blur_regions = dialog.regions()
+
+        new_logo = dialog.logo_options()
+        self._logo_path = new_logo["logo_path"]
+        self._logo_position = new_logo["logo_position"]
+        self._logo_scale = new_logo["logo_scale"]
+        self._logo_opacity = new_logo["logo_opacity"]
+        self._logo_motion = new_logo["logo_motion"]
+
+        new_wm = dialog.watermark_options()
+        self._watermark_text = new_wm["watermark_text"]
+        self._watermark_motion = new_wm["watermark_motion"]
+        self._watermark_opacity = new_wm["watermark_opacity"]
+        self._watermark_font_size = new_wm["watermark_font_size"]
+        self._watermark_speed = new_wm["watermark_speed"]
+
         if self.export_panel.subtitle.current_key() != "burn":
             self.export_panel.subtitle.set_key("burn")
             TOASTS.info("Kiểu chữ tự chỉnh cần ghi thẳng vào hình, nên phụ đề "
@@ -595,3 +626,78 @@ class VoiceAndExportMixin:
         TOASTS.success(
             "Đã lưu âm thanh MP3.", action_label="Mở tệp",
             on_action=lambda: open_file(path))
+
+    # -- Đăng bài & Thumbnail --------------------------------------------
+
+    def _open_thumbnail(self) -> None:
+        """Mở ảnh bìa Thumbnail đã sinh."""
+        import os
+        from autodub_gui.system_open import open_file
+
+        if not self._work_dir:
+            return
+
+        yt_dir = os.path.join(self._work_dir, "youtube")
+        for name in ("thumbnail_landscape.jpg", "thumbnail_portrait.jpg", "thumbnail_original.jpg"):
+            cand = os.path.join(yt_dir, name)
+            if os.path.exists(cand):
+                open_file(cand)
+                return
+
+        # Thử tự sinh ngay nếu chưa có
+        video_path = getattr(self._state, "video_path", "")
+        if video_path and os.path.exists(video_path):
+            from autodub.media.thumbnail import generate_high_ctr_thumbnail
+            os.makedirs(yt_dir, exist_ok=True)
+            out_thumb = os.path.join(yt_dir, "thumbnail_landscape.jpg")
+            title = getattr(self._project, "title", "") or "VIDEO MỚI NHẤT"
+            try:
+                generate_high_ctr_thumbnail(video_path, title, out_thumb, aspect="16:9")
+                TOASTS.success("Đã sinh xong ảnh bìa Thumbnail!", action_label="Mở xem", on_action=lambda: open_file(out_thumb))
+                open_file(out_thumb)
+                return
+            except Exception as e:
+                TOASTS.warn(f"Không thể tạo thumbnail: {e}")
+                return
+
+        TOASTS.info("Chưa có ảnh bìa cho video này.")
+
+    def _get_social_metadata(self) -> dict:
+        """Đọc metadata tiêu đề, mô tả đã lưu trong dự án."""
+        import json
+        import os
+
+        if not self._work_dir:
+            return {}
+        meta_path = os.path.join(self._work_dir, "youtube", "youtube_metadata.json")
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _copy_youtube_title(self) -> None:
+        """Sao chép tiêu đề video vào clipboard."""
+        from PySide6.QtWidgets import QApplication
+        meta = self._get_social_metadata()
+        title = meta.get("title") or getattr(self._project, "title", "")
+        if title:
+            QApplication.clipboard().setText(title)
+            TOASTS.success("Đã chép tiêu đề vào Clipboard!")
+        else:
+            TOASTS.info("Chưa có tiêu đề.")
+
+    def _copy_youtube_description(self) -> None:
+        """Sao chép mô tả và hashtag vào clipboard."""
+        from PySide6.QtWidgets import QApplication
+        meta = self._get_social_metadata()
+        desc = meta.get("description", "")
+        tags = " ".join(meta.get("hashtags", []))
+        full = f"{desc}\n\n{tags}".strip()
+        if full:
+            QApplication.clipboard().setText(full)
+            TOASTS.success("Đã chép mô tả & hashtag vào Clipboard!")
+        else:
+            TOASTS.info("Chưa có mô tả.")

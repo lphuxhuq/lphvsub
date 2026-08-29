@@ -253,6 +253,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.export_panel.export_srt_requested.connect(self._export_srt_file)
         self.export_panel.export_ass_requested.connect(self._export_ass_file)
         self.export_panel.export_audio_mp3_requested.connect(self._export_audio_mp3)
+        self.export_panel.open_thumb_requested.connect(self._open_thumbnail)
+        self.export_panel.copy_title_requested.connect(self._copy_youtube_title)
+        self.export_panel.copy_desc_requested.connect(self._copy_youtube_description)
         self.export_panel.changed.connect(self._on_export_options_changed)
         self._preview.status_changed.connect(self.voice_panel.status.setText)
         # Khoá nút khi đang tổng hợp / phát, mở lại khi xong — giống hành vi

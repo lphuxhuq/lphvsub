@@ -519,9 +519,20 @@ def auto_detect_hardsub_regions(work_dir: str) -> list[dict]:
 
 
 def _render_options(state: EditorState, settings: Settings,
-
                     subtitle_mode: str | None, blur_regions: list[dict] | None,
-                    subtitle_style: dict | None) -> tuple[str, list[dict], dict]:
+                    subtitle_style: dict | None,
+                    logo_path: str | None = None,
+                    logo_position: str | None = None,
+                    logo_scale: float | None = None,
+                    logo_opacity: float | None = None,
+                    logo_margin: int | None = None,
+                    logo_motion: str | None = None,
+                    watermark_text: str | None = None,
+                    watermark_opacity: float | None = None,
+                    watermark_font_size: int | None = None,
+                    watermark_color: str | None = None,
+                    watermark_speed: int | None = None,
+                    watermark_motion: str | None = None) -> tuple[str, list[dict], dict, dict]:
     """Chốt bộ tùy chọn xuất video và ghi lại vào ``render_opts.json``.
 
     Tham số nào để None thì lấy theo lựa chọn đã lưu của dự án, rồi mới tới
@@ -537,11 +548,46 @@ def _render_options(state: EditorState, settings: Settings,
     style = normalize_style(subtitle_style or opts.get("subtitle_style")
                             or settings.subtitle_style())
     merged = dict(opts)
-    merged.update({"subtitle_mode": subtitle_mode,
-                   "blur_regions": blur_regions,
-                   "subtitle_style": style})
+    merged.update({
+        "subtitle_mode": subtitle_mode,
+        "blur_regions": blur_regions,
+        "subtitle_style": style,
+    })
+    if logo_path is not None: merged["logo_path"] = logo_path
+    if logo_position is not None: merged["logo_position"] = logo_position
+    if logo_scale is not None: merged["logo_scale"] = logo_scale
+    if logo_opacity is not None: merged["logo_opacity"] = logo_opacity
+    if logo_margin is not None: merged["logo_margin"] = logo_margin
+    if logo_motion is not None: merged["logo_motion"] = logo_motion
+    if watermark_text is not None: merged["watermark_text"] = watermark_text
+    if watermark_opacity is not None: merged["watermark_opacity"] = watermark_opacity
+    if watermark_font_size is not None: merged["watermark_font_size"] = watermark_font_size
+    if watermark_color is not None: merged["watermark_color"] = watermark_color
+    if watermark_speed is not None: merged["watermark_speed"] = watermark_speed
+    if watermark_motion is not None: merged["watermark_motion"] = watermark_motion
+    if "smart_flip" in opts: merged["smart_flip"] = opts["smart_flip"]
+    if "micro_zoom" in opts: merged["micro_zoom"] = opts["micro_zoom"]
+    if "color_filter" in opts: merged["color_filter"] = opts["color_filter"]
+
     save_render_opts(state.work_dir, merged)
-    return subtitle_mode, blur_regions, style
+    logo_opts = {
+        "logo_path": merged.get("logo_path") or getattr(settings, "logo_path", ""),
+        "logo_position": merged.get("logo_position") or getattr(settings, "logo_position", "top_right"),
+        "logo_scale": merged.get("logo_scale", getattr(settings, "logo_scale", 0.12)),
+        "logo_opacity": merged.get("logo_opacity", getattr(settings, "logo_opacity", 0.85)),
+        "logo_margin": merged.get("logo_margin", getattr(settings, "logo_margin", 24)),
+        "logo_motion": merged.get("logo_motion") or getattr(settings, "logo_motion", "static"),
+        "watermark_text": merged.get("watermark_text") or getattr(settings, "watermark_text", ""),
+        "watermark_opacity": merged.get("watermark_opacity", getattr(settings, "watermark_opacity", 0.28)),
+        "watermark_font_size": merged.get("watermark_font_size", getattr(settings, "watermark_font_size", 26)),
+        "watermark_color": merged.get("watermark_color", getattr(settings, "watermark_color", "white")),
+        "watermark_speed": merged.get("watermark_speed", getattr(settings, "watermark_speed", 40)),
+        "watermark_motion": merged.get("watermark_motion", getattr(settings, "watermark_motion", "bounce")),
+        "smart_flip": merged.get("smart_flip", getattr(settings, "smart_flip", False)),
+        "micro_zoom": merged.get("micro_zoom", getattr(settings, "micro_zoom", False)),
+        "color_filter": merged.get("color_filter", getattr(settings, "color_filter", "none")),
+    }
+    return subtitle_mode, blur_regions, style, logo_opts
 
 
 def _check_render_mode(work_dir: str) -> None:
@@ -649,6 +695,11 @@ def rebuild_output(
     voice: str | None = None, bg_mode: str = "demucs", bg_duck_db: float = -12.0,
     subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
+    logo_path: str | None = None,
+    logo_position: str | None = None,
+    logo_scale: float | None = None,
+    logo_opacity: float | None = None,
+    logo_margin: int | None = None,
     reporter: ProgressReporter | None = None,
 ) -> str:
     """Dựng lại âm thanh và video từ danh sách câu hiện tại.
@@ -665,8 +716,10 @@ def rebuild_output(
 
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
-    subtitle_mode, blur_regions, style = _render_options(
-        state, settings, subtitle_mode, blur_regions, subtitle_style)
+    subtitle_mode, blur_regions, style, logo_opts = _render_options(
+        state, settings, subtitle_mode, blur_regions, subtitle_style,
+        logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
+        logo_opacity=logo_opacity, logo_margin=logo_margin)
 
     def emit(step, status, **kw):
         if reporter is not None:
@@ -741,7 +794,8 @@ def rebuild_output(
         blur_regions=blur_regions, subtitle_lang=target.iso639_2,
         subtitle_style=style,
         speed=deferred_speed[0] if deferred_speed else None,
-        fps=deferred_speed[1] if deferred_speed else None)
+        fps=deferred_speed[1] if deferred_speed else None,
+        **logo_opts)
     emit("merge_video", "done", detail=dubbed)
     emit("done", "done", detail=work_dir)
     logger.info(f"Đã xuất xong video: {dubbed}")
@@ -752,6 +806,11 @@ def rebuild_subtitles(
     work_dir: str, settings: Settings, target_key: str = "vi",
     subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
+    logo_path: str | None = None,
+    logo_position: str | None = None,
+    logo_scale: float | None = None,
+    logo_opacity: float | None = None,
+    logo_margin: int | None = None,
     reporter: ProgressReporter | None = None,
 ) -> str:
     """Ghi lại PHỤ ĐỀ vào video, giữ nguyên phần âm thanh đã có.
@@ -766,8 +825,10 @@ def rebuild_subtitles(
 
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
-    subtitle_mode, blur_regions, style = _render_options(
-        state, settings, subtitle_mode, blur_regions, subtitle_style)
+    subtitle_mode, blur_regions, style, logo_opts = _render_options(
+        state, settings, subtitle_mode, blur_regions, subtitle_style,
+        logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
+        logo_opacity=logo_opacity, logo_margin=logo_margin)
 
     merged_audio_path = data_path(work_dir, target.audio_name)
     if not os.path.isfile(merged_audio_path):
@@ -797,7 +858,8 @@ def rebuild_subtitles(
         blur_regions=blur_regions, subtitle_lang=target.iso639_2,
         subtitle_style=style,
         speed=deferred_speed[0] if deferred_speed else None,
-        fps=deferred_speed[1] if deferred_speed else None)
+        fps=deferred_speed[1] if deferred_speed else None,
+        **logo_opts)
     if reporter is not None:
         reporter.emit("merge_video", "done", detail=dubbed)
         reporter.emit("done", "done", detail=work_dir)

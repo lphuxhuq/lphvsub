@@ -565,9 +565,28 @@ class BatchPage(BasePage):
 
         video = next((it.file_path for it in self._items
                       if it.file_path and os.path.isfile(it.file_path)), None)
-        style = self._shared_style or self._settings_provider().subtitle_style()
+        settings = self._settings_provider()
+        style = self._shared_style or settings.subtitle_style()
+        logo_opts = {
+            "logo_path": getattr(self, "_shared_logo_path", "") or getattr(settings, "logo_path", ""),
+            "logo_position": getattr(self, "_shared_logo_position", "top_right"),
+            "logo_scale": getattr(self, "_shared_logo_scale", 0.12),
+            "logo_opacity": getattr(self, "_shared_logo_opacity", 0.85),
+            "logo_motion": getattr(self, "_shared_logo_motion", "static"),
+        }
+        wm_opts = {
+            "watermark_text": getattr(self, "_shared_wm_text", "") or getattr(settings, "watermark_text", ""),
+            "watermark_motion": getattr(self, "_shared_wm_motion", "bounce"),
+            "watermark_opacity": getattr(self, "_shared_wm_opacity", 0.28),
+            "watermark_font_size": getattr(self, "_shared_wm_font_size", 26),
+            "watermark_speed": getattr(self, "_shared_wm_speed", 40),
+        }
         try:
-            dialog = StyleDialog(video, style, list(self._shared_regions), self)
+            dialog = StyleDialog(
+                video, style, list(self._shared_regions), self,
+                logo_options=logo_opts,
+                watermark_options=wm_opts,
+            )
         except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
             ConfirmDialog.show_error(
                 self, "Không mở được khung xem trước",
@@ -580,6 +599,21 @@ class BatchPage(BasePage):
         self._shared_style = dialog.style()
         if video:
             self._shared_regions = dialog.regions()
+
+        new_logo = dialog.logo_options()
+        self._shared_logo_path = new_logo["logo_path"]
+        self._shared_logo_position = new_logo["logo_position"]
+        self._shared_logo_scale = new_logo["logo_scale"]
+        self._shared_logo_opacity = new_logo["logo_opacity"]
+        self._shared_logo_motion = new_logo["logo_motion"]
+
+        new_wm = dialog.watermark_options()
+        self._shared_wm_text = new_wm["watermark_text"]
+        self._shared_wm_motion = new_wm["watermark_motion"]
+        self._shared_wm_opacity = new_wm["watermark_opacity"]
+        self._shared_wm_font_size = new_wm["watermark_font_size"]
+        self._shared_wm_speed = new_wm["watermark_speed"]
+
         count = len(self._shared_regions)
         self.lbl_style.setText(
             f"Cỡ chữ {self._shared_style.get('font_size', 22)}, "
@@ -602,6 +636,14 @@ class BatchPage(BasePage):
             subtitle_mode=self.opt_subtitle.current_key(),
             subtitle_style=self._shared_style or settings.subtitle_style(),
             blur_regions=list(self._shared_regions),
+            logo_path=getattr(settings, "logo_path", ""),
+            logo_position=getattr(settings, "logo_position", "top_right"),
+            watermark_text=getattr(settings, "watermark_text", ""),
+            watermark_opacity=getattr(settings, "watermark_opacity", 0.28),
+            watermark_motion=getattr(settings, "watermark_motion", "bounce"),
+            smart_flip=getattr(settings, "smart_flip", False),
+            micro_zoom=getattr(settings, "micro_zoom", False),
+            color_filter=getattr(settings, "color_filter", "none"),
         )
 
     def _start_all(self) -> None:

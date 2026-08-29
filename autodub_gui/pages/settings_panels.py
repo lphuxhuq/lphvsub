@@ -44,7 +44,7 @@ class VoiceSettingsPanel(CollapsibleSection):
         super().__init__("Giọng mặc định", expanded=True, parent=parent)
         self.picker = VoicePicker("Giọng dùng cho dự án mới",
                                   show_preview=False)
-        self.picker.changed.connect(self.changed.emit)
+        self.picker.changed.connect(lambda *_a: self.changed.emit())
         self.add_widget(self.picker)
 
         # Khối này nằm trong cột phải khá hẹp của thẻ Giọng đọc, nên hai nút

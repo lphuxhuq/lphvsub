@@ -31,7 +31,7 @@ logger = setup_logging("autodub.align")
 ALIGN_MODEL = "base"
 
 # Clip ngắn hơn mức này không đáng chạy model — ước lượng là đủ.
-_MIN_CLIP_S = 0.4
+_MIN_CLIP_S = 0.15
 
 
 def _align_workers() -> int:
@@ -73,7 +73,8 @@ def _asr_words(model, wav_path: str) -> list[tuple[str, float, float]]:
     """Chữ + mốc (tương đối trong clip) Whisper nghe được từ một clip."""
     segments, _info = model.transcribe(
         wav_path, language="vi", word_timestamps=True,
-        beam_size=1,              # audio sạch — greedy đủ, nhanh gấp đôi
+        beam_size=2,
+        initial_prompt="Đây là bản dịch tiếng Việt phụ đề karaoke.",
         condition_on_previous_text=False,
         vad_filter=False,         # clip đã là lời nói thuần
     )
@@ -94,15 +95,13 @@ def _map_words(
 ) -> list[tuple[str, float, float]] | None:
     """Gán mốc cho từng chữ của bản dịch từ mốc Whisper nghe được.
 
-    Trả về mốc TUYỆT ĐỐI (đã cộng ``clip_start``), hoặc None khi kết quả
-    ASR quá lệch để tin (quá ít chữ so với văn bản).
+    Trả về mốc TUYỆT ĐỐI (đã cộng ``clip_start``), hoặc None khi không có mốc nào.
     """
     nt, na = len(text_words), len(asr_words)
     if nt == 0 or na == 0:
         return None
-    # ASR nghe ra quá ít chữ (nuốt nửa câu) → mốc nội suy sẽ sai nhịp nặng;
-    # thà ước lượng đều còn hơn.
-    if na < nt * 0.5:
+    # Khi ASR quá thưa thớt (ví dụ 1 từ / 4 từ), trả None để fallback sang acoustic RMS energy
+    if na < nt * 0.4 or (na == 1 and nt >= 3):
         return None
 
     out: list[tuple[str, float, float]] = []
@@ -111,16 +110,25 @@ def _map_words(
         for token, (_w, t0, t1) in pairs:
             out.append((token, clip_start + t0, clip_start + t1))
     else:
-        # Nội suy vị trí: chữ i của văn bản ↔ vùng i*na/nt của ASR.
+        # Nội suy vị trí: khớp theo tỷ lệ hoặc neo theo khoảng phát âm thực tế của ASR
+        first_t0 = asr_words[0][1]
+        last_t1 = asr_words[-1][2]
+        effective_dur = max(0.1, last_t1 - first_t0)
+
         for i, token in enumerate(text_words):
             j0 = min(na - 1, int(i * na / nt))
             j1 = min(na - 1, int((i + 1) * na / nt))
             t0 = asr_words[j0][1]
             t1 = asr_words[j1][2] if j1 > j0 else asr_words[j0][2]
+
+            # Nếu chênh lệch số lượng từ quá lớn, phân bổ đều theo khoảng hoạt động của ASR
+            if na < nt * 0.5 or na > nt * 2.0:
+                t0 = first_t0 + (i / nt) * effective_dur
+                t1 = first_t0 + ((i + 1) / nt) * effective_dur
+
             out.append((token, clip_start + t0, clip_start + max(t1, t0)))
 
-    # Vá đơn điệu: mốc phải không lùi và nằm trong clip (ASR đôi khi trả
-    # end < start quanh khoảng lặng).
+    # Vá đơn điệu: mốc phải không lùi và nằm trong clip
     hi = clip_start + clip_dur
     prev = clip_start
     fixed: list[tuple[str, float, float]] = []

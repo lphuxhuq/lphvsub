@@ -22,13 +22,15 @@ import os
 import subprocess
 import tempfile
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, Signal
-from PySide6.QtGui import (QColor, QFont, QPainter,
+from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, QUrl, Signal
+from PySide6.QtGui import (QColor, QFont, QImage, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout,
-    QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea,
+    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoFrame, QVideoSink
 
 from autodub_gui import tokens
 from autodub_gui.ui.inputs import polish_combo
@@ -106,7 +108,7 @@ def subtitle_zone(center_ratio: float) -> str:
 
 
 class _FrameCanvas(QWidget):
-    """Frame + blur rectangles + draggable live subtitle preview."""
+    """Frame + blur rectangles + logo + watermark + draggable live subtitle preview."""
 
     def __init__(self, pixmap: QPixmap, style: dict,
                  allow_regions: bool = True, parent=None):
@@ -114,13 +116,17 @@ class _FrameCanvas(QWidget):
         self._source = pixmap
         self._scaled = pixmap
         self._style = dict(style)
+        self._logo_opts: dict = {}
+        self._wm_opts: dict = {}
         self._allow_regions = allow_regions
         self._rects: list[QRect] = []
+        self._selected_index: int | None = None
         self._drag_origin: QPoint | None = None
         self._drag_current: QRect | None = None
         self._dragging_text = False
         self._text_rect = QRectF()
         self.on_style_dragged = None      # callback(position: str, margin_v: int)
+        self.on_regions_changed = None    # callback(regions: list[dict])
         self.setMinimumSize(480, 270)
         self.setMouseTracking(True)
 
@@ -144,8 +150,25 @@ class _FrameCanvas(QWidget):
 
     # --------------------------------------------------------- style ------ #
 
+    def set_pixmap(self, pixmap: QPixmap) -> None:
+        self._source = pixmap
+        self._scaled = self._source.scaled(
+            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.update()
+
+    def set_image(self, img: QImage) -> None:
+        self.set_pixmap(QPixmap.fromImage(img))
+
     def set_style(self, style: dict) -> None:
         self._style = dict(style)
+        self.update()
+
+    def set_logo_options(self, opts: dict) -> None:
+        self._logo_opts = dict(opts)
+        self.update()
+
+    def set_watermark_options(self, opts: dict) -> None:
+        self._wm_opts = dict(opts)
         self.update()
 
     def set_rects_from_normalized(self, regions: list[dict]) -> None:
@@ -158,7 +181,10 @@ class _FrameCanvas(QWidget):
                   int(r["h"] * pr.height()))
             for r in regions
         ]
+        self._selected_index = len(self._rects) - 1 if self._rects else None
         self.update()
+        if self.on_regions_changed is not None:
+            self.on_regions_changed(self.normalized_regions())
 
     # --------------------------------------------------------- mouse ------ #
 
@@ -191,6 +217,9 @@ class _FrameCanvas(QWidget):
             clipped = self._drag_current.intersected(self._pixmap_rect())
             if clipped.width() > 4 and clipped.height() > 4:
                 self._rects.append(clipped)
+                self._selected_index = len(self._rects) - 1
+                if self.on_regions_changed is not None:
+                    self.on_regions_changed(self.normalized_regions())
         self._drag_origin = None
         self._drag_current = None
         self.update()
@@ -200,36 +229,86 @@ class _FrameCanvas(QWidget):
         pr = self._pixmap_rect()
         if pr.height() == 0:
             return
+        clamped_y = max(pr.y(), min(mouse_y, pr.bottom()))
+        center_ratio = (clamped_y - pr.y()) / pr.height()
+        pos = subtitle_zone(center_ratio)
         scale = self._ass_scale()
-        text_h = self._text_rect.height() or 1
-
-        center_ratio = (mouse_y - pr.y()) / pr.height()
-        position = subtitle_zone(min(max(center_ratio, 0.0), 1.0))
-        if position == "bottom":
-            margin = round((pr.bottom() - (mouse_y + text_h / 2)) / scale)
-        elif position == "top":
-            margin = round(((mouse_y - text_h / 2) - pr.y()) / scale)
+        if pos == "top":
+            margin_v = int((clamped_y - pr.y()) / scale)
+        elif pos == "bottom":
+            margin_v = int((pr.bottom() - clamped_y) / scale)
         else:
-            margin = self._style.get("margin_v", 40)
-        margin = max(0, min(int(margin), 280))
-
-        self._style["position"] = position
-        if position != "middle":
-            self._style["margin_v"] = margin
+            margin_v = 0
+        margin_v = max(0, min(margin_v, 200))
+        self._style["position"] = pos
+        self._style["margin_v"] = margin_v
         self.update()
         if self.on_style_dragged is not None:
-            self.on_style_dragged(position, self._style.get("margin_v", 40))
+            self.on_style_dragged(pos, margin_v)
 
-    # --------------------------------------------------------- rects ------ #
+    # ------------------------------------------------------- regions ------ #
 
-    def clear_last(self):
+    def clear_all(self) -> None:
+        self._rects.clear()
+        self._selected_index = None
+        self.update()
+        if self.on_regions_changed is not None:
+            self.on_regions_changed([])
+
+    def clear_last(self) -> None:
         if self._rects:
             self._rects.pop()
+            self._selected_index = len(self._rects) - 1 if self._rects else None
             self.update()
+            if self.on_regions_changed is not None:
+                self.on_regions_changed(self.normalized_regions())
 
-    def clear_all(self):
-        self._rects.clear()
+    def remove_region(self, index: int) -> None:
+        """Xoá một vùng theo số thứ tự (0-indexed)."""
+        if 0 <= index < len(self._rects):
+            self._rects.pop(index)
+            if self._selected_index == index:
+                self._selected_index = len(self._rects) - 1 if self._rects else None
+            elif self._selected_index is not None and self._selected_index > index:
+                self._selected_index -= 1
+            self.update()
+            if self.on_regions_changed is not None:
+                self.on_regions_changed(self.normalized_regions())
+
+    def select_region(self, index: int | None) -> None:
+        """Đánh dấu chọn một vùng để làm nổi bật trên canvas."""
+        self._selected_index = index if (index is not None and 0 <= index < len(self._rects)) else None
         self.update()
+
+    def add_preset_region(self, preset_type: str) -> None:
+        """Tạo nhanh một vùng làm mờ từ mẫu phổ biến."""
+        if preset_type == "bottom_band":
+            reg = {"x": 0.0, "y": 0.82, "w": 1.0, "h": 0.16}
+        elif preset_type == "top_band":
+            reg = {"x": 0.0, "y": 0.02, "w": 1.0, "h": 0.15}
+        elif preset_type == "top_right_logo":
+            reg = {"x": 0.74, "y": 0.02, "w": 0.24, "h": 0.14}
+        elif preset_type == "top_left_logo":
+            reg = {"x": 0.02, "y": 0.02, "w": 0.24, "h": 0.14}
+        elif preset_type == "bottom_right":
+            reg = {"x": 0.74, "y": 0.84, "w": 0.24, "h": 0.14}
+        elif preset_type == "bottom_left":
+            reg = {"x": 0.02, "y": 0.84, "w": 0.24, "h": 0.14}
+        else:
+            reg = {"x": 0.0, "y": 0.82, "w": 1.0, "h": 0.16}
+
+        pr = self._pixmap_rect()
+        if pr.width() <= 0 or pr.height() <= 0:
+            return
+        new_r = QRect(int(pr.x() + reg["x"] * pr.width()),
+                      int(pr.y() + reg["y"] * pr.height()),
+                      int(reg["w"] * pr.width()),
+                      int(reg["h"] * pr.height()))
+        self._rects.append(new_r)
+        self._selected_index = len(self._rects) - 1
+        self.update()
+        if self.on_regions_changed is not None:
+            self.on_regions_changed(self.normalized_regions())
 
     def normalized_regions(self) -> list[dict]:
         """Convert stored displayed rectangles to normalized 0..1 dicts."""
@@ -256,17 +335,125 @@ class _FrameCanvas(QWidget):
         painter.drawPixmap(pr.topLeft(), self._scaled)
 
         # Blur regions
-        pen = QPen(QColor(tokens.PREVIEW_GUIDE), 2)
-        painter.setPen(pen)
-        fill = QColor(63, 111, 181, 70)
-        for r in self._rects:
-            painter.fillRect(r, fill)
+        default_pen = QPen(QColor(tokens.PREVIEW_GUIDE), 2)
+        default_fill = QColor(63, 111, 181, 70)
+        selected_pen = QPen(QColor(tokens.WARNING), 3)
+        sel_c = QColor(tokens.WARNING)
+        sel_c.setAlpha(90)
+        selected_fill = sel_c
+
+        badge_font = QFont("Arial", 9, QFont.Bold)
+        painter.setFont(badge_font)
+
+        for i, r in enumerate(self._rects):
+            is_sel = (i == self._selected_index)
+            painter.setPen(selected_pen if is_sel else default_pen)
+            painter.fillRect(r, selected_fill if is_sel else default_fill)
             painter.drawRect(r)
+
+            # Vẽ số thứ tự vùng (1, 2, 3...)
+            badge_rect = QRect(r.x() + 2, r.y() + 2, 18, 16)
+            painter.fillRect(badge_rect, QColor(0, 0, 0, 180))
+            painter.setPen(QColor(tokens.WARNING if is_sel else tokens.TEXT_ON_ACCENT))
+            painter.drawText(badge_rect, Qt.AlignCenter, str(i + 1))
+
         if self._drag_current is not None:
             painter.setPen(QPen(QColor(tokens.PREVIEW_BLUR_EDGE), 2, Qt.DashLine))
             painter.drawRect(self._drag_current)
 
+        self._paint_logo(painter, pr)
+        self._paint_watermark(painter, pr)
         self._paint_subtitle(painter, pr)
+
+    def _paint_logo(self, painter: QPainter, pr: QRect) -> None:
+        """Vẽ logo xem trước trên canvas."""
+        if not self._logo_opts or not self._logo_opts.get("enabled"):
+            return
+        path = str(self._logo_opts.get("path", "")).strip()
+        scale = float(self._logo_opts.get("scale", 0.12))
+        opacity = float(self._logo_opts.get("opacity", 0.85))
+        pos = str(self._logo_opts.get("position", "top_right"))
+        motion = str(self._logo_opts.get("motion", "static"))
+        margin = max(8, int(pr.width() * 0.025))
+
+        target_w = max(24, int(pr.width() * scale))
+
+        painter.save()
+        painter.setOpacity(max(0.1, min(1.0, opacity)))
+
+        pix = QPixmap(path) if (path and os.path.exists(path)) else None
+        if pix and not pix.isNull():
+            scaled_pix = pix.scaledToWidth(target_w, Qt.SmoothTransformation)
+            pw, ph = scaled_pix.width(), scaled_pix.height()
+        else:
+            pw = target_w
+            ph = int(target_w * 0.6)
+            scaled_pix = None
+
+        if motion == "bounce":
+            lx = pr.x() + int(pr.width() * 0.35)
+            ly = pr.y() + int(pr.height() * 0.15)
+        elif pos == "top_left":
+            lx = pr.x() + margin
+            ly = pr.y() + margin
+        elif pos == "bottom_left":
+            lx = pr.x() + margin
+            ly = pr.bottom() - ph - margin
+        elif pos == "bottom_right":
+            lx = pr.right() - pw - margin
+            ly = pr.bottom() - ph - margin
+        else:  # top_right
+            lx = pr.right() - pw - margin
+            ly = pr.y() + margin
+
+        if scaled_pix:
+            painter.drawPixmap(lx, ly, scaled_pix)
+        else:
+            l_rect = QRect(lx, ly, pw, ph)
+            painter.fillRect(l_rect, QColor(30, 35, 60, 200))
+            painter.setPen(QPen(QColor(tokens.PRIMARY), 1, Qt.DashLine))
+            painter.drawRect(l_rect)
+            painter.setPen(QColor(tokens.TEXT_PRIMARY))
+            painter.setFont(QFont("Arial", 8, QFont.Bold))
+            painter.drawText(l_rect, Qt.AlignCenter, "LOGO")
+
+        painter.setOpacity(0.9)
+        painter.setPen(QPen(QColor(tokens.PRIMARY), 1, Qt.DotLine))
+        painter.drawRect(QRect(lx - 2, ly - 2, pw + 4, ph + 4))
+
+        painter.restore()
+
+    def _paint_watermark(self, painter: QPainter, pr: QRect) -> None:
+        """Vẽ watermark chìm xem trước trên canvas."""
+        if not self._wm_opts or not self._wm_opts.get("enabled"):
+            return
+        text = str(self._wm_opts.get("text", "")).strip()
+        if not text:
+            return
+        opacity = float(self._wm_opts.get("opacity", 0.28))
+        font_size = int(self._wm_opts.get("font_size", 26))
+        scale = self._ass_scale()
+        motion = str(self._wm_opts.get("motion", "bounce"))
+
+        painter.save()
+        painter.setOpacity(max(0.05, min(1.0, opacity)))
+
+        wm_font = QFont("Arial", max(9, int(font_size * scale * 0.7)), QFont.Bold)
+        painter.setFont(wm_font)
+        painter.setPen(QColor(tokens.TEXT_PRIMARY))
+
+        if motion == "bounce":
+            painter.drawText(pr, Qt.AlignCenter, text)
+        elif motion == "top_left":
+            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignTop | Qt.AlignLeft, text)
+        elif motion == "bottom_left":
+            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignBottom | Qt.AlignLeft, text)
+        elif motion == "bottom_right":
+            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignBottom | Qt.AlignRight, text)
+        else:  # top_right
+            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignTop | Qt.AlignRight, text)
+
+        painter.restore()
 
     def _paint_subtitle(self, painter: QPainter, pr: QRect) -> None:
         """Render the preview line exactly as ffmpeg/libass would place it."""
@@ -354,23 +541,24 @@ def _placeholder_frame() -> QPixmap:
 
 
 class StyleDialog(QDialog):
-    """Style the subtitles and pick blur regions in one place."""
+    """Style the subtitles, blur regions, logo and dynamic watermark in one place."""
 
     def __init__(self, video_path: str | None, style: dict,
                  regions: list[dict] | None = None, parent=None,
-                 preview_text: str = ""):
+                 preview_text: str = "",
+                 logo_options: dict | None = None,
+                 watermark_options: dict | None = None):
         super().__init__(parent)
         self.setWindowTitle("Phụ đề & che chữ")
-        # Đủ chỗ cho panel phải hiện trọn cả 3 nhóm không phải cuộn.
-        self.resize(1150, 700)
-        self.setMinimumSize(1050, 620)
+        self.resize(1180, 720)
+        self.setMinimumSize(1080, 640)
         self._style = dict(style)
+        self._logo_opts = dict(logo_options or {})
+        self._wm_opts = dict(watermark_options or {})
         self._video_path = video_path
         self._regions_pending = regions
         self._frame_worker = None
-        # Chữ xem trước: dùng câu thật của người dùng nếu được truyền vào,
-        # không thì dùng mẫu mặc định. Điều này giúp xem trước đúng với độ
-        # dài thực tế của câu thoại đang chỉnh.
+
         if preview_text:
             global PREVIEW_TEXT, PREVIEW_TEXT_KARAOKE  # noqa: PLW0603
             PREVIEW_TEXT = preview_text
@@ -378,12 +566,6 @@ class StyleDialog(QDialog):
             PREVIEW_TEXT_KARAOKE = " ".join(words[:3]) if len(words) >= 3 else preview_text
 
         has_video = bool(video_path)
-        # Bắt đầu bằng placeholder — frame thật sẽ thay thế sau khi ffmpeg
-        # chạy xong trong luồng nền. Người dùng thấy dialog ngay lập tức
-        # thay vì phải chờ ffmpeg (có thể mất 2-5 giây trên file lớn).
-        # Cho phép vẽ vùng che CẢ KHI chưa có video (chỉ có URL): tọa độ
-        # được chuẩn hóa 0..1 theo khung hình, nên vùng vẽ trên placeholder
-        # 16:9 áp đúng lên video thật khi pipeline tải về.
         pixmap = _placeholder_frame()
 
         root = QVBoxLayout(self)
@@ -393,13 +575,50 @@ class StyleDialog(QDialog):
         body.setSpacing(16)
         root.addLayout(body, 1)
 
-        # --- Left: canvas (7 phần) ---
+        # --- Left: canvas (6 phần) ---
         left = QVBoxLayout()
         left.setSpacing(6)
-        # allow_regions luôn True — placeholder đủ để khoanh vùng; tọa độ 0..1
         self.canvas = _FrameCanvas(pixmap, self._style, allow_regions=True)
         self.canvas.on_style_dragged = self._on_canvas_drag
         left.addWidget(self.canvas, 1)
+
+        # Thanh điều khiển phát video (Live Video Playback)
+        self._player: QMediaPlayer | None = None
+        self._audio_output: QAudioOutput | None = None
+        self._video_sink: QVideoSink | None = None
+        self._duration_ms = 0
+
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(8)
+        self.btn_play = QPushButton("▶ Phát")
+        self.btn_play.setFixedWidth(75)
+        self.btn_play.clicked.connect(self._toggle_playback)
+        self.slider_pos = QSlider(Qt.Horizontal)
+        self.slider_pos.setRange(0, 1000)
+        self.slider_pos.sliderMoved.connect(self._on_seek)
+        self.lbl_time = QLabel("00:00 / 00:00")
+        self.lbl_time.setMinimumWidth(85)
+        controls_row.addWidget(self.btn_play)
+        controls_row.addWidget(self.slider_pos, 1)
+        controls_row.addWidget(self.lbl_time)
+        left.addLayout(controls_row)
+
+        if has_video and os.path.isfile(str(video_path)):
+            self._player = QMediaPlayer(self)
+            self._audio_output = QAudioOutput(self)
+            self._player.setAudioOutput(self._audio_output)
+            self._video_sink = QVideoSink(self)
+            self._player.setVideoSink(self._video_sink)
+            self._video_sink.videoFrameChanged.connect(self._on_video_frame)
+            self._player.positionChanged.connect(self._on_player_position)
+            self._player.durationChanged.connect(self._on_player_duration)
+            self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+            self._player.setSource(QUrl.fromLocalFile(os.path.abspath(str(video_path))))
+            self._player.setPosition(0)
+        else:
+            self.btn_play.setEnabled(False)
+            self.slider_pos.setEnabled(False)
+
         hint = QLabel(
             "Kéo dòng phụ đề để đặt vị trí. "
             "Kéo chuột trên hình để khoanh vùng che chữ (làm mờ suốt video)."
@@ -410,212 +629,392 @@ class StyleDialog(QDialog):
         left.addWidget(hint)
         body.addLayout(left, 6)
 
-        # --- Right: panel phẳng (3 phần) — nhóm bằng tiêu đề + khoảng
-        # trắng, KHÔNG viền lồng nhau; cuộn được khi cửa sổ thấp ---
-        from PySide6.QtWidgets import QScrollArea
-        panel_scroll = QScrollArea()
-        panel_scroll.setWidgetResizable(True)
-        # Sàn bề rộng: dưới mức này hàng "nhãn + 2 ô số" bị cắt chữ.
-        panel_scroll.setMinimumWidth(400)
-        panel_scroll.setMaximumWidth(460)
-        panel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        panel = QWidget()
-        panel_l = QVBoxLayout(panel)
-        panel_l.setContentsMargins(4, 0, 10, 4)
-        panel_l.setSpacing(6)
+        # --- Right: Tabbed Panel (4 phần) ---
+        self.tabs = QTabWidget()
+        self.tabs.setMinimumWidth(420)
+        self.tabs.setMaximumWidth(480)
+        self.tabs.setStyleSheet(
+            f"QTabWidget::pane {{ border: 1px solid {tokens.BORDER_SUBTLE}; background: {tokens.BG_PANEL}; border-radius: 6px; }} "
+            f"QTabBar::tab {{ background: {tokens.BG_INPUT}; color: {tokens.TEXT_MUTED}; padding: 8px 14px; font-weight: 600; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 4px; }} "
+            f"QTabBar::tab:selected {{ background: {tokens.BG_PANEL}; color: {tokens.TEXT_PRIMARY}; border: 1px solid {tokens.BORDER_SUBTLE}; border-bottom: none; }} "
+            f"QTabBar::tab:hover {{ background: {tokens.BG_PANEL_HOVER}; color: {tokens.TEXT_PRIMARY}; }}"
+        )
+
+        # ================================= TAB 1: KIỂU CHỮ ================================= #
+        tab_font_scroll = QScrollArea()
+        tab_font_scroll.setWidgetResizable(True)
+        tab_font_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tab_font_w = QWidget()
+        panel_l = QVBoxLayout(tab_font_w)
+        panel_l.setContentsMargins(10, 10, 10, 10)
+        panel_l.setSpacing(8)
 
         def _section(title: str) -> None:
-            """Tiêu đề nhóm phẳng; khoảng trắng phía trên tách nhóm."""
             if panel_l.count():
-                panel_l.addSpacing(14)
+                panel_l.addSpacing(10)
             lb = QLabel(title)
             lb.setObjectName("sectionHeader")
             panel_l.addWidget(lb)
 
-        # Nhóm 1: chữ (font, cỡ, màu, vị trí)
-        _section("Kiểu chữ")
+        _section("Phông chữ & Vị trí")
         f = QFormLayout()
         f.setContentsMargins(0, 0, 0, 0)
         f.setLabelAlignment(Qt.AlignRight)
         f.setSpacing(7)
         panel_l.addLayout(f)
-        # Hộp font tự đổ: font KÈM APP (thư mục fonts/) đứng đầu — các font
-        # này render đúng trên video ở mọi máy; font Windows có đủ dấu
-        # tiếng Việt xếp sau. Không dùng QFontComboBox vì nó chỉ biết font
-        # hệ thống và không tách được 2 nhóm.
+
         self.cb_font = QComboBox()
         self._populate_fonts()
         self.cb_font.setToolTip(
-            "Font trong nhóm 'Font của app' hiển thị đúng trên video ở mọi "
-            "máy (khuyên dùng).\n"
-            "Thêm font mới: bấm nút + để mở thư mục font, thả file .ttf "
-            "vào đó rồi mở lại hộp thoại này.\n"
-            "Nguồn font miễn phí: fonts.google.com (lọc Language → "
-            "Vietnamese).")
+            "Font trong nhóm 'Font của app' hiển thị đúng trên video ở mọi máy.")
         self.btn_fonts_dir = QPushButton("+")
         self.btn_fonts_dir.setFixedWidth(28)
-        self.btn_fonts_dir.setToolTip(
-            "Thêm font: mở thư mục font của app.\nThả file font (.ttf/.otf) "
-            "vào đó rồi mở lại hộp thoại này là dùng được.\nTải font miễn "
-            "phí tại fonts.google.com (lọc Language → Vietnamese).")
+        self.btn_fonts_dir.setToolTip("Thêm font: mở thư mục font của app.")
         self.btn_fonts_dir.clicked.connect(self._open_fonts_dir)
         font_row = QHBoxLayout()
         font_row.setSpacing(4)
         font_row.addWidget(self.cb_font, 1)
         font_row.addWidget(self.btn_fonts_dir)
+
         self.sp_size = QSpinBox()
         self.sp_size.setRange(8, 120)
         self.sp_size.setToolTip("Cỡ chữ — tự co giãn theo độ phân giải video")
         self.sp_outline = QSpinBox()
         self.sp_outline.setRange(0, 10)
         self.sp_outline.setToolTip("Độ dày viền quanh chữ")
-        # Cỡ chữ + viền chung một hàng cho gọn.
+
         size_row = QHBoxLayout()
         size_row.setSpacing(4)
         size_row.addWidget(self.sp_size, 1)
-        size_row.addWidget(QLabel("Viền"))
+        lbl_out = QLabel("Viền")
+        lbl_out.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        size_row.addWidget(lbl_out)
         size_row.addWidget(self.sp_outline, 1)
-        # Chữ đậm + bóng đổ chung một hàng — đủ cặp thông số như Cài đặt.
+
         self.chk_bold = QCheckBox("Chữ đậm")
-        self.chk_bold.setToolTip("Chữ đậm dễ đọc hơn khi xem trên điện thoại")
         self.sp_shadow = QSpinBox()
-        self.sp_shadow.setRange(0, 8)
-        self.sp_shadow.setToolTip("Bóng nhẹ phía sau chữ. Đặt 0 để tắt.")
+        self.sp_shadow.setRange(0, 10)
+        self.sp_shadow.setToolTip("Độ lệch bóng đổ (pixel theo độ phân giải 288p)")
         bold_row = QHBoxLayout()
         bold_row.setSpacing(4)
         bold_row.addWidget(self.chk_bold, 1)
-        bold_row.addWidget(QLabel("Bóng"))
+        lbl_sh = QLabel("Bóng")
+        lbl_sh.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        bold_row.addWidget(lbl_sh)
         bold_row.addWidget(self.sp_shadow, 1)
+
         self.btn_color = QPushButton()
+        self.btn_color.setToolTip("Màu chữ chính")
         self.btn_color.clicked.connect(lambda: self._pick_color("color"))
         self.btn_outline_color = QPushButton()
-        self.btn_outline_color.clicked.connect(
-            lambda: self._pick_color("outline_color"))
+        self.btn_outline_color.setToolTip("Màu viền quanh chữ")
+        self.btn_outline_color.clicked.connect(lambda: self._pick_color("outline_color"))
         color_row = QHBoxLayout()
         color_row.setSpacing(4)
         color_row.addWidget(self.btn_color, 1)
         color_row.addWidget(self.btn_outline_color, 1)
+
         self.cb_pos = QComboBox()
-        for label, key in _POSITIONS:
-            self.cb_pos.addItem(label, key)
+        for label, val in _POSITIONS:
+            self.cb_pos.addItem(label, val)
         polish_combo(self.cb_pos)
         self.sp_margin = QSpinBox()
-        self.sp_margin.setRange(0, 280)
-        self.sp_margin.setToolTip("Khoảng cách tới mép trên/dưới của video")
+        self.sp_margin.setRange(0, 200)
+        self.sp_margin.setToolTip("Khoảng cách từ mép video tới chữ (pixel)")
         pos_row = QHBoxLayout()
         pos_row.setSpacing(4)
         pos_row.addWidget(self.cb_pos, 1)
-        pos_row.addWidget(QLabel("Lề"))
+        lbl_mg = QLabel("Lề")
+        lbl_mg.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        pos_row.addWidget(lbl_mg)
         pos_row.addWidget(self.sp_margin, 1)
-        # Nền sau chữ (BorderStyle=4): khối nền mờ giúp đọc trên nền rối.
+
         self.cb_box = QComboBox()
-        for label, key in _BOXES:
-            self.cb_box.addItem(label, key)
+        for label, val in _BOXES:
+            self.cb_box.addItem(label, val)
         polish_combo(self.cb_box)
-        self.cb_box.setToolTip(
-            "Khối nền mờ sau chữ giúp đọc được trên nền video nhiều chi "
-            "tiết.\nKhi bật nền thì viền và bóng chữ không dùng nữa.")
         self.btn_box_color = QPushButton()
-        self.btn_box_color.setToolTip("Màu của khối nền sau chữ")
-        self.btn_box_color.clicked.connect(
-            lambda: self._pick_color("box_color"))
+        self.btn_box_color.setToolTip("Màu của khối nền phía sau chữ")
+        self.btn_box_color.clicked.connect(lambda: self._pick_color("box_color"))
         self.sp_box_opacity = QSpinBox()
         self.sp_box_opacity.setRange(0, 100)
-        self.sp_box_opacity.setSuffix("%")
-        self.sp_box_opacity.setToolTip(
-            "Độ đục của nền: 0 là trong suốt hẳn, 100 là che kín hoàn toàn")
-        box_row = QHBoxLayout()
-        box_row.setSpacing(4)
-        box_row.addWidget(self.btn_box_color, 1)
-        box_row.addWidget(QLabel("Đục"))
-        box_row.addWidget(self.sp_box_opacity, 1)
+        self.sp_box_opacity.setSuffix(" %")
+        self.sp_box_opacity.setToolTip("Độ đậm của khối nền (100% = đục hoàn toàn)")
+
+        box_color_row = QHBoxLayout()
+        box_color_row.setSpacing(4)
+        box_color_row.addWidget(self.btn_box_color, 1)
+        lbl_duc = QLabel("Đục")
+        lbl_duc.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        box_color_row.addWidget(lbl_duc)
+        box_color_row.addWidget(self.sp_box_opacity, 1)
+
         f.addRow("Font:", font_row)
         f.addRow("Cỡ chữ:", size_row)
         f.addRow("Đậm / bóng:", bold_row)
         f.addRow("Màu / viền:", color_row)
         f.addRow("Vị trí:", pos_row)
         f.addRow("Nền chữ:", self.cb_box)
-        f.addRow("Màu nền:", box_row)
-        # Nhóm 2: cách hiện chữ (cả câu / cụm chữ) + hiệu ứng
+        f.addRow("Màu nền:", box_color_row)
+
         _section("Cách hiện chữ")
-        fd = QFormLayout()
-        fd.setContentsMargins(0, 0, 0, 0)
-        fd.setLabelAlignment(Qt.AlignRight)
-        fd.setSpacing(7)
-        panel_l.addLayout(fd)
+        f2 = QFormLayout()
+        f2.setContentsMargins(0, 0, 0, 0)
+        f2.setLabelAlignment(Qt.AlignRight)
+        f2.setSpacing(7)
+        panel_l.addLayout(f2)
+
         self.cb_display = QComboBox()
-        for label, key in _DISPLAYS:
-            self.cb_display.addItem(label, key)
+        for label, val in _DISPLAYS:
+            self.cb_display.addItem(label, val)
         polish_combo(self.cb_display)
         self.cb_display.setToolTip(
-            "Cụm chữ theo giọng đọc: chữ hiện từng cụm ngắn đúng nhịp lời "
-            "thoại — hợp video đăng TikTok/Shorts.\nChỉ áp dụng khi chọn "
-            "'Ghi phụ đề vào video'. File phụ đề thường (.srt) vẫn được "
-            "xuất kèm.")
-        # Số chữ mỗi hàng cho phụ đề CẢ CÂU (0 = tự xuống dòng theo bề rộng).
+            "Cả câu: hiện trọn câu một lần (kiểu chuẩn).\n"
+            "Cụm chữ theo giọng đọc: chữ nhảy theo từng cụm ngắn khớp nhịp nói.")
+
         self.sp_line_words = QSpinBox()
-        self.sp_line_words.setRange(0, 12)
-        self.sp_line_words.setSpecialValueText("Tự động")
-        self.sp_line_words.setToolTip(
-            "Số chữ tối đa trên một hàng phụ đề (chế độ Cả câu).\n"
-            "Tự động: xuống dòng theo bề rộng màn hình (khuyên dùng).\n"
-            "Chọn số nhỏ (4-6) cho video dọc TikTok để chữ không tràn mép.")
+        self.sp_line_words.setRange(1, 20)
+        self.sp_line_words.setToolTip("Số chữ trên mỗi dòng trước khi xuống dòng")
         self.sp_max_lines = QSpinBox()
         self.sp_max_lines.setRange(1, 4)
-        self.sp_max_lines.setToolTip(
-            "Mỗi lần hiện nhiều nhất bấy nhiêu dòng chữ")
-        lines_row = QHBoxLayout()
-        lines_row.setSpacing(4)
-        lines_row.addWidget(self.sp_line_words, 1)
-        lines_row.addWidget(QLabel("Tối đa"))
-        lines_row.addWidget(self.sp_max_lines, 1)
-        self.chk_all_caps = QCheckBox("Viết hoa toàn bộ")
-        self.chk_all_caps.setToolTip(
-            "Chữ hoa hết nhìn mạnh hơn nhưng đọc chậm hơn, hợp video ngắn")
-        self.cb_effect = QComboBox()
-        for label, key in _EFFECTS:
-            self.cb_effect.addItem(label, key)
-        polish_combo(self.cb_effect)
-        self.sp_words = QSpinBox()
-        self.sp_words.setRange(1, 5)
-        self.sp_words.setToolTip("Số chữ hiện mỗi lần (2 = dồn dập, "
-                                 "3 = cân bằng)")
-        self.btn_highlight = QPushButton()
-        self.btn_highlight.setToolTip("Màu của chữ đang được đọc "
-                                      "(hiệu ứng Đổi màu theo lời)")
-        self.btn_highlight.clicked.connect(
-            lambda: self._pick_color("highlight_color"))
+        self.sp_max_lines.setToolTip("Số dòng tối đa trên màn hình cùng lúc")
+
         words_row = QHBoxLayout()
         words_row.setSpacing(4)
-        words_row.addWidget(self.sp_words, 1)
-        words_row.addWidget(QLabel("Màu nhấn"))
-        words_row.addWidget(self.btn_highlight, 1)
-        fd.addRow("Hiển thị:", self.cb_display)
-        fd.addRow("Chữ mỗi hàng:", lines_row)
-        fd.addRow("", self.chk_all_caps)
-        fd.addRow("Hiệu ứng:", self.cb_effect)
-        fd.addRow("Chữ mỗi lần:", words_row)
+        words_row.addWidget(self.sp_line_words, 1)
+        lbl_td = QLabel("Tối đa")
+        lbl_td.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        words_row.addWidget(lbl_td)
+        words_row.addWidget(self.sp_max_lines, 1)
 
-        _section("Che chữ trên hình")
-        b = QHBoxLayout()
-        b.setContentsMargins(0, 0, 0, 0)
-        b.setSpacing(6)
-        panel_l.addLayout(b)
-        self.btn_auto_detect = QPushButton("Dò tự động")
-        self.btn_auto_detect.setToolTip("Quét video tự động tìm và khoanh vùng phụ đề cứng gốc")
+        self.chk_all_caps = QCheckBox("Viết hoa toàn bộ")
 
-        self.btn_auto_detect.clicked.connect(self._on_auto_detect_clicked)
-        self.btn_undo = QPushButton("Xoá vùng cuối")
-        self.btn_undo.clicked.connect(self.canvas.clear_last)
-        self.btn_clear = QPushButton("Xoá tất cả")
-        self.btn_clear.clicked.connect(self.canvas.clear_all)
-        b.addWidget(self.btn_auto_detect)
-        b.addWidget(self.btn_undo)
-        b.addWidget(self.btn_clear)
+        self.cb_effect = QComboBox()
+        for label, val in _EFFECTS:
+            self.cb_effect.addItem(label, val)
+        polish_combo(self.cb_effect)
+
+        self.sp_words = QSpinBox()
+        self.sp_words.setRange(1, 20)
+        self.sp_words.setToolTip("Số chữ hiện trong mỗi cụm")
+        self.btn_highlight = QPushButton()
+        self.btn_highlight.setToolTip("Màu nhấn cho chữ đang nói")
+        self.btn_highlight.clicked.connect(lambda: self._pick_color("highlight_color"))
+
+        cue_row = QHBoxLayout()
+        cue_row.setSpacing(4)
+        cue_row.addWidget(self.sp_words, 1)
+        lbl_nhan = QLabel("Màu nhấn")
+        lbl_nhan.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        cue_row.addWidget(lbl_nhan)
+        cue_row.addWidget(self.btn_highlight, 1)
+
+        f2.addRow("Hiển thị:", self.cb_display)
+        f2.addRow("Chữ mỗi hàng:", words_row)
+        f2.addRow("", self.chk_all_caps)
+        f2.addRow("Hiệu ứng:", self.cb_effect)
+        f2.addRow("Chữ mỗi lần:", cue_row)
 
         panel_l.addStretch()
-        panel_scroll.setWidget(panel)
-        body.addWidget(panel_scroll, 4)
+        tab_font_scroll.setWidget(tab_font_w)
+        self.tabs.addTab(tab_font_scroll, "Kiểu chữ")
+
+        # ================================= TAB 2: VÙNG CHE ================================= #
+        tab_blur_scroll = QScrollArea()
+        tab_blur_scroll.setWidgetResizable(True)
+        tab_blur_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tab_blur_w = QWidget()
+        blur_l = QVBoxLayout(tab_blur_w)
+        blur_l.setContentsMargins(10, 10, 10, 10)
+        blur_l.setSpacing(10)
+
+        lbl_blur_title = QLabel("Mẫu vùng che nhanh")
+        lbl_blur_title.setObjectName("sectionHeader")
+        blur_l.addWidget(lbl_blur_title)
+
+        p_row1 = QHBoxLayout()
+        p_row1.setSpacing(4)
+        self.btn_pre_bot = QPushButton("+ Dải đáy")
+        self.btn_pre_bot.setToolTip("Che dải phụ đề đáy màn hình (100% x 16%)")
+        self.btn_pre_bot.clicked.connect(lambda: self.canvas.add_preset_region("bottom_band"))
+        self.btn_pre_top = QPushButton("+ Dải đỉnh")
+        self.btn_pre_top.setToolTip("Che dải phụ đề đỉnh màn hình (100% x 15%)")
+        self.btn_pre_top.clicked.connect(lambda: self.canvas.add_preset_region("top_band"))
+        self.btn_pre_tr = QPushButton("+ Góc phải")
+        self.btn_pre_tr.setToolTip("Che logo/watermark góc trên bên phải (24% x 14%)")
+        self.btn_pre_tr.clicked.connect(lambda: self.canvas.add_preset_region("top_right_logo"))
+        self.btn_pre_tl = QPushButton("+ Góc trái")
+        self.btn_pre_tl.setToolTip("Che logo góc trên bên trái (24% x 14%)")
+        self.btn_pre_tl.clicked.connect(lambda: self.canvas.add_preset_region("top_left_logo"))
+
+        p_row1.addWidget(self.btn_pre_bot)
+        p_row1.addWidget(self.btn_pre_top)
+        p_row1.addWidget(self.btn_pre_tr)
+        p_row1.addWidget(self.btn_pre_tl)
+        blur_l.addLayout(p_row1)
+
+        self.lbl_regions_count = QLabel("Danh sách vùng làm mờ (0 vùng):")
+        self.lbl_regions_count.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;")
+        blur_l.addWidget(self.lbl_regions_count)
+
+        self.list_regions = QListWidget()
+        self.list_regions.setFixedHeight(120)
+        self.list_regions.setStyleSheet(
+            f"background: {tokens.BG_PANEL}; border: 1px solid {tokens.BORDER_DEFAULT}; border-radius: 4px; padding: 2px;"
+        )
+        self.list_regions.currentRowChanged.connect(self._on_region_selected)
+        blur_l.addWidget(self.list_regions)
+
+        b = QHBoxLayout()
+        b.setContentsMargins(0, 0, 0, 0)
+        b.setSpacing(4)
+        blur_l.addLayout(b)
+        self.btn_auto_detect = QPushButton("Dò tự động")
+        self.btn_auto_detect.setToolTip("Quét video tự động tìm và khoanh vùng phụ đề cứng gốc")
+        self.btn_auto_detect.clicked.connect(self._on_auto_detect_clicked)
+
+        self.btn_del_sel = QPushButton("Xoá vùng chọn")
+        self.btn_del_sel.setToolTip("Xoá vùng làm mờ đang được chọn trong danh sách")
+        self.btn_del_sel.clicked.connect(self._delete_selected_region)
+
+        self.btn_clear = QPushButton("Xoá tất cả")
+        self.btn_clear.clicked.connect(self.canvas.clear_all)
+
+        b.addWidget(self.btn_auto_detect)
+        b.addWidget(self.btn_del_sel)
+        b.addWidget(self.btn_clear)
+
+        self.canvas.on_regions_changed = self._sync_regions_list
+        blur_l.addStretch()
+        tab_blur_scroll.setWidget(tab_blur_w)
+        self.tabs.addTab(tab_blur_scroll, "Vùng che (Blur)")
+
+        # ================================= TAB 3: LOGO & WATERMARK ================================= #
+        tab_lw_scroll = QScrollArea()
+        tab_lw_scroll.setWidgetResizable(True)
+        tab_lw_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tab_lw_w = QWidget()
+        lw_l = QVBoxLayout(tab_lw_w)
+        lw_l.setContentsMargins(10, 10, 10, 10)
+        lw_l.setSpacing(8)
+
+        # 1. Logo thương hiệu
+        lbl_logo_header = QLabel("Logo thương hiệu")
+        lbl_logo_header.setObjectName("sectionHeader")
+        lw_l.addWidget(lbl_logo_header)
+
+        self.chk_logo_enabled = QCheckBox("Hiển thị logo trên video")
+        lw_l.addWidget(self.chk_logo_enabled)
+
+        f_logo = QFormLayout()
+        f_logo.setContentsMargins(0, 0, 0, 0)
+        f_logo.setLabelAlignment(Qt.AlignRight)
+        f_logo.setSpacing(6)
+        lw_l.addLayout(f_logo)
+
+        self.txt_logo_path = QLineEdit()
+        self.txt_logo_path.setPlaceholderText("Đường dẫn tệp ảnh PNG, JPG...")
+        self.btn_browse_logo = QPushButton("Chọn…")
+        self.btn_browse_logo.setFixedWidth(55)
+        self.btn_browse_logo.clicked.connect(self._browse_logo_file)
+        row_logo_f = QHBoxLayout()
+        row_logo_f.setSpacing(4)
+        row_logo_f.addWidget(self.txt_logo_path, 1)
+        row_logo_f.addWidget(self.btn_browse_logo)
+        f_logo.addRow("Tệp ảnh:", row_logo_f)
+
+        self.cb_logo_pos = QComboBox()
+        self.cb_logo_pos.addItem("Góc trên bên phải", "top_right")
+        self.cb_logo_pos.addItem("Góc trên bên trái", "top_left")
+        self.cb_logo_pos.addItem("Góc dưới bên phải", "bottom_right")
+        self.cb_logo_pos.addItem("Góc dưới bên trái", "bottom_left")
+        polish_combo(self.cb_logo_pos)
+        f_logo.addRow("Vị trí:", self.cb_logo_pos)
+
+        self.sp_logo_scale = QSpinBox()
+        self.sp_logo_scale.setRange(4, 50)
+        self.sp_logo_scale.setValue(12)
+        self.sp_logo_scale.setSuffix(" %")
+
+        self.sp_logo_opacity = QSpinBox()
+        self.sp_logo_opacity.setRange(10, 100)
+        self.sp_logo_opacity.setValue(85)
+        self.sp_logo_opacity.setSuffix(" %")
+
+        row_logo_dim = QHBoxLayout()
+        row_logo_dim.setSpacing(4)
+        row_logo_dim.addWidget(self.sp_logo_scale, 1)
+        lbl_r = QLabel("Độ rõ")
+        lbl_r.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        row_logo_dim.addWidget(lbl_r)
+        row_logo_dim.addWidget(self.sp_logo_opacity, 1)
+        f_logo.addRow("Kích thước:", row_logo_dim)
+
+        self.cb_logo_motion = QComboBox()
+        self.cb_logo_motion.addItem("Cố định vị trí", "static")
+        self.cb_logo_motion.addItem("Chạy nảy mượt mà (Bouncing)", "bounce")
+        polish_combo(self.cb_logo_motion)
+        f_logo.addRow("Hiệu ứng:", self.cb_logo_motion)
+
+        lw_l.addSpacing(10)
+
+        # 2. Watermark chữ chìm
+        lbl_wm_header = QLabel("Watermark chống reup")
+        lbl_wm_header.setObjectName("sectionHeader")
+        lw_l.addWidget(lbl_wm_header)
+
+        self.chk_wm_enabled = QCheckBox("Hiển thị watermark chữ chìm")
+        lw_l.addWidget(self.chk_wm_enabled)
+
+        f_wm = QFormLayout()
+        f_wm.setContentsMargins(0, 0, 0, 0)
+        f_wm.setLabelAlignment(Qt.AlignRight)
+        f_wm.setSpacing(6)
+        lw_l.addLayout(f_wm)
+
+        self.txt_wm_text = QLineEdit()
+        self.txt_wm_text.setPlaceholderText("@KenhCuaBan, SĐT, hoặc ID...")
+        f_wm.addRow("Chữ:", self.txt_wm_text)
+
+        self.cb_wm_motion = QComboBox()
+        self.cb_wm_motion.addItem("Chạy nảy quanh video (Khuyên dùng)", "bounce")
+        self.cb_wm_motion.addItem("Cố định góc trên bên phải", "top_right")
+        self.cb_wm_motion.addItem("Cố định góc trên bên trái", "top_left")
+        self.cb_wm_motion.addItem("Cố định góc dưới bên phải", "bottom_right")
+        self.cb_wm_motion.addItem("Cố định góc dưới bên trái", "bottom_left")
+        polish_combo(self.cb_wm_motion)
+        f_wm.addRow("Quỹ đạo:", self.cb_wm_motion)
+
+        self.sp_wm_opacity = QSpinBox()
+        self.sp_wm_opacity.setRange(5, 80)
+        self.sp_wm_opacity.setValue(28)
+        self.sp_wm_opacity.setSuffix(" %")
+
+        self.sp_wm_font_size = QSpinBox()
+        self.sp_wm_font_size.setRange(12, 72)
+        self.sp_wm_font_size.setValue(26)
+        self.sp_wm_font_size.setSuffix(" px")
+
+        row_wm_spec = QHBoxLayout()
+        row_wm_spec.setSpacing(4)
+        row_wm_spec.addWidget(self.sp_wm_opacity, 1)
+        lbl_c = QLabel("Cỡ")
+        lbl_c.setStyleSheet(f"color: {tokens.TEXT_MUTED};")
+        row_wm_spec.addWidget(lbl_c)
+        row_wm_spec.addWidget(self.sp_wm_font_size, 1)
+        f_wm.addRow("Độ mờ / Cỡ:", row_wm_spec)
+
+        self.sp_wm_speed = QSpinBox()
+        self.sp_wm_speed.setRange(10, 200)
+        self.sp_wm_speed.setValue(40)
+        self.sp_wm_speed.setSuffix(" px/s")
+        f_wm.addRow("Tốc độ chạy:", self.sp_wm_speed)
+
+        lw_l.addStretch()
+        tab_lw_scroll.setWidget(tab_lw_w)
+        self.tabs.addTab(tab_lw_scroll, "Logo & Watermark")
+
+        body.addWidget(self.tabs, 4)
 
         # --- Bottom: actions ---
         actions = QHBoxLayout()
@@ -669,6 +1068,44 @@ class StyleDialog(QDialog):
             QTimer.singleShot(
                 0, lambda: self.canvas.set_rects_from_normalized(
                     self._regions_pending))
+
+    def _sync_regions_list(self, regions: list[dict]) -> None:
+        """Đồng bộ danh sách các vùng làm mờ vào QListWidget."""
+        self.list_regions.blockSignals(True)
+        self.list_regions.clear()
+        count = len(regions)
+        if count == 0:
+            self.lbl_regions_count.setText("Danh sách vùng làm mờ (0 vùng):")
+            self.lbl_regions_count.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;")
+        else:
+            self.lbl_regions_count.setText(f"Danh sách vùng làm mờ ({count} vùng):")
+            self.lbl_regions_count.setStyleSheet(f"color: {tokens.WARNING}; font-weight: bold; font-size: 12px; margin-top: 4px;")
+
+        for i, r in enumerate(regions):
+            x_pct = int(round(float(r.get("x", 0)) * 100))
+            y_pct = int(round(float(r.get("y", 0)) * 100))
+            w_pct = int(round(float(r.get("w", 0)) * 100))
+            h_pct = int(round(float(r.get("h", 0)) * 100))
+            desc = f"Vùng {i + 1}: x={x_pct}%, y={y_pct}%, rộng={w_pct}%, cao={h_pct}%"
+            item = QListWidgetItem(desc)
+            self.list_regions.addItem(item)
+
+        if self.canvas._selected_index is not None and 0 <= self.canvas._selected_index < count:
+            self.list_regions.setCurrentRow(self.canvas._selected_index)
+        self.list_regions.blockSignals(False)
+
+    def _on_region_selected(self, row: int) -> None:
+        if row >= 0:
+            self.canvas.select_region(row)
+        else:
+            self.canvas.select_region(None)
+
+    def _delete_selected_region(self) -> None:
+        row = self.list_regions.currentRow()
+        if row >= 0:
+            self.canvas.remove_region(row)
+        else:
+            self.canvas.clear_last()
 
     def _on_frame_failed(self, message: str) -> None:
         """Hiện cảnh báo nhẹ; không đóng dialog — phụ đề vẫn chỉnh được."""
@@ -744,6 +1181,35 @@ class StyleDialog(QDialog):
         self._update_karaoke_enabled()
         self._update_box_enabled()
 
+        # Logo controls
+        logo_path = str(self._logo_opts.get("logo_path") or self._logo_opts.get("path") or "").strip()
+        self.txt_logo_path.setText(logo_path)
+        self.chk_logo_enabled.setChecked(bool(logo_path or self._logo_opts.get("enabled", False)))
+        l_pos = self._logo_opts.get("logo_position") or self._logo_opts.get("position", "top_right")
+        l_pos_idx = self.cb_logo_pos.findData(l_pos)
+        self.cb_logo_pos.setCurrentIndex(l_pos_idx if l_pos_idx >= 0 else 0)
+        l_scale = int(round(float(self._logo_opts.get("logo_scale", self._logo_opts.get("scale", 0.12))) * 100))
+        self.sp_logo_scale.setValue(max(4, min(50, l_scale)))
+        l_op = int(round(float(self._logo_opts.get("logo_opacity", self._logo_opts.get("opacity", 0.85))) * 100))
+        self.sp_logo_opacity.setValue(max(10, min(100, l_op)))
+        l_motion = self._logo_opts.get("logo_motion") or self._logo_opts.get("motion", "static")
+        l_mot_idx = self.cb_logo_motion.findData(l_motion)
+        self.cb_logo_motion.setCurrentIndex(l_mot_idx if l_mot_idx >= 0 else 0)
+
+        # Watermark controls
+        wm_text = str(self._wm_opts.get("watermark_text") or self._wm_opts.get("text") or "").strip()
+        self.txt_wm_text.setText(wm_text)
+        self.chk_wm_enabled.setChecked(bool(wm_text or self._wm_opts.get("enabled", False)))
+        wm_mot = self._wm_opts.get("watermark_motion") or self._wm_opts.get("motion", "bounce")
+        wm_mot_idx = self.cb_wm_motion.findData(wm_mot)
+        self.cb_wm_motion.setCurrentIndex(wm_mot_idx if wm_mot_idx >= 0 else 0)
+        wm_op = int(round(float(self._wm_opts.get("watermark_opacity", self._wm_opts.get("opacity", 0.28))) * 100))
+        self.sp_wm_opacity.setValue(max(5, min(80, wm_op)))
+        self.sp_wm_font_size.setValue(int(self._wm_opts.get("watermark_font_size", self._wm_opts.get("font_size", 26))))
+        self.sp_wm_speed.setValue(int(self._wm_opts.get("watermark_speed", self._wm_opts.get("speed", 40))))
+
+        self._sync_logo_wm_from_controls()
+
     def _connect_controls(self) -> None:
         self.cb_display.currentIndexChanged.connect(self._sync_from_controls)
         self.sp_line_words.valueChanged.connect(self._sync_from_controls)
@@ -760,6 +1226,49 @@ class StyleDialog(QDialog):
         self.chk_bold.toggled.connect(self._sync_from_controls)
         self.cb_box.currentIndexChanged.connect(self._sync_from_controls)
         self.sp_box_opacity.valueChanged.connect(self._sync_from_controls)
+
+        self.chk_logo_enabled.toggled.connect(self._sync_logo_wm_from_controls)
+        self.txt_logo_path.textChanged.connect(self._sync_logo_wm_from_controls)
+        self.cb_logo_pos.currentIndexChanged.connect(self._sync_logo_wm_from_controls)
+        self.sp_logo_scale.valueChanged.connect(self._sync_logo_wm_from_controls)
+        self.sp_logo_opacity.valueChanged.connect(self._sync_logo_wm_from_controls)
+        self.cb_logo_motion.currentIndexChanged.connect(self._sync_logo_wm_from_controls)
+
+        self.chk_wm_enabled.toggled.connect(self._sync_logo_wm_from_controls)
+        self.txt_wm_text.textChanged.connect(self._sync_logo_wm_from_controls)
+        self.cb_wm_motion.currentIndexChanged.connect(self._sync_logo_wm_from_controls)
+        self.sp_wm_opacity.valueChanged.connect(self._sync_logo_wm_from_controls)
+        self.sp_wm_font_size.valueChanged.connect(self._sync_logo_wm_from_controls)
+        self.sp_wm_speed.valueChanged.connect(self._sync_logo_wm_from_controls)
+
+    def _browse_logo_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Chọn hình ảnh Logo / Watermark", "",
+            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)")
+        if path:
+            self.txt_logo_path.setText(path)
+            self.chk_logo_enabled.setChecked(True)
+            self._sync_logo_wm_from_controls()
+
+    def _sync_logo_wm_from_controls(self, *_args) -> None:
+        self._logo_opts = {
+            "enabled": self.chk_logo_enabled.isChecked(),
+            "path": self.txt_logo_path.text().strip(),
+            "position": self.cb_logo_pos.currentData() or "top_right",
+            "scale": self.sp_logo_scale.value() / 100.0,
+            "opacity": self.sp_logo_opacity.value() / 100.0,
+            "motion": self.cb_logo_motion.currentData() or "static",
+        }
+        self._wm_opts = {
+            "enabled": self.chk_wm_enabled.isChecked(),
+            "text": self.txt_wm_text.text().strip(),
+            "motion": self.cb_wm_motion.currentData() or "bounce",
+            "opacity": self.sp_wm_opacity.value() / 100.0,
+            "font_size": self.sp_wm_font_size.value(),
+            "speed": self.sp_wm_speed.value(),
+        }
+        self.canvas.set_logo_options(self._logo_opts)
+        self.canvas.set_watermark_options(self._wm_opts)
 
     def _update_karaoke_enabled(self) -> None:
         karaoke = self.cb_display.currentData() == "karaoke"
@@ -923,6 +1432,70 @@ class StyleDialog(QDialog):
         self._paint_color_button(btn, hex_color)
         self.canvas.set_style(self._style)
 
+    # ------------------------------------------------------ playback ------ #
+
+    def _toggle_playback(self) -> None:
+        if not self._player:
+            return
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            self.btn_play.setText("⏸ Dừng")
+        else:
+            self.btn_play.setText("▶ Phát")
+
+    def _on_seek(self, value: int) -> None:
+        if not self._player or self._duration_ms <= 0:
+            return
+        pos_ms = int(value * self._duration_ms / 1000)
+        self._player.setPosition(pos_ms)
+
+    def _on_video_frame(self, frame: QVideoFrame) -> None:
+        if not frame.isValid():
+            return
+        img = frame.toImage()
+        if not img.isNull():
+            self.canvas.set_image(img)
+
+    def _on_player_position(self, pos_ms: int) -> None:
+        if self._duration_ms > 0:
+            if not self.slider_pos.isSliderDown():
+                self.slider_pos.setValue(int(pos_ms * 1000 / self._duration_ms))
+            cur = self._format_time(pos_ms)
+            tot = self._format_time(self._duration_ms)
+            self.lbl_time.setText(f"{cur} / {tot}")
+
+    def _on_player_duration(self, duration_ms: int) -> None:
+        self._duration_ms = duration_ms
+        cur = self._format_time(self._player.position() if self._player else 0)
+        tot = self._format_time(duration_ms)
+        self.lbl_time.setText(f"{cur} / {tot}")
+
+    @staticmethod
+    def _format_time(ms: int) -> str:
+        sec = max(0, ms // 1000)
+        m, s = divmod(sec, 60)
+        return f"{m:02d}:{s:02d}"
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if hasattr(self, "_player") and self._player:
+            self._player.stop()
+        super().closeEvent(event)
+
+    def reject(self) -> None:
+        if hasattr(self, "_player") and self._player:
+            self._player.stop()
+        super().reject()
+
+    def accept(self) -> None:
+        if hasattr(self, "_player") and self._player:
+            self._player.stop()
+        super().accept()
+
     # -------------------------------------------------------- results ----- #
 
     def style(self) -> dict:
@@ -930,3 +1503,24 @@ class StyleDialog(QDialog):
 
     def regions(self) -> list[dict]:
         return self.canvas.normalized_regions()
+
+    def logo_options(self) -> dict:
+        """Thông số cấu hình logo thương hiệu."""
+        return {
+            "logo_path": self.txt_logo_path.text().strip() if self.chk_logo_enabled.isChecked() else "",
+            "logo_position": self.cb_logo_pos.currentData() or "top_right",
+            "logo_scale": self.sp_logo_scale.value() / 100.0,
+            "logo_opacity": self.sp_logo_opacity.value() / 100.0,
+            "logo_motion": self.cb_logo_motion.currentData() or "static",
+        }
+
+    def watermark_options(self) -> dict:
+        """Thông số cấu hình watermark chữ chìm."""
+        return {
+            "watermark_text": self.txt_wm_text.text().strip() if self.chk_wm_enabled.isChecked() else "",
+            "watermark_motion": self.cb_wm_motion.currentData() or "bounce",
+            "watermark_opacity": self.sp_wm_opacity.value() / 100.0,
+            "watermark_font_size": self.sp_wm_font_size.value(),
+            "watermark_speed": self.sp_wm_speed.value(),
+        }
+

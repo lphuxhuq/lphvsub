@@ -200,9 +200,24 @@ def merge_video(
     speed: float | None = None,
     fps: str | None = None,
     aspect_preset: str | None = None,
+    logo_path: str | None = None,
+    logo_position: str = "top_right",
+    logo_scale: float = 0.12,
+    logo_opacity: float = 0.85,
+    logo_margin: int = 24,
+    logo_motion: str = "static",
+    watermark_text: str | None = None,
+    watermark_opacity: float = 0.28,
+    watermark_font_size: int = 26,
+    watermark_color: str = "white",
+    watermark_speed: int = 40,
+    watermark_motion: str = "bounce",
+    smart_flip: bool = False,
+    micro_zoom: bool = False,
+    color_filter: str = "none",
 ) -> str:
 
-    """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect conversion.
+    """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
 
     ``subtitle_mode``:
 
@@ -217,6 +232,12 @@ def merge_video(
 
     ``aspect_preset`` converts the canvas ratio with blurred background padding
     (e.g., "tiktok_9_16", "youtube_16_9", "square_1_1"). Forces a re-encode.
+
+    ``logo_path`` overlays a watermark / brand logo onto the video canvas.
+    ``watermark_text`` overlays a dynamic floating/bouncing text watermark.
+    ``smart_flip`` mirrors base video horizontally without flipping subtitles/logo.
+    ``micro_zoom`` slightly zooms (103%) and drifts camera to bypass Content ID.
+    ``color_filter`` applies cinematic grading preset.
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -234,10 +255,29 @@ def merge_video(
 
     burn_srt = srt_path if subtitle_mode == "burn" else None
     filter_complex = None
-    if blur_regions or burn_srt or (aspect_preset and aspect_preset not in ("original", "none")):
+    has_logo = bool(logo_path and str(logo_path).strip())
+    has_wm = bool(watermark_text and str(watermark_text).strip())
+    has_anti_id = bool(smart_flip or micro_zoom or (color_filter and color_filter not in ("none", "original", "")))
+    if blur_regions or burn_srt or has_logo or has_wm or has_anti_id or (aspect_preset and aspect_preset not in ("original", "none")):
         width, height = probe_dimensions(video_path)
         filter_complex = build_filter_complex(
-            blur_regions, width, height, burn_srt, subtitle_style, aspect_preset=aspect_preset
+            blur_regions, width, height, burn_srt, subtitle_style,
+            aspect_preset=aspect_preset,
+            logo_path=logo_path,
+            logo_position=logo_position,
+            logo_scale=logo_scale,
+            logo_opacity=logo_opacity,
+            logo_margin=logo_margin,
+            logo_motion=logo_motion,
+            watermark_text=watermark_text,
+            watermark_opacity=watermark_opacity,
+            watermark_font_size=watermark_font_size,
+            watermark_color=watermark_color,
+            watermark_speed=watermark_speed,
+            watermark_motion=watermark_motion,
+            smart_flip=smart_flip,
+            micro_zoom=micro_zoom,
+            color_filter=color_filter,
         )
 
 

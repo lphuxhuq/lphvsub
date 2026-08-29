@@ -227,24 +227,41 @@ def _phonetic_section() -> str:
     return "\n".join(lines)
 
 
-def _build_system_prompt(target_field: str = "text_vi", style_notes: str = "") -> str:
+def _build_system_prompt(
+    target_field: str = "text_vi",
+    style_notes: str = "",
+    target: Optional[TargetLang] = None,
+    source_lang: str = "zh",
+    settings: Any = None,
+    cps_budget: Optional[float] = None,
+) -> str:
+    """Tạo System Prompt dịch thuật chất lượng cao (đồng bộ với chuẩn AI Studio / Prompt Master)."""
+    from autodub.languages import get_target
+    from autodub.text.translate_hint import (
+        CHARS_PER_SECOND_BUDGET,
+        build_translation_prompt,
+        effective_cps,
+    )
+
+    if target is None:
+        target = get_target("vi" if "vi" in target_field else target_field)
+
+    cps = cps_budget or (effective_cps(settings) if settings else CHARS_PER_SECOND_BUDGET)
+    base_prompt = build_translation_prompt(
+        target=target,
+        source_lang=source_lang,
+        settings=settings,
+        cps_budget=cps,
+        compact_output=True,
+    )
     phonetic = _phonetic_section()
-    prompt = f"""Bạn là chuyên gia dịch thuật và chuyển thể lồng tiếng video sang tiếng Việt tự nhiên, khớp nhịp cho AI TTS.
-Nguyên tắc quan trọng:
-1. Độ dài câu: BẮT BUỘC khống chế độ dài ký tự của bản dịch không vượt quá trường 'max_chars' trong mỗi câu (nếu có). Câu dịch phải ngắn gọn, súc tích, lược bỏ từ thừa để AI đọc vừa khít thời lượng nói của video gốc, tránh bị lệch nhịp, chậm tiếng hay dồn đuôi chữ.
-2. Tự nhiên & chuẩn văn phong: Dịch thoát ý, tự nhiên theo ngữ cảnh phim/video, không dịch thô cứng hay sót chữ Hán.
-3. Số viết thành chữ để đọc chuẩn (ví dụ 100 -> một trăm, 2024 -> hai nghìn không trăm hai mươi tư).
 
-{phonetic}
-
-Bắt buộc trả về đúng định dạng mảng JSON duy nhất:
-[
-  {{"id": 1, "{target_field}": "Bản dịch tiếng Việt."}}
-]
-Không giải thích, không thêm chữ ngoài mảng JSON."""
+    extra_blocks = [phonetic]
     if style_notes and style_notes.strip():
-        prompt += f"\n\n### Ngữ cảnh & Văn phong:\n{style_notes.strip()}"
-    return prompt
+        if style_notes.strip() not in base_prompt:
+            extra_blocks.append(f"### YÊU CẦU BỔ SUNG VỀ VĂN PHONG:\n{style_notes.strip()}")
+
+    return base_prompt + "\n\n" + "\n\n".join(extra_blocks)
 
 
 class GeminiDirectClient:
@@ -693,6 +710,10 @@ def translate_segments_direct(
     system_prompt = _build_system_prompt(
         target_field=target.text_field,
         style_notes=getattr(settings, "translate_style_notes", ""),
+        target=target,
+        source_lang=source_lang,
+        settings=settings,
+        cps_budget=cps,
     )
 
     logger.info(

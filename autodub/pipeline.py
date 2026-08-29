@@ -104,6 +104,27 @@ class DubRequest:
     # Tự động quét và che phụ đề cứng gốc bằng thị giác máy tính
     auto_mask_hardsub: bool = False
 
+    # Logo / Watermark thương hiệu chèn vào video
+    logo_path: str | None = None
+    logo_position: str | None = None
+    logo_scale: float | None = None
+    logo_opacity: float | None = None
+    logo_margin: int | None = None
+    logo_motion: str | None = None
+
+    # Watermark chữ chìm chuyển động
+    watermark_text: str | None = None
+    watermark_opacity: float | None = None
+    watermark_font_size: int | None = None
+    watermark_color: str | None = None
+    watermark_speed: int | None = None
+    watermark_motion: str | None = None
+
+    # Xử lý video chống quét bản quyền / Reup (Anti-Content ID)
+    smart_flip: bool | None = None
+    micro_zoom: bool | None = None
+    color_filter: str | None = None
+
     # The dub target is always Vietnamese now.
 
 
@@ -978,6 +999,21 @@ class DubPipeline:
                 "subtitle_mode": req.subtitle_mode,
                 "blur_regions": req.blur_regions,
                 "subtitle_style": subtitle_style,
+                "logo_path": req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""),
+                "logo_position": req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"),
+                "logo_scale": req.logo_scale if req.logo_scale is not None else getattr(settings, "logo_scale", 0.12),
+                "logo_opacity": req.logo_opacity if req.logo_opacity is not None else getattr(settings, "logo_opacity", 0.85),
+                "logo_margin": req.logo_margin if req.logo_margin is not None else getattr(settings, "logo_margin", 24),
+                "logo_motion": req.logo_motion if req.logo_motion is not None else getattr(settings, "logo_motion", "static"),
+                "watermark_text": req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""),
+                "watermark_opacity": req.watermark_opacity if req.watermark_opacity is not None else getattr(settings, "watermark_opacity", 0.28),
+                "watermark_font_size": req.watermark_font_size if req.watermark_font_size is not None else getattr(settings, "watermark_font_size", 26),
+                "watermark_color": req.watermark_color if req.watermark_color is not None else getattr(settings, "watermark_color", "white"),
+                "watermark_speed": req.watermark_speed if req.watermark_speed is not None else getattr(settings, "watermark_speed", 40),
+                "watermark_motion": req.watermark_motion if req.watermark_motion is not None else getattr(settings, "watermark_motion", "bounce"),
+                "smart_flip": req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False),
+                "micro_zoom": req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
+                "color_filter": req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
             })
 
         else:
@@ -987,6 +1023,12 @@ class DubPipeline:
             render_opts.setdefault("subtitle_mode", req.subtitle_mode)
             render_opts.setdefault("blur_regions", req.blur_regions)
             render_opts.setdefault("subtitle_style", subtitle_style)
+            render_opts.setdefault("logo_path", req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""))
+            render_opts.setdefault("logo_position", req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"))
+            render_opts.setdefault("watermark_text", req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""))
+            render_opts.setdefault("smart_flip", req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False))
+            render_opts.setdefault("micro_zoom", req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False))
+            render_opts.setdefault("color_filter", req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"))
         save_render_opts(work_dir, render_opts)
         if not req.skip_video:
             # Phụ đề ghi vào hình: cả câu (.srt) hay cụm chữ theo giọng đọc
@@ -1007,6 +1049,21 @@ class DubPipeline:
                 speed=deferred_speed[0] if deferred_speed else None,
                 fps=deferred_speed[1] if deferred_speed else None,
                 aspect_preset=req.aspect_preset or getattr(settings, "video_aspect_preset", "original"),
+                logo_path=req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""),
+                logo_position=req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"),
+                logo_scale=req.logo_scale if req.logo_scale is not None else getattr(settings, "logo_scale", 0.12),
+                logo_opacity=req.logo_opacity if req.logo_opacity is not None else getattr(settings, "logo_opacity", 0.85),
+                logo_margin=req.logo_margin if req.logo_margin is not None else getattr(settings, "logo_margin", 24),
+                logo_motion=req.logo_motion if req.logo_motion is not None else getattr(settings, "logo_motion", "static"),
+                watermark_text=req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""),
+                watermark_opacity=req.watermark_opacity if req.watermark_opacity is not None else getattr(settings, "watermark_opacity", 0.28),
+                watermark_font_size=req.watermark_font_size if req.watermark_font_size is not None else getattr(settings, "watermark_font_size", 26),
+                watermark_color=req.watermark_color if req.watermark_color is not None else getattr(settings, "watermark_color", "white"),
+                watermark_speed=req.watermark_speed if req.watermark_speed is not None else getattr(settings, "watermark_speed", 40),
+                watermark_motion=req.watermark_motion if req.watermark_motion is not None else getattr(settings, "watermark_motion", "bounce"),
+                smart_flip=req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False),
+                micro_zoom=req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
+                color_filter=req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
@@ -1408,7 +1465,7 @@ class DubPipeline:
             # nhận biết; file thường đọc như open() bình thường.
             from autodub import securestore
             from autodub.text.translate_common import HOLD
-            segments = securestore.read_json_secure(path, HOLD.key)
+            raw_data = securestore.read_json_secure(path, HOLD.key)
         except securestore.SecureStoreError as e:
             # File thường mà JSON hỏng → lỗi sửa-tay quen thuộc; chỉ file
             # đang mã hóa mới là chuyện khóa giải mã.
@@ -1423,8 +1480,46 @@ class DubPipeline:
                 "nhận lại khóa từ máy chủ (phần đã dịch không tính phí lại)."
             ) from e
 
+        # Hỗ trợ cả 2 định dạng:
+        # 1. Định dạng AI Studio / Web AI mới: {"title": "...", "description": "...", "hashtags": [...], "segments": [...]}
+        # 2. Định dạng mảng thuần túy: [...]
+        if isinstance(raw_data, dict):
+            # Tự động trích xuất tiêu đề, mô tả, hashtag từ bản dịch AI Studio
+            social_meta = {
+                k: raw_data[k] for k in ("title", "description", "hashtags", "tiktok", "facebook")
+                if k in raw_data
+            }
+            if social_meta.get("title"):
+                try:
+                    from autodub.content.generator import _write_post_file
+                    from autodub.workdir import youtube_dir
+                    work_dir = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+                    yt_dir = youtube_dir(work_dir, create=True)
+                    meta_path = os.path.join(yt_dir, "youtube_metadata.json")
+                    with open(meta_path, "w", encoding="utf-8") as f:
+                        json.dump(social_meta, f, ensure_ascii=False, indent=2)
+                    _write_post_file(os.path.join(yt_dir, "youtube_post.txt"), social_meta)
+                    logger.info(f"Đã tự động trích xuất tiêu đề, mô tả, hashtag từ bản dịch: «{str(social_meta.get('title'))[:50]}»")
+                except Exception as ex:
+                    logger.warning(f"Không thể lưu metadata trích xuất: {ex}")
+            segments = raw_data.get("segments") or raw_data.get("data") or raw_data.get("translations") or []
+        elif isinstance(raw_data, list):
+            segments = raw_data
+        else:
+            segments = []
+
         if not isinstance(segments, list) or not segments:
-            raise ValueError(f"{path} must be a non-empty JSON array of segments")
+            raise ValueError(f"{path} must be a non-empty JSON array of segments (or an object with a 'segments' array)")
+
+        # Phục hồi timing nếu AI Studio lược bỏ start/end/duration
+        orig_map = {s.get("id"): s for s in original_segments}
+        for s in segments:
+            sid = s.get("id")
+            if sid in orig_map:
+                orig_s = orig_map[sid]
+                for k in ("start", "end", "duration", "text"):
+                    if k not in s and k in orig_s:
+                        s[k] = orig_s[k]
 
         # Timing fields are as essential as the text: a hand-made file
         # missing start/end/duration would otherwise crash with a bare
@@ -1845,7 +1940,7 @@ class DubPipeline:
         Bước phụ — hỏng thì video vẫn xong. Riêng hết Vox thì ném lên trên để
         giao diện mời người dùng nạp thêm, vì đó không phải lỗi kỹ thuật.
         """
-        del target, video_path
+        del target
         rep = self._reporter
         settings = self.settings
         content_result: dict = {"metadata": {}}
@@ -1871,6 +1966,7 @@ class DubPipeline:
                 source_url=source_url,
                 output_dir=youtube_dir(work_dir, create=True),
                 settings=settings,
+                video_path=video_path,
                 video_title=str(load_video_meta(work_dir).get("title", "")),
                 # Cùng transcript ⇒ cùng job_id ⇒ chạy lại không tính phí lần hai.
                 job_id=f"post-{run_id_for(segments, _POST_TARGET)}",

@@ -150,3 +150,120 @@ def test_blur_then_subtitles_order():
     assert graph.index("boxblur") < graph.index("subtitles")
     assert graph.endswith("[vout]")
     assert "null[vout]" not in graph
+
+
+# --------------------------- logo overlay --------------------------- #
+
+def test_build_filter_complex_with_logo_top_right():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        logo_path="D:/assets/logo.png",
+        logo_position="top_right",
+        logo_scale=0.15,
+        logo_opacity=0.8,
+        logo_margin=30,
+    )
+    assert graph is not None
+    assert "movie=" in graph
+    assert "scale=288:-1" in graph
+    assert "colorchannelmixer=aa=0.80" in graph
+    assert "overlay=x='main_w-overlay_w-30':y='30'" in graph
+    assert graph.endswith("null[vout]")
+
+
+def test_build_filter_complex_with_logo_bottom_left_and_subtitles():
+    graph = build_filter_complex(
+        blur_regions=[FULL_WIDTH_BAND],
+        video_w=1920,
+        video_h=1080,
+        srt_path="/tmp/vi.srt",
+        logo_path="D:/logo.png",
+        logo_position="bottom_left",
+        logo_scale=0.10,
+        logo_opacity=0.9,
+        logo_margin=20,
+    )
+    assert "boxblur" in graph
+    assert "movie=" in graph
+    assert "overlay=x='20':y='main_h-overlay_h-20'" in graph
+    assert "subtitles=" in graph
+    # Thứ tự đúng: blur trước -> logo -> subtitles trên cùng
+    assert graph.index("boxblur") < graph.index("movie=")
+    assert graph.index("movie=") < graph.index("subtitles=")
+    assert graph.endswith("[vout]")
+
+
+# --------------------------- dynamic moving watermark --------------------------- #
+
+def test_build_filter_complex_with_dynamic_bouncing_watermark():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        watermark_text="@PhimHayMoiNgay",
+        watermark_opacity=0.30,
+        watermark_font_size=28,
+        watermark_color="#FFFFFF",
+        watermark_speed=45,
+        watermark_motion="bounce",
+    )
+    assert graph is not None
+    assert "drawtext=" in graph
+    assert "@PhimHayMoiNgay" in graph
+    assert "fontsize=28" in graph
+    assert "fontcolor=FFFFFF@0.30" in graph
+    assert "abs(mod(t*45" in graph
+    assert graph.endswith("null[vout]")
+
+
+def test_build_filter_complex_with_bouncing_logo():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        logo_path="D:/logo.png",
+        logo_motion="bounce",
+        watermark_speed=50,
+    )
+    assert graph is not None
+    assert "movie=" in graph
+    assert "abs(mod(t*50" in graph
+    assert graph.endswith("null[vout]")
+
+
+# --------------------------- anti-content ID filters --------------------------- #
+
+def test_build_filter_complex_with_smart_flip_and_subtitles():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        srt_path="/tmp/vi.srt",
+        smart_flip=True,
+    )
+    assert graph is not None
+    assert "hflip" in graph
+    assert "subtitles=" in graph
+    # Thứ tự đúng: hflip trước -> subtitles sau cùng (để chữ không bị ngược)
+    assert graph.index("hflip") < graph.index("subtitles=")
+    assert graph.endswith("[vout]")
+
+
+def test_build_filter_complex_with_micro_zoom_and_color_grading():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        micro_zoom=True,
+        color_filter="teal_orange",
+    )
+    assert graph is not None
+    assert "scale=1.03*iw:1.03*ih" in graph
+    assert "colorbalance=" in graph
+    assert graph.index("scale=1.03") < graph.index("colorbalance=")
+    assert graph.endswith("null[vout]")
+
+
+

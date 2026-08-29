@@ -481,6 +481,8 @@ class NewProjectPage(BasePage):
             return
         self.step_recognize.engine.set_key(settings.asr_engine)
         self.step_recognize.model.set_key(settings.whisper_model)
+        if hasattr(self.step_recognize, "diarization_enabled"):
+            self.step_recognize.diarization_enabled.setChecked(settings.diarization_enabled)
         self.step_translate.auto_translate.setChecked(settings.translate_enabled)
         self.step_translate.metadata.setChecked(settings.generate_metadata)
         if hasattr(self.step_translate, "gemini_key"):
@@ -498,7 +500,7 @@ class NewProjectPage(BasePage):
         self.step_voice.speed.set_value(settings.voice_speed)
         self.step_voice.mode.set_key(settings.subtitle_mode)
         self.step_voice.preset.set_key(settings.subtitle_preset)
-        self._blur_regions = list(settings.blur_regions_list())
+        self._blur_regions = []  # Mặc định TẮT làm mờ sub cho dự án mới
         self._subtitle_style = settings.subtitle_style()
         self._update_style_summary()
 
@@ -555,12 +557,29 @@ class NewProjectPage(BasePage):
         from autodub_gui.style_dialog import StyleDialog
 
         video = self._current_video_path()
-        # Chưa tự chỉnh gì thì mở ra với đúng bộ kiểu đang chọn ở bước này,
-        # để cửa sổ xem trước khớp với thứ người dùng vừa chọn.
         style = self._subtitle_style or self._base_style(
             self.step_voice.preset.current_key())
+        voice_vals = self.step_voice.values() if hasattr(self.step_voice, "values") else {}
+        logo_opts = {
+            "logo_path": voice_vals.get("logo_path", ""),
+            "logo_position": voice_vals.get("logo_position", "top_right"),
+            "logo_scale": voice_vals.get("logo_scale", 0.12),
+            "logo_opacity": voice_vals.get("logo_opacity", 0.85),
+            "logo_motion": voice_vals.get("logo_motion", "static"),
+        }
+        wm_opts = {
+            "watermark_text": voice_vals.get("watermark_text", ""),
+            "watermark_motion": voice_vals.get("watermark_motion", "bounce"),
+            "watermark_opacity": voice_vals.get("watermark_opacity", 0.28),
+            "watermark_font_size": 26,
+            "watermark_speed": voice_vals.get("watermark_speed", 40),
+        }
         try:
-            dialog = StyleDialog(video, style, self._blur_regions, self)
+            dialog = StyleDialog(
+                video, style, self._blur_regions, self,
+                logo_options=logo_opts,
+                watermark_options=wm_opts,
+            )
         except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
             ConfirmDialog.show_error(
                 self, "Không mở được khung xem trước",
@@ -571,11 +590,12 @@ class NewProjectPage(BasePage):
         if not dialog.exec():
             return
         self._subtitle_style = dict(dialog.style(), preset="custom")
-        # Ô chọn bộ kiểu nhảy về "Tự chỉnh" cho khớp với kiểu vừa sửa.
         self.step_voice.preset.set_key("custom")
-        # Lưu vùng che kể cả khi nguồn là liên kết (chưa có tệp trên máy):
-        # tọa độ đã chuẩn hóa 0..1 nên áp đúng lên video sau khi tải về.
         self._blur_regions = dialog.regions()
+        if hasattr(self.step_voice, "set_logo_options"):
+            self.step_voice.set_logo_options(dialog.logo_options())
+        if hasattr(self.step_voice, "set_watermark_options"):
+            self.step_voice.set_watermark_options(dialog.watermark_options())
         self._update_style_summary()
         try:
             settings = self._settings_provider()
@@ -585,6 +605,7 @@ class NewProjectPage(BasePage):
         self._on_form_changed()
 
     def _update_style_summary(self) -> None:
+        """Cập nhật dòng tóm tắt kiểu phụ đề ở bước 5."""
         parts: list[str] = []
         style = self._subtitle_style
         if style:
@@ -653,6 +674,19 @@ class NewProjectPage(BasePage):
             blur_regions=list(self._blur_regions),
             subtitle_style=(self._subtitle_style
                             or self._base_style(data["subtitle_preset"])),
+            diarization_enabled=bool(data.get("diarization_enabled", True)),
+            logo_path=data.get("logo_path"),
+            logo_position=data.get("logo_position"),
+            logo_scale=data.get("logo_scale"),
+            logo_opacity=data.get("logo_opacity"),
+            logo_motion=data.get("logo_motion"),
+            watermark_text=data.get("watermark_text"),
+            watermark_motion=data.get("watermark_motion"),
+            watermark_opacity=data.get("watermark_opacity"),
+            watermark_speed=data.get("watermark_speed"),
+            smart_flip=data.get("smart_flip"),
+            micro_zoom=data.get("micro_zoom"),
+            color_filter=data.get("color_filter"),
             # Luồng wizard: dừng ở ranh giới Xuất video, chờ người dùng chốt.
             defer_export=True,
         )
@@ -674,6 +708,8 @@ class NewProjectPage(BasePage):
         changes = {"voice_speed": data["voice_speed"],
                    "translate_enabled": bool(data["auto_translate"]),
                    "generate_metadata": bool(data["generate_metadata"])}
+        if "diarization_enabled" in data:
+            changes["diarization_enabled"] = bool(data["diarization_enabled"])
         engine = data.get("translate_engine", "gemini")
         if engine == "ai_studio":
             changes["ai_studio_enabled"] = True
@@ -725,6 +761,10 @@ class NewProjectPage(BasePage):
         put("GENERATE_METADATA",
             bool_to_env(bool(data["generate_metadata"])),
             bool_to_env(settings.generate_metadata))
+        if "diarization_enabled" in data:
+            put("DIARIZATION_ENABLED",
+                bool_to_env(bool(data["diarization_enabled"])),
+                bool_to_env(settings.diarization_enabled))
         engine = data.get("translate_engine", "gemini")
         put("AI_STUDIO_ENABLED",
             bool_to_env(engine == "ai_studio"),

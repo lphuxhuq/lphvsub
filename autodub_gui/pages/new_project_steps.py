@@ -224,12 +224,20 @@ class RecognizeStep(_StepPanel):
             "Bật khi bạn không chắc video nói tiếng gì. Tắt thì dùng đúng "
             "ngôn ngữ bạn chọn ở trên, thường chính xác hơn.")
         self.auto_detect.toggled.connect(self._on_auto)
+
+        self.diarization_enabled = QCheckBox("Tự động phân tách người nói (Speaker Diarization)")
+        self.diarization_enabled.setToolTip(
+            "Tự động nhận diện và phân biệt các nhân vật khác nhau trong video bằng âm sắc giọng nói.")
+        self.diarization_enabled.setChecked(True)
+        self.diarization_enabled.toggled.connect(lambda _c: self.changed.emit())
+
         for widget in (self.engine, self.model, self.language):
-            widget.changed.connect(self.changed.emit)
+            widget.changed.connect(lambda *_a: self.changed.emit())
         self.body.addWidget(self.engine)
         self.body.addWidget(self.model)
         self.body.addWidget(self.language)
         self.body.addWidget(self.auto_detect)
+        self.body.addWidget(self.diarization_enabled)
 
         # Nhạc nền — dọn về đây từ bước Xuất video cũ, vì tách giọng chạy
         # ngay sau bước nghe; gập lại mặc định cho gọn.
@@ -264,6 +272,7 @@ class RecognizeStep(_StepPanel):
             "whisper_model": self.model.current_key(),
             "source_lang": self.language.current_key(),
             "auto_detect": self.auto_detect.isChecked(),
+            "diarization_enabled": self.diarization_enabled.isChecked(),
             "bg_mode": self.background.current_key(),
             "bg_duck_db": self.duck.value(),
         }
@@ -273,6 +282,7 @@ class RecognizeStep(_StepPanel):
         self.model.set_key(data.get("whisper_model", "auto"))
         self.language.set_key(data.get("source_lang", "zh-CN"))
         self.auto_detect.setChecked(bool(data.get("auto_detect", False)))
+        self.diarization_enabled.setChecked(bool(data.get("diarization_enabled", True)))
         self.background.set_key(data.get("bg_mode", "demucs"))
         self.duck.set_value(float(data.get("bg_duck_db", -12.0)))
         self._on_background()
@@ -346,7 +356,7 @@ class TranslateStep(_StepPanel):
                 ("Gemini 2.5 Pro (Văn phong cao cấp, thông minh)", "gemini-2.5-pro"),
             ],
             "Mô hình AI xử lý dịch thuật và tạo nội dung đăng bài.")
-        self.gemini_model.changed.connect(self.changed.emit)
+        self.gemini_model.changed.connect(lambda *_a: self.changed.emit())
 
         self.btn_open_gemini_web = GhostButton("Mở Trình Dịch Web Gemini SRT Pro")
         self.btn_open_gemini_web.clicked.connect(self._open_gemini_web_tool)
@@ -399,7 +409,7 @@ class TranslateStep(_StepPanel):
             "Ghi chú thêm cho người dịch",
             "ví dụ: giữ tên nhân vật Hán Việt, xưng hô mình với các bạn",
             "Ghi chú này được gửi kèm mỗi lần dịch.")
-        self.style.changed.connect(self.changed.emit)
+        self.style.changed.connect(lambda *_a: self.changed.emit())
         self.note.changed.connect(lambda _t: self.changed.emit())
 
         self.body.addWidget(self.engine)
@@ -655,7 +665,7 @@ class VoiceStep(_StepPanel):
         self._override = CollapsibleSection("Đổi giọng riêng cho video này")
         self._override.toggled.connect(lambda _e: self.changed.emit())
         self.picker = VoicePicker("Giọng đọc")
-        self.picker.changed.connect(self.changed.emit)
+        self.picker.changed.connect(lambda *_a: self.changed.emit())
         self.picker.preview_requested.connect(self.preview_requested.emit)
         self._override.add_widget(self.picker)
         self.body.addWidget(self._override)
@@ -673,14 +683,14 @@ class VoiceStep(_StepPanel):
             "Kiểu phụ đề", consts.SUBTITLE_MODES,
             "Phụ đề rời là tệp riêng, người xem tự bật tắt. Ghi thẳng vào "
             "hình thì chữ nằm luôn trên video.")
-        self.mode.changed.connect(self.changed.emit)
+        self.mode.changed.connect(lambda *_a: self.changed.emit())
         self.body.addWidget(self.mode)
 
         self.preset = LabeledCombo(
             "Bộ kiểu chữ", PRESET_CHOICES,
             "Chọn một bộ có sẵn là xong. Muốn tự quyết từng thông số thì bấm "
             "Kiểu chữ và vùng che.")
-        self.preset.changed.connect(self.changed.emit)
+        self.preset.changed.connect(lambda *_a: self.changed.emit())
         self.body.addWidget(self.preset)
 
         row = QHBoxLayout()
@@ -698,6 +708,120 @@ class VoiceStep(_StepPanel):
             f"background: transparent;")
         self.body.addWidget(self.summary)
 
+        # Logo / Watermark thương hiệu
+        self._logo_section = CollapsibleSection("Logo / Watermark thương hiệu")
+        self._logo_section.toggled.connect(lambda _e: self.changed.emit())
+
+        logo_file_row = QHBoxLayout()
+        logo_file_row.setSpacing(tokens.SP_2)
+        self.logo_path_input = LabeledLineEdit(
+            "Tệp logo", "Đường dẫn tệp logo (.png trong suốt, .jpg, .webp)...",
+            "Chọn hình ảnh logo để chèn lên video xuất ra.")
+        self.logo_path_input.changed.connect(lambda *_a: self.changed.emit())
+        self.btn_browse_logo = GhostButton("Chọn ảnh…")
+        self.btn_browse_logo.clicked.connect(self._browse_logo)
+        self.btn_clear_logo = GhostButton("Xóa")
+        self.btn_clear_logo.clicked.connect(lambda: (self.logo_path_input.set_text(""), self.changed.emit()))
+        logo_file_row.addWidget(self.logo_path_input, 1)
+        logo_file_row.addWidget(self.btn_browse_logo)
+        logo_file_row.addWidget(self.btn_clear_logo)
+        self._logo_section.add_layout(logo_file_row)
+
+        _LOGO_POS_CHOICES = (
+            ("Góc trên bên phải (Khuyên dùng)", "top_right"),
+            ("Góc trên bên trái", "top_left"),
+            ("Góc dưới bên phải", "bottom_right"),
+            ("Góc dưới bên trái", "bottom_left"),
+            ("Trên cùng ở giữa", "top_center"),
+            ("Dưới cùng ở giữa", "bottom_center"),
+            ("Chính giữa video", "center"),
+        )
+        self.logo_position = LabeledCombo("Vị trí hiển thị", _LOGO_POS_CHOICES)
+        self.logo_position.changed.connect(lambda *_a: self.changed.emit())
+        self._logo_section.add_widget(self.logo_position)
+
+        self.logo_motion = LabeledCombo(
+            "Hiệu ứng logo",
+            [("Cố định tại vị trí đã chọn", "static"),
+             ("Chạy nảy mượt mà quanh video (Bouncing)", "bounce")])
+        self.logo_motion.changed.connect(lambda *_a: self.changed.emit())
+        self._logo_section.add_widget(self.logo_motion)
+
+        self.logo_scale = LabeledSlider("Kích thước logo", 0.04, 0.40, 0.01,
+                                        "Tỷ lệ chiều rộng logo so với chiều rộng khung hình video.", "")
+        self.logo_scale.set_value(0.12)
+        self.logo_scale.changed.connect(lambda _v: self.changed.emit())
+        self._logo_section.add_widget(self.logo_scale)
+
+        self.logo_opacity = LabeledSlider("Độ rõ nét", 0.10, 1.0, 0.05,
+                                          "Độ mờ / trong suốt của logo.", "")
+        self.logo_opacity.set_value(0.85)
+        self.logo_opacity.changed.connect(lambda _v: self.changed.emit())
+        self._logo_section.add_widget(self.logo_opacity)
+
+        self.body.addWidget(self._logo_section)
+
+        # Watermark chữ chìm chuyển động
+        self._wm_section = CollapsibleSection("Watermark chữ chìm chuyển động (Chống reup)")
+        self._wm_section.toggled.connect(lambda _e: self.changed.emit())
+
+        self.wm_text = LabeledLineEdit(
+            "Chữ watermark", "@KenhCuaBan, SĐT, hoặc tên bạn...",
+            "Dòng chữ chìm di chuyển quanh video để bảo vệ bản quyền.")
+        self.wm_text.changed.connect(lambda *_a: self.changed.emit())
+        self._wm_section.add_widget(self.wm_text)
+
+        self.wm_motion = LabeledCombo(
+            "Kiểu chuyển động",
+            [("Chạy nảy mượt mà quanh video (Khuyên dùng)", "bounce"),
+             ("Cố định góc trên bên phải", "top_right"),
+             ("Cố định góc dưới bên phải", "bottom_right"),
+             ("Cố định góc dưới bên trái", "bottom_left"),
+             ("Cố định góc trên bên trái", "top_left")])
+        self.wm_motion.changed.connect(lambda *_a: self.changed.emit())
+        self._wm_section.add_widget(self.wm_motion)
+
+        self.wm_opacity = LabeledSlider("Độ mờ chìm", 0.08, 0.60, 0.02,
+                                        "Độ trong suốt của chữ watermark (0.15 - 0.35 là chìm nhẹ tinh tế).", "")
+        self.wm_opacity.set_value(0.28)
+        self.wm_opacity.changed.connect(lambda _v: self.changed.emit())
+        self._wm_section.add_widget(self.wm_opacity)
+
+        self.wm_speed = LabeledSlider("Tốc độ chạy", 10, 150, 5,
+                                      "Tốc độ di chuyển quanh khung hình.", " px/s")
+        self.wm_speed.set_value(40)
+        self.wm_speed.changed.connect(lambda _v: self.changed.emit())
+        self._wm_section.add_widget(self.wm_speed)
+
+        self.body.addWidget(self._wm_section)
+
+        # Xử lý Video & Chống quét bản quyền (Anti-Content ID)
+        self._anti_id_section = CollapsibleSection("Xử lý Video & Chống bản quyền (Anti-Content ID)")
+        self._anti_id_section.toggled.connect(lambda _e: self.changed.emit())
+
+        self.smart_flip = QCheckBox("Lật gương thông minh (Smart Flip — Giữ nguyên phụ đề / logo)")
+        self.smart_flip.setToolTip("Lật ngang hình ảnh video để tránh nhận diện bản quyền nhưng không lật chữ tiếng Việt.")
+        self.smart_flip.toggled.connect(lambda _c: self.changed.emit())
+        self._anti_id_section.add_widget(self.smart_flip)
+
+        self.micro_zoom = QCheckBox("Zoom động 103% & Trượt góc máy (Micro-zoom)")
+        self.micro_zoom.setToolTip("Phóng to nhẹ và chuyển động vi mô phá vỡ thuật toán quét khuôn hình.")
+        self.micro_zoom.toggled.connect(lambda _c: self.changed.emit())
+        self._anti_id_section.add_widget(self.micro_zoom)
+
+        self.color_filter = LabeledCombo(
+            "Bộ lọc màu điện ảnh",
+            [("none", "Nguyên bản (Không lọc màu)"),
+             ("cinematic_warm", "Cinematic Warm (Ấm áp điện ảnh)"),
+             ("teal_orange", "Teal & Orange (Phim bom tấn Hollywood)"),
+             ("vintage", "Vintage Retro (Hoài niệm cổ điển)"),
+             ("moody_dark", "Moody Dark (Tương phản cao)"),
+             ("clean_film", "Clean Film (Trong trẻo sắc nét)")])
+        self.color_filter.changed.connect(lambda *_a: self.changed.emit())
+        self._anti_id_section.add_widget(self.color_filter)
+
+        self.body.addWidget(self._anti_id_section)
+
         self.audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề, bỏ ghép video")
         self.audio_only.setToolTip(
             "Bật khi bạn tự dựng video ở phần mềm khác và chỉ cần tiếng Việt "
@@ -713,6 +837,14 @@ class VoiceStep(_StepPanel):
         self.body.addWidget(self.status)
         self.finish()
         self._refresh_default_label()
+
+    def _browse_logo(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Chọn hình ảnh Logo / Watermark", "",
+            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)")
+        if path:
+            self.logo_path_input.set_text(path)
+            self.changed.emit()
 
     @staticmethod
     def _default_voice() -> str:
@@ -745,12 +877,26 @@ class VoiceStep(_StepPanel):
     def values(self) -> dict:
         # Không mở phần đổi giọng thì trả về rỗng — pipeline sẽ tự dùng
         # giọng mặc định trong Cài đặt.
+        logo_path = self.logo_path_input.text().strip() if self._logo_section.is_expanded() else ""
+        wm_text = self.wm_text.text().strip() if self._wm_section.is_expanded() else ""
         return {
             "voice": (self.picker.voice()
                       if self._override.is_expanded() else ""),
             "voice_speed": self.speed.value(),
             "subtitle_mode": self.mode.current_key(),
             "subtitle_preset": self.preset.current_key(),
+            "logo_path": logo_path,
+            "logo_position": self.logo_position.current_key(),
+            "logo_scale": self.logo_scale.value(),
+            "logo_opacity": self.logo_opacity.value(),
+            "logo_motion": self.logo_motion.current_key(),
+            "watermark_text": wm_text,
+            "watermark_motion": self.wm_motion.current_key(),
+            "watermark_opacity": self.wm_opacity.value(),
+            "watermark_speed": int(self.wm_speed.value()),
+            "smart_flip": self.smart_flip.isChecked() if self._anti_id_section.is_expanded() else False,
+            "micro_zoom": self.micro_zoom.isChecked() if self._anti_id_section.is_expanded() else False,
+            "color_filter": self.color_filter.current_key() if self._anti_id_section.is_expanded() else "none",
             "skip_video": self.audio_only.isChecked(),
         }
 
@@ -768,12 +914,66 @@ class VoiceStep(_StepPanel):
             settings = Settings.load()
             fb_mode = settings.subtitle_mode
             fb_preset = settings.subtitle_preset
+            fb_logo_path = settings.logo_path
+            fb_logo_pos = settings.logo_position
+            fb_logo_scale = settings.logo_scale
+            fb_logo_opacity = settings.logo_opacity
+            fb_logo_motion = settings.logo_motion
+            fb_wm_text = settings.watermark_text
+            fb_wm_motion = settings.watermark_motion
+            fb_wm_opacity = settings.watermark_opacity
+            fb_wm_speed = settings.watermark_speed
         except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
             fb_mode, fb_preset = "none", "clean"
+            fb_logo_path, fb_logo_pos, fb_logo_scale, fb_logo_opacity, fb_logo_motion = "", "top_right", 0.12, 0.85, "static"
+            fb_wm_text, fb_wm_motion, fb_wm_opacity, fb_wm_speed = "", "bounce", 0.28, 40
+
         self.mode.set_key(data.get("subtitle_mode", fb_mode))
         self.preset.set_key(data.get("subtitle_preset", fb_preset))
+
+        logo_path = data.get("logo_path", fb_logo_path)
+        self.logo_path_input.set_text(logo_path)
+        self.logo_position.set_key(data.get("logo_position", fb_logo_pos or "top_right"))
+        self.logo_scale.set_value(float(data.get("logo_scale", fb_logo_scale or 0.12)))
+        self.logo_opacity.set_value(float(data.get("logo_opacity", fb_logo_opacity or 0.85)))
+        self.logo_motion.set_key(data.get("logo_motion", fb_logo_motion or "static"))
+        self._logo_section.set_expanded(bool(logo_path))
+
+        wm_text = data.get("watermark_text", fb_wm_text)
+        self.wm_text.set_text(wm_text)
+        self.wm_motion.set_key(data.get("watermark_motion", fb_wm_motion or "bounce"))
+        self.wm_opacity.set_value(float(data.get("watermark_opacity", fb_wm_opacity or 0.28)))
+        self.wm_speed.set_value(float(data.get("watermark_speed", fb_wm_speed or 40)))
+        self._wm_section.set_expanded(bool(wm_text))
+
         self.audio_only.setChecked(bool(data.get("skip_video", False)))
         self._refresh_default_label()
+
+    def set_logo_options(self, opts: dict) -> None:
+        path = opts.get("logo_path", "")
+        self.logo_path_input.set_text(path)
+        if "logo_position" in opts:
+            self.logo_position.set_key(opts["logo_position"])
+        if "logo_scale" in opts:
+            self.logo_scale.set_value(float(opts["logo_scale"]))
+        if "logo_opacity" in opts:
+            self.logo_opacity.set_value(float(opts["logo_opacity"]))
+        if "logo_motion" in opts:
+            self.logo_motion.set_key(opts["logo_motion"])
+        self._logo_section.set_expanded(bool(path))
+        self.changed.emit()
+
+    def set_watermark_options(self, opts: dict) -> None:
+        text = opts.get("watermark_text", "")
+        self.wm_text.set_text(text)
+        if "watermark_motion" in opts:
+            self.wm_motion.set_key(opts["watermark_motion"])
+        if "watermark_opacity" in opts:
+            self.wm_opacity.set_value(float(opts["watermark_opacity"]))
+        if "watermark_speed" in opts:
+            self.wm_speed.set_value(float(opts["watermark_speed"]))
+        self._wm_section.set_expanded(bool(text))
+        self.changed.emit()
 
 
 class RunStep(_StepPanel):

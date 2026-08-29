@@ -17,6 +17,7 @@ import re
 import subprocess
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -138,20 +139,69 @@ def resolve_video_id(url: str) -> str | None:
 # Primary path: API / share-page JSON → direct no-watermark MP4
 # --------------------------------------------------------------------------- #
 
+def _deep_find_play_addr(obj, depth: int = 0) -> dict | None:
+    """Recursively search any nested dict/list for a 'play_addr' with a uri."""
+    if depth > 12:
+        return None
+    if isinstance(obj, dict):
+        pa = obj.get("play_addr")
+        if isinstance(pa, dict) and (pa.get("uri") or pa.get("url_list")):
+            uri = pa.get("uri", "")
+            url_list = pa.get("url_list", [])
+            clean_play_url = ""
+            for u in url_list:
+                if u:
+                    clean_play_url = u.replace("playwm", "play")
+                    break
+            # Walk up to find desc/title
+            title = (obj.get("desc") or "").strip()
+            duration_ms = obj.get("duration") or 0
+            if not title:
+                # try parent-like keys
+                for k in ("aweme_info", "awemeInfo", "aweme_detail"):
+                    sub = obj.get(k)
+                    if isinstance(sub, dict):
+                        title = (sub.get("desc") or "").strip()
+                        break
+            return {
+                "uri": uri,
+                "play_url": clean_play_url,
+                "title": title,
+                "duration_ms": duration_ms,
+            }
+        for val in obj.values():
+            result = _deep_find_play_addr(val, depth + 1)
+            if result:
+                if not result["title"]:
+                    result["title"] = (obj.get("desc") or "").strip()
+                return result
+    elif isinstance(obj, list):
+        for item in obj:
+            result = _deep_find_play_addr(item, depth + 1)
+            if result:
+                return result
+    return None
+
+
 def _fetch_share_info(video_id: str) -> dict | None:
     """Fetch video metadata from Douyin APIs or mobile share page embedded JSON.
 
     Returns {"uri", "play_url", "title", "duration_ms"} or None.
+
+    Tries multiple strategies because Douyin frequently changes its API surface:
+    1. Legacy iteminfo API
+    2. Share page embedded JSON (multiple script data formats)
+    3. Deep recursive search through any embedded JSON for play_addr
     """
-    # Strategy 1: Mobile API endpoint
+    # Strategy 1: Mobile API endpoint (may return empty since ~2025)
     api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
     try:
         resp = requests.get(
             api_url,
             headers={"User-Agent": _MOBILE_UA, "Referer": _IES_REFERER, "Accept": "application/json"},
-            timeout=15
+            timeout=10
         )
-        if resp.status_code == 200:
+        if resp.status_code == 200 and resp.text.strip():
             data = resp.json()
             items = data.get("item_list", [])
             if items:
@@ -160,80 +210,85 @@ def _fetch_share_info(video_id: str) -> dict | None:
                 play_addr = video_obj.get("play_addr", {})
                 uri = play_addr.get("uri", "")
                 url_list = play_addr.get("url_list", [])
-                
-                # Replace playwm with play for watermark-free video
                 clean_play_url = ""
                 for u in url_list:
                     if u:
                         clean_play_url = u.replace("playwm", "play")
                         break
-                        
                 title = (item.get("desc") or "").strip()
                 duration_ms = video_obj.get("duration") or item.get("duration") or 0
                 if clean_play_url or uri:
+                    logger.info(f"Strategy 1 (iteminfo API) succeeded for {video_id}")
                     return {
                         "uri": uri,
                         "play_url": clean_play_url,
                         "title": title,
                         "duration_ms": duration_ms,
                     }
+            # Also try deep search on the full response
+            result = _deep_find_play_addr(data)
+            if result:
+                logger.info(f"Strategy 1 (iteminfo deep search) succeeded for {video_id}")
+                return result
     except Exception as exc:
         logger.debug(f"Strategy 1 (iteminfo API) failed for {video_id}: {exc}")
 
-    # Strategy 2: Mobile share page HTML extraction
+    # Strategy 2: Mobile share page HTML extraction — try all known JSON formats
     share_url = f"https://www.iesdouyin.com/share/video/{video_id}/"
     try:
-        resp = requests.get(share_url, headers={"User-Agent": _MOBILE_UA}, timeout=20)
+        resp = requests.get(share_url, headers={"User-Agent": _MOBILE_UA}, timeout=15)
         if resp.status_code == 200:
             html = resp.text
-            
-            # Match router data or SSR data
-            for pattern in (_ROUTER_DATA_RE, _SSR_DATA_RE):
+
+            # Try all known embedded JSON patterns
+            all_patterns = [
+                (_ROUTER_DATA_RE, "ROUTER_DATA"),
+                (_SSR_DATA_RE, "SSR_DATA"),
+                (_RENDER_DATA_RE, "RENDER_DATA"),
+                (_UNIVERSAL_DATA_RE, "UNIVERSAL_DATA"),
+            ]
+            for pattern, name in all_patterns:
                 m = pattern.search(html)
-                if m:
-                    try:
-                        data = json.loads(m.group(1))
-                        for loader_value in data.get("loaderData", {}).values():
-                            if not isinstance(loader_value, dict):
-                                continue
-                            items = loader_value.get("videoInfoRes", {}).get("item_list", [])
-                            if not items:
-                                continue
-                            item = items[0]
-                            uri = item.get("video", {}).get("play_addr", {}).get("uri", "")
-                            url_list = item.get("video", {}).get("play_addr", {}).get("url_list", [])
-                            clean_play_url = url_list[0].replace("playwm", "play") if url_list else ""
-                            if uri or clean_play_url:
-                                return {
-                                    "uri": uri,
-                                    "play_url": clean_play_url,
-                                    "title": (item.get("desc") or "").strip(),
-                                    "duration_ms": item.get("video", {}).get("duration") or 0,
-                                }
-                    except Exception:
-                        pass
-                        
-            # Match RENDER_DATA
-            m_render = _RENDER_DATA_RE.search(html)
-            if m_render:
+                if not m:
+                    continue
                 try:
-                    raw_json = urllib.parse.unquote(m_render.group(1))
-                    data = json.loads(raw_json)
-                    for key, val in data.items():
-                        if isinstance(val, dict) and "video" in val:
-                            uri = val["video"].get("play_addr", {}).get("uri", "")
-                            if uri:
-                                return {
-                                    "uri": uri,
-                                    "play_url": "",
-                                    "title": (val.get("desc") or "").strip(),
-                                    "duration_ms": val["video"].get("duration") or 0,
-                                }
-                except Exception:
+                    raw = m.group(1)
+                    # RENDER_DATA is URL-encoded
+                    if name == "RENDER_DATA":
+                        raw = urllib.parse.unquote(raw)
+                    data = json.loads(raw)
+
+                    # Legacy path: loaderData → videoInfoRes → item_list
+                    for loader_value in data.get("loaderData", {}).values():
+                        if not isinstance(loader_value, dict):
+                            continue
+                        items = loader_value.get("videoInfoRes", {}).get("item_list", [])
+                        if not items:
+                            continue
+                        item = items[0]
+                        uri = item.get("video", {}).get("play_addr", {}).get("uri", "")
+                        url_list = item.get("video", {}).get("play_addr", {}).get("url_list", [])
+                        clean_play_url = url_list[0].replace("playwm", "play") if url_list else ""
+                        if uri or clean_play_url:
+                            logger.info(f"Strategy 2 ({name} legacy) succeeded for {video_id}")
+                            return {
+                                "uri": uri,
+                                "play_url": clean_play_url,
+                                "title": (item.get("desc") or "").strip(),
+                                "duration_ms": item.get("video", {}).get("duration") or 0,
+                            }
+
+                    # Deep recursive search: handles any future restructuring
+                    result = _deep_find_play_addr(data)
+                    if result:
+                        logger.info(f"Strategy 2 ({name} deep search) succeeded for {video_id}")
+                        return result
+                except (json.JSONDecodeError, Exception):
                     pass
     except Exception as exc:
         logger.warning(f"Strategy 2 (share page) failed for {video_id}: {exc}")
 
+    logger.info(f"All API strategies exhausted for {video_id} — will use Playwright fallback")
     return None
 
 
@@ -362,15 +417,7 @@ def _extract_via_playwright(
 
     video_id = _extract_video_id(canonical) or ""
 
-    if captured["progressive"]:
-        return {
-            "mode": "progressive",
-            "canonical_url": canonical,
-            "video_id": video_id,
-            "title": title,
-            "video_url": max(captured["progressive"], key=_bitrate_of),
-        }
-
+    # Ưu tiên số 1: DASH streams (chứa toàn bộ video đầy đủ, chất lượng cao nhất)
     if captured["dash_video"] and captured["dash_audio"]:
         return {
             "mode": "dash",
@@ -379,6 +426,16 @@ def _extract_via_playwright(
             "title": title,
             "video_url": max(captured["dash_video"], key=_bitrate_of),
             "audio_url": max(captured["dash_audio"], key=_bitrate_of),
+        }
+
+    # Ưu tiên số 2: Progressive MP4 (dự phòng nếu không có DASH)
+    if captured["progressive"]:
+        return {
+            "mode": "progressive",
+            "canonical_url": canonical,
+            "video_id": video_id,
+            "title": title,
+            "video_url": max(captured["progressive"], key=_bitrate_of),
         }
 
     raise RuntimeError(
@@ -440,39 +497,69 @@ def _ffprobe_duration(path: Path) -> float:
         return 0.0
 
 
-def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path) -> dict:
-    """Fallback: sniff CDN streams from the share page with a headless browser."""
-    share_url = f"https://www.iesdouyin.com/share/video/{video_id}/"
-    info = _extract_via_playwright(share_url)
+def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, initial_url: str | None = None) -> dict:
+    """Fallback: sniff CDN streams with a headless browser.
 
-    if info["video_id"] and info["video_id"] != video_id:
-        raise RuntimeError(
-            f"Douyin chuyển hướng sang video khác (yêu cầu {video_id}, "
-            f"nhận {info['video_id']}). Video có thể đã bị ẩn hoặc xóa."
-        )
+    Tries multiple URLs in order of specificity:
+    1. The exact clean input URL if it points directly to a Douyin page/modal
+    2. Canonical desktop video URL
+    3. Discover modal URL
+    4. Mobile share page
+    """
+    urls_to_try = []
+    if initial_url and "douyin.com" in initial_url and not initial_url.startswith("https://v.douyin.com"):
+        urls_to_try.append(initial_url)
+    urls_to_try.extend([
+        f"https://www.douyin.com/video/{video_id}",
+        f"https://www.douyin.com/discover?modal_id={video_id}",
+        f"https://www.iesdouyin.com/share/video/{video_id}/",
+    ])
+    # Deduplicate while preserving order
+    seen = set()
+    deduped = []
+    for u in urls_to_try:
+        if u not in seen:
+            seen.add(u)
+            deduped.append(u)
 
-    if info["mode"] == "progressive":
-        logger.info(f"Downloading progressive MP4 id={video_id}")
-        size = _download_stream(info["video_url"], final_path)
-        logger.info(f"Stream downloaded: {size:,}B")
-    else:
-        tmp_video = out_dir / f"_tmp_{video_id}.video.mp4"
-        tmp_audio = out_dir / f"_tmp_{video_id}.audio.m4a"
+    last_exc = None
+    for page_url in deduped:
         try:
-            logger.info(f"Downloading DASH video stream id={video_id}")
-            v_size = _download_stream(info["video_url"], tmp_video)
-            logger.info(f"Downloading DASH audio stream id={video_id}")
-            a_size = _download_stream(info["audio_url"], tmp_audio)
-            logger.info(f"Streams downloaded: video={v_size:,}B audio={a_size:,}B")
-            _ffmpeg_mux(tmp_video, tmp_audio, final_path)
-        finally:
-            for p in (tmp_video, tmp_audio):
-                if p.exists():
-                    try:
-                        p.unlink()
-                    except OSError:
-                        pass
-    return info
+            logger.info(f"Playwright fallback trying: {page_url}")
+            info = _extract_via_playwright(page_url, wait_seconds=20.0)
+
+            if info["mode"] == "progressive":
+                logger.info(f"Downloading progressive MP4 id={video_id}")
+                size = _download_stream(info["video_url"], final_path)
+                logger.info(f"Stream downloaded: {size:,}B")
+            else:
+                tmp_video = out_dir / f"_tmp_{video_id}.video.mp4"
+                tmp_audio = out_dir / f"_tmp_{video_id}.audio.m4a"
+                try:
+                    logger.info(f"Downloading DASH video+audio in parallel id={video_id}")
+                    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="douyin-dash") as pool:
+                        v_fut = pool.submit(_download_stream, info["video_url"], tmp_video)
+                        a_fut = pool.submit(_download_stream, info["audio_url"], tmp_audio)
+                        v_size = v_fut.result()
+                        a_size = a_fut.result()
+                    logger.info(f"Streams downloaded: video={v_size:,}B audio={a_size:,}B")
+                    _ffmpeg_mux(tmp_video, tmp_audio, final_path)
+                finally:
+                    for p in (tmp_video, tmp_audio):
+                        if p.exists():
+                            try:
+                                p.unlink()
+                            except OSError:
+                                pass
+            return info
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(f"Playwright fallback failed for {page_url}: {exc}")
+
+    raise RuntimeError(
+        f"Tất cả các phương thức tải Douyin đều thất bại cho video {video_id}. "
+        f"Lỗi cuối: {last_exc}"
+    )
 
 
 def download_douyin(
@@ -523,7 +610,7 @@ def download_douyin(
 
     # --- Fallback: Playwright stream sniffing (share page, id-verified) ---
     if not downloaded:
-        info = _download_via_playwright(video_id, out_dir, final_path)
+        info = _download_via_playwright(video_id, out_dir, final_path, initial_url=clean_url)
         title = title or info.get("title", "")
 
     duration = _ffprobe_duration(final_path)

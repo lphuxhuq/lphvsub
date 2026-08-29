@@ -1009,6 +1009,71 @@ def translate_segments_browser(
                         detail=f"{len(translated_segments_map)}/{len(segments)} câu"
                     )
 
+            # Tự động sinh tiêu đề, mô tả, hashtag qua AI Studio (tái sử dụng tab chat đang mở)
+            if getattr(settings, "generate_metadata", True) and checkpoint_path:
+                try:
+                    work_dir = os.path.dirname(os.path.dirname(os.path.abspath(checkpoint_path)))
+                    from autodub.workdir import youtube_dir, load_video_meta
+                    yt_dir = youtube_dir(work_dir, create=True)
+                    yt_meta_file = os.path.join(yt_dir, "youtube_metadata.json")
+                    if not os.path.exists(yt_meta_file):
+                        logger.info("Đang tạo tiêu đề, mô tả, hashtag qua Google AI Studio...")
+                        script_trans = " ".join(
+                            str(translated_segments_map.get(s["id"], s).get(target.text_field, "")).strip()
+                            for s in segments
+                            if translated_segments_map.get(s["id"], s).get(target.text_field)
+                        )
+                        video_title = str(load_video_meta(work_dir).get("title", "")).strip()
+                        domain = getattr(settings, "translate_domain", "").strip()
+                        topic_ctx = f"\nChủ đề: {domain}" if domain else ""
+                        title_ctx = f"\nTiêu đề gốc: {video_title}" if video_title else ""
+
+                        post_prompt = f"""Dựa vào nội dung kịch bản video tiếng Việt dưới đây:{title_ctx}{topic_ctx}
+Lời thoại video:
+\"\"\"
+{script_trans[:6000]}
+\"\"\"
+
+Hãy tạo gói nội dung đăng bài chuyên nghiệp, chuẩn SEO và tối ưu tương tác cho cả 3 nền tảng:
+1. YouTube (Video / Shorts):
+   - title: Tiêu đề tiếng Việt hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự).
+   - description: Mô tả chi tiết 3 phần (hook 2 câu mở đầu, điểm nổi bật chính, kêu gọi Like/Đăng ký kênh).
+   - hashtags: 10-15 hashtag chất lượng cao (#shorts, #phimhay, từ khóa ngách...).
+2. TikTok:
+   - title: Caption ngắn gọn (1-2 câu), giật gân, cuốn hút.
+   - hashtags: 5-8 hashtag thịnh hành (#fyp, #xuhuong, #viral...).
+3. Facebook (Reels / Post):
+   - title: Caption tự nhiên, tăng tương tác và bình luận.
+   - hashtags: 3-5 hashtag cô đọng (#reels, #trending...).
+
+Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau:
+{{
+  "title": "Tiêu đề YouTube...",
+  "description": "Nội dung mô tả YouTube...",
+  "hashtags": ["#tag1", "#tag2", ...],
+  "tiktok": {{
+    "title": "Caption TikTok...",
+    "hashtags": ["#fyp", "#xuhuong", ...]
+  }},
+  "facebook": {{
+    "title": "Caption Facebook...",
+    "hashtags": ["#reels", "#trending", ...]
+  }}
+}}
+Chỉ trả về JSON thuần túy."""
+                        raw_meta = client.translate_batch("", post_prompt, max_wait_secs=90)
+                        from autodub.text.translate_direct import _slice_to_payload, _strip_fences_and_citations
+                        clean_meta = _strip_fences_and_citations(raw_meta)
+                        meta_data = json.loads(_slice_to_payload(clean_meta))
+                        if isinstance(meta_data, dict) and "title" in meta_data:
+                            with open(yt_meta_file, "w", encoding="utf-8") as f:
+                                json.dump(meta_data, f, ensure_ascii=False, indent=2)
+                            from autodub.content.generator import _write_post_file
+                            _write_post_file(os.path.join(yt_dir, "youtube_post.txt"), meta_data)
+                            logger.info(f"Đã tạo xong tiêu đề, mô tả AI Studio: «{meta_data.get('title', '')[:50]}»")
+                except Exception as e:
+                    logger.warning(f"Tạo tiêu đề/mô tả qua AI Studio không thành công ({e})")
+
     finally:
         client.close()
 

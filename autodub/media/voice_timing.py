@@ -70,24 +70,33 @@ def fit_voice_to_slot(
     *,
     min_speed: float = 0.90,
     max_speed: float = 1.15,
+    trim_silence: bool = True,
 ) -> FitResult:
     """Fit clip TTS vào slot — trả path wav dùng được + tempo đã áp."""
-    from autodub.media.audio import apply_atempo, wav_duration_s
+    from autodub.media.audio import wav_duration_s
+    from autodub.media.voice_stretch import apply_formant_preserved_stretch
+    from autodub.speech.tts_trimmer import trim_tts_silence
 
-    actual = wav_duration_s(wav_path) or 0.0
+    work_wav = wav_path
+    if trim_silence:
+        trimmed_dir = os.path.join(out_dir, "trimmed")
+        trimmed_path = os.path.join(trimmed_dir, os.path.basename(wav_path))
+        work_wav, _lead, _tail = trim_tts_silence(wav_path, trimmed_path)
+
+    actual = wav_duration_s(work_wav) or 0.0
     tempo = _decide_tempo(actual, target_duration, min_speed, max_speed)
     if tempo <= 1.0:
-        return FitResult(tempo_factor=1.0, out_path=wav_path, rendered=False)
+        return FitResult(tempo_factor=1.0, out_path=work_wav, rendered=(work_wav != wav_path))
 
     ensure_dir(out_dir)
     out_path = os.path.join(out_dir, os.path.basename(wav_path))
     expected = actual / tempo
     # Resume-safe: đầu ra còn mới hơn nguồn VÀ đúng thời lượng kỳ vọng.
     if (os.path.exists(out_path) and os.path.getsize(out_path) > 0
-            and os.path.getmtime(out_path) >= os.path.getmtime(wav_path)):
+            and os.path.getmtime(out_path) >= os.path.getmtime(work_wav)):
         have = wav_duration_s(out_path) or -1.0
         if abs(have - expected) < CACHE_TOLERANCE_S:
             return FitResult(tempo_factor=tempo, out_path=out_path,
                              rendered=False)
-    apply_atempo(wav_path, out_path, tempo)
+    apply_formant_preserved_stretch(work_wav, out_path, tempo)
     return FitResult(tempo_factor=tempo, out_path=out_path, rendered=True)

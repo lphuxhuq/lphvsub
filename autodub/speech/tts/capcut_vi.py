@@ -5,6 +5,7 @@ Hỗ trợ Device Pool đa thiết bị (fake nhiều device.json) chạy đa lu
 from __future__ import annotations
 
 import os
+import random
 import re
 import subprocess
 import threading
@@ -17,15 +18,16 @@ from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.tts.capcut")
 
-#: Số câu đọc song song (mặc định 8 luồng song song với Device Pool, có thể nâng lên đến 16 qua Settings.capcut_threads hoặc CAPCUT_THREADS).
+#: Số câu đọc song song (mặc định 8 luồng song song với Device Pool, có thể tùy chỉnh qua Settings.capcut_threads hoặc CAPCUT_THREADS).
 RECOMMENDED_THREADS = min(16, max(1, int(os.environ.get("CAPCUT_THREADS", "8"))))
 
-#: Khoảng cách tối thiểu giữa hai lần gửi per-device
-MIN_GAP_S = 0.05
+#: Khoảng cách tối thiểu giữa hai lần gửi toàn cục và per-device
+GLOBAL_MIN_GAP_S = 0.12
+MIN_GAP_S = 0.15
 
 #: Số lần thử lại một câu khi mạng chập chờn hoặc máy chủ báo bận.
 RETRIES = 6
-BACKOFF_S = (0.5, 1.0, 1.5, 2.5, 3.5, 5.0)
+BACKOFF_S = (0.8, 1.2, 1.8, 2.8, 3.8, 5.0)
 
 #: Số lần đổi định danh liên tiếp mà vẫn bị chặn thì bỏ cuộc.
 MAX_ROTATIONS = 2
@@ -39,11 +41,12 @@ OFFLINE_HINT = ("Giọng CapCut cần kết nối mạng. Kiểm tra mạng rồ
                 "hoặc chọn một giọng offline (VieNeu) ở ô chọn giọng.")
 
 BLOCKED_HINT = ("Máy chủ CapCut đang tạm thời bận hoặc giới hạn kết nối (system busy / shark block). "
-                "Hệ thống đã tự động thử lại và đổi hồ sơ thiết bị nhưng máy chủ vẫn chưa phản hồi. "
+                "Hệ thống đã tự động thử lại và điều tiết nhịp gửi nhưng máy chủ vẫn chưa phản hồi. "
                 "Hãy thử lại sau ít phút hoặc chọn một giọng offline (VieNeu) để lồng tiếng ngay.")
 
-_THROTTLE_LOCK = threading.Lock()
-_next_slot = 0.0
+_GLOBAL_THROTTLE_LOCK = threading.Lock()
+_global_next_slot = 0.0
+_global_backoff_until = 0.0
 
 _DEVICE_LOCK = threading.Lock()
 _rotations = 0
@@ -84,34 +87,60 @@ def _rotate_profile(seen: dict) -> dict | None:
         return _profile
 
 
+def _trigger_global_backoff(duration_s: float = 1.0) -> None:
+    """Khi một luồng gặp system busy, phanh nhẹ các luồng khác một khoảng ngắn tránh dồn dập."""
+    global _global_backoff_until
+    with _GLOBAL_THROTTLE_LOCK:
+        _global_backoff_until = max(_global_backoff_until, time.monotonic() + duration_s)
+
+
 def _throttle(device: Optional[dict] = None) -> None:
-    """Giữ nhịp gửi, ưu tiên phân tán theo từng thiết bị trong pool."""
+    """Giữ nhịp gửi toàn cục và nhịp riêng theo từng thiết bị."""
+    global _global_next_slot
+    with _GLOBAL_THROTTLE_LOCK:
+        now = time.monotonic()
+        if _global_backoff_until > now:
+            wait_backoff = _global_backoff_until - now
+            _global_next_slot = max(_global_next_slot, _global_backoff_until) + GLOBAL_MIN_GAP_S
+        else:
+            wait_slot = _global_next_slot - now
+            _global_next_slot = max(now, _global_next_slot) + GLOBAL_MIN_GAP_S
+            wait_backoff = max(0.0, wait_slot)
+
+    if wait_backoff > 0:
+        time.sleep(wait_backoff)
+
     if device is not None:
         get_device_pool().throttle_device(device, min_gap_s=MIN_GAP_S)
-        return
-
-    global _next_slot
-    with _THROTTLE_LOCK:
-        now = time.monotonic()
-        wait = _next_slot - now
-        _next_slot = max(now, _next_slot) + MIN_GAP_S
-    if wait > 0:
-        time.sleep(wait)
 
 
-def _is_shark_block(error: Exception) -> bool:
-    """Máy chủ chặn định danh máy hoặc báo bận — cần đổi thiết bị và giãn cách."""
+def _is_hard_block(error: Exception) -> bool:
+    """Máy chủ chặn vĩnh viễn định danh máy (shark block / ret -6) — cần đổi thiết bị."""
     text = str(error).lower()
     return (
         "shark block" in text
         or "'ret': '-6'" in text
         or '"ret": "-6"' in text
-        or "'ret': '1014'" in text
+    )
+
+
+def _is_rate_limited(error: Exception) -> bool:
+    """Máy chủ báo bận hoặc giới hạn tần suất tạm thời (system busy / ret 1014 / 1004 / 429)."""
+    text = str(error).lower()
+    return (
+        "'ret': '1014'" in text
         or '"ret": "1014"' in text
         or "system busy" in text
         or "'ret': '1004'" in text
         or '"ret": "1004"' in text
+        or "429" in text
+        or "too many requests" in text
     )
+
+
+def _is_shark_block(error: Exception) -> bool:
+    """Kiểm tra xem lỗi có phải do máy chủ chặn thiết bị hay quá tải."""
+    return _is_hard_block(error) or _is_rate_limited(error)
 
 
 def _is_invalid_text(error: Exception) -> bool:
@@ -193,8 +222,21 @@ class CapCutSynthesizer:
 
         return self._client, self._device
 
+    def _soft_rotate_device(self, used: dict) -> None:
+        """Xoay nhẹ sang thiết bị khác trong pool khi server báo bận mà không phạt cooldown."""
+        if getattr(self._local, "client", None) is not None:
+            new_dev = self._pool.rotate_device(used)
+            if new_dev.get("device_id") != used.get("device_id"):
+                from autodub.speech.tts.capcut_api import CapCutClient
+                try:
+                    self._local.client.session.close()
+                except Exception:
+                    pass
+                self._local.device = new_dev
+                self._local.client = CapCutClient(device=new_dev)
+
     def _reload_device(self, used: dict) -> bool:
-        """Nhận định danh mới sau khi ``used`` bị chặn. False là hết đường."""
+        """Nhận định danh mới sau khi ``used`` bị chặn thực sự (shark block). False là hết đường."""
         from autodub.speech.tts.capcut_api import CapCutClient
 
         # Nếu đang ở worker thread có thread-local client:
@@ -246,20 +288,36 @@ class CapCutSynthesizer:
                     raise RuntimeError(
                         f"CapCut từ chối nội dung câu (TTSInvalidText): {text!r}"
                     ) from e
-                if _is_shark_block(e):
+                
+                # 1. Hard Block (shark block / ret -6) -> Thiết bị bị ban thật, phải đổi định danh
+                if _is_hard_block(e):
                     if not self._reload_device(used):
                         raise RuntimeError(BLOCKED_HINT) from e
                     sleep_s = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
                     logger.warning(
-                        f"CapCut phản hồi chậm/bận ({e}) — đã đổi thiết bị và chờ {sleep_s:.1f}s (lần {attempt + 1}/{RETRIES})..."
+                        f"CapCut chặn định danh máy ({e}) — đã đổi thiết bị và chờ {sleep_s:.1f}s (lần {attempt + 1}/{RETRIES})..."
                     )
                     time.sleep(sleep_s)
                     continue
+
+                # 2. Soft Rate Limit (system busy / ret 1014) -> Máy chủ bận, hoãn nhịp và thử lại
+                if _is_rate_limited(e):
+                    _trigger_global_backoff(1.0)
+                    self._soft_rotate_device(used)
+                    base_sleep = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
+                    jitter = random.uniform(0.1, 0.5)
+                    sleep_s = base_sleep + jitter
+                    logger.warning(
+                        f"CapCut máy chủ phản hồi bận (system busy / ret=1014) — tạm hoãn {sleep_s:.2f}s và thử lại (lần {attempt + 1}/{RETRIES})..."
+                    )
+                    time.sleep(sleep_s)
+                    continue
+
                 if attempt < RETRIES - 1:
                     logger.warning(
                         f"CapCut lỗi (lần {attempt + 1}/{RETRIES}): {e}")
                     time.sleep(BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)])
-        if last_error is not None and _is_shark_block(last_error):
+        if last_error is not None and (_is_hard_block(last_error) or _is_rate_limited(last_error)):
             raise RuntimeError(BLOCKED_HINT) from last_error
         raise RuntimeError(f"Không đọc được câu bằng giọng CapCut sau "
                            f"{RETRIES} lần thử: {last_error}. {OFFLINE_HINT}")
