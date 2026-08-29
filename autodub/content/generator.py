@@ -75,6 +75,86 @@ def extract_script_text(segments: list[dict], text_field: str,
 
 # ------------------------------------------------------- nội dung đăng bài -- #
 
+def _has_cjk(text: str) -> bool:
+    """Kiểm tra chuỗi có chứa ký tự tiếng Trung/Nhật/Hàn hay không."""
+    return bool(re.search(r"[\u4e00-\u9fff]", str(text or "")))
+
+
+def _clean_social_metadata(meta: dict, script_translated: str) -> dict:
+    """Chuẩn hóa và lọc sạch 100% tiếng Trung trong metadata."""
+    if not isinstance(meta, dict):
+        meta = {}
+
+    title = str(meta.get("title") or "").strip()
+    if not title or _has_cjk(title):
+        # Tự sinh tiêu đề tiếng Việt từ kịch bản dịch
+        sentences = [s.strip() for s in re.split(r"[.!?\n]+", script_translated) if s.strip()]
+        first_line = sentences[0] if sentences else "Siêu Phẩm Video Lồng Tiếng Mới Nhất"
+        title = first_line[:65]
+        meta["title"] = title
+
+    desc = str(meta.get("description") or "").strip()
+    if not desc or _has_cjk(desc):
+        desc = (
+            f"{title}\n\n"
+            f"Chào mừng bạn đến với video mới nhất! Hãy xem trọn vẹn video để không bỏ lỡ "
+            f"những tình tiết gay cấn và hấp dẫn nhất nhé.\n\n"
+            f"+ Đừng quên bấm LIKE, CHIA SẺ và ĐĂNG KÝ KÊNH để ủng hộ mình và đón xem "
+            f"những tập tiếp theo sớm nhất!"
+        )
+        meta["description"] = desc
+
+    # Xử lý alternative titles
+    alt_titles = meta.get("alternative_titles")
+    if not isinstance(alt_titles, list) or not alt_titles or any(_has_cjk(x) for x in alt_titles):
+        meta["alternative_titles"] = [
+            f"Bí Mật Đằng Sau: {title[:45]}",
+            f"Sự Thật Bất Ngờ Trong {title[:45]}",
+            f"Cái Kết Bất Ngờ Của {title[:45]}",
+        ]
+
+    # Xử lý tags
+    tags = meta.get("tags")
+    if not isinstance(tags, list) or not tags or any(_has_cjk(x) for x in tags):
+        meta["tags"] = [
+            "review phim", "lồng tiếng", "tóm tắt phim", "phim hay",
+            "phim mới", "shorts", "xem phim", "viral video", "thịnh hành"
+        ]
+
+    # Xử lý hashtags
+    hashtags = meta.get("hashtags")
+    if not isinstance(hashtags, list) or not hashtags or any(_has_cjk(x) for x in hashtags):
+        meta["hashtags"] = ["#shorts", "#reviewphim", "#phimhay", "#tomtatphim", "#trending", "#viral", "#xuhuong"]
+
+    # Xử lý TikTok
+    tiktok = meta.get("tiktok")
+    if not isinstance(tiktok, dict):
+        tiktok = {}
+    tk_title = str(tiktok.get("title") or "").strip()
+    if not tk_title or _has_cjk(tk_title):
+        tiktok["title"] = f"{title[:60]} | Xem ngay để biết cái kết!"
+    tk_tags = tiktok.get("hashtags")
+    if not isinstance(tk_tags, list) or not tk_tags or any(_has_cjk(x) for x in tk_tags):
+        tiktok["hashtags"] = ["#fyp", "#xuhuong", "#viral", "#shorts", "#phimhay", "#review"]
+    meta["tiktok"] = tiktok
+
+    # Xử lý Facebook
+    facebook = meta.get("facebook")
+    if not isinstance(facebook, dict):
+        facebook = {}
+    fb_title = str(facebook.get("title") or "").strip()
+    if not fb_title or _has_cjk(fb_title):
+        facebook["title"] = f"Mọi người đánh giá thế nào về diễn biến này? Để lại bình luận nhé!\n{title}"
+    if not facebook.get("description") or _has_cjk(facebook.get("description", "")):
+        facebook["description"] = "Cùng theo dõi và thảo luận những tình tiết gay cấn nhất trong video dưới đây."
+    fb_tags = facebook.get("hashtags")
+    if not isinstance(fb_tags, list) or not fb_tags or any(_has_cjk(x) for x in fb_tags):
+        facebook["hashtags"] = ["#reels", "#trending", "#viral", "#phimhay", "#xuhuong"]
+    meta["facebook"] = facebook
+
+    return meta
+
+
 def generate_social_metadata_direct(
     script_original: str,
     script_translated: str,
@@ -97,12 +177,17 @@ def generate_social_metadata_direct(
     system_instruction = (
         "Bạn là chuyên gia sáng tạo nội dung mạng xã hội và tối ưu SEO video hàng đầu "
         "(YouTube, TikTok, Facebook Reels). Nhiệm vụ của bạn là đọc kịch bản video và tạo ra bộ "
-        "tiêu đề, mô tả, hashtag hấp dẫn, kích thích lượt xem (CTR cao) nhưng không giật tít lừa đảo."
+        "tiêu đề, mô tả, hashtag và danh sách thẻ từ khóa (tags) hấp dẫn, kích thích lượt xem (High CTR) "
+        "nhưng không giật tít lừa đảo.\n"
+        "YÊU CẦU BẮT BUỘC:\n"
+        "1. Toàn bộ nội dung trả về BẮT BUỘC 100% bằng TIẾNG VIỆT HOÀN TOÀN.\n"
+        "2. TUYỆT ĐỐI KHÔNG để lại bất kỳ chữ Hán/tiếng Trung (CJK) nào trong tiêu đề, mô tả, thẻ tags hay hashtag."
     )
 
     domain = getattr(settings, "translate_domain", "").strip()
     topic_context = f"\nChủ đề/Thể loại: {domain}" if domain else ""
-    orig_title_context = f"\nTiêu đề gốc: {video_title}" if video_title else ""
+    clean_vtitle = re.sub(r"[\u4e00-\u9fff]+", "", video_title).strip()
+    orig_title_context = f"\nTiêu đề tham khảo: {clean_vtitle}" if clean_vtitle else ""
 
     user_prompt = f"""Dựa vào nội dung kịch bản video tiếng Việt dưới đây:{orig_title_context}{topic_context}
 Lời thoại video:
@@ -112,28 +197,38 @@ Lời thoại video:
 
 Hãy tạo gói nội dung đăng bài chuyên nghiệp, chuẩn SEO và tối ưu tương tác cho cả 3 nền tảng:
 1. YouTube (Video / Shorts):
-   - title: Tiêu đề tiếng Việt hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự, có thể kèm emoji tinh tế hoặc từ khóa hot).
-   - description: Mô tả chi tiết 3 phần: (1) Đoạn mở đầu hook 2 câu tóm tắt gay cấn; (2) Điểm nổi bật / bài học chính trong video; (3) Lời kêu gọi hành động (Đăng ký kênh, để lại bình luận).
-   - hashtags: 10-15 hashtag chất lượng cao (gồm các từ khóa ngách cụ thể và hashtag thịnh hành, viết liền có dấu #).
+   - title: Tiêu đề tiếng Việt chính cực kỳ hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự).
+   - alternative_titles: 3 tiêu đề gợi ý khác nhau mang phong cách giật gân, tò mò, khám phá để A/B test.
+   - description: Mô tả chi tiết 3 phần: (1) Đoạn mở đầu hook 2 câu tóm tắt gay cấn; (2) Tóm tắt cốt truyện/điểm nổi bật chính; (3) Lời kêu gọi hành động (Đăng ký kênh, để lại bình luận).
+   - tags: 12-18 từ khóa SEO dạng mảng chuỗi (không có dấu #) để dán vào ô Tags của YouTube Studio (ví dụ: ["review phim", "tóm tắt phim", "phim hay"]).
+   - hashtags: 10-15 hashtag chất lượng cao (viết liền có dấu #).
 2. TikTok:
    - title: Caption ngắn gọn (1-2 câu), giật gân, khơi gợi tranh luận hoặc tò mò ngay giây đầu.
    - hashtags: 5-8 hashtag thịnh hành (#fyp, #xuhuong, #viral + các hashtag chủ đề video).
 3. Facebook (Reels / Video Post):
    - title: Caption tự nhiên, mang tính kết nối cộng đồng, đặt câu hỏi để người xem comment.
+   - description: Đoạn chia sẻ ngắn gọn về tình tiết video.
    - hashtags: 3-5 hashtag cô đọng (#reels, #trending + hashtag chủ đề).
 
-Bắt buộc trả về đúng duy nhất định dạng JSON thuần túy sau:
+Bắt buộc trả về đúng DUY NHẤT định dạng JSON thuần túy sau (100% TIẾNG VIỆT, KHÔNG CHỨA CHỮ HÁN):
 {{
-  "title": "Tiêu đề YouTube...",
-  "description": "Nội dung mô tả YouTube...",
-  "hashtags": ["#tag1", "#tag2", ...],
+  "title": "Tiêu đề YouTube chính...",
+  "alternative_titles": [
+    "Tiêu đề gợi ý 1...",
+    "Tiêu đề gợi ý 2...",
+    "Tiêu đề gợi ý 3..."
+  ],
+  "description": "Nội dung mô tả YouTube đầy đủ...",
+  "tags": ["từ khóa 1", "từ khóa 2", "từ khóa 3"],
+  "hashtags": ["#tag1", "#tag2"],
   "tiktok": {{
     "title": "Caption TikTok...",
-    "hashtags": ["#fyp", "#xuhuong", ...]
+    "hashtags": ["#fyp", "#xuhuong"]
   }},
   "facebook": {{
     "title": "Caption Facebook...",
-    "hashtags": ["#reels", "#trending", ...]
+    "description": "Mô tả Facebook...",
+    "hashtags": ["#reels", "#trending"]
   }}
 }}
 Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích thêm."""
@@ -143,6 +238,7 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
         clean = _strip_fences_and_citations(raw)
         data = json.loads(_slice_to_payload(clean))
         if isinstance(data, dict) and "title" in data:
+            data = _clean_social_metadata(data, script_translated)
             logger.info(f"Đã tạo nội dung đăng bài qua {provider_name}: «{data.get('title', '')[:50]}»")
             return data
     except Exception as e:
@@ -166,7 +262,8 @@ def generate_social_metadata_browser(
 
         domain = getattr(settings, "translate_domain", "").strip()
         topic_context = f"\nChủ đề/Thể loại: {domain}" if domain else ""
-        orig_title_context = f"\nTiêu đề gốc: {video_title}" if video_title else ""
+        clean_vtitle = re.sub(r"[\u4e00-\u9fff]+", "", video_title).strip()
+        orig_title_context = f"\nTiêu đề tham khảo: {clean_vtitle}" if clean_vtitle else ""
 
         user_prompt = f"""Dựa vào nội dung kịch bản video tiếng Việt dưới đây:{orig_title_context}{topic_context}
 Lời thoại video:
@@ -176,20 +273,25 @@ Lời thoại video:
 
 Hãy tạo gói nội dung đăng bài chuyên nghiệp, chuẩn SEO và tối ưu tương tác cho cả 3 nền tảng:
 1. YouTube (Video / Shorts):
-   - title: Tiêu đề tiếng Việt hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự).
+   - title: Tiêu đề tiếng Việt chính cực kỳ hấp dẫn, kích thích tò mò (khoảng 45-70 ký tự).
+   - alternative_titles: 3 tiêu đề gợi ý khác nhau mang phong cách giật gân, tò mò để A/B test.
    - description: Mô tả chi tiết 3 phần (hook 2 câu mở đầu, điểm nổi bật chính, kêu gọi Like/Đăng ký kênh).
-   - hashtags: 10-15 hashtag chất lượng cao (#shorts, #phimhay, #review, #trending, #viral...).
+   - tags: 12-18 từ khóa SEO dạng mảng chuỗi (không có dấu #) để dán vào ô Tags của YouTube Studio.
+   - hashtags: 10-15 hashtag chất lượng cao (#shorts, #phimhay, #review...).
 2. TikTok:
    - title: Caption ngắn gọn (1-2 câu), giật gân, cuốn hút.
    - hashtags: 5-8 hashtag thịnh hành (#fyp, #xuhuong, #viral...).
 3. Facebook (Reels / Post):
    - title: Caption tự nhiên, tăng tương tác và bình luận.
+   - description: Mô tả ngắn gọn thu hút.
    - hashtags: 3-5 hashtag cô đọng (#reels, #trending...).
 
-Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau:
+Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau (100% TIẾNG VIỆT, KHÔNG CHỨA CHỮ HÁN):
 {{
   "title": "Tiêu đề YouTube...",
+  "alternative_titles": ["Tiêu đề gợi ý 1...", "Tiêu đề gợi ý 2...", "Tiêu đề gợi ý 3..."],
   "description": "Nội dung mô tả YouTube...",
+  "tags": ["từ khóa 1", "từ khóa 2", "từ khóa 3"],
   "hashtags": ["#tag1", "#tag2", ...],
   "tiktok": {{
     "title": "Caption TikTok...",
@@ -197,6 +299,7 @@ Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau:
   }},
   "facebook": {{
     "title": "Caption Facebook...",
+    "description": "Mô tả Facebook...",
     "hashtags": ["#reels", "#trending", ...]
   }}
 }}
@@ -210,6 +313,7 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
             clean = _strip_fences_and_citations(raw)
             data = json.loads(_slice_to_payload(clean))
             if isinstance(data, dict) and "title" in data:
+                data = _clean_social_metadata(data, script_translated)
                 logger.info(f"Đã tạo nội dung đăng bài qua Google AI Studio: «{data.get('title', '')[:50]}»")
                 return data
         finally:
@@ -220,24 +324,44 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
 
 
 def _generate_fallback_metadata(script_translated: str, video_title: str = "") -> dict:
-    """Tạo metadata dự phòng tự nhiên dựa trên tiêu đề gốc và kịch bản khi không có AI."""
-    title = video_title.strip() if video_title else ""
+    """Tạo metadata dự phòng tự nhiên 100% tiếng Việt dựa trên kịch bản khi không có AI."""
+    clean_vtitle = re.sub(r"[\u4e00-\u9fff]+", "", str(video_title or "")).strip()
+    title = clean_vtitle if len(clean_vtitle) >= 6 else ""
     if not title:
-        first_line = script_translated.split(".")[0].strip()
-        title = first_line[:60] if first_line else "Video Lồng Tiếng Mới Nhất"
-    desc = f"{title}\n\nXem video trọn vẹn và đừng quên bấm Like & Đăng ký kênh để theo dõi những video hấp dẫn tiếp theo nhé!"
-    tags = ["#shorts", "#review", "#phimhay", "#trending", "#viral", "#xuhuong"]
+        sentences = [s.strip() for s in re.split(r"[.!?\n]+", script_translated) if s.strip()]
+        first_line = sentences[0] if sentences else "Siêu Phẩm Video Lồng Tiếng Mới Nhất"
+        title = first_line[:65]
+
+    desc = (
+        f"{title}\n\n"
+        f"Chào mừng các bạn đã đến với kênh! Hãy thưởng thức trọn vẹn video để cảm nhận những "
+        f"khoảnh khắc kịch tính và ý nghĩa nhất.\n\n"
+        f"+ Nhấn LIKE và ĐĂNG KÝ KÊNH để không bỏ lỡ những siêu phẩm video hấp dẫn tiếp theo nhé!"
+    )
+    tags = [
+        "review phim", "lồng tiếng", "tóm tắt phim", "phim hay", "phim mới",
+        "shorts", "xem phim", "viral video", "thịnh hành", "video hot"
+    ]
+    hashtags = ["#shorts", "#reviewphim", "#phimhay", "#tomtatphim", "#trending", "#viral", "#xuhuong"]
+
     return {
         "title": title,
+        "alternative_titles": [
+            f"Bí Mật Đằng Sau: {title[:45]}",
+            f"Sự Thật Bất Ngờ Trong {title[:45]}",
+            f"Cái Kết Bất Ngờ Của {title[:45]}",
+        ],
         "description": desc,
-        "hashtags": tags,
+        "tags": tags,
+        "hashtags": hashtags,
         "tiktok": {
-            "title": f"{title} | Xem ngay!",
-            "hashtags": ["#fyp", "#xuhuong", "#viral", "#shorts"]
+            "title": f"{title[:60]} | Xem ngay để biết cái kết!",
+            "hashtags": ["#fyp", "#xuhuong", "#viral", "#shorts", "#phimhay"]
         },
         "facebook": {
-            "title": f"Mọi người thấy video này thế nào? Bình luận bên dưới nhé!\n{title}",
-            "hashtags": ["#reels", "#trending", "#viral"]
+            "title": f"Mọi người thấy diễn biến này thế nào? Bình luận bên dưới nhé!\n{title}",
+            "description": "Cùng theo dõi và chia sẻ cảm nghĩ của bạn về video này nhé!",
+            "hashtags": ["#reels", "#trending", "#viral", "#phimhay"]
         }
     }
 
@@ -251,14 +375,14 @@ def generate_social_metadata(script_original: str, script_translated: str,
             script_original, script_translated, settings, video_title=video_title
         )
         if res:
-            return res
+            return _clean_social_metadata(res, script_translated)
 
         if getattr(settings, "ai_studio_enabled", False):
             res_browser = generate_social_metadata_browser(
                 script_original, script_translated, settings, video_title=video_title
             )
             if res_browser:
-                return res_browser
+                return _clean_social_metadata(res_browser, script_translated)
 
     from autodub.saas_client import (
         InsufficientCreditError, SaasError, get_client, is_configured,
@@ -274,7 +398,7 @@ def generate_social_metadata(script_original: str, script_translated: str,
             if metadata:
                 logger.info("Đã viết xong nội dung đăng bài qua server: "
                             f"«{str(metadata.get('title', ''))[:50]}»")
-                return metadata
+                return _clean_social_metadata(metadata, script_translated)
         except InsufficientCreditError:
             raise
         except SaasError as e:
@@ -287,26 +411,59 @@ def generate_social_metadata(script_original: str, script_translated: str,
 # ------------------------------------------------------------- ghi ra tệp -- #
 
 def _write_post_file(path: str, meta: dict) -> None:
-    """``youtube_post.txt`` — nội dung đăng bài cho ba nền tảng."""
+    """``youtube_post.txt`` — nội dung đăng bài chuyên nghiệp, đầy đủ cho cả 3 nền tảng."""
     tiktok = meta.get("tiktok") or {}
     facebook = meta.get("facebook") or {}
-    bar = "=" * 60
+    alt_titles = meta.get("alternative_titles") or []
+    tags = meta.get("tags") or []
+    if not tags:
+        tags = [h.lstrip("#") for h in (meta.get("hashtags") or [])]
 
-    def block(name: str, title: str, description: str,
-              hashtags: list) -> list[str]:
-        rows = [bar, name, bar, "", f"TIÊU ĐỀ:\n{title}", ""]
-        if description:
-            rows += [f"MÔ TẢ:\n{description}", ""]
-        rows += [f"HASHTAG:\n{' '.join(hashtags or [])}", ""]
-        return rows
+    bar_double = "=" * 70
 
-    lines: list[str] = []
-    lines += block("YOUTUBE", meta.get("title", ""),
-                   meta.get("description", ""), meta.get("hashtags", []))
-    lines += block("TIKTOK", tiktok.get("title", ""), "",
-                   tiktok.get("hashtags", []))
-    lines += block("FACEBOOK", facebook.get("title", ""), "",
-                   facebook.get("hashtags", []))
+    lines = [
+        bar_double,
+        "             GÓI NỘI DUNG ĐĂNG BÀI ĐA NỀN TẢNG (CHUẨN SEO / HIGH CTR)",
+        bar_double,
+        "",
+        "============================== 1. YOUTUBE ==============================",
+        f"► TIÊU ĐỀ CHÍNH (TITLE):\n{meta.get('title', '')}",
+        "",
+    ]
+
+    if alt_titles:
+        lines.append("► GỢI Ý TIÊU ĐỀ THAY THẾ (DÙNG CHO A/B TESTING):")
+        for idx, at in enumerate(alt_titles, 1):
+            lines.append(f"  {idx}. {at}")
+        lines.append("")
+
+    lines.extend([
+        f"► MÔ TẢ VIDEO (DESCRIPTION):\n{meta.get('description', '')}",
+        "",
+        f"► DANH SÁCH THẺ TỪ KHÓA (TAGS / KEYWORDS - Copy dán thẳng vào YouTube Studio):\n{', '.join(tags)}",
+        "",
+        f"► HASHTAGS:\n{' '.join(meta.get('hashtags') or [])}",
+        "",
+        "=============================== 2. TIKTOK ===============================",
+        f"► CAPTION / TIÊU ĐỀ TIKTOK:\n{tiktok.get('title', meta.get('title', ''))}",
+        "",
+        f"► HASHTAGS TIKTOK:\n{' '.join(tiktok.get('hashtags') or meta.get('hashtags') or [])}",
+        "",
+        "============================== 3. FACEBOOK ==============================",
+        f"► BÀI ĐĂNG FACEBOOK / REELS:\n{facebook.get('title', meta.get('title', ''))}",
+        "",
+    ])
+
+    fb_desc = facebook.get("description", "")
+    if fb_desc:
+        lines.extend([f"► MÔ TẢ CHI TIẾT:\n{fb_desc}", ""])
+
+    lines.extend([
+        f"► HASHTAGS FACEBOOK:\n{' '.join(facebook.get('hashtags') or meta.get('hashtags') or [])}",
+        "",
+        bar_double,
+    ])
+
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -340,13 +497,13 @@ def generate_content(
         try:
             with open(metadata_path, "r", encoding="utf-8") as f:
                 saved_meta = json.load(f)
-            if isinstance(saved_meta, dict) and saved_meta.get("title"):
+            if isinstance(saved_meta, dict) and saved_meta.get("title") and not _has_cjk(saved_meta.get("title", "")):
                 meta = saved_meta
                 logger.info(f"Dùng lại tiêu đề, mô tả đã có: «{str(saved_meta.get('title'))[:50]}»")
         except Exception:
             pass
 
-    if not meta or not meta.get("title"):
+    if not meta or not meta.get("title") or _has_cjk(meta.get("title", "")):
         meta = generate_social_metadata(
             script_original, script_translated, video_title=video_title,
             job_id=job_id, settings=settings)
@@ -362,7 +519,7 @@ def generate_content(
     # Tự động sinh Thumbnail High-CTR (16:9 và 9:16) nếu có video_path
     if video_path and os.path.exists(video_path):
         from autodub.media.thumbnail import generate_high_ctr_thumbnail
-        thumb_title = meta.get("title") or video_title or "VIDEO MỚI NHẤT"
+        thumb_title = meta.get("title") or "VIDEO MỚI NHẤT"
         thumb_landscape = os.path.join(output_dir, "thumbnail_landscape.jpg")
         thumb_portrait = os.path.join(output_dir, "thumbnail_portrait.jpg")
         try:

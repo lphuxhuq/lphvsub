@@ -187,3 +187,47 @@ def test_pipeline_generate_content_with_video_path(tmp_path):
     assert isinstance(res, dict)
 
 
+def test_generate_social_metadata_scrubs_cjk():
+    """Khi tiêu đề gốc hoặc AI trả về chứa tiếng Trung, hàm tự động loại bỏ và dùng tiếng Việt."""
+    from autodub.content.generator import _clean_social_metadata, _has_cjk
+    assert _has_cjk("【亮剑】李云龙大闹黑云寨") is True
+    assert _has_cjk("Review Phim Hay Nhất") is False
+
+    raw_meta = {
+        "title": "【亮剑】李云龙大闹黑云寨",
+        "description": "这是李云龙的精彩片段。",
+    }
+    cleaned = _clean_social_metadata(raw_meta, "Lý Vân Long chỉ huy trận đánh đỉnh cao tại Hắc Vân Trại.")
+    assert _has_cjk(cleaned["title"]) is False
+    assert _has_cjk(cleaned["description"]) is False
+    assert "Lý Vân Long" in cleaned["title"] or len(cleaned["title"]) > 5
+    assert len(cleaned.get("alternative_titles", [])) == 3
+    assert len(cleaned.get("tags", [])) >= 5
+
+
+def test_write_post_file_comprehensive(tmp_path):
+    """Kiểm tra file youtube_post.txt được tạo ra đầy đủ, rõ ràng các mục."""
+    from autodub.content.generator import _write_post_file
+    post_file = str(tmp_path / "youtube_post.txt")
+    meta = {
+        "title": "Bí Mật Đằng Sau Trận Đánh Lịch Sử",
+        "alternative_titles": ["Tiêu Đề 1", "Tiêu Đề 2", "Tiêu Đề 3"],
+        "description": "Mô tả chi tiết video.",
+        "tags": ["review phim", "phim hay", "lich su"],
+        "hashtags": ["#shorts", "#reviewphim"],
+        "tiktok": {"title": "Caption TikTok hay", "hashtags": ["#fyp", "#xuhuong"]},
+        "facebook": {"title": "Caption FB hay", "description": "Chi tiết FB", "hashtags": ["#reels"]},
+    }
+    _write_post_file(post_file, meta)
+    assert os.path.exists(post_file)
+    with open(post_file, "r", encoding="utf-8") as f:
+        txt = f.read()
+    assert "YOUTUBE" in txt
+    assert "TIKTOK" in txt
+    assert "FACEBOOK" in txt
+    assert "TIÊU ĐỀ CHÍNH" in txt
+    assert "DANH SÁCH THẺ TỪ KHÓA" in txt
+    assert "Bí Mật Đằng Sau Trận Đánh Lịch Sử" in txt
+
+
+

@@ -1066,9 +1066,10 @@ Chỉ trả về JSON thuần túy."""
                         clean_meta = _strip_fences_and_citations(raw_meta)
                         meta_data = json.loads(_slice_to_payload(clean_meta))
                         if isinstance(meta_data, dict) and "title" in meta_data:
+                            from autodub.content.generator import _clean_social_metadata, _write_post_file
+                            meta_data = _clean_social_metadata(meta_data, script_trans)
                             with open(yt_meta_file, "w", encoding="utf-8") as f:
                                 json.dump(meta_data, f, ensure_ascii=False, indent=2)
-                            from autodub.content.generator import _write_post_file
                             _write_post_file(os.path.join(yt_dir, "youtube_post.txt"), meta_data)
                             logger.info(f"Đã tạo xong tiêu đề, mô tả AI Studio: «{meta_data.get('title', '')[:50]}»")
                 except Exception as e:
