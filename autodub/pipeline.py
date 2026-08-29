@@ -802,6 +802,23 @@ class DubPipeline:
             "blur_regions": req.blur_regions,
             "voice": req.voice,
             "elapsed_before": round(time.time() - start_time, 1),
+            "logo_path": req.logo_path,
+            "logo_position": req.logo_position,
+            "logo_scale": req.logo_scale,
+            "logo_opacity": req.logo_opacity,
+            "logo_margin": req.logo_margin,
+            "logo_motion": req.logo_motion,
+            "watermark_text": req.watermark_text,
+            "watermark_opacity": req.watermark_opacity,
+            "watermark_font_size": req.watermark_font_size,
+            "watermark_color": req.watermark_color,
+            "watermark_speed": req.watermark_speed,
+            "watermark_motion": req.watermark_motion,
+            "smart_flip": req.smart_flip,
+            "micro_zoom": req.micro_zoom,
+            "color_filter": req.color_filter,
+            "aspect_preset": req.aspect_preset,
+            "auto_mask_hardsub": req.auto_mask_hardsub,
         }
 
         if req.defer_export and HOLD.active:
@@ -841,6 +858,22 @@ class DubPipeline:
         render_opts.setdefault("subtitle_mode", state.get("subtitle_mode"))
         render_opts.setdefault("blur_regions", state.get("blur_regions"))
         render_opts.setdefault("subtitle_style", state.get("subtitle_style"))
+        if state.get("logo_path") is not None: render_opts["logo_path"] = state["logo_path"]
+        if state.get("logo_position") is not None: render_opts["logo_position"] = state["logo_position"]
+        if state.get("logo_scale") is not None: render_opts["logo_scale"] = state["logo_scale"]
+        if state.get("logo_opacity") is not None: render_opts["logo_opacity"] = state["logo_opacity"]
+        if state.get("logo_margin") is not None: render_opts["logo_margin"] = state["logo_margin"]
+        if state.get("logo_motion") is not None: render_opts["logo_motion"] = state["logo_motion"]
+        if state.get("watermark_text") is not None: render_opts["watermark_text"] = state["watermark_text"]
+        if state.get("watermark_opacity") is not None: render_opts["watermark_opacity"] = state["watermark_opacity"]
+        if state.get("watermark_font_size") is not None: render_opts["watermark_font_size"] = state["watermark_font_size"]
+        if state.get("watermark_color") is not None: render_opts["watermark_color"] = state["watermark_color"]
+        if state.get("watermark_speed") is not None: render_opts["watermark_speed"] = state["watermark_speed"]
+        if state.get("watermark_motion") is not None: render_opts["watermark_motion"] = state["watermark_motion"]
+        if state.get("smart_flip") is not None: render_opts["smart_flip"] = state["smart_flip"]
+        if state.get("micro_zoom") is not None: render_opts["micro_zoom"] = state["micro_zoom"]
+        if state.get("color_filter") is not None: render_opts["color_filter"] = state["color_filter"]
+        if state.get("aspect_preset") is not None: render_opts["aspect_preset"] = state["aspect_preset"]
         save_render_opts(work_dir, render_opts)
 
         # Audio ghép + trạng thái xuất: mã hóa rồi ghi vào marker.
@@ -959,11 +992,30 @@ class DubPipeline:
         deferred = state.get("deferred_speed")
         deferred_speed = ((float(deferred[0]), deferred[1])
                           if deferred else None)
-        # DubRequest tối thiểu — _build_report chỉ đọc url/voice từ đây.
-        req = DubRequest(url=state.get("url"), voice=state.get("voice"),
-                         skip_video=bool(state.get("skip_video")),
-                         subtitle_mode=state.get("subtitle_mode", "none"),
-                         blur_regions=state.get("blur_regions") or [])
+        req = DubRequest(
+            url=state.get("url"),
+            voice=state.get("voice"),
+            skip_video=bool(state.get("skip_video")),
+            subtitle_mode=state.get("subtitle_mode", "none"),
+            blur_regions=state.get("blur_regions") or [],
+            logo_path=state.get("logo_path"),
+            logo_position=state.get("logo_position"),
+            logo_scale=state.get("logo_scale"),
+            logo_opacity=state.get("logo_opacity"),
+            logo_margin=state.get("logo_margin"),
+            logo_motion=state.get("logo_motion"),
+            watermark_text=state.get("watermark_text"),
+            watermark_opacity=state.get("watermark_opacity"),
+            watermark_font_size=state.get("watermark_font_size"),
+            watermark_color=state.get("watermark_color"),
+            watermark_speed=state.get("watermark_speed"),
+            watermark_motion=state.get("watermark_motion"),
+            smart_flip=bool(state.get("smart_flip", False)),
+            micro_zoom=bool(state.get("micro_zoom", False)),
+            color_filter=state.get("color_filter") or "none",
+            aspect_preset=state.get("aspect_preset") or "original",
+            auto_mask_hardsub=bool(state.get("auto_mask_hardsub", False)),
+        )
 
         # --- Step 7: Merge video (optional) ---
         # Ghim tên giọng THẬT đã dùng (kể cả khi người dùng để mặc định),

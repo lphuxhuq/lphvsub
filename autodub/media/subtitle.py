@@ -435,7 +435,8 @@ def build_filter_complex(
         current = nxt
 
     if has_logo:
-        escaped_logo = escape_subtitles_path(str(logo_path).strip())
+        clean_logo = str(logo_path).strip()
+        escaped_logo = escape_subtitles_path(clean_logo)
         target_w = max(16, int(video_w * float(logo_scale or 0.12)))
         if target_w % 2 != 0:
             target_w += 1
@@ -451,7 +452,7 @@ def build_filter_complex(
             ox, oy = _logo_overlay_coords(logo_position or "top_right", margin)
 
         parts.append(f"movie='{escaped_logo}',scale={target_w}:-1,format=rgba,colorchannelmixer=aa={opacity:.2f}[logo]")
-        parts.append(f"[{current}][logo]overlay=x='{ox}':y='{oy}'[vlogo]")
+        parts.append(f"[{current}][logo]overlay={ox}:{oy}[vlogo]")
         current = "vlogo"
 
     if has_wm:

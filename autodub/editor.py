@@ -695,12 +695,24 @@ def rebuild_output(
     voice: str | None = None, bg_mode: str = "demucs", bg_duck_db: float = -12.0,
     subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
+    reporter: ProgressReporter | None = None,
+    *,
     logo_path: str | None = None,
     logo_position: str | None = None,
     logo_scale: float | None = None,
     logo_opacity: float | None = None,
     logo_margin: int | None = None,
-    reporter: ProgressReporter | None = None,
+    logo_motion: str | None = None,
+    watermark_text: str | None = None,
+    watermark_opacity: float | None = None,
+    watermark_font_size: int | None = None,
+    watermark_color: str | None = None,
+    watermark_speed: int | None = None,
+    watermark_motion: str | None = None,
+    smart_flip: bool | None = None,
+    micro_zoom: bool | None = None,
+    color_filter: str | None = None,
+    aspect_preset: str | None = None,
 ) -> str:
     """Dựng lại âm thanh và video từ danh sách câu hiện tại.
 
@@ -719,7 +731,10 @@ def rebuild_output(
     subtitle_mode, blur_regions, style, logo_opts = _render_options(
         state, settings, subtitle_mode, blur_regions, subtitle_style,
         logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
-        logo_opacity=logo_opacity, logo_margin=logo_margin)
+        logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
+        watermark_text=watermark_text, watermark_opacity=watermark_opacity,
+        watermark_font_size=watermark_font_size, watermark_color=watermark_color,
+        watermark_speed=watermark_speed, watermark_motion=watermark_motion)
 
     def emit(step, status, **kw):
         if reporter is not None:
@@ -806,12 +821,24 @@ def rebuild_subtitles(
     work_dir: str, settings: Settings, target_key: str = "vi",
     subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
+    reporter: ProgressReporter | None = None,
+    *,
     logo_path: str | None = None,
     logo_position: str | None = None,
     logo_scale: float | None = None,
     logo_opacity: float | None = None,
     logo_margin: int | None = None,
-    reporter: ProgressReporter | None = None,
+    logo_motion: str | None = None,
+    watermark_text: str | None = None,
+    watermark_opacity: float | None = None,
+    watermark_font_size: int | None = None,
+    watermark_color: str | None = None,
+    watermark_speed: int | None = None,
+    watermark_motion: str | None = None,
+    smart_flip: bool | None = None,
+    micro_zoom: bool | None = None,
+    color_filter: str | None = None,
+    aspect_preset: str | None = None,
 ) -> str:
     """Ghi lại PHỤ ĐỀ vào video, giữ nguyên phần âm thanh đã có.
 
@@ -828,7 +855,10 @@ def rebuild_subtitles(
     subtitle_mode, blur_regions, style, logo_opts = _render_options(
         state, settings, subtitle_mode, blur_regions, subtitle_style,
         logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
-        logo_opacity=logo_opacity, logo_margin=logo_margin)
+        logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
+        watermark_text=watermark_text, watermark_opacity=watermark_opacity,
+        watermark_font_size=watermark_font_size, watermark_color=watermark_color,
+        watermark_speed=watermark_speed, watermark_motion=watermark_motion)
 
     merged_audio_path = data_path(work_dir, target.audio_name)
     if not os.path.isfile(merged_audio_path):

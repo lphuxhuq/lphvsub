@@ -532,6 +532,20 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.export_panel.preset.set_key(
             (self._subtitle_style or {}).get("preset")
             or opts.get("subtitle_preset") or settings.subtitle_preset)
+
+        self._logo_path = opts.get("logo_path", getattr(settings, "logo_path", ""))
+        self._logo_position = opts.get("logo_position", getattr(settings, "logo_position", "top_right"))
+        self._logo_scale = opts.get("logo_scale", getattr(settings, "logo_scale", 0.12))
+        self._logo_opacity = opts.get("logo_opacity", getattr(settings, "logo_opacity", 0.85))
+        self._logo_margin = opts.get("logo_margin", getattr(settings, "logo_margin", 24))
+        self._logo_motion = opts.get("logo_motion", getattr(settings, "logo_motion", "static"))
+        self._watermark_text = opts.get("watermark_text", getattr(settings, "watermark_text", ""))
+        self._watermark_opacity = opts.get("watermark_opacity", getattr(settings, "watermark_opacity", 0.28))
+        self._watermark_font_size = opts.get("watermark_font_size", getattr(settings, "watermark_font_size", 26))
+        self._watermark_color = opts.get("watermark_color", getattr(settings, "watermark_color", "white"))
+        self._watermark_speed = opts.get("watermark_speed", getattr(settings, "watermark_speed", 40))
+        self._watermark_motion = opts.get("watermark_motion", getattr(settings, "watermark_motion", "bounce"))
+
         self._apply_style_to_player()
 
     def _has_separated_audio(self) -> bool:
@@ -557,6 +571,18 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts["blur_regions"] = list(getattr(self, "_blur_regions", []))
         if getattr(self, "_subtitle_style", None):
             opts["subtitle_style"] = self._subtitle_style
+        opts["logo_path"] = getattr(self, "_logo_path", "")
+        opts["logo_position"] = getattr(self, "_logo_position", "top_right")
+        opts["logo_scale"] = getattr(self, "_logo_scale", 0.12)
+        opts["logo_opacity"] = getattr(self, "_logo_opacity", 0.85)
+        opts["logo_margin"] = getattr(self, "_logo_margin", 24)
+        opts["logo_motion"] = getattr(self, "_logo_motion", "static")
+        opts["watermark_text"] = getattr(self, "_watermark_text", "")
+        opts["watermark_opacity"] = getattr(self, "_watermark_opacity", 0.28)
+        opts["watermark_font_size"] = getattr(self, "_watermark_font_size", 26)
+        opts["watermark_color"] = getattr(self, "_watermark_color", "white")
+        opts["watermark_speed"] = getattr(self, "_watermark_speed", 40)
+        opts["watermark_motion"] = getattr(self, "_watermark_motion", "bounce")
         try:
             save_render_opts(self._work_dir, opts)
         except OSError as e:

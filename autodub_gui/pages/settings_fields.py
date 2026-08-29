@@ -544,6 +544,11 @@ EXEMPT_KEYS: dict[str, str] = {
     "VOXDUB_API_URL": "địa chỉ máy chủ được nhúng cứng vào bản đóng gói; "
                       "chỉ đọc từ .env khi chạy từ mã nguồn (dev), người "
                       "dùng cuối không đổi được và không cần đổi",
+    "VIDEO_ASPECT_PRESET": "tỷ lệ khung hình chọn trực tiếp trên giao diện tạo dự án",
+    "VOICE_COMPACT_TRANSLATE_ENABLED": "tùy chọn kỹ thuật đồng bộ giọng đọc tự động",
+    "VOICE_SCENE_GUARD_ENABLED": "tùy chọn kỹ thuật chống tràn giọng qua chuyển cảnh",
+    "VOICE_VAD_TRIM_ENABLED": "tùy chọn kỹ thuật cắt khoảng lặng thừa của file TTS",
+    "WATERMARK_COLOR": "chọn trực tiếp trong hộp thoại tùy chỉnh kiểu phụ đề & hiệu ứng",
 }
 
 

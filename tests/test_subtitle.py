@@ -169,7 +169,7 @@ def test_build_filter_complex_with_logo_top_right():
     assert "movie=" in graph
     assert "scale=288:-1" in graph
     assert "colorchannelmixer=aa=0.80" in graph
-    assert "overlay=x='main_w-overlay_w-30':y='30'" in graph
+    assert "overlay=main_w-overlay_w-30:30" in graph
     assert graph.endswith("null[vout]")
 
 
@@ -187,7 +187,7 @@ def test_build_filter_complex_with_logo_bottom_left_and_subtitles():
     )
     assert "boxblur" in graph
     assert "movie=" in graph
-    assert "overlay=x='20':y='main_h-overlay_h-20'" in graph
+    assert "overlay=20:main_h-overlay_h-20" in graph
     assert "subtitles=" in graph
     # Thứ tự đúng: blur trước -> logo -> subtitles trên cùng
     assert graph.index("boxblur") < graph.index("movie=")

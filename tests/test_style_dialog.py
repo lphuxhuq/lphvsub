@@ -145,3 +145,71 @@ def test_voice_step_set_logo_and_watermark_signals(qtbot):
     assert vals["watermark_speed"] == 60
     assert changed_count > 0
 
+
+def test_pipeline_stop_for_export_saves_logo_and_watermark_to_render_opts(tmp_path, monkeypatch):
+    import os
+    import json
+    from autodub.config import Settings
+    from autodub.pipeline import DubPipeline
+    from autodub.editor import load_render_opts
+    from autodub.text.translate_common import HOLD
+
+    work_dir = str(tmp_path / "proj")
+    os.makedirs(os.path.join(work_dir, "data"), exist_ok=True)
+    merged_wav = str(tmp_path / "proj" / "data" / "merged.wav")
+    with open(merged_wav, "wb") as f:
+        f.write(b"RIFFmockwav")
+
+    HOLD.set("test_hold_123", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+    try:
+        state = {
+            "voice": "Phạm Tuyên",
+            "subtitle_mode": "burn",
+            "blur_regions": [{"x": 0.1, "y": 0.8, "w": 0.8, "h": 0.1}],
+            "subtitle_style": {"preset": "custom", "font_size": 24},
+            "logo_path": "C:/path/my_logo.png",
+            "logo_position": "top_left",
+            "logo_scale": 0.18,
+            "logo_opacity": 0.90,
+            "logo_motion": "bounce",
+            "watermark_text": "@TikTokChannel",
+            "watermark_opacity": 0.35,
+            "watermark_speed": 55,
+            "watermark_motion": "bounce",
+            "smart_flip": True,
+            "micro_zoom": True,
+            "color_filter": "cinematic_warm",
+            "aspect_preset": "tiktok_9_16",
+            "merged_audio_path": merged_wav,
+            "segments": [{"id": 1, "end": 2.0}],
+        }
+
+        settings = Settings()
+        pipeline = DubPipeline(settings)
+
+        # Mock encrypt_file / add_locked_file / write_json_secure to avoid external dependencies
+        from autodub import securestore
+        monkeypatch.setattr(securestore, "encrypt_file", lambda f, k: None)
+        monkeypatch.setattr(securestore, "add_locked_file", lambda w, h, f: None)
+        monkeypatch.setattr(securestore, "write_json_secure", lambda d, p, k: None)
+
+        pipeline._stop_for_export(state, work_dir)
+
+        opts = load_render_opts(work_dir)
+        assert opts["logo_path"] == "C:/path/my_logo.png"
+        assert opts["logo_position"] == "top_left"
+        assert opts["logo_scale"] == 0.18
+        assert opts["logo_opacity"] == 0.90
+        assert opts["logo_motion"] == "bounce"
+        assert opts["watermark_text"] == "@TikTokChannel"
+        assert opts["watermark_opacity"] == 0.35
+        assert opts["watermark_speed"] == 55
+        assert opts["watermark_motion"] == "bounce"
+        assert opts["smart_flip"] is True
+        assert opts["micro_zoom"] is True
+        assert opts["color_filter"] == "cinematic_warm"
+        assert opts["aspect_preset"] == "tiktok_9_16"
+    finally:
+        HOLD.clear()
+
+
