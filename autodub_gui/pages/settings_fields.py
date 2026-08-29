@@ -545,6 +545,10 @@ EXEMPT_KEYS: dict[str, str] = {
                       "chỉ đọc từ .env khi chạy từ mã nguồn (dev), người "
                       "dùng cuối không đổi được và không cần đổi",
     "VIDEO_ASPECT_PRESET": "tỷ lệ khung hình chọn trực tiếp trên giao diện tạo dự án",
+    "VIDEO_REFRAME_MODE": "chế độ căn chỉnh khung hình (blur, top_split, center_crop)",
+    "AUTO_SFX_ENABLED": "tự động chèn âm thanh chuyển cảnh tại scene cuts",
+    "SFX_PRESET": "kiểu âm thanh chuyển cảnh (whoosh, pop, swish, cinematic)",
+    "SFX_VOLUME_DB": "mức âm lượng âm thanh chuyển cảnh",
     "VOICE_COMPACT_TRANSLATE_ENABLED": "tùy chọn kỹ thuật đồng bộ giọng đọc tự động",
     "VOICE_SCENE_GUARD_ENABLED": "tùy chọn kỹ thuật chống tràn giọng qua chuyển cảnh",
     "VOICE_VAD_TRIM_ENABLED": "tùy chọn kỹ thuật cắt khoảng lặng thừa của file TTS",

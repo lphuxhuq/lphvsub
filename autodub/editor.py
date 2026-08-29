@@ -565,9 +565,9 @@ def _render_options(state: EditorState, settings: Settings,
     if watermark_color is not None: merged["watermark_color"] = watermark_color
     if watermark_speed is not None: merged["watermark_speed"] = watermark_speed
     if watermark_motion is not None: merged["watermark_motion"] = watermark_motion
-    if "smart_flip" in opts: merged["smart_flip"] = opts["smart_flip"]
-    if "micro_zoom" in opts: merged["micro_zoom"] = opts["micro_zoom"]
-    if "color_filter" in opts: merged["color_filter"] = opts["color_filter"]
+    if aspect_preset is not None: merged["aspect_preset"] = aspect_preset
+    if "reframe_mode" in opts: merged["reframe_mode"] = opts["reframe_mode"]
+    if "auto_sfx_enabled" in opts: merged["auto_sfx_enabled"] = opts["auto_sfx_enabled"]
 
     save_render_opts(state.work_dir, merged)
     logo_opts = {
@@ -586,6 +586,8 @@ def _render_options(state: EditorState, settings: Settings,
         "smart_flip": merged.get("smart_flip", getattr(settings, "smart_flip", False)),
         "micro_zoom": merged.get("micro_zoom", getattr(settings, "micro_zoom", False)),
         "color_filter": merged.get("color_filter", getattr(settings, "color_filter", "none")),
+        "aspect_preset": merged.get("aspect_preset", getattr(settings, "video_aspect_preset", "original")),
+        "reframe_mode": merged.get("reframe_mode", getattr(settings, "video_reframe_mode", "blur")),
     }
     return subtitle_mode, blur_regions, style, logo_opts
 
@@ -796,7 +798,12 @@ def rebuild_output(
     merge_segments(
         segments, merge_dir, merged_audio_path, total_duration,
         background_path=background_path, background_gain_db=background_gain_db,
-        duck_voice_db=settings.bg_duck_voice_db)
+        duck_voice_db=settings.bg_duck_voice_db,
+        scene_cuts=scene_cuts,
+        auto_sfx_enabled=getattr(settings, "auto_sfx_enabled", False),
+        sfx_preset=getattr(settings, "sfx_preset", "whoosh"),
+        sfx_volume_db=getattr(settings, "sfx_volume_db", -14.0),
+    )
     emit("merge_audio", "done", detail=merged_audio_path)
 
     check()

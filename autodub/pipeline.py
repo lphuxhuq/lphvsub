@@ -124,6 +124,12 @@ class DubRequest:
     smart_flip: bool | None = None
     micro_zoom: bool | None = None
     color_filter: str | None = None
+    reframe_mode: str | None = None
+
+    # Âm thanh chuyển cảnh tự động
+    auto_sfx_enabled: bool | None = None
+    sfx_preset: str | None = None
+    sfx_volume_db: float | None = None
 
     # The dub target is always Vietnamese now.
 
@@ -772,6 +778,10 @@ class DubPipeline:
         logger.info("STEP 6: Merging audio segments")
         logger.info("Đang ghép giọng đọc với nhạc nền...")
         merged_audio_path = data_path(work_dir, target.audio_name)
+        auto_sfx = req.auto_sfx_enabled if req.auto_sfx_enabled is not None else getattr(settings, "auto_sfx_enabled", False)
+        sfx_preset = req.sfx_preset or getattr(settings, "sfx_preset", "whoosh")
+        sfx_vol = req.sfx_volume_db if req.sfx_volume_db is not None else getattr(settings, "sfx_volume_db", -14.0)
+
         from autodub.media.audio import merge_segments
         merge_segments(
             segments, merge_dir, merged_audio_path, total_duration,
@@ -782,6 +792,10 @@ class DubPipeline:
             speech_duck_db=speech_dip_db,
             duck_attack_s=settings.duck_attack_ms / 1000.0,
             duck_release_s=settings.duck_release_ms / 1000.0,
+            scene_cuts=scene_cuts,
+            auto_sfx_enabled=auto_sfx,
+            sfx_preset=sfx_preset,
+            sfx_volume_db=sfx_vol,
         )
         rep.emit("merge_audio", "done", detail=merged_audio_path)
 
@@ -824,7 +838,11 @@ class DubPipeline:
             "micro_zoom": req.micro_zoom,
             "color_filter": req.color_filter,
             "aspect_preset": req.aspect_preset,
+            "reframe_mode": req.reframe_mode,
             "auto_mask_hardsub": req.auto_mask_hardsub,
+            "auto_sfx_enabled": auto_sfx,
+            "sfx_preset": sfx_preset,
+            "sfx_volume_db": sfx_vol,
         }
 
         if req.defer_export and HOLD.active:
@@ -1122,6 +1140,7 @@ class DubPipeline:
                 smart_flip=req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False),
                 micro_zoom=req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
                 color_filter=req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
+                reframe_mode=req.reframe_mode or state.get("reframe_mode") or getattr(settings, "video_reframe_mode", "blur"),
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)

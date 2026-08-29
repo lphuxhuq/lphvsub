@@ -377,6 +377,12 @@ class Settings:
 
     # Bố cục tỷ lệ khung hình xuất video: "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
     video_aspect_preset: str = "original"
+    video_reframe_mode: str = "blur"  # "blur" | "top_split" | "center_crop"
+
+    # Âm thanh chuyển cảnh tự động (Auto Scene Cut SFX)
+    auto_sfx_enabled: bool = False
+    sfx_preset: str = "whoosh"  # "whoosh" | "pop" | "swish" | "cinematic"
+    sfx_volume_db: float = -14.0
 
     # Xử lý video chống quét bản quyền / Reup (Anti-Content ID)
     smart_flip: bool = False

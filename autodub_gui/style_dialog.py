@@ -547,14 +547,18 @@ class StyleDialog(QDialog):
                  regions: list[dict] | None = None, parent=None,
                  preview_text: str = "",
                  logo_options: dict | None = None,
-                 watermark_options: dict | None = None):
+                 watermark_options: dict | None = None,
+                 reframe_options: dict | None = None,
+                 sfx_options: dict | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Phụ đề & che chữ")
+        self.setWindowTitle("Phụ đề & hiệu ứng video")
         self.resize(1180, 720)
         self.setMinimumSize(1080, 640)
         self._style = dict(style)
         self._logo_opts = dict(logo_options or {})
         self._wm_opts = dict(watermark_options or {})
+        self._reframe_opts = dict(reframe_options or {})
+        self._sfx_opts = dict(sfx_options or {})
         self._video_path = video_path
         self._regions_pending = regions
         self._frame_worker = None
@@ -1014,6 +1018,74 @@ class StyleDialog(QDialog):
         tab_lw_scroll.setWidget(tab_lw_w)
         self.tabs.addTab(tab_lw_scroll, "Logo & Watermark")
 
+        # ================================= TAB 4: BỐ CỤC & HIỆU ỨNG ================================= #
+        tab_fx_scroll = QScrollArea()
+        tab_fx_scroll.setWidgetResizable(True)
+        tab_fx_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tab_fx_w = QWidget()
+        fx_l = QVBoxLayout(tab_fx_w)
+        fx_l.setContentsMargins(10, 10, 10, 10)
+        fx_l.setSpacing(8)
+
+        def _fx_section(title: str) -> None:
+            if fx_l.count():
+                fx_l.addSpacing(10)
+            lb = QLabel(title)
+            lb.setObjectName("sectionHeader")
+            fx_l.addWidget(lb)
+
+        _fx_section("Tỷ lệ khung hình (Auto-Reframe)")
+        f_reframe = QFormLayout()
+        f_reframe.setContentsMargins(0, 0, 0, 0)
+        f_reframe.setLabelAlignment(Qt.AlignRight)
+        f_reframe.setSpacing(7)
+        fx_l.addLayout(f_reframe)
+
+        self.cb_aspect = QComboBox()
+        self.cb_aspect.addItem("Giữ nguyên tỷ lệ gốc", "original")
+        self.cb_aspect.addItem("TikTok / Shorts / Reels (9:16 dọc)", "tiktok_9_16")
+        self.cb_aspect.addItem("YouTube ngang chuẩn (16:9)", "youtube_16_9")
+        self.cb_aspect.addItem("Vuông Instagram / Facebook (1:1)", "square_1_1")
+        polish_combo(self.cb_aspect)
+        f_reframe.addRow("Tỷ lệ xuất:", self.cb_aspect)
+
+        self.cb_reframe_mode = QComboBox()
+        self.cb_reframe_mode.addItem("Mờ nền nghệ thuật (Blur Background)", "blur")
+        self.cb_reframe_mode.addItem("Khung trên / Phụ đề dưới (Top-Split)", "top_split")
+        self.cb_reframe_mode.addItem("Cắt vừa khít lấp đầy (Center Crop)", "center_crop")
+        polish_combo(self.cb_reframe_mode)
+        f_reframe.addRow("Kiểu căn chỉnh:", self.cb_reframe_mode)
+
+        _fx_section("Âm thanh chuyển cảnh (Auto SFX)")
+        f_sfx = QFormLayout()
+        f_sfx.setContentsMargins(0, 0, 0, 0)
+        f_sfx.setLabelAlignment(Qt.AlignRight)
+        f_sfx.setSpacing(7)
+        fx_l.addLayout(f_sfx)
+
+        self.chk_auto_sfx = QCheckBox("Bật âm thanh chuyển cảnh tự động")
+        self.chk_auto_sfx.setToolTip("Tự động chèn hiệu ứng âm thanh nhỏ khi video chuyển cảnh (Scene Cut)")
+        f_sfx.addRow("", self.chk_auto_sfx)
+
+        self.cb_sfx_preset = QComboBox()
+        self.cb_sfx_preset.addItem("Whoosh (Vút gió êm dịu)", "whoosh")
+        self.cb_sfx_preset.addItem("Pop (Tiếng pop hiện đại)", "pop")
+        self.cb_sfx_preset.addItem("Swish (Lướt nhanh)", "swish")
+        self.cb_sfx_preset.addItem("Cinematic (Trầm ấm điện ảnh)", "cinematic")
+        polish_combo(self.cb_sfx_preset)
+        f_sfx.addRow("Kiểu âm thanh:", self.cb_sfx_preset)
+
+        self.sp_sfx_volume = QSpinBox()
+        self.sp_sfx_volume.setRange(-30, 0)
+        self.sp_sfx_volume.setValue(-14)
+        self.sp_sfx_volume.setSuffix(" dB")
+        self.sp_sfx_volume.setToolTip("Âm lượng âm thanh chuyển cảnh (-14 dB là mức êm dịu, không át tiếng nói)")
+        f_sfx.addRow("Âm lượng SFX:", self.sp_sfx_volume)
+
+        fx_l.addStretch()
+        tab_fx_scroll.setWidget(tab_fx_w)
+        self.tabs.addTab(tab_fx_scroll, "Bố cục & SFX")
+
         body.addWidget(self.tabs, 4)
 
         # --- Bottom: actions ---
@@ -1207,6 +1279,21 @@ class StyleDialog(QDialog):
         self.sp_wm_opacity.setValue(max(5, min(80, wm_op)))
         self.sp_wm_font_size.setValue(int(self._wm_opts.get("watermark_font_size", self._wm_opts.get("font_size", 26))))
         self.sp_wm_speed.setValue(int(self._wm_opts.get("watermark_speed", self._wm_opts.get("speed", 40))))
+
+        # Reframe & SFX controls
+        asp = self._reframe_opts.get("aspect_preset", "original")
+        asp_idx = self.cb_aspect.findData(asp)
+        self.cb_aspect.setCurrentIndex(asp_idx if asp_idx >= 0 else 0)
+        ref_mode = self._reframe_opts.get("reframe_mode", "blur")
+        ref_idx = self.cb_reframe_mode.findData(ref_mode)
+        self.cb_reframe_mode.setCurrentIndex(ref_idx if ref_idx >= 0 else 0)
+
+        self.chk_auto_sfx.setChecked(bool(self._sfx_opts.get("auto_sfx_enabled", False)))
+        sfx_p = self._sfx_opts.get("sfx_preset", "whoosh")
+        sfx_p_idx = self.cb_sfx_preset.findData(sfx_p)
+        self.cb_sfx_preset.setCurrentIndex(sfx_p_idx if sfx_p_idx >= 0 else 0)
+        sfx_v = int(round(float(self._sfx_opts.get("sfx_volume_db", -14.0))))
+        self.sp_sfx_volume.setValue(max(-30, min(0, sfx_v)))
 
         self._sync_logo_wm_from_controls()
 
@@ -1522,5 +1609,20 @@ class StyleDialog(QDialog):
             "watermark_opacity": self.sp_wm_opacity.value() / 100.0,
             "watermark_font_size": self.sp_wm_font_size.value(),
             "watermark_speed": self.sp_wm_speed.value(),
+        }
+
+    def reframe_options(self) -> dict:
+        """Thông số cấu hình tỷ lệ khung hình và chế độ Reframe."""
+        return {
+            "aspect_preset": self.cb_aspect.currentData() or "original",
+            "reframe_mode": self.cb_reframe_mode.currentData() or "blur",
+        }
+
+    def sfx_options(self) -> dict:
+        """Thông số cấu hình âm thanh chuyển cảnh Auto SFX."""
+        return {
+            "auto_sfx_enabled": self.chk_auto_sfx.isChecked(),
+            "sfx_preset": self.cb_sfx_preset.currentData() or "whoosh",
+            "sfx_volume_db": float(self.sp_sfx_volume.value()),
         }
 

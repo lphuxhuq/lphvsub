@@ -63,11 +63,12 @@ def test_style_dialog_tabs_and_logo_watermark(qtbot):
     )
     qtbot.addWidget(dialog)
 
-    # 1. Kiểm tra có đủ 3 Tabs
-    assert dialog.tabs.count() == 3
+    # 1. Kiểm tra có đủ 4 Tabs
+    assert dialog.tabs.count() == 4
     assert dialog.tabs.tabText(0) == "Kiểu chữ"
     assert dialog.tabs.tabText(1) == "Vùng che (Blur)"
     assert dialog.tabs.tabText(2) == "Logo & Watermark"
+    assert dialog.tabs.tabText(3) == "Bố cục & SFX"
 
     # 2. Kiểm tra dữ liệu nạp vào Logo controls
     assert dialog.chk_logo_enabled.isChecked() is True
@@ -88,6 +89,14 @@ def test_style_dialog_tabs_and_logo_watermark(qtbot):
 
     out_wm = dialog.watermark_options()
     assert out_wm["watermark_text"] == "@MyChannel"
+
+    out_ref = dialog.reframe_options()
+    assert out_ref["aspect_preset"] == "original"
+    assert out_ref["reframe_mode"] == "blur"
+
+    out_sfx = dialog.sfx_options()
+    assert out_sfx["auto_sfx_enabled"] is False
+    assert out_sfx["sfx_preset"] == "whoosh"
     assert out_wm["watermark_motion"] == "bounce"
     assert out_wm["watermark_opacity"] == 0.3
 
