@@ -767,11 +767,18 @@ def rebuild_output(
         merge_dir = slow_segments(segments, merge_dir, dst, speed)
     if settings.soft_timing_fit:
         # Cùng cơ chế với pipeline: dồn trễ vào khoảng lặng, không đổi tốc độ
-        # đọc từng câu.
+        # đọc từng câu và bảo vệ mốc chuyển cảnh.
+        scene_cuts = None
+        if getattr(settings, "voice_scene_guard_enabled", True) and video_path and os.path.exists(video_path):
+            try:
+                from autodub.media.scene_detector import load_or_detect_scene_cuts
+                scene_cuts = load_or_detect_scene_cuts(video_path, work_dir=work_dir)
+            except Exception:
+                pass
         from autodub.media.timing import apply_soft_timing
         merge_dir, _timing = apply_soft_timing(
             segments, merge_dir, data_path(work_dir, "segments_timed"),
-            settings)
+            settings, scene_cuts=scene_cuts)
     for s in segments:
         dur = wav_duration_s(seg_wav_path(merge_dir, s["id"]))
         if dur:

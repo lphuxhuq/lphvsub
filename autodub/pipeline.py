@@ -717,16 +717,22 @@ class DubPipeline:
         merge_dir = (merge_src if speed_in_post
                      else self._apply_voice_speed(segments, merge_src, work_dir))
 
-        # Chống chồng tiếng mềm: đặt lại vị trí clip (ưu tiên DỒN TRỄ vào
-        # khoảng lặng — tốc độ đọc mọi câu giữ nguyên; nén nhẹ chỉ khi bất
-        # khả kháng, trần thấp). Chạy trên clip ĐÃ hậu kỳ + voice_speed để
-        # số đo thời lượng là thật. Mutates segments → SRT làm lại bên dưới.
+        # Chống chồng tiếng mềm & bảo vệ điểm chuyển cảnh (Scene Guard)
         timing_report = None
         if settings.soft_timing_fit:
+            scene_cuts = None
+            if getattr(settings, "voice_scene_guard_enabled", True) and video_path and os.path.exists(video_path):
+                try:
+                    from autodub.media.scene_detector import load_or_detect_scene_cuts
+                    scene_cuts = load_or_detect_scene_cuts(video_path, work_dir=work_dir)
+                except Exception as e:
+                    logger.warning(f"Không thể quét điểm chuyển cảnh ({e}) — tiếp tục timing thông thường")
+
             from autodub.media.timing import apply_soft_timing
             merge_dir, timing_report = apply_soft_timing(
                 segments, merge_dir, data_path(work_dir, "segments_timed"),
-                settings, max_workers=min(8, settings.parallel_workers))
+                settings, max_workers=min(8, settings.parallel_workers),
+                scene_cuts=scene_cuts)
             _refresh_subs(segments, work_dir, target, subtitle_style)
 
         # A long clip may run past the last segment's end — extend the mix

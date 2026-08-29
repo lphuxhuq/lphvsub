@@ -326,3 +326,33 @@ def test_resynth_segments_removes_locked_file_after_retry(work_dir, monkeypatch)
 
     assert state["denied"] == 2                 # retried past the lock
     assert not os.path.exists(locked)
+
+
+def test_editor_rebuild_with_scene_cuts(work_dir, monkeypatch):
+    import json
+    from autodub.media import audio, video, scene_detector, timing
+
+    # Mock merge_video & merge_segments & wav_duration_s
+    monkeypatch.setattr(video, "merge_video", lambda *a, **k: None)
+    monkeypatch.setattr(audio, "merge_segments", lambda *a, **k: None)
+    monkeypatch.setattr(audio, "wav_duration_s", lambda p: 2.0)
+
+    # Ghi file scene_cuts.json
+    scene_cuts_path = os.path.join(work_dir, "data", "scene_cuts.json")
+    os.makedirs(os.path.dirname(scene_cuts_path), exist_ok=True)
+    with open(scene_cuts_path, "w", encoding="utf-8") as f:
+        json.dump([5.0, 10.0], f)
+
+    cuts_loaded = None
+    orig_apply = timing.apply_soft_timing
+    def mock_apply(segments, src_dir, dst_dir, settings, max_workers=4, scene_cuts=None):
+        nonlocal cuts_loaded
+        cuts_loaded = scene_cuts
+        return orig_apply(segments, src_dir, dst_dir, settings, max_workers, scene_cuts)
+
+    monkeypatch.setattr(timing, "apply_soft_timing", mock_apply)
+
+    settings = Settings()
+    editor.rebuild_output(work_dir, settings)
+    assert cuts_loaded == [5.0, 10.0]
+
