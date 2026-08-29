@@ -116,3 +116,24 @@ def test_merge_segments_applies_background_gain(tmp_path):
     # round-trip through pydub + 16-bit PCM export
     assert quiet.dBFS < full.dBFS - 10
     assert abs(len(quiet) / 1000.0 - 3.0) < 0.1
+
+
+def test_merge_segments_with_auto_sfx(tmp_path):
+    seg_dir = str(tmp_path / "segments")
+    os.makedirs(seg_dir)
+    _make_segment_file(os.path.join(seg_dir, "seg_001.wav"), 1000)
+
+    segments = [{"id": 1, "start": 0.5, "end": 1.5, "duration": 1.0}]
+    output_path = str(tmp_path / "merged_sfx.wav")
+    scene_cuts = [2.0, 5.0]
+
+    res = merge_segments(
+        segments, seg_dir, output_path, total_duration=8.0,
+        scene_cuts=scene_cuts, auto_sfx_enabled=True, sfx_preset="whoosh", sfx_volume_db=-10.0
+    )
+    assert os.path.exists(res)
+    audio = AudioSegment.from_wav(res)
+    assert abs(len(audio) / 1000.0 - 8.0) < 0.1
+    # Ensure audio has energy at scene cut points
+    assert audio.dBFS > -60.0
+

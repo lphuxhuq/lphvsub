@@ -544,6 +544,10 @@ def merge_segments(
     speech_duck_db: float = 0.0,
     duck_attack_s: float = _DUCK_ATTACK_S,
     duck_release_s: float = _DUCK_RELEASE_S,
+    scene_cuts: list[float] | None = None,
+    auto_sfx_enabled: bool = False,
+    sfx_preset: str = "whoosh",
+    sfx_volume_db: float = -14.0,
 ) -> str:
     """Mix per-segment dub audio onto a background track, block by block.
 
@@ -560,6 +564,9 @@ def merge_segments(
       giọng Việt đã dứt chưa. Attack/release từ ``duck_attack_s/release_s``.
     - ``duck_voice_db`` < 0 (chế độ demucs): nền nhạc dip khi có GIỌNG VIỆT
       (sidechain theo placement dub) — giữ cho nhạc nền nhường giọng đọc.
+
+    ``auto_sfx_enabled``: Tự động chèn âm thanh chuyển cảnh (Whoosh, Pop, Swish,
+    Cinematic) tại các điểm Scene Cut (khoảng cách tối thiểu 3.0s giữa các SFX).
 
     Streaming design: the background is normalised once by ffmpeg (rate,
     gain, duration) into a temp WAV on disk, then mixed with the segments in
@@ -608,6 +615,25 @@ def merge_segments(
 
     total_frames = int(total_duration * rate)
     block_frames = _MERGE_BLOCK_S * rate
+
+    # Chuẩn bị âm thanh chuyển cảnh SFX nếu được kích hoạt
+    sfx_arr = None
+    valid_sfx_cuts: list[float] = []
+    if auto_sfx_enabled and scene_cuts:
+        from autodub.media.sfx import generate_sfx
+        raw_sfx = generate_sfx(preset=sfx_preset, sample_rate=rate, gain_db=sfx_volume_db)
+        if ch == 2:
+            sfx_arr = np.repeat(raw_sfx[:, None], 2, axis=1).astype(np.int32)
+        else:
+            sfx_arr = raw_sfx.astype(np.int32).reshape(-1, 1)
+
+        last_t = -10.0
+        for t_cut in scene_cuts:
+            if 1.0 <= t_cut <= (total_duration - 1.0) and (t_cut - last_t) >= 3.0:
+                valid_sfx_cuts.append(t_cut)
+                last_t = t_cut
+        if valid_sfx_cuts:
+            logger.info(f"Kích hoạt Auto Scene Cut SFX ({sfx_preset}) tại {len(valid_sfx_cuts)} điểm chuyển cảnh")
 
     # Sort segments by start; the block loop walks this list with a window.
     seg_index: list[tuple[float, float, dict]] = []
@@ -684,6 +710,21 @@ def merge_segments(
                 if ge <= gs:
                     continue
                 block[gs - b0:ge - b0] += arr[gs - start_f:ge - start_f]
+
+            # Hòa trộn âm thanh chuyển cảnh SFX tại các điểm scene cuts
+            if sfx_arr is not None and valid_sfx_cuts:
+                sfx_len = len(sfx_arr)
+                for cut_t in valid_sfx_cuts:
+                    cut_start_f = int(cut_t * rate)
+                    cut_end_f = cut_start_f + sfx_len
+                    if cut_end_f <= b0:
+                        continue
+                    if cut_start_f >= b1:
+                        break
+                    gs = max(cut_start_f, b0)
+                    ge = min(cut_end_f, b1)
+                    if ge > gs:
+                        block[gs - b0:ge - b0] += sfx_arr[gs - cut_start_f:ge - cut_start_f]
 
             out.writeframes(
                 np.clip(_soft_limit(block), -32768, 32767)
