@@ -404,7 +404,7 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         vad_parameters={
             "threshold": 0.35,
             "min_silence_duration_ms": 500,
-            "speech_pad_ms": 500,
+            "speech_pad_ms": 150,
             "min_speech_duration_ms": 100,
         },
         condition_on_previous_text=False,
@@ -440,8 +440,9 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
                  "end": round(w.end, 3)}
                 for w in words
             ]
+        segment = _anchor_segment_to_words(segment)
         segments.append(segment)
-        logger.info(f"Segment {segment_id}: [{start:.1f}s-{end:.1f}s] {text[:50]}...")
+        logger.info(f"Segment {segment_id}: [{segment['start']:.1f}s-{segment['end']:.1f}s] {text[:50]}...")
 
     # The transcript is fully materialised — hand the VRAM back before the
     # TTS step sizes its worker pool. raw_segments (a generator) also pins
@@ -453,6 +454,33 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         _release_vram()
 
     return segments
+
+
+def _anchor_segment_to_words(segment: dict) -> dict:
+    """Neo biên segment vào mốc phát âm thật của từ đầu tiên và từ cuối cùng.
+
+    Whisper VAD pad thường mở rộng biên về trước/sau. Khi có `words` (word_timestamps),
+    lấy `words[0].start` làm mốc phát âm thật của câu, tránh câu thoại nói trước cảnh.
+    """
+    words = segment.get("words")
+    if not words:
+        return segment
+    s = float(segment.get("start", 0.0) or 0.0)
+    e = float(segment.get("end", s) or s)
+    w0_start = float(words[0].get("start", s) or s)
+    w1_end = float(words[-1].get("end", e) or e)
+
+    # Nếu từ đầu tiên phát âm sau biên VAD nhưng không quá 0.6s (khoảng VAD pad)
+    if w0_start > s and (w0_start - s) <= 0.60:
+        s = w0_start
+    # Tương tự nếu từ cuối cùng kết thúc trước biên VAD kết thúc
+    if w1_end < e and (e - w1_end) <= 0.60 and w1_end > s:
+        e = w1_end
+
+    segment["start"] = round(s, 3)
+    segment["end"] = round(e, 3)
+    segment["duration"] = round(max(0.1, e - s), 3)
+    return segment
 
 
 def _word_boundary_time(seg: dict, char_pos: int, fallback: float) -> float:

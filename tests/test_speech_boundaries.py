@@ -1,4 +1,4 @@
-﻿"""Unit test cho refine_speech_boundaries (voice-sync TASK-1).
+"""Unit test cho refine_speech_boundaries (voice-sync TASK-1).
 
 Fixture wav tự sinh: 16 kHz mono PCM16, sine burst đặt đúng thời điểm —
 không cần file nhị phân.
@@ -122,3 +122,20 @@ def test_empty_segments(tmp_path):
     wav = tmp_path / "a.wav"
     _fixture(wav, [(1.0, 2.0)])
     assert refine_speech_boundaries([], str(wav)) == []
+
+
+def test_whisper_word_anchor_onset():
+    from autodub.speech.transcriber import _anchor_segment_to_words
+    seg = {
+        "start": 4.70,
+        "end": 6.80,
+        "words": [
+            {"word": "Hello", "start": 5.15, "end": 5.40},
+            {"word": "world", "start": 5.45, "end": 6.70},
+        ],
+    }
+    anchored = _anchor_segment_to_words(seg)
+    assert anchored["start"] == 5.15
+    assert anchored["end"] == 6.70
+    assert anchored["duration"] == round(6.70 - 5.15, 3)
+
