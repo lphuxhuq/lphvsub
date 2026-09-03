@@ -87,6 +87,9 @@ class NewProjectPage(BasePage):
         self._result: DubResult | None = None
         self._blur_regions: list[dict] = []
         self._subtitle_style: dict | None = None
+        self._mask_method: str | None = None
+        self._inpaint_engine: str | None = None
+        self._inpaint_device: str | None = None
         # Dự án đang làm dở của phiên này: thư mục + lý do dừng. Được lưu vào
         # bản nháp để lần mở app sau vẫn mời chạy tiếp thay vì tạo dự án mới
         # (dự án mới = job_id mới = trừ Vox lần nữa).
@@ -367,6 +370,17 @@ class NewProjectPage(BasePage):
         data["blur_regions"] = list(getattr(self, "_blur_regions", []))
         if getattr(self, "_subtitle_style", None):
             data["subtitle_style"] = self._subtitle_style
+
+        settings = None
+        if callable(getattr(self, "_settings_provider", None)):
+            try:
+                settings = self._settings_provider()
+            except Exception:
+                pass
+
+        data["mask_method"] = getattr(self, "_mask_method", None) or (getattr(settings, "mask_method", None) if settings else None) or "blur"
+        data["inpaint_engine"] = getattr(self, "_inpaint_engine", None) or (getattr(settings, "inpaint_engine", None) if settings else None) or "lama_onnx"
+        data["inpaint_device"] = getattr(self, "_inpaint_device", None) or (getattr(settings, "inpaint_device", None) if settings else None) or "auto"
         return data
 
     def _source_lang_label(self) -> str:
@@ -441,6 +455,12 @@ class NewProjectPage(BasePage):
         if data:
             self._blur_regions = list(data.get("blur_regions") or [])
             self._subtitle_style = data.get("subtitle_style")
+            if "mask_method" in data:
+                self._mask_method = data.get("mask_method")
+            if "inpaint_engine" in data:
+                self._inpaint_engine = data.get("inpaint_engine")
+            if "inpaint_device" in data:
+                self._inpaint_device = data.get("inpaint_device")
             for step in self._steps:
                 step.load(data)
             self._update_style_summary()
@@ -506,6 +526,9 @@ class NewProjectPage(BasePage):
         self.step_voice.preset.set_key(settings.subtitle_preset)
         self._blur_regions = []  # Mặc định TẮT làm mờ sub cho dự án mới
         self._subtitle_style = settings.subtitle_style()
+        self._mask_method = getattr(settings, "mask_method", "blur")
+        self._inpaint_engine = getattr(settings, "inpaint_engine", "lama_onnx")
+        self._inpaint_device = getattr(settings, "inpaint_device", "auto")
         self._update_style_summary()
 
     def _clear_draft(self) -> None:
@@ -524,6 +547,9 @@ class NewProjectPage(BasePage):
         self._active_status = ""
         self._blur_regions = []
         self._subtitle_style = None
+        self._mask_method = None
+        self._inpaint_engine = None
+        self._inpaint_device = None
         for step in self._steps:
             step.load({})
         self._apply_defaults_from_settings()
@@ -580,9 +606,9 @@ class NewProjectPage(BasePage):
         }
         settings = self._settings_provider()
         mask_opts = {
-            "mask_method": getattr(self, "_mask_method", getattr(settings, "mask_method", "blur")),
-            "inpaint_engine": getattr(self, "_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")),
-            "inpaint_device": getattr(self, "_inpaint_device", getattr(settings, "inpaint_device", "auto")),
+            "mask_method": getattr(self, "_mask_method", None) or getattr(settings, "mask_method", "blur"),
+            "inpaint_engine": getattr(self, "_inpaint_engine", None) or getattr(settings, "inpaint_engine", "lama_onnx"),
+            "inpaint_device": getattr(self, "_inpaint_device", None) or getattr(settings, "inpaint_device", "auto"),
         }
         try:
             dialog = StyleDialog(
@@ -691,6 +717,9 @@ class NewProjectPage(BasePage):
             subtitle_style=(self._subtitle_style
                             or self._base_style(data["subtitle_preset"])),
             diarization_enabled=bool(data.get("diarization_enabled", True)),
+            mask_method=data.get("mask_method", "blur"),
+            inpaint_engine=data.get("inpaint_engine", "lama_onnx"),
+            inpaint_device=data.get("inpaint_device", "auto"),
             logo_path=data.get("logo_path"),
             logo_position=data.get("logo_position"),
             logo_scale=data.get("logo_scale"),

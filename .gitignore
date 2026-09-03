@@ -39,6 +39,21 @@ Thumbs.db
 .zcode/
 .agents/
 
+# Repository orchestration contract (keep other local agent artifacts ignored)
+!.agents/
+.agents/*
+!.agents/commands/
+.agents/commands/*
+!.agents/commands/*.md
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/codex-orchestrator/
+!.agents/skills/codex-orchestrator/SKILL.md
+!.agents/skills/antigravity-worker/
+!.agents/skills/antigravity-worker/SKILL.md
+!.agents/skills/computer-use-qa/
+!.agents/skills/computer-use-qa/SKILL.md
+
 
 # Build exe
 scratch/

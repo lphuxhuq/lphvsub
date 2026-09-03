@@ -103,6 +103,10 @@ class DubRequest:
     speaker_voices: dict[int, str] = field(default_factory=dict)
     # Tự động quét và che phụ đề cứng gốc bằng thị giác máy tính
     auto_mask_hardsub: bool = False
+    # Phương thức và cấu hình che phụ đề gốc (Boxblur vs AI Inpaint)
+    mask_method: str = "blur"
+    inpaint_engine: str = "lama_onnx"
+    inpaint_device: str = "auto"
 
     # Logo / Watermark thương hiệu chèn vào video
     logo_path: str | None = None
@@ -939,6 +943,9 @@ class DubPipeline:
             "aspect_preset": req.aspect_preset,
             "reframe_mode": req.reframe_mode,
             "auto_mask_hardsub": req.auto_mask_hardsub,
+            "mask_method": req.mask_method,
+            "inpaint_engine": req.inpaint_engine,
+            "inpaint_device": req.inpaint_device,
             "auto_sfx_enabled": auto_sfx,
             "sfx_preset": sfx_preset,
             "sfx_volume_db": sfx_vol,
@@ -1138,6 +1145,9 @@ class DubPipeline:
             color_filter=state.get("color_filter") or "none",
             aspect_preset=state.get("aspect_preset") or "original",
             auto_mask_hardsub=bool(state.get("auto_mask_hardsub", False)),
+            mask_method=state.get("mask_method") or "blur",
+            inpaint_engine=state.get("inpaint_engine") or "lama_onnx",
+            inpaint_device=state.get("inpaint_device") or "auto",
         )
 
         # --- Step 7: Merge video (optional) ---
