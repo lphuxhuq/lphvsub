@@ -252,6 +252,109 @@
     .log-line.prog { color: #a5b4fc; }
     .log-line.sep  { color: #374151; }
 
+    /* Social Metadata Card & Badges */
+    .meta-video-card {
+      background: #0d111c;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      transition: all 0.2s;
+    }
+    .meta-video-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .meta-filename-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      color: #818cf8;
+      font-size: 13px;
+      background: rgba(99,102,241,0.12);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(99,102,241,0.25);
+    }
+    .meta-field-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .meta-title-display {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      line-height: 1.4;
+      user-select: text;
+    }
+    .meta-hashtags-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+    }
+    .meta-tag-pill {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      color: #c084fc;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .meta-tag-pill:hover {
+      background: rgba(168, 85, 247, 0.3);
+      color: #ffffff;
+    }
+    .copy-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover {
+      background: var(--border2);
+      color: #ffffff;
+    }
+    .copy-btn.copied {
+      background: #059669 !important;
+      border-color: #10b981 !important;
+      color: #ffffff !important;
+    }
+
     /* Status Pill */
     .status-pill {
       display: inline-flex; align-items: center; gap: 6px;
@@ -627,9 +730,10 @@
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     </div>
 
-    <!-- Tab navigation: Live Subtitles vs Logs -->
+    <!-- Tab navigation: Live Subtitles vs Logs vs Metadata -->
     <div class="tab-nav">
       <button class="tab-btn active" id="tabSubBtn" onclick="switchTab('subtitles')">📺 Bảng phụ đề trực tiếp (<span id="subCountBadge">0</span> dòng)</button>
+      <button class="tab-btn" id="tabMetaBtn" onclick="switchTab('metadata')">🏷️ Tiêu đề &amp; Hashtags (<span id="metaCountBadge">0</span>)</button>
       <button class="tab-btn" id="tabLogBtn" onclick="switchTab('logs')">📜 Terminal Logs</button>
       
       <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
@@ -675,6 +779,15 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Social Metadata Tab (Tiêu đề & Hashtags cho từng Video) -->
+    <div id="metadataTabContent" style="display:none;">
+      <div id="socialMetaList" style="display:flex; flex-direction:column; gap:16px;">
+        <div style="text-align:center; color:var(--text2); padding:36px; background:#0d111c; border:1px dashed var(--border2); border-radius:var(--radius-sm);">
+          ⏳ Đang chờ tạo nội dung... Tiêu đề và hashtags phân biệt theo từng video sẽ tự động hiển thị ở đây khi hoàn tất.
+        </div>
       </div>
     </div>
 
@@ -1178,6 +1291,8 @@
     }
   }
 
+  let socialMetadataStore = {};
+
   function toggleAdv(btn, targetId) {
     btn.classList.toggle('open');
     document.getElementById(targetId).classList.toggle('open');
@@ -1186,9 +1301,111 @@
   function switchTab(tab) {
     activeTab = tab;
     document.getElementById('tabSubBtn').classList.toggle('active', tab === 'subtitles');
+    document.getElementById('tabMetaBtn').classList.toggle('active', tab === 'metadata');
     document.getElementById('tabLogBtn').classList.toggle('active', tab === 'logs');
     document.getElementById('subtitlesTabContent').style.display = tab === 'subtitles' ? 'block' : 'none';
+    document.getElementById('metadataTabContent').style.display = tab === 'metadata' ? 'block' : 'none';
     document.getElementById('logsTabContent').style.display = tab === 'logs' ? 'block' : 'none';
+  }
+
+  function copyToClipboard(text, btnElement) {
+    if (!text) {
+      showNotif('error', 'Chưa có nội dung để sao chép!');
+      return;
+    }
+    const onSuccess = () => {
+      if (btnElement) {
+        const origHTML = btnElement.innerHTML;
+        btnElement.innerHTML = '✓ Đã chép!';
+        btnElement.classList.add('copied');
+        setTimeout(() => {
+          btnElement.innerHTML = origHTML;
+          btnElement.classList.remove('copied');
+        }, 1500);
+      }
+      showNotif('success', 'Đã sao chép vào Clipboard!');
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, onSuccess));
+    } else {
+      fallbackCopy(text, onSuccess);
+    }
+  }
+
+  function fallbackCopy(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      if (cb) cb();
+    } catch (err) {
+      showNotif('error', 'Không thể sao chép: ' + err);
+    }
+    document.body.removeChild(ta);
+  }
+
+  function updateSocialMetadataUI(meta) {
+    if (!meta || (!meta.title && (!meta.hashtags || !meta.hashtags.length))) return;
+    const key = meta.filename || 'default';
+    socialMetadataStore[key] = meta;
+
+    const listEl = document.getElementById('socialMetaList');
+    const badgeEl = document.getElementById('metaCountBadge');
+    const keys = Object.keys(socialMetadataStore);
+    badgeEl.textContent = keys.length;
+
+    let html = '';
+    keys.forEach(k => {
+      const item = socialMetadataStore[k];
+      const tagsList = item.hashtags || [];
+      const tagsHtml = tagsList.map(t => {
+        const escapedTag = t.replace(/'/g, "\\'");
+        return `<span class="meta-tag-pill" onclick="copyToClipboard('${escapedTag}', this)" title="Bấm để sao chép tag này">${t}</span>`;
+      }).join(' ');
+
+      const rawTags = tagsList.join(' ');
+      const escapedTags = rawTags.replace(/'/g, "\\'");
+      const escapedTitle = (item.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const rawFull = item.full_text || `Tiêu đề: ${item.title}\n\n${rawTags}`;
+      const escapedFull = rawFull.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
+
+      html += `
+        <div class="meta-video-card">
+          <div class="meta-video-header">
+            <div class="meta-filename-badge">🎬 Video: ${item.filename}</div>
+            <button class="copy-btn" onclick="copyToClipboard('${escapedFull}', this)" style="background:var(--accent); border-color:var(--accent3); color:#fff;">
+              📄 Sao chép Toàn bộ (Tiêu đề + Tags)
+            </button>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div class="meta-field-label">
+              <span>📌 Tiêu đề Video</span>
+              <button class="copy-btn" style="padding:2px 8px; font-size:11px;" onclick="copyToClipboard('${escapedTitle}', this)">📋 Chép Tiêu đề</button>
+            </div>
+            <div class="meta-title-display">${item.title || 'Chưa có tiêu đề'}</div>
+          </div>
+          <div>
+            <div class="meta-field-label">
+              <span>🏷️ Hashtags (${tagsList.length} tags)</span>
+              <button class="copy-btn" style="padding:2px 8px; font-size:11px;" onclick="copyToClipboard('${escapedTags}', this)">🏷️ Chép Hashtags</button>
+            </div>
+            <div class="meta-hashtags-wrap">
+              ${tagsHtml || '<span style="color:var(--text3);font-size:12px;">Chưa có hashtag</span>'}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    if (html) {
+      listEl.innerHTML = html;
+    }
   }
 
   // --- Translation Engine (Single & Batch) ---
@@ -1329,6 +1546,11 @@
           updateSubtitlesTable(data.subtitles);
         }
 
+        // Social Metadata (Title & Hashtags)
+        if (data.social_metadata) {
+          updateSocialMetadataUI(data.social_metadata);
+        }
+
         // Logs
         renderLogs(data.log || []);
 
@@ -1345,6 +1567,7 @@
               const finalRes = await fetch(`/api/status/${job_id}?include_subtitles=1`);
               const finalData = await finalRes.json();
               if (finalData.subtitles) updateSubtitlesTable(finalData.subtitles);
+              if (finalData.social_metadata) updateSocialMetadataUI(finalData.social_metadata);
               if (finalData.output_file && !completedOutputFiles.includes(finalData.output_file)) {
                 completedOutputFiles.push(finalData.output_file);
               }
@@ -1391,6 +1614,9 @@
         }
 
         data.jobs.forEach(j => {
+          if (j.social_metadata) {
+            updateSocialMetadataUI(j.social_metadata);
+          }
           if (j.output_file && !completedOutputFiles.includes(j.output_file)) {
             completedOutputFiles.push(j.output_file);
           }
@@ -1428,6 +1654,7 @@
       const data = await res.json();
       if (data.output_file) currentOutputFile = data.output_file;
       if (data.subtitles) updateSubtitlesTable(data.subtitles);
+      if (data.social_metadata) updateSocialMetadataUI(data.social_metadata);
       if (data.log) renderLogs(data.log);
       document.getElementById('statSpeed').textContent = `${data.speed_lps || 0} dòng/s`;
       document.getElementById('statEta').textContent = data.eta_sec > 0 ? '~' + formatSeconds(data.eta_sec) : '--';

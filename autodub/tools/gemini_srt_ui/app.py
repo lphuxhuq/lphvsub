@@ -1,6 +1,7 @@
 import os
 import sys
 import math
+import json
 import subprocess
 import threading
 import uuid
@@ -662,7 +663,8 @@ def batch_status(batch_id):
             "status": status,
             "progress": j.get("progress", 0),
             "output_file": j.get("output_file"),
-            "error": j.get("error")
+            "error": j.get("error"),
+            "social_metadata": get_social_metadata_safe(jid, j),
         })
 
     processed_count = completed_count + failed_count + stopped_count
@@ -687,6 +689,87 @@ def batch_status(batch_id):
         "translated_lines": translated_lines,
         "jobs": jobs_summary,
     })
+
+
+def get_social_metadata_safe(job_id: str, job: dict | None = None) -> dict | None:
+    """Retrieve or compute social metadata (title, hashtags, description) for a completed job."""
+    if not job:
+        job = jobs.get(job_id, {})
+    if not job:
+        return None
+
+    # Check if job already has social_metadata cached
+    if "social_metadata" in job and isinstance(job["social_metadata"], dict):
+        return job["social_metadata"]
+
+    filename = job.get("original_name") or job.get("original") or (os.path.basename(job.get("input_file_path") or "") if job.get("input_file_path") else "") or "video"
+    base_title = os.path.splitext(filename)[0] if filename else "Video"
+
+    meta_candidates = []
+    meta_candidates.append(os.path.join(OUTPUT_FOLDER, f"meta_{job_id}.json"))
+
+    out_file = job.get("out_file_path") or (os.path.join(OUTPUT_FOLDER, job.get("output_file")) if job.get("output_file") else None)
+    if out_file:
+        meta_candidates.append(os.path.join(os.path.dirname(out_file), "youtube", "youtube_metadata.json"))
+        meta_candidates.append(os.path.join(os.path.dirname(out_file), "youtube_metadata.json"))
+        meta_candidates.append(os.path.join(os.path.dirname(os.path.dirname(out_file)), "youtube", "youtube_metadata.json"))
+
+    input_file = job.get("input_file_path")
+    if input_file:
+        meta_candidates.append(os.path.join(os.path.dirname(input_file), "youtube", "youtube_metadata.json"))
+        meta_candidates.append(os.path.join(os.path.dirname(input_file), "youtube_metadata.json"))
+
+    meta_data = {}
+    for cand in meta_candidates:
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and (data.get("title") or data.get("hashtags")):
+                    meta_data = data
+                    break
+            except Exception:
+                pass
+
+    title = meta_data.get("title") or ""
+    description = meta_data.get("description") or ""
+    hashtags = meta_data.get("hashtags") or []
+    if isinstance(hashtags, str):
+        hashtags = [h.strip() for h in hashtags.split() if h.strip()]
+    elif not isinstance(hashtags, list):
+        hashtags = []
+
+    formatted_tags = []
+    for tag in hashtags:
+        t = str(tag).strip()
+        if t:
+            if not t.startswith("#"):
+                t = "#" + t
+            formatted_tags.append(t)
+
+    # Fallback default title/tags when job is finished
+    if not title and job.get("status") == "done":
+        clean_name = re.sub(r"[_\-]+", " ", base_title).strip()
+        title = f"{clean_name.title()} — Bản Lồng Tiếng Việt"
+        if not formatted_tags:
+            formatted_tags = ["#shorts", "#reviewphim", "#trending", "#viral", "#xuhuong", "#phimhay"]
+
+    if not title and not formatted_tags:
+        return None
+
+    hashtags_str = " ".join(formatted_tags)
+    full_text = f"Tiêu đề: {title}\n\nMô tả: {description}\n\nHashtags:\n{hashtags_str}".strip()
+
+    social_meta = {
+        "filename": filename,
+        "title": title,
+        "description": description,
+        "hashtags": formatted_tags,
+        "hashtags_str": hashtags_str,
+        "full_text": full_text,
+    }
+    job["social_metadata"] = social_meta
+    return social_meta
 
 
 @app.route("/api/status/<job_id>")
@@ -765,6 +848,7 @@ def job_status(job_id):
         "output_file":   job["output_file"],
         "error":         job["error"],
         "subtitles":     subtitles,
+        "social_metadata": get_social_metadata_safe(job_id, job),
     })
 
 
