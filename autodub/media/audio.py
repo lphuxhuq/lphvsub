@@ -241,7 +241,7 @@ _VOICE_FADE_MS = 15
 # với động tác miệng, nghe như mất đồng bộ.
 _LEAD_TRIM_THRESHOLD = 0.01   # ~ -40 dBFS, RMS cửa sổ 20 ms
 _LEAD_TRIM_SUSTAIN_S = 0.05   # phải đạt ngưỡng LIÊN TỤC (bỏ qua click lẻ)
-_LEAD_TRIM_GUARD_S = 0.12     # đệm giữ lại trước tiếng nói thật
+_LEAD_TRIM_GUARD_S = 0.18     # đệm an toàn 180ms giữ lại trước tiếng nói thật (chống nuốt âm xát/vô thanh)
 
 
 def lead_silence_s(samples, rate: int,
@@ -310,8 +310,8 @@ def postprocess_voice_clip(src: str, dst: str,
         trim_s = lead_silence_s(data, src_rate)
     except (OSError, EOFError, ValueError):
         pass
-    # Trim xong còn quá ngắn cho loudnorm (gần như toàn im lặng) — giữ nguyên.
-    if dur - trim_s < 0.15:
+    # Chỉ cắt nếu khoảng lặng đầu lớn (>= 80ms) và sau khi cắt vẫn còn đủ dài cho loudnorm
+    if trim_s < 0.080 or dur - trim_s < 0.15:
         trim_s = 0.0
     fade_s = _VOICE_FADE_MS / 1000.0
     # atempo gộp luôn vào đây: mỗi câu chỉ còn MỘT lệnh ffmpeg thay vì hai

@@ -3,7 +3,7 @@
 TTS thường sinh ra 100-300ms khoảng lặng hoặc tiếng lấy hơi ở đầu và cuối clip.
 Module này tính toán RMS energy trên các frame 10ms để phát hiện chính xác
 thời điểm bắt đầu và kết thúc phát âm thật, sau đó cắt bớt khoảng lặng thừa
-(có giữ lại margin an toàn 25-30ms).
+(có giữ lại margin an toàn 80ms để bảo vệ các phụ âm đầu/đuôi có năng lượng thấp).
 """
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from autodub.utils import ensure_dir, setup_logging
 
 logger = setup_logging("autodub.tts_trimmer")
 
-FRAME_S = 0.010       # Khung RMS 10ms
-ENERGY_RATIO = 0.08   # Ngưỡng năng lượng = 8% peak RMS
-ABS_FLOOR = 0.003     # Ngưỡng sàn năng lượng tối thiểu
-DEFAULT_MARGIN_S = 0.025  # Margin an toàn giữ lại hai đầu
+FRAME_S = 0.010          # Khung RMS 10ms
+ENERGY_RATIO = 0.02      # Ngưỡng năng lượng = 2% peak RMS (bảo vệ phụ âm xát/vô thanh th, s, x, ph, kh)
+ABS_FLOOR = 0.0015       # Ngưỡng sàn năng lượng tối thiểu (không nuốt tiếng thì thầm)
+DEFAULT_MARGIN_S = 0.080 # Margin an toàn giữ lại hai đầu (80ms)
 
 
 def compute_speech_extents(
@@ -70,7 +70,7 @@ def trim_tts_silence(
     wav_path: str,
     out_path: str,
     *,
-    min_silence_s: float = 0.05,
+    min_silence_s: float = 0.06,
     margin_s: float = DEFAULT_MARGIN_S,
 ) -> tuple[str, float, float]:
     """Cắt tỉa khoảng lặng thừa đầu/đuôi của file WAV.

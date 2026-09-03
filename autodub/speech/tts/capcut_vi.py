@@ -153,17 +153,24 @@ def _is_invalid_text(error: Exception) -> bool:
     )
 
 
+import unicodedata
+
 _CJK_RE = re.compile(r"[\u3400-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]+")
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_WEIRD_RE = re.compile(r"[^\w\s.,!?;:…\-–—'\"()/%&+À-ỹ]+", re.UNICODE)
+_WEIRD_RE = re.compile(r"[^\w\s.,!?;:…\-–—'\"()/%&+À-ỹĐđ]+", re.UNICODE)
 
 
 def sanitize_capcut_text(text: str) -> str:
-    """Làm sạch câu trước khi gửi CapCut — tránh TTSInvalidText."""
-    cleaned = _CTRL_RE.sub("", text or "")
+    """Làm sạch câu trước khi gửi CapCut — chuẩn hóa NFC, tránh TTSInvalidText."""
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFC", str(text))
+    cleaned = _CTRL_RE.sub("", text)
     cleaned = _CJK_RE.sub(" ", cleaned)
     cleaned = cleaned.replace("\u200b", "").replace("\ufeff", "")
     cleaned = cleaned.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    cleaned = cleaned.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
+    cleaned = cleaned.replace("«", "\"").replace("»", "\"").replace("[", "(").replace("]", ")")
     cleaned = _WEIRD_RE.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) > 280:
@@ -366,9 +373,24 @@ class CapCutSynthesizer:
         except RuntimeError as e:
             if _is_invalid_text(e) or "TTSInvalidText" in str(e):
                 logger.warning(
-                    "CapCut từ chối câu %r — ghi clip im lặng, không dừng video.",
+                    "CapCut từ chối câu %r (TTSInvalidText) — làm sạch sâu và thử lại...",
                     text[:80],
                 )
+                try:
+                    # Làm sạch cấp 2: bỏ mọi ký tự đặc biệt, chỉ giữ lại chữ cái tiếng Việt, số và dấu phẩy/chấm
+                    fallback_text = re.sub(r"[^\w\s.,!?;:À-ỹĐđ]", " ", text)
+                    fallback_text = re.sub(r"\s+", " ", fallback_text).strip()
+                    if fallback_text and fallback_text.strip(".,!?;: ") and fallback_text != text:
+                        self._to_wav(self._fetch_mp3(fallback_text), output_path)
+                        duration = wav_duration_s(output_path) or 0.0
+                        return TTSResult(
+                            path=output_path,
+                            actual_duration=round(duration, 3),
+                            speed_adjusted=False,
+                            rate_applied="1.0x (fallback)",
+                        )
+                except Exception as retry_err:
+                    logger.warning("Thử lại câu lỗi thất bại (%s) — ghi clip im lặng.", retry_err)
                 return write_silence(output_path, duration_s=max(0.12, min(1.2, (target_duration or 0.4))))
             raise
         duration = wav_duration_s(output_path) or 0.0
