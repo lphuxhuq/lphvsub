@@ -35,6 +35,20 @@ REASON_TEXT_TOO_SHORT = "text_too_short_for_duration"
 REASON_GAP_ANOMALY = "gap_anomaly"
 REASON_OCR_NO_ASR = "ocr_no_asr_match"
 
+# --- Trọng số scoring và ngưỡng quyết định Fusion (TASK-5) -----------------
+W_ASR = 0.30
+W_OCR = 0.20
+W_ALIGN = 0.20
+W_TEMPORAL = 0.15
+W_COMPLETENESS = 0.15
+
+FUSION_OVERRIDE_MIN = 0.75
+ALIGN_MERGE_THRESHOLD = 0.80
+ALIGN_HIGH_THRESHOLD = 0.85
+ALIGN_LOW_THRESHOLD = 0.60
+OCR_SCORE_MIN_EMPTY = 0.60
+
+
 
 def _normalize_for_align(text: str) -> str:
     """Chuẩn hoá để so khớp: bỏ punctuation/khoảng trắng, giữ CJK + alnum.
@@ -227,3 +241,275 @@ def detect_suspect_segments(
                               if k.endswith(("chunk", "duration", "anomaly",
                                              "asr_match"))))
     return res
+
+
+def fuse(
+    segments: list[dict],
+    ocr_segments: list[dict] | None = None,
+    suspects: SuspectResult | None = None,
+) -> tuple[list[dict], dict]:
+    """Kết hợp (fuse) transcript ASR và OCR dựa trên chấm điểm và quy tắc ưu tiên.
+
+    Bảo toàn bất biến:
+    - Sắp xếp theo start, 0 <= start < end, duration >= 0.1s.
+    - Không chồng chéo thời gian giữa các câu kề.
+    - len(fused_segments) >= len(segments).
+    - Không mutate input.
+
+    Trả về: (fused_segments, report_dict)
+    """
+    if not ocr_segments:
+        # Passthrough hoàn toàn nếu không có OCR
+        copied = [dict(s) for s in segments]
+        for idx, s in enumerate(copied):
+            s["id"] = idx + 1
+        report = {
+            "version": 1,
+            "total_fused": len(copied),
+            "total_asr": len(segments),
+            "total_ocr": 0,
+            "decisions": [],
+            "stats": {"passthrough": True},
+        }
+        return copied, report
+
+    suspect_ids = set()
+    if suspects and getattr(suspects, "suspect", None):
+        for s in suspects.suspect:
+            suspect_ids.add(s.get("id"))
+
+    # Chuẩn hoá danh sách OCR segments
+    parsed_ocr = []
+    for ocr in ocr_segments:
+        otext = str(ocr.get("text", "")).strip()
+        ostart = float(ocr.get("start_time", ocr.get("start", 0.0)) or 0.0)
+        oend = float(ocr.get("end_time", ocr.get("end", 0.0)) or 0.0)
+        oconf = float(ocr.get("confidence", 0.9) or 0.9)
+        if oend <= ostart:
+            oend = ostart + 0.5
+        parsed_ocr.append({
+            "text": otext,
+            "start": ostart,
+            "end": oend,
+            "confidence": oconf,
+            "used": False,
+        })
+
+    decisions = []
+    fused_raw = []
+
+    # 1. Ghép từng câu ASR với OCR
+    for seg in sorted(segments, key=lambda s: float(s.get("start", 0.0))):
+        seg_id = seg.get("id")
+        asr_text = str(seg.get("text", "")).strip()
+        asr_start = float(seg.get("start", 0.0))
+        asr_end = float(seg.get("end", asr_start + 0.5))
+
+        # Tìm các đoạn OCR có giao thời gian với câu ASR này
+        matched_ocrs = []
+        for ocr in parsed_ocr:
+            overlap = max(0.0, min(asr_end, ocr["end"]) - max(asr_start, ocr["start"]))
+            if overlap >= 0.2 or (asr_end >= ocr["start"] and asr_start <= ocr["end"]):
+                matched_ocrs.append(ocr)
+                ocr["used"] = True
+
+        if not matched_ocrs:
+            # Không có OCR khớp
+            fused_raw.append({
+                "text": asr_text,
+                "start": asr_start,
+                "end": asr_end,
+                "orig": seg,
+            })
+            decisions.append({
+                "segment_id": seg_id,
+                "decision": "keep_asr_no_ocr",
+                "rule": 0,
+                "scores": {"asr": 1.0, "ocr": 0.0, "align": 1.0, "temporal": 0.0, "completeness": 1.0, "final": 1.0},
+                "asr_text": asr_text,
+                "ocr_text": "",
+                "final_text": asr_text,
+                "start": asr_start,
+                "end": asr_end,
+            })
+            continue
+
+        # Gộp text OCR khớp
+        matched_ocrs.sort(key=lambda o: o["start"])
+        ocr_text = "".join(o["text"] for o in matched_ocrs)
+        ocr_start = min(o["start"] for o in matched_ocrs)
+        ocr_end = max(o["end"] for o in matched_ocrs)
+        ocr_conf = sum(o["confidence"] for o in matched_ocrs) / len(matched_ocrs)
+
+        # Tính toán Scoring components
+        align_res = align_texts(asr_text, ocr_text)
+
+        # ASR Score
+        asr_score = 0.6 if asr_text else 0.0
+        if seg_id not in suspect_ids:
+            asr_score += 0.2
+        dur = max(0.1, asr_end - asr_start)
+        cjk_count = _cjk_len(asr_text)
+        if 0.5 <= (cjk_count / dur) <= 6.0:
+            asr_score += 0.2
+        asr_score = min(1.0, asr_score)
+
+        # OCR Score
+        ocr_score = max(0.0, min(1.0, ocr_conf))
+
+        # Alignment Score
+        align_score = align_res.similarity
+
+        # Temporal Score (IoU)
+        inter = max(0.0, min(asr_end, ocr_end) - max(asr_start, ocr_start))
+        union = max(1e-6, max(asr_end, ocr_end) - min(asr_start, ocr_start))
+        temporal_score = max(0.0, min(1.0, inter / union))
+
+        # Completeness Score
+        norm_a = _normalize_for_align(asr_text)
+        norm_o = _normalize_for_align(ocr_text)
+        if (norm_a and norm_a in norm_o) or (norm_o and norm_o in norm_a):
+            completeness_score = 1.0
+        elif align_score >= 0.5:
+            completeness_score = align_score
+        else:
+            completeness_score = 0.0
+
+        final_score = (
+            W_ASR * asr_score
+            + W_OCR * ocr_score
+            + W_ALIGN * align_score
+            + W_TEMPORAL * temporal_score
+            + W_COMPLETENESS * completeness_score
+        )
+
+        scores_dict = {
+            "asr": round(asr_score, 3),
+            "ocr": round(ocr_score, 3),
+            "align": round(align_score, 3),
+            "temporal": round(temporal_score, 3),
+            "completeness": round(completeness_score, 3),
+            "final": round(final_score, 3),
+        }
+
+        # Áp dụng 4 Quy tắc quyết định
+        # Quy tắc 1: ASR rỗng + OCR có text >= 3 CJK chars và ocr_score >= 0.6
+        if not norm_a and _cjk_len(ocr_text) >= 3 and ocr_score >= OCR_SCORE_MIN_EMPTY:
+            final_text = ocr_text
+            f_start = ocr_start
+            f_end = ocr_end
+            decision_name = "ocr_override_empty"
+            rule_num = 1
+
+        # Quy tắc 2: ALIGN >= 0.80 và OCR bổ sung prefix hoặc suffix
+        elif (
+            align_score >= ALIGN_MERGE_THRESHOLD
+            and (len(align_res.added_prefix) >= 1 or len(align_res.added_suffix) >= 1)
+        ):
+            final_text = align_res.merged
+            f_start = asr_start
+            f_end = asr_end
+            decision_name = "merged_prefix_suffix"
+            rule_num = 2
+
+        # Quy tắc 3: ALIGN >= 0.85 (tương đồng cao, OCR chỉ sai khác vài chữ) -> Giữ ASR
+        elif align_score >= ALIGN_HIGH_THRESHOLD:
+            final_text = asr_text
+            f_start = asr_start
+            f_end = asr_end
+            decision_name = "keep_asr_high_similarity"
+            rule_num = 3
+
+        # Quy tắc 4: ALIGN < 0.60 hoặc final_score < 0.75 -> Giữ ASR + flag suspect
+        elif align_score < ALIGN_LOW_THRESHOLD or final_score < FUSION_OVERRIDE_MIN:
+            final_text = asr_text
+            f_start = asr_start
+            f_end = asr_end
+            decision_name = "keep_asr_fallback"
+            rule_num = 4
+
+        else:
+            # Mặc định giữ ASR
+            final_text = asr_text
+            f_start = asr_start
+            f_end = asr_end
+            decision_name = "keep_asr"
+            rule_num = 0
+
+        fused_raw.append({
+            "text": final_text,
+            "start": f_start,
+            "end": f_end,
+            "orig": seg,
+        })
+        decisions.append({
+            "segment_id": seg_id,
+            "decision": decision_name,
+            "rule": rule_num,
+            "scores": scores_dict,
+            "asr_text": asr_text,
+            "ocr_text": ocr_text,
+            "final_text": final_text,
+            "start": f_start,
+            "end": f_end,
+        })
+
+    # 2. Xử lý các đoạn OCR độc lập (không trùng với câu ASR nào) — Quy tắc 1 OCR Standalone
+    for ocr in parsed_ocr:
+        if not ocr["used"] and _cjk_len(ocr["text"]) >= 3 and ocr["confidence"] >= OCR_SCORE_MIN_EMPTY:
+            fused_raw.append({
+                "text": ocr["text"],
+                "start": ocr["start"],
+                "end": ocr["end"],
+                "orig": None,
+            })
+            decisions.append({
+                "segment_id": None,
+                "decision": "ocr_standalone",
+                "rule": 1,
+                "scores": {"asr": 0.0, "ocr": round(ocr["confidence"], 3), "align": 0.0, "temporal": 0.0, "completeness": 1.0, "final": 0.8},
+                "asr_text": "",
+                "ocr_text": ocr["text"],
+                "final_text": ocr["text"],
+                "start": ocr["start"],
+                "end": ocr["end"],
+            })
+
+    # 3. Sắp xếp và đảm bảo tính bất biến thời gian
+    fused_raw.sort(key=lambda x: float(x["start"]))
+
+    fused_segments = []
+    last_end = 0.0
+    for idx, item in enumerate(fused_raw):
+        s_start = max(0.0, float(item["start"]))
+        s_end = max(s_start + 0.1, float(item["end"]))
+
+        # Chặn chồng chéo với câu liền trước
+        if s_start < last_end:
+            s_start = last_end
+            s_end = max(s_end, s_start + 0.1)
+
+        seg_dict = dict(item["orig"]) if item["orig"] else {}
+        seg_dict["id"] = idx + 1
+        seg_dict["start"] = round(s_start, 3)
+        seg_dict["end"] = round(s_end, 3)
+        seg_dict["text"] = str(item["text"])
+
+        fused_segments.append(seg_dict)
+        last_end = seg_dict["end"]
+
+    report = {
+        "version": 1,
+        "total_fused": len(fused_segments),
+        "total_asr": len(segments),
+        "total_ocr": len(ocr_segments),
+        "decisions": decisions,
+        "stats": {
+            "merged_count": sum(1 for d in decisions if d["decision"] == "merged_prefix_suffix"),
+            "ocr_added_count": sum(1 for d in decisions if d["decision"] in ("ocr_override_empty", "ocr_standalone")),
+            "asr_kept_count": sum(1 for d in decisions if "keep_asr" in d["decision"]),
+        },
+    }
+
+    return fused_segments, report
+
