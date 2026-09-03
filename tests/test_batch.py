@@ -345,3 +345,35 @@ def test_prefetcher_skips_local_files(tmp_path, monkeypatch):
     assert pf.take(2, timeout=10) is not None   # chỉ item có URL được tải
     assert called == ["https://a.com/2"]
     pf.cleanup()
+
+
+def test_batch_concurrency(env, monkeypatch):
+    """Kiểm tra xử lý đồng thời danh sách nhiều link qua concurrency > 1."""
+    import threading
+    settings, template, state_path = env
+    from autodub.media import downloader
+    from autodub.pipeline import DubResult
+
+    monkeypatch.setattr(downloader, "download_video", _fake_download_video)
+
+    called_urls = []
+    lock = threading.Lock()
+
+    class ConcurrentMockPipeline:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self, req):
+            with lock:
+                called_urls.append(req.url)
+            return DubResult(status="completed", work_dir="/tmp/test", report={"session_id": "test_sess"})
+
+    monkeypatch.setattr("autodub.batch.DubPipeline", ConcurrentMockPipeline)
+
+    urls = "https://a.com/1\nhttps://a.com/2\nhttps://a.com/3\nhttps://a.com/4"
+    summary = run_batch(urls, settings, template, state_path=state_path, concurrency=2)
+
+    assert summary.total == 4
+    assert summary.success == 4
+    assert set(called_urls) == {"https://a.com/1", "https://a.com/2", "https://a.com/3", "https://a.com/4"}
+

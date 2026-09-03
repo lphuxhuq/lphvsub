@@ -9,7 +9,7 @@ import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
 )
 
 from autodub_gui import dub_constants as consts
@@ -64,24 +64,158 @@ class _StepPanel(QWidget):
         return True, ""
 
 
+class VideoPreviewLoaderDialog(QDialog):
+    """Hộp thoại chờ tải video từ link để xem trước và phát trực tiếp trong StyleDialog."""
+
+    def __init__(self, url: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Đang chuẩn bị video xem trước")
+        self.setFixedWidth(440)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.video_path: str | None = None
+        self._url = url
+        self._worker = None
+
+        from autodub_gui.ui.buttons import GhostButton
+        from PySide6.QtWidgets import QProgressBar
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(tokens.SP_4, tokens.SP_4, tokens.SP_4, tokens.SP_4)
+        root.setSpacing(tokens.SP_3)
+
+        title_lbl = QLabel("Đang tải video xem trước từ link...")
+        title_lbl.setStyleSheet(f"color: {tokens.TEXT_PRIMARY}; font-weight: 600; font-size: {tokens.FS_SECTION}px;")
+        root.addWidget(title_lbl)
+
+        url_lbl = ElidedLabel(url)
+        url_lbl.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px;")
+        root.addWidget(url_lbl)
+
+        self.pbar = QProgressBar()
+        self.pbar.setRange(0, 0)
+        self.pbar.setFixedHeight(6)
+        self.pbar.setTextVisible(False)
+        self.pbar.setStyleSheet(
+            f"QProgressBar {{ background: {tokens.BG_INPUT}; border-radius: 3px; }} "
+            f"QProgressBar::chunk {{ background: {tokens.PRIMARY}; border-radius: 3px; }}"
+        )
+        root.addWidget(self.pbar)
+
+        desc_lbl = QLabel(
+            "Video đang được tải về tạm để bạn có thể xem trực tiếp video thật, bấm phát/tua khi căn chỉnh phụ đề và vùng che.")
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px;")
+        root.addWidget(desc_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(tokens.SP_2)
+        btn_row.addStretch()
+
+        self.btn_skip = GhostButton("Mở ngay (nền mẫu)")
+        self.btn_skip.clicked.connect(self._skip_waiting)
+        btn_row.addWidget(self.btn_skip)
+
+        self.btn_cancel = GhostButton("Hủy")
+        self.btn_cancel.clicked.connect(self._cancel)
+        btn_row.addWidget(self.btn_cancel)
+        root.addLayout(btn_row)
+
+        self._start_download()
+
+    def _start_download(self):
+        from autodub.config import cache_dir
+        from autodub_gui.workers import PrefetchWorker
+        out_dir = os.path.join(cache_dir(), "preview_videos")
+        self._worker = PrefetchWorker(self._url, out_dir, self)
+        self._worker.finished_ok.connect(self._on_finished)
+        self._worker.failed.connect(self._on_failed)
+        self._worker.start()
+
+    def _on_finished(self, path: str):
+        self.video_path = path
+        self.accept()
+
+    def _on_failed(self, _err: str):
+        self.video_path = None
+        self.accept()
+
+    def _skip_waiting(self):
+        if self._worker:
+            self._worker.cancel()
+        self.video_path = None
+        self.accept()
+
+    def _cancel(self):
+        if self._worker:
+            self._worker.cancel()
+        self.reject()
+
+    def closeEvent(self, event):
+        if self._worker:
+            self._worker.cancel()
+        super().closeEvent(event)
+
+
 class VideoStep(_StepPanel):
-    """Bước 1: chọn nguồn video."""
+    """Bước 1: chọn nguồn video (hỗ trợ nhập 1 hoặc nhiều liên kết để chạy đa luồng)."""
 
     SOURCES = [("Dán liên kết", "url"), ("Tải tệp lên", "file"),
                ("Tiếp tục dang dở", "resume")]
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Chọn video", "Dán liên kết, chọn tệp từ máy, hoặc "
-                                       "chạy tiếp một dự án đang dở.", parent)
+        super().__init__("Chọn video", "Dán một hoặc nhiều liên kết (chạy đa luồng), "
+                                       "chọn tệp từ máy, hoặc chạy tiếp dự án đang dở.", parent)
+        from autodub_gui.ui.inputs import LabeledPlainTextEdit
+
         self.source = SegmentedControl(self.SOURCES)
         self.source.selection_changed.connect(self._on_source)
         self.body.addWidget(LabeledWidget("Nguồn video", self.source))
 
-        self.url = LabeledLineEdit(
-            "Liên kết video", "https://www.youtube.com/watch?v=...",
-            "Dán liên kết YouTube, Douyin hoặc liên kết tải trực tiếp")
-        self.url.changed.connect(lambda _t: self.changed.emit())
+        self.url = LabeledPlainTextEdit(
+            "Liên kết video (hỗ trợ nhập nhiều link)",
+            "Dán một hoặc nhiều liên kết (YouTube, Douyin, Bilibili, TikTok...)\n"
+            "Ví dụ:\nhttps://www.youtube.com/watch?v=...\nhttps://www.youtube.com/watch?v=...",
+            "Dán một hoặc nhiều liên kết video, mỗi liên kết trên một dòng để xử lý đa luồng song song.",
+            min_height=90,
+        )
+        self.url.changed.connect(self._on_url_changed)
         self.body.addWidget(self.url)
+
+        self.url_badge = QLabel("")
+        self.url_badge.setWordWrap(True)
+        self.url_badge.setStyleSheet(
+            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
+            f"background: transparent;")
+        self.body.addWidget(self.url_badge)
+
+        self.concurrency_slider = LabeledSlider(
+            "Số luồng xử lý song song", 1.0, 4.0, 1.0,
+            "Số video được tải và lồng tiếng đồng thời cùng lúc", " luồng", decimals=0)
+        self.concurrency_slider.set_value(2.0)
+        self.concurrency_slider.changed.connect(lambda _v: self.changed.emit())
+        self.concurrency_slider.setVisible(False)
+        self.body.addWidget(self.concurrency_slider)
+
+        # Khung thiết lập chi tiết từng video (Giọng đọc riêng, danh sách link)
+        from autodub_gui.ui.collapsible import CollapsibleSection
+        from PySide6.QtCore import QTimer
+
+        self._custom_items: dict[str, dict] = {}
+        self._prefetched_paths: dict[str, str] = {}
+        self._prefetch_workers: list = []
+        self._prefetch_timer = QTimer(self)
+        self._prefetch_timer.setSingleShot(True)
+        self._prefetch_timer.timeout.connect(self._auto_prefetch_urls)
+
+        self.setup_section = CollapsibleSection("Cấu hình chi tiết từng video trước khi chạy", expanded=True)
+        self.setup_container = QWidget()
+        clear_background(self.setup_container)
+        self.setup_layout = QVBoxLayout(self.setup_container)
+        self.setup_layout.setContentsMargins(0, tokens.SP_1, 0, tokens.SP_1)
+        self.setup_layout.setSpacing(tokens.SP_2)
+        self.setup_section.add_widget(self.setup_container)
+        self.setup_section.setVisible(False)
+        self.body.addWidget(self.setup_section)
 
         self.file_row, self.file_edit = self._picker(
             "Tệp video trên máy", "Chưa chọn tệp nào", self._pick_file)
@@ -120,9 +254,362 @@ class VideoStep(_StepPanel):
 
     def _on_source(self, key: str) -> None:
         self.url.setVisible(key == "url")
+        self.url_badge.setVisible(key == "url")
+        has_multi = key == "url" and len(self.urls()) > 1
+        self.concurrency_slider.setVisible(has_multi)
+        self.setup_section.setVisible(has_multi)
+        if has_multi:
+            self._refresh_setup_table()
         self.file_row.setVisible(key == "file")
         self.resume_row.setVisible(key == "resume")
         self.changed.emit()
+
+    def _auto_prefetch_urls(self) -> None:
+        """Tự động tải video ngầm từ các link vừa nhập để người dùng mở xem trước ngay không cần chờ."""
+        if self.source.current_key() != "url":
+            return
+        from autodub.config import cache_dir
+        from autodub_gui.workers import PrefetchWorker
+
+        out_dir = os.path.join(cache_dir(), "preview_videos")
+        for u in self.urls():
+            if u and u.startswith(("http://", "https://")):
+                if u not in self._prefetched_paths or not os.path.isfile(self._prefetched_paths[u]):
+                    worker = PrefetchWorker(u, out_dir, self)
+                    worker.finished_ok.connect(lambda p, url=u: self._on_prefetch_done(url, p))
+                    self._prefetch_workers.append(worker)
+                    worker.start()
+
+    def _on_prefetch_done(self, url: str, path: str) -> None:
+        self._prefetched_paths[url] = path
+        self._refresh_setup_table()
+
+    def _on_url_changed(self) -> None:
+        urls = self.urls()
+        n = len(urls)
+        if n == 0:
+            self.url_badge.setText("")
+            self.concurrency_slider.setVisible(False)
+            self.setup_section.setVisible(False)
+        elif n == 1:
+            self.url_badge.setText("1 liên kết video (đang tự động tải ngầm...)")
+            self.concurrency_slider.setVisible(False)
+            self.setup_section.setVisible(False)
+        else:
+            self.url_badge.setText(
+                f"Đã nhập {n} liên kết video (Chế độ xử lý đa luồng — đang tự động tải ngầm...)")
+            is_url = self.source.current_key() == "url"
+            self.concurrency_slider.setVisible(is_url)
+            self.setup_section.setVisible(is_url)
+            if is_url:
+                self._refresh_setup_table()
+        # Kích hoạt tải ngầm sau 1s khi người dùng dán/gõ link
+        self._prefetch_timer.start(1000)
+        self.changed.emit()
+
+    def items(self):
+        from autodub.batch import parse_lines
+        raw = self.url.text()
+        base_items = parse_lines(raw)
+        result = []
+        for it in base_items:
+            custom = self._custom_items.get(it.url or "", {})
+            it.subtitle_style = custom.get("subtitle_style")
+            it.blur_regions = custom.get("blur_regions")
+            it.logo_opts = custom.get("logo_opts")
+            it.watermark_opts = custom.get("watermark_opts")
+            it.reframe_opts = custom.get("reframe_opts")
+            it.sfx_opts = custom.get("sfx_opts")
+            result.append(it)
+        return result
+
+    def urls(self) -> list[str]:
+        return [it.url for it in self.items() if it.url]
+
+    def _open_item_custom_dialog(self, url: str, index: int) -> None:
+        """Mở hộp thoại Kiểu chữ, Vùng che Blur, Logo & Watermark riêng cho video này."""
+        from autodub_gui.style_dialog import StyleDialog
+        from autodub.config import Settings
+        from PySide6.QtWidgets import QDialog
+
+        video_path = None
+        if url and url.startswith(("http://", "https://")):
+            if url in self._prefetched_paths and os.path.isfile(self._prefetched_paths[url]):
+                video_path = self._prefetched_paths[url]
+            else:
+                loader = VideoPreviewLoaderDialog(url, parent=self)
+                if loader.exec() != QDialog.DialogCode.Accepted:
+                    return
+                video_path = loader.video_path
+                if video_path:
+                    self._prefetched_paths[url] = video_path
+        elif url and os.path.isfile(url):
+            video_path = url
+
+        settings = Settings.load()
+        custom = self._custom_items.get(url, {})
+        style = custom.get("subtitle_style") or settings.subtitle_style()
+        regions = list(custom.get("blur_regions") or [])
+        logo_opts = custom.get("logo_opts") or {
+            "logo_path": getattr(settings, "logo_path", ""),
+            "logo_position": getattr(settings, "logo_position", "top_right"),
+            "logo_scale": getattr(settings, "logo_scale", 0.12),
+            "logo_opacity": getattr(settings, "logo_opacity", 0.85),
+            "logo_motion": getattr(settings, "logo_motion", "static"),
+        }
+        wm_opts = custom.get("watermark_opts") or {
+            "watermark_text": getattr(settings, "watermark_text", ""),
+            "watermark_motion": getattr(settings, "watermark_motion", "bounce"),
+            "watermark_opacity": getattr(settings, "watermark_opacity", 0.28),
+            "watermark_font_size": getattr(settings, "watermark_font_size", 26),
+            "watermark_speed": getattr(settings, "watermark_speed", 40),
+        }
+        reframe_opts = custom.get("reframe_opts") or {
+            "aspect_preset": getattr(settings, "video_aspect_preset", "original"),
+            "reframe_mode": "blur",
+        }
+        sfx_opts = custom.get("sfx_opts") or {
+            "auto_sfx_enabled": getattr(settings, "auto_sfx_enabled", False),
+            "sfx_preset": getattr(settings, "sfx_preset", "whoosh"),
+            "sfx_volume_db": getattr(settings, "sfx_volume_db", -4.0),
+        }
+        mask_opts = custom.get("mask_opts") or {
+            "mask_method": getattr(settings, "mask_method", "blur"),
+            "inpaint_engine": getattr(settings, "inpaint_engine", "lama_onnx"),
+            "inpaint_device": getattr(settings, "inpaint_device", "auto"),
+        }
+
+        dialog = StyleDialog(
+            video_path=video_path,
+            style=style,
+            regions=regions,
+            parent=self,
+            logo_options=logo_opts,
+            watermark_options=wm_opts,
+            reframe_options=reframe_opts,
+            sfx_options=sfx_opts,
+            mask_options=mask_opts,
+        )
+        if not dialog.exec():
+            return
+
+        self._custom_items[url] = {
+            "subtitle_style": dialog.style(),
+            "blur_regions": dialog.regions(),
+            "logo_opts": dialog.logo_options(),
+            "watermark_opts": dialog.watermark_options(),
+            "reframe_opts": dialog.reframe_options(),
+            "sfx_opts": dialog.sfx_options(),
+            "mask_opts": dialog.mask_options(),
+        }
+
+        self._refresh_setup_table()
+        self.changed.emit()
+
+    def _refresh_setup_table(self) -> None:
+        if getattr(self, "_block_table_refresh", False):
+            return
+        items = self.items()
+        if len(items) <= 1 or self.source.current_key() != "url":
+            self.setup_section.setVisible(False)
+            return
+
+        self.setup_section.setVisible(True)
+        # Xóa các dòng cũ
+        while self.setup_layout.count():
+            child = self.setup_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        from autodub_gui import icons
+        from autodub_gui.ui.buttons import GhostButton, IconButton
+        from PySide6.QtWidgets import QComboBox
+
+        # Lấy danh sách giọng đọc có sẵn
+        available_voices = ["(Theo dự án)"]
+        try:
+            from autodub.config import Settings
+            from autodub.speech.tts import voices
+            all_v = voices.names(Settings.load())
+            if all_v:
+                available_voices.extend(all_v)
+        except Exception:
+            pass
+
+        # Thanh công cụ thao tác hàng loạt
+        toolbar = QWidget()
+        toolbar.setStyleSheet(
+            f"background: {tokens.BG_ELEVATED}; border-radius: {tokens.RADIUS_MD}px; "
+            f"padding: {tokens.SP_1}px {tokens.SP_2}px; margin-bottom: {tokens.SP_1}px;"
+        )
+        tb_layout = QHBoxLayout(toolbar)
+        tb_layout.setContentsMargins(tokens.SP_2, tokens.SP_1, tokens.SP_2, tokens.SP_1)
+        tb_layout.setSpacing(tokens.SP_2)
+
+        lbl_bulk = QLabel("Đổi giọng hàng loạt:")
+        lbl_bulk.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; font-weight: 600;")
+        tb_layout.addWidget(lbl_bulk)
+
+        self._bulk_voice_combo = QComboBox()
+        self._bulk_voice_combo.addItems(available_voices)
+        self._bulk_voice_combo.setStyleSheet(
+            f"QComboBox {{ background: {tokens.BG_INPUT}; color: {tokens.TEXT_PRIMARY}; "
+            f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: {tokens.RADIUS_SM}px; "
+            f"padding: 2px 8px; font-size: {tokens.FS_META}px; min-width: 120px; }}"
+        )
+        tb_layout.addWidget(self._bulk_voice_combo)
+
+        btn_apply_all_voice = GhostButton("Áp dụng cho tất cả")
+        btn_apply_all_voice.setStyleSheet(
+            f"color: {tokens.PRIMARY}; border: 1px solid {tokens.BORDER_SUBTLE}; "
+            f"font-size: {tokens.FS_META}px; border-radius: {tokens.RADIUS_SM}px; padding: 2px 8px;"
+        )
+        btn_apply_all_voice.clicked.connect(self._apply_bulk_voice)
+        tb_layout.addWidget(btn_apply_all_voice)
+        tb_layout.addStretch()
+
+        self.setup_layout.addWidget(toolbar)
+
+        for idx, item in enumerate(items):
+            row = QWidget()
+            row.setStyleSheet(
+                f"background: {tokens.BG_INPUT}; border-radius: {tokens.RADIUS_MD}px; "
+                f"padding: {tokens.SP_1}px {tokens.SP_2}px;"
+            )
+            r_layout = QHBoxLayout(row)
+            r_layout.setContentsMargins(tokens.SP_2, tokens.SP_1, tokens.SP_2, tokens.SP_1)
+            r_layout.setSpacing(tokens.SP_2)
+
+            num_lbl = QLabel(f"#{idx + 1}")
+            num_lbl.setStyleSheet(f"color: {tokens.PRIMARY}; font-weight: bold; font-size: {tokens.FS_META}px;")
+            r_layout.addWidget(num_lbl)
+
+            url_lbl = ElidedLabel(item.url or "")
+            url_lbl.setStyleSheet(f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_META}px;")
+            r_layout.addWidget(url_lbl, 1)
+
+            # Huy hiệu trạng thái tải ngầm
+            if item.url in self._prefetched_paths and os.path.isfile(self._prefetched_paths[item.url]):
+                tag = QLabel("Đã tải xong")
+                tag.setStyleSheet(
+                    f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; "
+                    f"background: transparent; font-weight: 500;"
+                )
+                r_layout.addWidget(tag)
+
+            cb_voice = QComboBox()
+            cb_voice.addItems(available_voices)
+            curr_v = item.voice or "(Theo dự án)"
+            curr_idx = cb_voice.findText(curr_v)
+            if curr_idx >= 0:
+                cb_voice.setCurrentIndex(curr_idx)
+            elif item.voice:
+                cb_voice.addItem(item.voice)
+                cb_voice.setCurrentIndex(cb_voice.count() - 1)
+
+            cb_voice.setStyleSheet(
+                f"QComboBox {{ background: {tokens.BG_ELEVATED}; color: {tokens.TEXT_PRIMARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: {tokens.RADIUS_SM}px; "
+                f"padding: 2px 8px; font-size: {tokens.FS_META}px; min-width: 130px; }}"
+            )
+            cb_voice.currentTextChanged.connect(
+                lambda v, i=idx: self._on_item_voice_changed(i, v)
+            )
+            r_layout.addWidget(cb_voice)
+
+            # Nút chỉnh Blur, Sub, Logo, Watermark riêng cho video này
+            has_custom = item.url in self._custom_items and any(
+                bool(v) for v in self._custom_items[item.url].values()
+            )
+            btn_text = "Đã chỉnh riêng" if has_custom else "Hiệu ứng & Sub…"
+            btn_fx = GhostButton(btn_text)
+            if has_custom:
+                btn_fx.setStyleSheet(
+                    f"color: {tokens.PRIMARY}; border: 1px solid {tokens.PRIMARY}; "
+                    f"font-size: {tokens.FS_META}px; border-radius: {tokens.RADIUS_SM}px; padding: 2px 8px;"
+                )
+            else:
+                btn_fx.setStyleSheet(
+                    f"font-size: {tokens.FS_META}px; border-radius: {tokens.RADIUS_SM}px; padding: 2px 8px;"
+                )
+            btn_fx.clicked.connect(lambda _c=False, u=item.url, i=idx: self._open_item_custom_dialog(u, i))
+            r_layout.addWidget(btn_fx)
+
+            if has_custom:
+                btn_clone = GhostButton("Nhân bản cho tất cả")
+                btn_clone.setStyleSheet(
+                    f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
+                    f"border: 1px dashed {tokens.BORDER_SUBTLE}; border-radius: {tokens.RADIUS_SM}px; padding: 2px 6px;"
+                )
+                btn_clone.clicked.connect(lambda _c=False, u=item.url: self._apply_custom_to_all(u))
+                r_layout.addWidget(btn_clone)
+
+            btn_del = IconButton(icons.trash(tokens.DANGER), "Xóa video này", size=24)
+            btn_del.clicked.connect(lambda _c=False, i=idx: self._remove_item(i))
+            r_layout.addWidget(btn_del)
+
+            self.setup_layout.addWidget(row)
+
+    def _apply_bulk_voice(self) -> None:
+        """Áp dụng một giọng đọc cho tất cả các video trong danh sách."""
+        if not hasattr(self, "_bulk_voice_combo"):
+            return
+        chosen = self._bulk_voice_combo.currentText()
+        val = chosen if chosen and chosen != "(Theo dự án)" else None
+        items = self.items()
+        new_lines = []
+        for it in items:
+            it.voice = val
+            if val:
+                new_lines.append(f"{it.url} | {val}")
+            else:
+                new_lines.append(it.url)
+        self._block_table_refresh = True
+        self.url.set_text("\n".join(new_lines))
+        self._block_table_refresh = False
+        self._refresh_setup_table()
+        self.changed.emit()
+
+    def _apply_custom_to_all(self, source_url: str) -> None:
+        """Sao chép cấu hình riêng (Blur, Sub, Logo, Watermark) của 1 video sang mọi video khác."""
+        if source_url not in self._custom_items:
+            return
+        import copy
+        src_data = self._custom_items[source_url]
+        for it in self.items():
+            if it.url and it.url != source_url:
+                self._custom_items[it.url] = copy.deepcopy(src_data)
+        self._refresh_setup_table()
+        self.changed.emit()
+
+    def _remove_item(self, index: int) -> None:
+        items = self.items()
+        if 0 <= index < len(items):
+            popped = items.pop(index)
+            if popped.url and popped.url in self._custom_items:
+                self._custom_items.pop(popped.url, None)
+            new_lines = []
+            for it in items:
+                if it.voice:
+                    new_lines.append(f"{it.url} | {it.voice}")
+                else:
+                    new_lines.append(it.url)
+            self.url.set_text("\n".join(new_lines))
+
+    def _on_item_voice_changed(self, index: int, voice_name: str) -> None:
+        items = self.items()
+        if 0 <= index < len(items):
+            items[index].voice = voice_name if voice_name and voice_name != "(Theo dự án)" else None
+            new_lines = []
+            for it in items:
+                if it.voice:
+                    new_lines.append(f"{it.url} | {it.voice}")
+                else:
+                    new_lines.append(it.url)
+            self._block_table_refresh = True
+            self.url.set_text("\n".join(new_lines))
+            self._block_table_refresh = False
+            self.changed.emit()
 
     def _pick_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -159,35 +646,46 @@ class VideoStep(_StepPanel):
         self.file_edit.set_text(path)
 
     def set_resume(self, work_dir: str) -> None:
-        """Chuyển bước 1 sang «Tiếp tục dang dở» trỏ vào một dự án có sẵn.
-
-        Trang cha gọi khi một lượt chạy dừng giữa chừng (lỗi, hết Vox, chờ
-        dịch tay) — bấm chạy lại sẽ đi tiếp đúng dự án cũ thay vì tạo dự án
-        mới và bị trừ Vox lần nữa.
-        """
+        """Chuyển bước 1 sang «Tiếp tục dang dở» trỏ vào một dự án có sẵn."""
         self.source.set_key("resume")
         self._on_source("resume")
         self.resume_edit.set_text(work_dir)
 
     def values(self) -> dict:
+        items = self.items()
+        urls = [it.url for it in items if it.url]
         return {
             "source": self.source.current_key(),
-            "url": self.url.text(),
+            "url": urls[0] if len(urls) == 1 else self.url.text(),
+            "urls": urls,
+            "items": [{"url": it.url, "voice": it.voice,
+                       "has_custom": it.url in self._custom_items} for it in items],
+            "custom_items": self._custom_items,
+            "concurrency": int(self.concurrency_slider.value()) if len(urls) > 1 else 1,
             "file_path": self.file_edit.text(),
             "resume_dir": self.resume_edit.text(),
         }
 
     def load(self, data: dict) -> None:
         self.source.set_key(data.get("source", "url"))
-        self.url.set_text(data.get("url", ""))
-        self.file_edit.set_text(data.get("file_path", ""))
-        self.resume_edit.set_text(data.get("resume_dir", ""))
+        self._custom_items = dict(data.get("custom_items") or {})
+        if data.get("source") == "file":
+            self.file_edit.set_text(data.get("file_path", ""))
+        elif data.get("source") == "resume":
+            self.resume_edit.set_text(data.get("resume_dir", ""))
+        else:
+            self.url.set_text(data.get("url", ""))
+        self._on_source(data.get("source", "url"))
+        self._on_url_changed()
+        if "concurrency" in data:
+            self.concurrency_slider.set_value(float(data["concurrency"]))
         self._on_source(self.source.current_key())
+        self._on_url_changed()
 
     def is_complete(self) -> tuple[bool, str]:
         key = self.source.current_key()
-        if key == "url" and not self.url.text():
-            return False, "Hãy dán liên kết video trước khi đi tiếp."
+        if key == "url" and not self.urls():
+            return False, "Hãy dán ít nhất một liên kết video hợp lệ trước khi đi tiếp."
         if key == "file":
             path = self.file_edit.text()
             if not path:

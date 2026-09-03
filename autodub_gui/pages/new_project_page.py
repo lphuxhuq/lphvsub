@@ -64,11 +64,7 @@ _RUN_INDEX = 4
 _EXPORT_INDEX = 5
 
 
-def cache_dir() -> str:
-    """Thư mục lưu bản nháp và dữ liệu tạm của giao diện."""
-    path = os.path.join(os.path.expanduser("~"), ".voxdub_cache")
-    os.makedirs(path, exist_ok=True)
-    return path
+from autodub.config import cache_dir
 
 
 class NewProjectPage(BasePage):
@@ -77,12 +73,14 @@ class NewProjectPage(BasePage):
     settings_needed = Signal(str)
     edit_requested = Signal(str)
     home_requested = Signal()
+    projects_requested = Signal()
     balance_changed = Signal(int)
 
     def __init__(self, settings_provider, parent: QWidget | None = None):
         super().__init__(parent)
         self._settings_provider = settings_provider
         self._worker: DubWorker | None = None
+        self._batch_worker: BatchWorker | None = None
         self._export_worker: ExportWorker | None = None
         self._prefetch_worker: PrefetchWorker | None = None
         self._prefetched_path: str = ""   # file đã tải sẵn khi nguồn là URL
@@ -257,9 +255,15 @@ class NewProjectPage(BasePage):
         if index == _RUN_INDEX:
             self._start()
             return
-        # Bước 1 nguồn URL: tải ngầm trước, khi xong mới chuyển bước 2
+        # Bước 1 nguồn URL: tải ngầm trước (với 1 URL), khi xong mới chuyển bước 2
         if index == 0 and self.step_video.source.current_key() == "url":
-            url = self.step_video.url.text().strip()
+            urls = self.step_video.urls()
+            if len(urls) > 1:
+                # Chế độ đa luồng nhiều URL: bỏ qua prefetch đơn lẻ, chuyển thẳng sang các bước cấu hình
+                self.stepper.set_max_reached(0)
+                self._go_to_step(1)
+                return
+            url = urls[0] if urls else self.step_video.url.text().strip()
             # File đã tải sẵn và chưa bị xóa thì chuyển ngay
             if self._prefetched_path and os.path.isfile(self._prefetched_path):
                 self.stepper.set_max_reached(0)
@@ -277,7 +281,7 @@ class NewProjectPage(BasePage):
             return
         self._go_to_step(index - 1)
 
-    def _on_url_changed(self, _text: str) -> None:
+    def _on_url_changed(self, _text: str = "") -> None:
         """URL thay đổi → file tải sẵn không còn hợp lệ, hủy tải nếu đang tải."""
         if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
             self._prefetch_worker.cancel()
@@ -422,8 +426,8 @@ class NewProjectPage(BasePage):
                 data["active_work_dir"] = self._active_work_dir
                 data["active_status"] = self._active_status
             with open(self._draft_path(), "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False)
-        except OSError:
+                json.dump(data, f, ensure_ascii=False, default=str)
+        except Exception:
             pass      # không lưu được nháp thì cũng không cản trở việc chính
 
     def _load_draft(self) -> None:
@@ -574,11 +578,18 @@ class NewProjectPage(BasePage):
             "watermark_font_size": 26,
             "watermark_speed": voice_vals.get("watermark_speed", 40),
         }
+        settings = self._settings_provider()
+        mask_opts = {
+            "mask_method": getattr(self, "_mask_method", getattr(settings, "mask_method", "blur")),
+            "inpaint_engine": getattr(self, "_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")),
+            "inpaint_device": getattr(self, "_inpaint_device", getattr(settings, "inpaint_device", "auto")),
+        }
         try:
             dialog = StyleDialog(
                 video, style, self._blur_regions, self,
                 logo_options=logo_opts,
                 watermark_options=wm_opts,
+                mask_options=mask_opts,
             )
         except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
             ConfirmDialog.show_error(
@@ -592,10 +603,15 @@ class NewProjectPage(BasePage):
         self._subtitle_style = dict(dialog.style(), preset="custom")
         self.step_voice.preset.set_key("custom")
         self._blur_regions = dialog.regions()
+        new_mask = dialog.mask_options()
+        self._mask_method = new_mask["mask_method"]
+        self._inpaint_engine = new_mask["inpaint_engine"]
+        self._inpaint_device = new_mask["inpaint_device"]
         if hasattr(self.step_voice, "set_logo_options"):
             self.step_voice.set_logo_options(dialog.logo_options())
         if hasattr(self.step_voice, "set_watermark_options"):
             self.step_voice.set_watermark_options(dialog.watermark_options())
+
         self._update_style_summary()
         try:
             settings = self._settings_provider()
@@ -848,9 +864,84 @@ class NewProjectPage(BasePage):
             pass   # không ghi được cấu hình thì lần chạy này vẫn đúng lựa chọn
 
     def _start(self) -> None:
+        data = self.values()
+        items = self.step_video.items() if data.get("source") == "url" else []
+        if data.get("source") == "url" and len(items) > 1:
+            request = self._build_request()
+            if request is not None:
+                concurrency = int(data.get("concurrency", 2))
+                self._launch_batch(items, concurrency, request)
+            return
+
         request = self._build_request()
         if request is not None:
             self._launch(request)
+
+    def _launch_batch(self, items, concurrency: int, template: DubRequest) -> None:
+        from autodub.batch import BatchItem
+        from autodub_gui.workers import BatchWorker
+
+        if (self._worker is not None and self._worker.isRunning()) or (
+                self._batch_worker is not None and self._batch_worker.isRunning()):
+            TOASTS.warn("Đang có tác vụ chạy dở. Hãy đợi xong hoặc bấm Dừng.")
+            return
+        if REGISTRY.is_busy():
+            job = REGISTRY.current()
+            TOASTS.warn(f"Đang chạy «{job.title}» ở trang khác. "
+                        "Hãy đợi xong hoặc dừng việc đó trước.")
+            return
+
+        self.pending_banner.setVisible(False)
+        self.done_banner.setVisible(False)
+        self.steps.reset()
+        self.log.reset_log()
+        self.run_stats.reset()
+        self._narrator.reset()
+        self._set_running(True)
+
+        batch_items = [it if isinstance(it, BatchItem) else BatchItem(url=str(it)) for it in items]
+        self.log.append_log(
+            f"Bắt đầu xử lý {len(batch_items)} video (Đa luồng: {concurrency} luồng song song)...",
+            logging.INFO
+        )
+
+        worker = BatchWorker(
+            self._run_settings(), template, batch_items,
+            concurrency=concurrency
+        )
+        worker.progress.connect(self.steps.apply_event)
+        worker.progress.connect(self.run_stats.apply_event)
+        worker.progress.connect(REGISTRY.update_job)
+        worker.progress.connect(self._on_progress_log)
+        worker.item_status.connect(self._on_batch_item_status)
+        worker.log.connect(self.log.append_log)
+        worker.finished_ok.connect(self._on_batch_finished)
+        worker.failed.connect(self._on_failed)
+        worker.cancelled.connect(self._on_cancelled)
+        worker.finished.connect(lambda: self._set_running(False))
+        self._batch_worker = worker
+
+        REGISTRY.start_job(
+            ActiveJob(kind="batch", title=f"Đa luồng ({len(batch_items)} video)",
+                      work_dir=""),
+            on_cancel=self._cancel)
+        worker.start()
+
+    def _on_batch_item_status(self, index: int, total: int, url: str, status: str, detail: str) -> None:
+        status_map = {
+            "start": "Bắt đầu xử lý",
+            "success": "Hoàn thành thành công",
+            "failed": f"Thất bại ({detail})" if detail else "Thất bại",
+        }
+        text = f"[{index + 1}/{total}] {url} -> {status_map.get(status, status)}"
+        self.log.append_log(text, logging.INFO)
+
+    def _on_batch_finished(self, summary) -> None:
+        REGISTRY.finish_job(True)
+        self._reset_session()
+        msg = f"Đã xử lý xong {summary.success}/{summary.total} video thành công."
+        TOASTS.success(msg, action_label="Xem dự án", on_action=self.projects_requested.emit)
+        self.log.append_log(f"Tổng kết: {summary.success} thành công, {summary.failed} lỗi, {summary.skipped} bỏ qua.", logging.INFO)
 
     def _resume_after_translation(self) -> None:
         if self._result is None:
@@ -943,6 +1034,8 @@ class NewProjectPage(BasePage):
                     kind="warning", confirm_label="Dừng")
                 if not confirmed or not worker.isRunning():
                     return
+        elif self._batch_worker is not None and self._batch_worker.isRunning():
+            worker = self._batch_worker
         elif self._export_worker is not None and self._export_worker.isRunning():
             worker = self._export_worker
         if worker is None:
@@ -1239,13 +1332,13 @@ class NewProjectPage(BasePage):
     # -- Vòng đời ------------------------------------------------------
     def is_running(self) -> bool:
         return any(w is not None and w.isRunning()
-                   for w in (self._worker, self._export_worker))
+                   for w in (self._worker, self._export_worker, self._batch_worker))
 
     def shutdown(self) -> None:
         if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
             self._prefetch_worker.cancel()
             self._prefetch_worker.wait(3000)
-        for worker in (self._worker, self._export_worker):
+        for worker in (self._worker, self._export_worker, self._batch_worker):
             if worker is not None and worker.isRunning():
                 worker.cancel()
                 worker.wait(5000)

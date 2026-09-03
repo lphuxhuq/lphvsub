@@ -261,9 +261,14 @@ class BatchPage(BasePage):
             self.opt_subtitle.set_key(self._settings_provider().subtitle_mode)
         except Exception:  # noqa: BLE001 — cấu hình hỏng thì giữ mặc định
             pass
+        self.opt_concurrency = LabeledSlider(
+            "Số luồng xử lý song song", 1.0, 4.0, 1.0,
+            "Số video được tải và lồng tiếng đồng thời cùng lúc", " luồng", decimals=0)
+        self.opt_concurrency.set_value(2.0)
+
         section.add_layout(self._grid(
             [self.opt_lang, self.opt_voice, self.opt_bg, self.opt_duck,
-             self.opt_subtitle, self._build_style_block()]))
+             self.opt_subtitle, self._build_style_block(), self.opt_concurrency]))
 
         self.chk_audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề")
         self.chk_reuse = QCheckBox("Giữ bộ giọng giữa các video để chạy nhanh hơn")
@@ -581,11 +586,17 @@ class BatchPage(BasePage):
             "watermark_font_size": getattr(self, "_shared_wm_font_size", 26),
             "watermark_speed": getattr(self, "_shared_wm_speed", 40),
         }
+        mask_opts = {
+            "mask_method": getattr(self, "_shared_mask_method", getattr(settings, "mask_method", "blur")),
+            "inpaint_engine": getattr(self, "_shared_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")),
+            "inpaint_device": getattr(self, "_shared_inpaint_device", getattr(settings, "inpaint_device", "auto")),
+        }
         try:
             dialog = StyleDialog(
                 video, style, list(self._shared_regions), self,
                 logo_options=logo_opts,
                 watermark_options=wm_opts,
+                mask_options=mask_opts,
             )
         except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
             ConfirmDialog.show_error(
@@ -613,6 +624,12 @@ class BatchPage(BasePage):
         self._shared_wm_opacity = new_wm["watermark_opacity"]
         self._shared_wm_font_size = new_wm["watermark_font_size"]
         self._shared_wm_speed = new_wm["watermark_speed"]
+
+        new_mask = dialog.mask_options()
+        self._shared_mask_method = new_mask["mask_method"]
+        self._shared_inpaint_engine = new_mask["inpaint_engine"]
+        self._shared_inpaint_device = new_mask["inpaint_device"]
+
 
         count = len(self._shared_regions)
         self.lbl_style.setText(
@@ -719,7 +736,8 @@ class BatchPage(BasePage):
         worker = BatchWorker(
             self._settings_provider(), self._template(), items,
             retry_done=self.chk_retry.isChecked(),
-            reuse_tts=self.chk_reuse.isChecked())
+            reuse_tts=self.chk_reuse.isChecked(),
+            concurrency=int(self.opt_concurrency.value()))
         worker.progress.connect(self._on_progress)
         worker.item_status.connect(self._on_item_status)
         worker.log.connect(self.log.append_log)
