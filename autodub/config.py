@@ -21,6 +21,13 @@ class ConfigError(Exception):
     """Ném ra khi một mục cấu hình bắt buộc còn trống ngay lúc cần dùng."""
 
 
+def cache_dir() -> str:
+    """Thư mục lưu bản nháp và dữ liệu tạm của giao diện."""
+    path = os.path.join(os.path.expanduser("~"), ".voxdub_cache")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def _auto_vieneu_workers() -> int:
     """Số tiến trình giọng đọc mặc định — theo RAM trống và số nhân CPU.
 
@@ -135,6 +142,9 @@ class Settings:
     # vài trăm ms đầu/cuối câu. Timestamp vẫn lấy biên VAD gốc nên timeline
     # không trượt. 0 = tắt.
     asr_vad_pad_s: float = 0.3
+    # Ưu tiên lấy bản tách giọng (vocals.wav từ Demucs) làm nguồn ASR thay vì
+    # audio gốc lẫn nhạc nền — giúp nhận dạng chuẩn hơn nhiều.
+    asr_use_vocals: bool = True
     # Beam size của Whisper (1–10). 5 là mặc định của thư viện — giữ nguyên
     # chất lượng. Máy CPU yếu có thể hạ (vd 1) để nhanh gấp 2–3 lần, đổi lại
     # kém chính xác hơn một chút — đây là lựa chọn CHỦ ĐỘNG, không tự hạ.
@@ -382,7 +392,12 @@ class Settings:
     # Âm thanh chuyển cảnh tự động (Auto Scene Cut SFX)
     auto_sfx_enabled: bool = False
     sfx_preset: str = "whoosh"  # "whoosh" | "pop" | "swish" | "cinematic"
+    sfx_volume: float = 0.6
     sfx_volume_db: float = -14.0
+
+    # Tùy chọn nền mặc định khi dựng video
+    bg_mode: str = "demucs"
+    bg_duck_db: float = -12.0
 
     # Xử lý video chống quét bản quyền / Reup (Anti-Content ID)
     smart_flip: bool = False
@@ -393,6 +408,16 @@ class Settings:
     voice_vad_trim_enabled: bool = True
     voice_compact_translate_enabled: bool = True
     voice_scene_guard_enabled: bool = True
+
+    # Phương thức che/xóa phụ đề gốc: "blur" (FFmpeg Boxblur) | "ai_inpaint" (AI Inpainting) | "none"
+    mask_method: str = "blur"
+    inpaint_engine: str = "lama_onnx"   # "lama_onnx" | "vsr_cli"
+    inpaint_device: str = "auto"        # "auto" | "cuda" | "directml" | "cpu"
+    inpaint_model_path: str = ""        # mặc định: models/inpaint/lama.onnx
+    vsr_dir: str = ""                   # đường dẫn thư mục cài VSR ngoài
+    # Tự động phân vai đa giọng thông minh bằng AI (AI Multi-Speaker Smart Voice Director)
+    auto_voice_director_enabled: bool = True
+
 
 
 
@@ -468,6 +493,7 @@ class Settings:
             asr_num_threads=max(1, min(16, env_int("ASR_NUM_THREADS", "4"))),
             asr_vad_pad_s=min(1.0, max(0.0,
                 env_float("ASR_VAD_PAD_S", "0.3"))),
+            asr_use_vocals=env_bool("ASR_USE_VOCALS", "true"),
             whisper_beam_size=max(1, min(10, env_int("WHISPER_BEAM_SIZE", "5"))),
             ocr_enabled=env_bool("OCR_ENABLED", "false"),
             ocr_venv_python=env("OCR_VENV_PYTHON"),
@@ -620,10 +646,28 @@ class Settings:
             smart_flip=env_bool("SMART_FLIP", False),
             micro_zoom=env_bool("MICRO_ZOOM", False),
             color_filter=env("COLOR_FILTER", "none").strip() or "none",
+            video_aspect_preset=env("VIDEO_ASPECT_PRESET", "original").strip() or "original",
+            video_reframe_mode=env("VIDEO_REFRAME_MODE", "blur").strip() or "blur",
+            auto_sfx_enabled=env_bool("AUTO_SFX_ENABLED", False),
+            sfx_preset=env("SFX_PRESET", "whoosh").strip() or "whoosh",
+            sfx_volume=min(1.0, max(0.0, env_float("SFX_VOLUME", "0.6"))),
+            sfx_volume_db=env_float("SFX_VOLUME_DB", "-14.0"),
+            bg_mode=env("BG_MODE", "demucs").strip() or "demucs",
+            bg_duck_db=env_float("BG_DUCK_DB", "-12.0"),
             voice_vad_trim_enabled=env_bool("VOICE_VAD_TRIM_ENABLED", True),
             voice_compact_translate_enabled=env_bool("VOICE_COMPACT_TRANSLATE_ENABLED", True),
             voice_scene_guard_enabled=env_bool("VOICE_SCENE_GUARD_ENABLED", True),
+            mask_method=_one_of(env("MASK_METHOD", "blur"),
+                                ("blur", "ai_inpaint", "none"), "blur"),
+            inpaint_engine=_one_of(env("INPAINT_ENGINE", "lama_onnx"),
+                                   ("lama_onnx", "vsr_cli"), "lama_onnx"),
+            inpaint_device=_one_of(env("INPAINT_DEVICE", "auto"),
+                                   ("auto", "cuda", "directml", "cpu"), "auto"),
+            inpaint_model_path=env_dir("INPAINT_MODEL_PATH", ""),
+            vsr_dir=env_dir("VSR_DIR", ""),
+            auto_voice_director_enabled=env_bool("AUTO_VOICE_DIRECTOR", True),
         )
+
 
 
     def blur_regions_list(self) -> list[dict]:

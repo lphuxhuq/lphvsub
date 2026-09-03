@@ -57,6 +57,7 @@ def run_preflight(settings: Settings | None = None) -> list[CheckResult]:
         lambda s: _check_ram(s),
         _check_vieneu,
         _check_asr,
+        _check_inpaint,
     )
     results: list[CheckResult] = []
     for check in checks:
@@ -267,3 +268,62 @@ def _check_asr(settings: Settings) -> CheckResult:
                    "xác hơn), đặt WHISPER_MODEL=small trong Cài đặt.")
     return CheckResult(key="asr", title="Bộ nghe (Whisper)", level="ok",
                        message=f"Model '{model_name}' đã có sẵn.")
+
+
+def _check_inpaint(settings: Settings) -> CheckResult:
+    """Kiểm tra môi trường AI Inpaint (xóa phụ đề)."""
+    title = "AI Xóa phụ đề"
+    if settings.mask_method != "ai_inpaint":
+        return CheckResult(
+            key="inpaint",
+            title=title,
+            level="ok",
+            message="Chế độ làm mờ Boxblur (nhanh, nhẹ).",
+        )
+
+    if settings.inpaint_engine == "vsr_cli":
+        if settings.vsr_dir and os.path.isdir(settings.vsr_dir):
+            return CheckResult(
+                key="inpaint",
+                title=title,
+                level="ok",
+                message=f"Đã liên kết VSR ngoài ({settings.vsr_dir}).",
+            )
+        return CheckResult(
+            key="inpaint",
+            title=title,
+            level="warn",
+            message="Chưa cấu hình thư mục video-subtitle-remover (VSR).",
+            advice="Thiết lập VSR_DIR trong Cài đặt hoặc chuyển sang dùng LaMa ONNX.",
+        )
+
+    # LaMa ONNX
+    try:
+        import onnxruntime  # noqa: F401
+    except ImportError:
+        return CheckResult(
+            key="inpaint",
+            title=title,
+            level="warn",
+            message="Chưa cài đặt thư viện onnxruntime.",
+            advice="Cài đặt: pip install onnxruntime (hoặc onnxruntime-gpu), hoặc hệ thống sẽ tự fallback về Boxblur.",
+        )
+
+    from autodub.media.inpaint.lama_onnx import default_lama_model_path
+    model_path = settings.inpaint_model_path or default_lama_model_path()
+    if not os.path.isfile(model_path):
+        return CheckResult(
+            key="inpaint",
+            title=title,
+            level="warn",
+            message="Chưa có file model LaMa ONNX (~200MB).",
+            advice=f"Tải file lama.onnx vào thư mục '{model_path}'. Nếu không có model, hệ thống sẽ tự fallback về Boxblur.",
+        )
+
+    return CheckResult(
+        key="inpaint",
+        title=title,
+        level="ok",
+        message="Model LaMa ONNX đã sẵn sàng.",
+    )
+

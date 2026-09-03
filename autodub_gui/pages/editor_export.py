@@ -69,15 +69,20 @@ class VoiceAndExportMixin:
         """
         audio = self.audio_panel.values()
         voice = self.voice_panel.values()
+        base_settings = self._settings_provider()
         return replace(
-            self._settings_provider(),
+            base_settings,
             voice_postprocess=audio["voice_postprocess"],
             voice_target_lufs=audio["voice_target_lufs"],
             bg_duck_voice_db=audio["bg_duck_voice_db"],
             soft_timing_fit=audio["soft_timing_fit"],
             timing_max_drift_s=audio["timing_max_drift_s"],
             voice_speed=voice["voice_speed"],
+            mask_method=getattr(self, "_mask_method", getattr(base_settings, "mask_method", "blur")),
+            inpaint_engine=getattr(self, "_inpaint_engine", getattr(base_settings, "inpaint_engine", "lama_onnx")),
+            inpaint_device=getattr(self, "_inpaint_device", getattr(base_settings, "inpaint_device", "auto")),
         )
+
 
     # -- Khóa chéo ------------------------------------------------------
     def _busy_warn(self) -> bool:
@@ -164,13 +169,20 @@ class VoiceAndExportMixin:
         TOASTS.success("Đã tạo xong giọng đọc mới.")
 
     def _pin_project_voice(self, voice: str) -> None:
-        """Ghi tên giọng đã dùng thật vào tùy chọn của dự án."""
+        """Ghi tên giọng đã dùng thật vào tùy chọn của dự án và cấu hình mặc định."""
         from autodub.editor import load_render_opts, save_render_opts
 
         try:
             opts = load_render_opts(self._work_dir)
             opts["voice"] = voice
+            opts["selected_voice"] = voice
             save_render_opts(self._work_dir, opts)
+            try:
+                from autodub_gui.env_store import write_env
+                if voice:
+                    write_env({"VIENEU_VOICE": voice})
+            except Exception:
+                pass
         except OSError as e:
             TOASTS.warn(f"Không lưu được tên giọng của dự án: {e}")
 
@@ -237,11 +249,17 @@ class VoiceAndExportMixin:
             "watermark_font_size": getattr(self, "_watermark_font_size", 26),
             "watermark_speed": getattr(self, "_watermark_speed", 40),
         }
+        mask_opts = {
+            "mask_method": getattr(self, "_mask_method", "blur"),
+            "inpaint_engine": getattr(self, "_inpaint_engine", "lama_onnx"),
+            "inpaint_device": getattr(self, "_inpaint_device", "auto"),
+        }
         dialog = StyleDialog(video, style,
                              list(getattr(self, "_blur_regions", [])), self,
                              preview_text=preview_text,
                              logo_options=logo_opts,
-                             watermark_options=wm_opts)
+                             watermark_options=wm_opts,
+                             mask_options=mask_opts)
         if not dialog.exec():
             return
         self._subtitle_style = dialog.style()
@@ -264,6 +282,12 @@ class VoiceAndExportMixin:
         self._watermark_opacity = new_wm["watermark_opacity"]
         self._watermark_font_size = new_wm["watermark_font_size"]
         self._watermark_speed = new_wm["watermark_speed"]
+
+        new_mask = dialog.mask_options()
+        self._mask_method = new_mask["mask_method"]
+        self._inpaint_engine = new_mask["inpaint_engine"]
+        self._inpaint_device = new_mask["inpaint_device"]
+
 
         if self.export_panel.subtitle.current_key() != "burn":
             self.export_panel.subtitle.set_key("burn")
@@ -669,13 +693,27 @@ class VoiceAndExportMixin:
 
         if not self._work_dir:
             return {}
-        meta_path = os.path.join(self._work_dir, "youtube", "youtube_metadata.json")
-        if os.path.exists(meta_path):
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
+        candidates = [
+            os.path.join(self._work_dir, "youtube", "youtube_metadata.json"),
+            os.path.join(self._work_dir, "youtube_metadata.json"),
+            os.path.join(self._work_dir, "data", "video_meta.json"),
+        ]
+        for meta_path in candidates:
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict) and (data.get("title") or data.get("hashtags")):
+                        return data
+                except Exception:
+                    pass
+        title = getattr(self._project, "title", "") if hasattr(self, "_project") and self._project else ""
+        if title:
+            return {
+                "title": title,
+                "description": f"Video {title} bản tiếng Việt lồng tiếng AI.",
+                "hashtags": ["#shorts", "#reviewphim", "#trending", "#viral", "#xuhuong", "#phimhay"]
+            }
         return {}
 
     def _copy_youtube_title(self) -> None:
@@ -699,5 +737,58 @@ class VoiceAndExportMixin:
         if full:
             QApplication.clipboard().setText(full)
             TOASTS.success("Đã chép mô tả & hashtag vào Clipboard!")
+    def _copy_youtube_hashtags(self) -> None:
+        """Sao chép danh sách hashtag vào clipboard."""
+        from PySide6.QtWidgets import QApplication
+        meta = self._get_social_metadata()
+        tags = meta.get("hashtags", [])
+        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        if tags_str:
+            QApplication.clipboard().setText(tags_str)
+            TOASTS.success("Đã chép Hashtags vào Clipboard!")
         else:
-            TOASTS.info("Chưa có mô tả.")
+            TOASTS.info("Chưa có hashtags.")
+
+    def _copy_youtube_all(self) -> None:
+        """Sao chép toàn bộ tiêu đề, mô tả và hashtag vào clipboard."""
+        from PySide6.QtWidgets import QApplication
+        meta = self._get_social_metadata()
+        title = meta.get("title") or getattr(self._project, "title", "")
+        desc = meta.get("description", "")
+        tags = meta.get("hashtags", [])
+        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        
+        parts = []
+        if title:
+            parts.append(f"Tiêu đề:\n{title}")
+        if desc:
+            parts.append(f"Mô tả:\n{desc}")
+        if tags_str:
+            parts.append(f"Hashtags:\n{tags_str}")
+        full = "\n\n".join(parts).strip()
+        if full:
+            QApplication.clipboard().setText(full)
+            TOASTS.success("Đã chép toàn bộ Tiêu đề, Mô tả & Hashtag!")
+        else:
+            TOASTS.info("Chưa có nội dung metadata.")
+
+    def _refresh_social_metadata(self) -> None:
+        """Cập nhật thông tin tiêu đề, hashtag và tên video lên panel xuất video."""
+        import os
+        meta = self._get_social_metadata()
+        video_name = ""
+        if hasattr(self, "_project") and self._project:
+            video_path = getattr(self._project, "video_path", "") or getattr(self._project, "input_video", "") or ""
+            video_name = os.path.basename(video_path) if video_path else ""
+        if hasattr(self, "export_panel") and hasattr(self.export_panel, "set_social_metadata"):
+            self.export_panel.set_social_metadata(meta, video_name)
+
+    def _open_viral_clipper_dialog(self) -> None:
+        """Mở hộp thoại AI Viral Shorts & Reels Clipper."""
+        if not self._state:
+            TOASTS.info("Chưa có dự án nào được mở.")
+            return
+        from autodub_gui.viral_clipper_dialog import ViralClipperDialog
+        dlg = ViralClipperDialog(self, self._state, settings=self._settings_provider())
+        dlg.exec()
+

@@ -216,6 +216,10 @@ def merge_video(
     micro_zoom: bool = False,
     color_filter: str = "none",
     reframe_mode: str = "blur",
+    mask_method: str = "blur",
+    inpaint_engine: str = "lama_onnx",
+    inpaint_device: str = "auto",
+    inpaint_model_path: str | None = None,
 ) -> str:
 
     """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
@@ -230,6 +234,11 @@ def merge_video(
     captions. Coordinates are normalized 0..1 dicts (``x``/``y``/``w``/``h``,
     optional ``t_start``/``t_end``). Any blur forces a re-encode, so it is
     applied in the same pass as burned-in subtitles.
+
+    ``mask_method``:
+    - ``blur`` — FFmpeg Boxblur (default, fast 1-pass encode)
+    - ``ai_inpaint`` — AI Inpainting Subtitle Remover (LaMa ONNX / VSR)
+    - ``none`` — do not mask/blur source subtitles
 
     ``aspect_preset`` converts the canvas ratio with blurred background padding
     (e.g., "tiktok_9_16", "youtube_16_9", "square_1_1"). Forces a re-encode.
@@ -253,6 +262,25 @@ def merge_video(
     if srt_path and subtitle_mode != "none" and not os.path.exists(srt_path):
         raise FileNotFoundError(f"Subtitle file not found: {srt_path}")
 
+    actual_video_path = video_path
+    effective_blur_regions = blur_regions
+
+    if mask_method == "ai_inpaint" and blur_regions:
+        try:
+            from autodub.media.inpaint import inpaint_video_with_cache
+            actual_video_path = inpaint_video_with_cache(
+                video_path=video_path,
+                regions=blur_regions,
+                engine_type=inpaint_engine,
+                device=inpaint_device,
+                model_path=inpaint_model_path,
+            )
+            # Sau khi đã xóa sạch bằng AI Inpaint, bỏ blur_regions trên filtergraph
+            effective_blur_regions = []
+        except Exception as e:
+            logger.warning(f"Lỗi khi thực hiện AI Inpaint ({e}) — tự động chuyển sang làm mờ Boxblur.")
+            effective_blur_regions = blur_regions
+
     from autodub.media.subtitle import build_filter_complex
 
     burn_srt = srt_path if subtitle_mode == "burn" else None
@@ -260,10 +288,10 @@ def merge_video(
     has_logo = bool(logo_path and str(logo_path).strip())
     has_wm = bool(watermark_text and str(watermark_text).strip())
     has_anti_id = bool(smart_flip or micro_zoom or (color_filter and color_filter not in ("none", "original", "")))
-    if blur_regions or burn_srt or has_logo or has_wm or has_anti_id or (aspect_preset and aspect_preset not in ("original", "none")):
-        width, height = probe_dimensions(video_path)
+    if effective_blur_regions or burn_srt or has_logo or has_wm or has_anti_id or (aspect_preset and aspect_preset not in ("original", "none")):
+        width, height = probe_dimensions(actual_video_path)
         filter_complex = build_filter_complex(
-            blur_regions, width, height, burn_srt, subtitle_style,
+            effective_blur_regions, width, height, burn_srt, subtitle_style,
             aspect_preset=aspect_preset,
             logo_path=logo_path,
             logo_position=logo_position,
@@ -297,7 +325,7 @@ def merge_video(
         else:
             filter_complex = f"[0:v]{setpts}[vout]"
 
-    cmd = ["ffmpeg", "-i", video_path, "-i", audio_path]
+    cmd = ["ffmpeg", "-i", actual_video_path, "-i", audio_path]
     if subtitle_mode == "soft":
         cmd += ["-i", srt_path]
 
@@ -318,9 +346,15 @@ def merge_video(
         cmd += ["-c:v", "copy", "-map", "0:v:0", "-map", "1:a"]
 
     if subtitle_mode == "soft":
-        # mov_text is the subtitle codec MP4 containers accept.
-        cmd += ["-map", "2:0", "-c:s", "mov_text",
-                "-metadata:s:s:0", f"language={subtitle_lang}"]
+        # Stream-copy soft subs as mov_text / srt
+        ext = os.path.splitext(output_path)[1].lower()
+        sub_codec = "mov_text" if ext in (".mp4", ".m4v", ".mov") else "srt"
+        cmd += [
+            "-map", "2:s",
+            "-c:s", sub_codec,
+            f"-metadata:s:s:0", f"language={subtitle_lang}",
+            "-disposition:s:0", "default",
+        ]
 
     cmd += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output_path]
 

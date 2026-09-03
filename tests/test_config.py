@@ -251,3 +251,27 @@ def test_video_aspect_preset_setting():
     s = Settings(video_aspect_preset="tiktok_9_16")
     assert s.video_aspect_preset == "tiktok_9_16"
 
+
+def test_inpaint_settings_defaults(monkeypatch):
+    monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
+    for var in ("MASK_METHOD", "INPAINT_ENGINE", "INPAINT_DEVICE", "INPAINT_MODEL_PATH", "VSR_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings.load()
+    assert s.mask_method == "blur"
+    assert s.inpaint_engine == "lama_onnx"
+    assert s.inpaint_device == "auto"
+    assert s.inpaint_model_path == ""
+    assert s.vsr_dir == ""
+
+
+def test_inpaint_settings_load_env(monkeypatch):
+    monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
+    monkeypatch.setenv("MASK_METHOD", "ai_inpaint")
+    monkeypatch.setenv("INPAINT_ENGINE", "vsr_cli")
+    monkeypatch.setenv("INPAINT_DEVICE", "cuda")
+    s = Settings.load()
+    assert s.mask_method == "ai_inpaint"
+    assert s.inpaint_engine == "vsr_cli"
+    assert s.inpaint_device == "cuda"
+
+

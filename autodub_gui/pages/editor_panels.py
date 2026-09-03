@@ -806,6 +806,25 @@ class VoicePanel(CollapsibleSection):
         self.speed.changed.connect(lambda _v: self.changed.emit())
         self.add_widget(self.speed)
 
+        # --- AI Multi-Speaker Voice Director ---
+        self.cb_auto_director = QCheckBox("Tự động phân vai AI (Đa nhân vật)")
+        self.cb_auto_director.setToolTip(
+            "Tự động nhận diện Nam/Nữ và người dẫn chuyện để ghép các giọng đọc riêng biệt."
+        )
+        self.cb_auto_director.setChecked(True)
+        self.cb_auto_director.toggled.connect(self._on_auto_director_toggled)
+        self.add_widget(self.cb_auto_director)
+
+        self.speakers_container = QWidget()
+        self.speakers_layout = QVBoxLayout(self.speakers_container)
+        self.speakers_layout.setContentsMargins(0, tokens.SP_1, 0, tokens.SP_1)
+        self.speakers_layout.setSpacing(tokens.SP_2)
+        self.speakers_container.setVisible(False)
+        self.add_widget(self.speakers_container)
+
+        self._speaker_pickers: dict[int, object] = {}
+        self._speaker_voices: dict[int, str] = {}
+
         row = QHBoxLayout()
         row.setSpacing(tokens.SP_2)
         self.btn_resynth = PrimaryButton("Lưu tất cả và đọc lại")
@@ -826,6 +845,75 @@ class VoicePanel(CollapsibleSection):
             f"background: transparent;")
         self.add_widget(self.status)
         self._project_voice = ""
+
+    def _on_auto_director_toggled(self, checked: bool) -> None:
+        self.speakers_container.setVisible(checked and bool(self._speaker_pickers))
+        self.changed.emit()
+
+    def set_speakers(
+        self,
+        segments: list[dict],
+        speaker_voices: dict[int, str] | None = None,
+        speaker_profiles: dict | None = None,
+    ) -> None:
+        """Hiển thị danh sách các nhân vật và giọng tương ứng trong video."""
+        from autodub_gui.voice_picker import VoicePicker
+
+        # Xóa các picker cũ
+        while self.speakers_layout.count():
+            item = self.speakers_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        self._speaker_pickers.clear()
+        self._speaker_voices = dict(speaker_voices or {})
+
+        spk_counts: dict[int, int] = {}
+        for s in segments:
+            spk_id = int(s.get("speaker_id", 0))
+            spk_counts[spk_id] = spk_counts.get(spk_id, 0) + 1
+
+        if len(spk_counts) <= 1:
+            self.cb_auto_director.setVisible(False)
+            self.speakers_container.setVisible(False)
+            return
+
+        self.cb_auto_director.setVisible(True)
+        self.speakers_container.setVisible(self.cb_auto_director.isChecked())
+
+        header = QLabel("Phân vai nhân vật (Speaker Voices):")
+        header.setStyleSheet(
+            f"color: {tokens.TEXT_SECONDARY}; font-weight: bold; font-size: {tokens.FS_META}px; background: transparent;"
+        )
+        self.speakers_layout.addWidget(header)
+
+        for spk_id in sorted(spk_counts.keys()):
+            count = spk_counts[spk_id]
+            title = f"Người nói {spk_id + 1} ({count} câu)"
+            if speaker_profiles and spk_id in speaker_profiles:
+                p = speaker_profiles[spk_id]
+                gender_str = "Nam" if p.get("gender") == "male" else ("Nữ" if p.get("gender") == "female" else "")
+                role_str = "Dẫn chuyện" if p.get("role") == "narrator" else "Nhân vật"
+                tag = " · ".join(x for x in [role_str, gender_str] if x)
+                title = f"Người nói {spk_id + 1} — {tag} ({count} câu)"
+
+            picker = VoicePicker(title)
+            current_v = self._speaker_voices.get(spk_id, self._project_voice or self.picker.voice())
+            if current_v:
+                picker.set_voice(current_v)
+
+            def _make_handler(sid=spk_id, pkr=picker):
+                def _handler():
+                    self._speaker_voices[sid] = pkr.voice()
+                    self.changed.emit()
+                return _handler
+
+            picker.changed.connect(_make_handler())
+            picker.preview_requested.connect(self.preview_requested.emit)
+
+            self.speakers_layout.addWidget(picker)
+            self._speaker_pickers[spk_id] = picker
+
 
     def set_project_voice(self, name: str) -> None:
         """Ghi nhớ giọng video này đang dùng thật, để so khi người dùng đổi."""
@@ -876,7 +964,13 @@ class VoicePanel(CollapsibleSection):
         # KHÔNG trả về "voice": khóa đó trong render_opts luôn là giọng đã
         # nằm thật trong âm thanh, chỉ được cập nhật sau khi đọc lại thành
         # công (xem editor_export._on_resynth_done).
-        return {"voice_speed": self.speed.value()}
+        vals: dict = {
+            "voice_speed": self.speed.value(),
+            "auto_voice_director_enabled": self.cb_auto_director.isChecked(),
+        }
+        if self._speaker_voices:
+            vals["speaker_voices"] = dict(self._speaker_voices)
+        return vals
 
 
 class BackgroundPanel(CollapsibleSection):
@@ -923,12 +1017,15 @@ class ExportPanel(CollapsibleSection):
     subtitles_requested = Signal()
     style_requested = Signal()
     preview_requested = Signal()
+    viral_shorts_requested = Signal()
     export_srt_requested = Signal()
     export_ass_requested = Signal()
     export_audio_mp3_requested = Signal()
     open_thumb_requested = Signal()
     copy_title_requested = Signal()
     copy_desc_requested = Signal()
+    copy_tags_requested = Signal()
+    copy_all_requested = Signal()
     changed = Signal()
 
     def __init__(self, parent: QWidget | None = None):
@@ -976,9 +1073,14 @@ class ExportPanel(CollapsibleSection):
             "Ghép lại cả âm thanh lẫn hình. Dùng khi bạn vừa đọc lại giọng "
             "hoặc đổi nhạc nền.")
         self.btn_export.clicked.connect(self.export_requested.emit)
-        # Hai nút xếp DỌC: bảng bên phải có thể hẹp tới 280 điểm, đặt cạnh
-        # nhau là nhãn dài («Ghi lại phụ đề vào video») bị ép cắt chữ.
-        for button in (self.btn_preview, self.btn_export, self.btn_subtitles):
+
+        self.btn_viral_shorts = PrimaryButton("AI Tạo Shorts & Reels (9:16)")
+        self.btn_viral_shorts.setToolTip(
+            "Tự động phân tích các đoạn cao trào kịch tính và trích xuất video ngắn 9:16 chuẩn TikTok/Shorts.")
+        self.btn_viral_shorts.clicked.connect(self.viral_shorts_requested.emit)
+
+        # Các nút xếp DỌC: bảng bên phải có thể hẹp tới 280 điểm
+        for button in (self.btn_preview, self.btn_export, self.btn_subtitles, self.btn_viral_shorts):
             row = QHBoxLayout()
             row.setSpacing(tokens.SP_2)
             row.addWidget(button)
@@ -1028,8 +1130,8 @@ class ExportPanel(CollapsibleSection):
             row2.addStretch()
             self.add_layout(row2)
 
-        # --- Đăng bài & Thumbnail -------------------------------------------
-        sep_post = QLabel("Đăng bài & Thumbnail")
+        # --- Đăng bài & Metadata Mạng Xã Hội --------------------------------
+        sep_post = QLabel("Đăng bài & Metadata Video")
         sep_post.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
             f"font-weight: 600; background: transparent; "
@@ -1037,19 +1139,36 @@ class ExportPanel(CollapsibleSection):
             f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;")
         self.add_widget(sep_post)
 
-        self.btn_open_thumb = GhostButton("Xem ảnh bìa Thumbnail")
-        self.btn_open_thumb.setToolTip("Mở ảnh bìa Thumbnail được tự động thiết kế riêng cho video này.")
-        self.btn_open_thumb.clicked.connect(self.open_thumb_requested.emit)
+        self.video_meta_info = QLabel("")
+        self.video_meta_info.setWordWrap(True)
+        self.video_meta_info.setStyleSheet(
+            f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
+            f"background: {tokens.BG_INPUT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
+            f"border-radius: 6px; padding: 8px; line-height: 1.4;")
+        self.video_meta_info.setVisible(False)
+        self.add_widget(self.video_meta_info)
 
-        self.btn_copy_title = GhostButton("Chép tiêu đề (YouTube/TikTok)")
-        self.btn_copy_title.setToolTip("Sao chép nhanh tiêu đề giật tít tiếng Việt vào Clipboard.")
+        self.btn_copy_title = GhostButton("Chép Tiêu đề")
+        self.btn_copy_title.setToolTip("Sao chép nhanh tiêu đề tiếng Việt vào Clipboard.")
         self.btn_copy_title.clicked.connect(self.copy_title_requested.emit)
 
-        self.btn_copy_desc = GhostButton("Chép mô tả & hashtag")
-        self.btn_copy_desc.setToolTip("Sao chép nội dung mô tả và hashtag SEO vào Clipboard.")
+        self.btn_copy_tags = GhostButton("Chép Hashtags")
+        self.btn_copy_tags.setToolTip("Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard.")
+        self.btn_copy_tags.clicked.connect(self.copy_tags_requested.emit)
+
+        self.btn_copy_desc = GhostButton("Chép Mô tả")
+        self.btn_copy_desc.setToolTip("Sao chép nội dung mô tả vào Clipboard.")
         self.btn_copy_desc.clicked.connect(self.copy_desc_requested.emit)
 
-        for button in (self.btn_open_thumb, self.btn_copy_title, self.btn_copy_desc):
+        self.btn_copy_all = GhostButton("Chép Toàn bộ")
+        self.btn_copy_all.setToolTip("Sao chép toàn bộ Tiêu đề, Mô tả và Hashtags vào Clipboard.")
+        self.btn_copy_all.clicked.connect(self.copy_all_requested.emit)
+
+        self.btn_open_thumb = GhostButton("Xem ảnh bìa")
+        self.btn_open_thumb.setToolTip("Mở ảnh bìa Thumbnail của video.")
+        self.btn_open_thumb.clicked.connect(self.open_thumb_requested.emit)
+
+        for button in (self.btn_copy_title, self.btn_copy_tags, self.btn_copy_desc, self.btn_copy_all, self.btn_open_thumb):
             row_post = QHBoxLayout()
             row_post.setSpacing(tokens.SP_2)
             row_post.addWidget(button)
@@ -1069,6 +1188,30 @@ class ExportPanel(CollapsibleSection):
         self._hist_list.itemDoubleClicked.connect(self._open_history_item)
         self._hist_section.add_widget(self._hist_list)
         self.add_widget(self._hist_section)
+
+    def set_social_metadata(self, meta: dict, video_name: str = "") -> None:
+        """Cập nhật thông tin tiêu đề, hashtag và tên video lên giao diện."""
+        if not meta and not video_name:
+            self.video_meta_info.setVisible(False)
+            return
+
+        title = (meta or {}).get("title") or ""
+        tags = (meta or {}).get("hashtags") or []
+        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        
+        lines = []
+        if video_name:
+            lines.append(f"<b>Video:</b> {video_name}")
+        if title:
+            lines.append(f"<b>Tiêu đề:</b> {title}")
+        if tags_str:
+            lines.append(f"<b>Hashtags:</b> <span style='color:{tokens.PRIMARY_HOVER};'>{tags_str}</span>")
+
+        if lines:
+            self.video_meta_info.setText("<br>".join(lines))
+            self.video_meta_info.setVisible(True)
+        else:
+            self.video_meta_info.setVisible(False)
 
     def refresh_history(self, work_dir: str) -> None:
         """Nạp lại danh sách bản xuất đã lưu trong export_history."""

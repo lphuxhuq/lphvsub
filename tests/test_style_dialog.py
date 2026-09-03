@@ -66,7 +66,7 @@ def test_style_dialog_tabs_and_logo_watermark(qtbot):
     # 1. Kiểm tra có đủ 4 Tabs
     assert dialog.tabs.count() == 4
     assert dialog.tabs.tabText(0) == "Kiểu chữ"
-    assert dialog.tabs.tabText(1) == "Vùng che (Blur)"
+    assert dialog.tabs.tabText(1) == "Vùng che / Xóa chữ"
     assert dialog.tabs.tabText(2) == "Logo & Watermark"
     assert dialog.tabs.tabText(3) == "Bố cục & SFX"
 

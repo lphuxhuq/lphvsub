@@ -553,6 +553,11 @@ EXEMPT_KEYS: dict[str, str] = {
     "VOICE_SCENE_GUARD_ENABLED": "tùy chọn kỹ thuật chống tràn giọng qua chuyển cảnh",
     "VOICE_VAD_TRIM_ENABLED": "tùy chọn kỹ thuật cắt khoảng lặng thừa của file TTS",
     "WATERMARK_COLOR": "chọn trực tiếp trong hộp thoại tùy chỉnh kiểu phụ đề & hiệu ứng",
+    "INPAINT_DEVICE": "cấu hình phần cứng inpaint (cpu/cuda), chọn trực tiếp trong hộp thoại tùy biến kiểu",
+    "INPAINT_ENGINE": "chọn engine xóa chữ AI (lama_onnx/telea) trực tiếp trong hộp thoại tùy biến kiểu",
+    "INPAINT_MODEL_PATH": "đường dẫn mô hình LaMa ONNX tự động dò tìm trong thư mục models",
+    "MASK_METHOD": "phương thức che/xóa phụ đề (inpaint/boxblur), chọn trực tiếp trong hộp thoại tùy biến kiểu",
+    "VSR_DIR": "đường dẫn thư mục VSR CLI nâng cao tự động dò tìm",
 }
 
 

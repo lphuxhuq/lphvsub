@@ -219,6 +219,31 @@ class LabeledLineEdit(_Field):
         self.edit.setText(value or "")
 
 
+class LabeledPlainTextEdit(_Field):
+    """Nhãn kèm ô nhập văn bản nhiều dòng."""
+
+    changed = Signal(str)
+
+    def __init__(self, label: str, placeholder: str = "", hint: str = "",
+                 min_height: int = 80, parent: QWidget | None = None):
+        super().__init__(label, hint, parent)
+        from PySide6.QtWidgets import QPlainTextEdit
+        self.edit = QPlainTextEdit()
+        self.edit.setPlaceholderText(placeholder)
+        self.edit.setMinimumHeight(min_height)
+        if hint:
+            self.edit.setToolTip(hint)
+        self.edit.textChanged.connect(lambda: self.changed.emit(self.text()))
+        self._root.addWidget(self.edit)
+        self._finish()
+
+    def text(self) -> str:
+        return self.edit.toPlainText().strip()
+
+    def set_text(self, value: str) -> None:
+        self.edit.setPlainText(value or "")
+
+
 class LabeledSlider(_Field):
     """Nhãn kèm thanh trượt số thực và ô số, hai bên đồng bộ với nhau."""
 

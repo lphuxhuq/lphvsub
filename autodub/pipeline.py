@@ -254,6 +254,39 @@ class DubPipeline:
         except Exception as exc:      # ffmpeg lạ — không đáng làm hỏng lượt chạy
             logger.debug(f"Không dò được encoder: {exc}")
 
+    @staticmethod
+    def _asr_source(work_dir: str, bg_future, settings: Settings, default_audio: str, req: DubRequest) -> str:
+        """Chọn nguồn audio cho ASR: nếu bật asr_use_vocals và dùng Demucs, lấy vocals.wav đã tách."""
+        if not getattr(settings, "asr_use_vocals", True) or getattr(req, "bg_mode", "demucs") != "demucs":
+            return default_audio
+        if bg_future is not None:
+            try:
+                bg_future.result()
+            except Exception as e:
+                logger.warning(f"Chờ tách nhạc nền lỗi ({e}) — ASR dùng audio gốc")
+                return default_audio
+        from autodub.workdir import data_path
+        vocals_path = data_path(work_dir, "vocals.wav")
+        if not (os.path.isfile(vocals_path) and os.path.getsize(vocals_path) > 0):
+            return default_audio
+
+        asr_vocals_path = data_path(work_dir, "asr_vocals.wav")
+        try:
+            if not os.path.isfile(asr_vocals_path) or os.path.getmtime(asr_vocals_path) < os.path.getmtime(vocals_path):
+                import subprocess
+                subprocess.run(
+                    ["ffmpeg", "-y", "-loglevel", "error", "-i", vocals_path, "-ar", "16000", "-ac", "1", asr_vocals_path],
+                    check=True,
+                    timeout=120,
+                )
+            if os.path.isfile(asr_vocals_path) and os.path.getsize(asr_vocals_path) > 0:
+                logger.info("ASR: dùng bản giọng hát/thoại đã tách (vocals) làm nguồn nghe-chép")
+                return asr_vocals_path
+            return vocals_path
+        except Exception as e:
+            logger.warning(f"Resample vocals cho ASR lỗi ({e}) — dùng audio gốc")
+        return default_audio
+
     def _run_impl(self, req: DubRequest) -> DubResult:
         start_time = time.time()
         settings = self.settings
@@ -279,11 +312,21 @@ class DubPipeline:
                 raise FileNotFoundError(f"Resume directory not found: {req.resume_dir}")
             work_dir = req.resume_dir
             folder_name = os.path.basename(os.path.normpath(work_dir))
+            data_dir(work_dir, create=True)
             logger.info(f"Resuming work directory: {work_dir}")
         else:
             output_dir = req.output_dir or self.default_output_dir(target)
-            folder_name = datetime.now().strftime("%Y%m%d%H%M%S") + target.folder_suffix
-            work_dir = ensure_dir(os.path.join(output_dir, folder_name))
+            base_folder = datetime.now().strftime("%Y%m%d%H%M%S")
+            candidate = f"{base_folder}{target.folder_suffix}"
+            full_path = os.path.join(output_dir, candidate)
+            counter = 1
+            while os.path.exists(full_path):
+                candidate = f"{base_folder}_{counter:02d}{target.folder_suffix}"
+                full_path = os.path.join(output_dir, candidate)
+                counter += 1
+            folder_name = candidate
+            work_dir = ensure_dir(full_path)
+            data_dir(work_dir, create=True)
             logger.info(f"Output folder: {work_dir}")
         # Cho caller (batch) biết lượt chạy này nằm ở thư mục nào — kể cả khi
         # nó đổ giữa chừng, để lần chạy lại truyền resume_dir đúng chỗ.
@@ -459,8 +502,32 @@ class DubPipeline:
             rep.emit("asr", "start")
             from autodub.speech.transcriber import transcribe, save_transcript
             from autodub.text.srt import generate_srt
-            segments = transcribe(audio_path, lang_code, settings,
-                                  whisper_cache=self._whisper_cache)
+
+            asr_audio = self._asr_source(work_dir, bg_future, settings, audio_path, req)
+            meta: dict = {}
+            segments = transcribe(asr_audio, lang_code, settings,
+                                  whisper_cache=self._whisper_cache,
+                                  meta=meta)
+
+            # --- OCR Hard-sub Selective Fallback & Fusion ---
+            if getattr(settings, "ocr_enabled", False):
+                try:
+                    from autodub.media.ocr import detect_hardsub, run_selective_ocr
+                    from autodub.text.fusion import detect_suspect_segments, fuse
+                    from autodub.utils import save_json_atomic
+                    if detect_hardsub(video_path, settings):
+                        suspects1 = detect_suspect_segments(segments, meta.get("empty_chunks"))
+                        if suspects1.suspect:
+                            logger.info(f"OCR: phát hiện {len(suspects1.suspect)} câu nghi vấn — tiến hành Selective OCR")
+                            ocr_segs = run_selective_ocr(video_path, suspects1.suspect, settings, work_dir)
+                            if ocr_segs:
+                                suspects2 = detect_suspect_segments(segments, meta.get("empty_chunks"), ocr_segs)
+                                segments, fusion_report = fuse(segments, ocr_segs, suspects2)
+                                save_json_atomic(fusion_report, data_path(work_dir, "asr_fusion_report.json"))
+                                logger.info(f"Fusion: đã kết hợp ASR + OCR ({len(segments)} câu cuối cùng)")
+                except Exception as e:
+                    logger.warning(f"OCR/Fusion gặp lỗi ({e}) — tiếp tục với transcript ASR gốc")
+
             save_transcript(segments, transcript_orig_path)
             generate_srt(segments, data_path(work_dir, "transcript_original.srt"),
                          text_field="text")
@@ -514,6 +581,38 @@ class DubPipeline:
         else:
             for s in segments:
                 s.setdefault("speaker_id", 0)
+
+        # --- Step 3.7: AI Multi-Speaker Smart Voice Director ---
+        auto_voice_director = getattr(req, "auto_voice_director_enabled", None)
+        if auto_voice_director is None:
+            auto_voice_director = getattr(settings, "auto_voice_director_enabled", True)
+
+        if auto_voice_director:
+            spk_set = {int(s.get("speaker_id", 0)) for s in segments if "speaker_id" in s}
+            if len(spk_set) > 1:
+                try:
+                    from autodub.speech.speaker_profiler import profile_speakers
+                    from autodub.speech.voice_director import cast_voices
+                    from autodub.speech.voice_catalog import UnifiedVoiceCatalog
+
+                    logger.info(f"AI Voice Director: phát hiện {len(spk_set)} người nói — tiến hành phân vai tự động")
+                    profiles = profile_speakers(audio_path, segments, settings)
+                    catalog = UnifiedVoiceCatalog.create_default(settings)
+                    casting = cast_voices(
+                        profiles,
+                        catalog,
+                        current_voice=req.voice or getattr(settings, "vieneu_voice", "nam_bac_1"),
+                        manual_overrides=getattr(req, "speaker_voices", None),
+                        auto_enabled=True,
+                    )
+                    cast_map = {spk_id: va.voice_id for spk_id, va in casting.assignments.items()}
+                    if getattr(req, "speaker_voices", None) is None:
+                        req.speaker_voices = cast_map
+                    else:
+                        req.speaker_voices.update(cast_map)
+                    logger.info(f"AI Voice Director đã phân vai tự động: {req.speaker_voices}")
+                except Exception as e:
+                    logger.warning(f"AI Voice Director gặp lỗi ({e}) — sử dụng giọng mặc định")
 
         # Real per-clip time window (until the next line starts) — drives the
         # translation character budget and the TTS target duration.
@@ -1105,6 +1204,9 @@ class DubPipeline:
             render_opts.setdefault("smart_flip", req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False))
             render_opts.setdefault("micro_zoom", req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False))
             render_opts.setdefault("color_filter", req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"))
+            render_opts.setdefault("mask_method", getattr(req, "mask_method", None) or getattr(settings, "mask_method", "blur"))
+            render_opts.setdefault("inpaint_engine", getattr(req, "inpaint_engine", None) or getattr(settings, "inpaint_engine", "lama_onnx"))
+            render_opts.setdefault("inpaint_device", getattr(req, "inpaint_device", None) or getattr(settings, "inpaint_device", "auto"))
         save_render_opts(work_dir, render_opts)
         if not req.skip_video:
             # Phụ đề ghi vào hình: cả câu (.srt) hay cụm chữ theo giọng đọc
@@ -1141,6 +1243,10 @@ class DubPipeline:
                 micro_zoom=req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
                 color_filter=req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
                 reframe_mode=req.reframe_mode or state.get("reframe_mode") or getattr(settings, "video_reframe_mode", "blur"),
+                mask_method=getattr(req, "mask_method", None) or render_opts.get("mask_method") or getattr(settings, "mask_method", "blur"),
+                inpaint_engine=getattr(req, "inpaint_engine", None) or render_opts.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
+                inpaint_device=getattr(req, "inpaint_device", None) or render_opts.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
+                inpaint_model_path=getattr(settings, "inpaint_model_path", None),
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
@@ -1164,7 +1270,7 @@ class DubPipeline:
             dubbed_video_path, content_result, elapsed,
         )
 
-        report_path = data_path(work_dir, "report.json")
+        report_path = data_path(work_dir, "report.json", create_dir=True)
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
 
@@ -1174,7 +1280,7 @@ class DubPipeline:
         quality = self._build_quality_report(target, segments,
                                              state.get("timing") or {},
                                              settings)
-        quality_path = data_path(work_dir, "quality_report.json")
+        quality_path = data_path(work_dir, "quality_report.json", create_dir=True)
         with open(quality_path, "w", encoding="utf-8") as f:
             json.dump(quality, f, ensure_ascii=False, indent=2)
         # GUI shows this summary in the done-banner.

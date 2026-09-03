@@ -27,8 +27,8 @@ from PySide6.QtGui import (QColor, QFont, QImage, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea,
-    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
+    QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoFrame, QVideoSink
 
@@ -540,6 +540,52 @@ def _placeholder_frame() -> QPixmap:
     return pm
 
 
+class ThumbnailWorker(QThread):
+    """Tải nhanh ảnh bìa / thumbnail của video URL ngầm mà không làm đơ giao diện."""
+    loaded = Signal(QImage)
+
+    def __init__(self, url: str, parent=None):
+        super().__init__(parent)
+        self._url = url
+
+    def run(self):
+        try:
+            import hashlib
+            import urllib.request
+            from autodub.config import cache_dir
+            import yt_dlp
+
+            url_hash = hashlib.md5(self._url.encode("utf-8")).hexdigest()[:10]
+            out_img = os.path.join(cache_dir(), f"thumb_{url_hash}.jpg")
+            if os.path.isfile(out_img) and os.path.getsize(out_img) > 1000:
+                img = QImage(out_img)
+                if not img.isNull():
+                    self.loaded.emit(img)
+                    return
+
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "extract_flat": False,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(self._url, download=False)
+                thumb_url = info.get("thumbnail") if isinstance(info, dict) else None
+                if thumb_url:
+                    req = urllib.request.Request(
+                        thumb_url, headers={"User-Agent": "Mozilla/5.0"}
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as response, open(out_img, "wb") as f:
+                        f.write(response.read())
+                    if os.path.isfile(out_img) and os.path.getsize(out_img) > 1000:
+                        img = QImage(out_img)
+                        if not img.isNull():
+                            self.loaded.emit(img)
+        except Exception:
+            pass
+
+
 class StyleDialog(QDialog):
     """Style the subtitles, blur regions, logo and dynamic watermark in one place."""
 
@@ -549,7 +595,9 @@ class StyleDialog(QDialog):
                  logo_options: dict | None = None,
                  watermark_options: dict | None = None,
                  reframe_options: dict | None = None,
-                 sfx_options: dict | None = None):
+                 sfx_options: dict | None = None,
+                 mask_options: dict | None = None,
+                 video_url: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Phụ đề & hiệu ứng video")
         self.resize(1180, 720)
@@ -559,9 +607,12 @@ class StyleDialog(QDialog):
         self._wm_opts = dict(watermark_options or {})
         self._reframe_opts = dict(reframe_options or {})
         self._sfx_opts = dict(sfx_options or {})
+        self._mask_opts = dict(mask_options or {})
         self._video_path = video_path
         self._regions_pending = regions
         self._frame_worker = None
+        self._thumb_worker = None
+
 
         if preview_text:
             global PREVIEW_TEXT, PREVIEW_TEXT_KARAOKE  # noqa: PLW0603
@@ -569,7 +620,7 @@ class StyleDialog(QDialog):
             words = preview_text.split()
             PREVIEW_TEXT_KARAOKE = " ".join(words[:3]) if len(words) >= 3 else preview_text
 
-        has_video = bool(video_path)
+        has_video = bool(video_path and not str(video_path).startswith(("http://", "https://")))
         pixmap = _placeholder_frame()
 
         root = QVBoxLayout(self)
@@ -602,35 +653,54 @@ class StyleDialog(QDialog):
         self.slider_pos.sliderMoved.connect(self._on_seek)
         self.lbl_time = QLabel("00:00 / 00:00")
         self.lbl_time.setMinimumWidth(85)
+        self.btn_pick_bg = QPushButton("Chọn ảnh/video mẫu…")
+        self.btn_pick_bg.setToolTip("Tải ảnh chụp màn hình hoặc video từ máy để làm nền căn chỉnh chính xác")
+        self.btn_pick_bg.clicked.connect(self._pick_backdrop)
         controls_row.addWidget(self.btn_play)
         controls_row.addWidget(self.slider_pos, 1)
         controls_row.addWidget(self.lbl_time)
+        controls_row.addWidget(self.btn_pick_bg)
         left.addLayout(controls_row)
 
+        is_image = has_video and str(video_path).lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
         if has_video and os.path.isfile(str(video_path)):
-            self._player = QMediaPlayer(self)
-            self._audio_output = QAudioOutput(self)
-            self._player.setAudioOutput(self._audio_output)
-            self._video_sink = QVideoSink(self)
-            self._player.setVideoSink(self._video_sink)
-            self._video_sink.videoFrameChanged.connect(self._on_video_frame)
-            self._player.positionChanged.connect(self._on_player_position)
-            self._player.durationChanged.connect(self._on_player_duration)
-            self._player.playbackStateChanged.connect(self._on_playback_state_changed)
-            self._player.setSource(QUrl.fromLocalFile(os.path.abspath(str(video_path))))
-            self._player.setPosition(0)
+            if is_image:
+                loaded_img = QImage(str(video_path))
+                if not loaded_img.isNull():
+                    self.canvas.set_image(loaded_img)
+                self.btn_play.setEnabled(False)
+                self.slider_pos.setEnabled(False)
+            else:
+                self._player = QMediaPlayer(self)
+                self._audio_output = QAudioOutput(self)
+                self._player.setAudioOutput(self._audio_output)
+                self._video_sink = QVideoSink(self)
+                self._player.setVideoSink(self._video_sink)
+                self._video_sink.videoFrameChanged.connect(self._on_video_frame)
+                self._player.positionChanged.connect(self._on_player_position)
+                self._player.durationChanged.connect(self._on_player_duration)
+                self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+                self._player.setSource(QUrl.fromLocalFile(os.path.abspath(str(video_path))))
+                self._player.setPosition(0)
         else:
             self.btn_play.setEnabled(False)
             self.slider_pos.setEnabled(False)
 
-        hint = QLabel(
+        # Khởi chạy tải ảnh bìa ngầm nếu là URL
+        target_url = video_url or (video_path if (video_path and str(video_path).startswith(("http://", "https://"))) else "")
+        if target_url:
+            self._thumb_worker = ThumbnailWorker(target_url, self)
+            self._thumb_worker.loaded.connect(self._on_thumbnail_loaded)
+            self._thumb_worker.start()
+
+        self.hint = QLabel(
             "Kéo dòng phụ đề để đặt vị trí. "
             "Kéo chuột trên hình để khoanh vùng che chữ (làm mờ suốt video)."
-            + ("" if has_video else
-               " Đang dùng khung mẫu — vùng che sẽ áp đúng lên video khi xử lý."))
-        hint.setObjectName("hint")
-        hint.setWordWrap(True)
-        left.addWidget(hint)
+            + ("" if (has_video and os.path.isfile(str(video_path))) else
+               " Đang tải ảnh từ link hoặc bạn có thể bấm «Chọn ảnh/video mẫu…»."))
+        self.hint.setObjectName("hint")
+        self.hint.setWordWrap(True)
+        left.addWidget(self.hint)
         body.addLayout(left, 6)
 
         # --- Right: Tabbed Panel (4 phần) ---
@@ -823,7 +893,7 @@ class StyleDialog(QDialog):
         tab_font_scroll.setWidget(tab_font_w)
         self.tabs.addTab(tab_font_scroll, "Kiểu chữ")
 
-        # ================================= TAB 2: VÙNG CHE ================================= #
+        # ================================= TAB 2: VÙNG CHE / XÓA PHỤ ĐỀ ================================= #
         tab_blur_scroll = QScrollArea()
         tab_blur_scroll.setWidgetResizable(True)
         tab_blur_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -831,6 +901,49 @@ class StyleDialog(QDialog):
         blur_l = QVBoxLayout(tab_blur_w)
         blur_l.setContentsMargins(10, 10, 10, 10)
         blur_l.setSpacing(10)
+
+        lbl_method_title = QLabel("Phương thức che / xóa phụ đề")
+        lbl_method_title.setObjectName("sectionHeader")
+        blur_l.addWidget(lbl_method_title)
+
+        method_card = QWidget()
+        method_card.setStyleSheet(
+            f"background: {tokens.BG_PANEL}; border: 1px solid {tokens.BORDER_DEFAULT}; border-radius: 6px; padding: 6px;"
+        )
+        method_layout = QVBoxLayout(method_card)
+        method_layout.setContentsMargins(8, 8, 8, 8)
+        method_layout.setSpacing(8)
+
+        self.rb_mask_blur = QRadioButton("Làm mờ Boxblur (Mặc định — Nhanh, nhẹ)")
+        self.rb_mask_blur.setToolTip("Làm mờ vùng phụ đề bằng FFmpeg trong 1 pass encode (nhanh, nhẹ, tương thích mọi máy)")
+        self.rb_mask_ai = QRadioButton("Xóa sạch AI Inpainting (Chất lượng cao)")
+        self.rb_mask_ai.setToolTip("Sử dụng AI Inpaint (LaMa ONNX / VSR) tái tạo nền video tự nhiên, xóa sạch chữ không để lại vết mờ")
+
+        method_layout.addWidget(self.rb_mask_blur)
+        method_layout.addWidget(self.rb_mask_ai)
+
+        self.ai_opts_container = QWidget()
+        ai_form = QFormLayout(self.ai_opts_container)
+        ai_form.setContentsMargins(14, 4, 4, 4)
+        ai_form.setLabelAlignment(Qt.AlignRight)
+        ai_form.setSpacing(6)
+
+        self.cb_inpaint_engine = QComboBox()
+        self.cb_inpaint_engine.addItem("LaMa ONNX (Khuyến nghị — Nhúng sẵn)", "lama_onnx")
+        self.cb_inpaint_engine.addItem("Video Subtitle Remover (VSR ngoài)", "vsr_cli")
+        polish_combo(self.cb_inpaint_engine)
+        ai_form.addRow("Engine AI:", self.cb_inpaint_engine)
+
+        self.cb_inpaint_device = QComboBox()
+        self.cb_inpaint_device.addItem("Tự động (Khuyến nghị)", "auto")
+        self.cb_inpaint_device.addItem("NVIDIA GPU (CUDA)", "cuda")
+        self.cb_inpaint_device.addItem("AMD / Intel GPU (DirectML)", "directml")
+        self.cb_inpaint_device.addItem("Vi xử lý CPU", "cpu")
+        polish_combo(self.cb_inpaint_device)
+        ai_form.addRow("Thiết bị:", self.cb_inpaint_device)
+
+        method_layout.addWidget(self.ai_opts_container)
+        blur_l.addWidget(method_card)
 
         lbl_blur_title = QLabel("Mẫu vùng che nhanh")
         lbl_blur_title.setObjectName("sectionHeader")
@@ -857,7 +970,7 @@ class StyleDialog(QDialog):
         p_row1.addWidget(self.btn_pre_tl)
         blur_l.addLayout(p_row1)
 
-        self.lbl_regions_count = QLabel("Danh sách vùng làm mờ (0 vùng):")
+        self.lbl_regions_count = QLabel("Danh sách vùng làm mờ / xóa chữ (0 vùng):")
         self.lbl_regions_count.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;")
         blur_l.addWidget(self.lbl_regions_count)
 
@@ -891,7 +1004,8 @@ class StyleDialog(QDialog):
         self.canvas.on_regions_changed = self._sync_regions_list
         blur_l.addStretch()
         tab_blur_scroll.setWidget(tab_blur_w)
-        self.tabs.addTab(tab_blur_scroll, "Vùng che (Blur)")
+        self.tabs.addTab(tab_blur_scroll, "Vùng che / Xóa chữ")
+
 
         # ================================= TAB 3: LOGO & WATERMARK ================================= #
         tab_lw_scroll = QScrollArea()
@@ -1295,10 +1409,30 @@ class StyleDialog(QDialog):
         sfx_v = int(round(float(self._sfx_opts.get("sfx_volume_db", -14.0))))
         self.sp_sfx_volume.setValue(max(-30, min(0, sfx_v)))
 
+        # Mask options (Che / Xóa phụ đề)
+        mask_m = self._mask_opts.get("mask_method", "blur")
+        if mask_m == "ai_inpaint":
+            self.rb_mask_ai.setChecked(True)
+        else:
+            self.rb_mask_blur.setChecked(True)
+        self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked())
+
+        inpaint_eng = self._mask_opts.get("inpaint_engine", "lama_onnx")
+        idx_eng = self.cb_inpaint_engine.findData(inpaint_eng)
+        self.cb_inpaint_engine.setCurrentIndex(idx_eng if idx_eng >= 0 else 0)
+
+        inpaint_dev = self._mask_opts.get("inpaint_device", "auto")
+        idx_dev = self.cb_inpaint_device.findData(inpaint_dev)
+        self.cb_inpaint_device.setCurrentIndex(idx_dev if idx_dev >= 0 else 0)
+
         self._sync_logo_wm_from_controls()
 
     def _connect_controls(self) -> None:
+        self.rb_mask_blur.toggled.connect(lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked()))
+        self.rb_mask_ai.toggled.connect(lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked()))
+
         self.cb_display.currentIndexChanged.connect(self._sync_from_controls)
+
         self.sp_line_words.valueChanged.connect(self._sync_from_controls)
         self.sp_max_lines.valueChanged.connect(self._sync_from_controls)
         self.chk_all_caps.toggled.connect(self._sync_from_controls)
@@ -1519,6 +1653,46 @@ class StyleDialog(QDialog):
         self._paint_color_button(btn, hex_color)
         self.canvas.set_style(self._style)
 
+    def _on_thumbnail_loaded(self, image: QImage) -> None:
+        """Cập nhật ảnh bìa video URL lên canvas khi luồng ngầm tải xong."""
+        if not image.isNull():
+            self.canvas.set_image(image)
+            if hasattr(self, "hint") and self.hint:
+                self.hint.setText(
+                    "Đã tải xong ảnh xem trước từ link video! Kéo dòng phụ đề để đặt vị trí, "
+                    "kéo chuột trên hình để khoanh vùng che chữ.")
+
+    def _pick_backdrop(self) -> None:
+        """Cho phép người dùng chọn bất kỳ ảnh hoặc video nào từ máy để làm nền xem trước."""
+        from PySide6.QtWidgets import QFileDialog
+        filters = "Tệp hình ảnh hoặc video (*.mp4 *.mkv *.mov *.webm *.avi *.jpg *.jpeg *.png *.webp);;Tất cả tệp (*.*)"
+        path, _ = QFileDialog.getOpenFileName(self, "Chọn video hoặc hình ảnh mẫu làm nền", "", filters)
+        if not path or not os.path.isfile(path):
+            return
+        if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            loaded = QImage(path)
+            if not loaded.isNull():
+                self.canvas.set_image(loaded)
+            if self._player:
+                self._player.stop()
+            self.btn_play.setEnabled(False)
+            self.slider_pos.setEnabled(False)
+        else:
+            if not self._player:
+                self._player = QMediaPlayer(self)
+                self._audio_output = QAudioOutput(self)
+                self._player.setAudioOutput(self._audio_output)
+                self._video_sink = QVideoSink(self)
+                self._player.setVideoSink(self._video_sink)
+                self._video_sink.videoFrameChanged.connect(self._on_video_frame)
+                self._player.positionChanged.connect(self._on_player_position)
+                self._player.durationChanged.connect(self._on_player_duration)
+                self._player.playbackStateChanged.connect(self._on_playback_state_changed)
+            self._player.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
+            self._player.setPosition(0)
+            self.btn_play.setEnabled(True)
+            self.slider_pos.setEnabled(True)
+
     # ------------------------------------------------------ playback ------ #
 
     def _toggle_playback(self) -> None:
@@ -1571,16 +1745,22 @@ class StyleDialog(QDialog):
     def closeEvent(self, event) -> None:  # noqa: N802
         if hasattr(self, "_player") and self._player:
             self._player.stop()
+        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.quit()
         super().closeEvent(event)
 
     def reject(self) -> None:
         if hasattr(self, "_player") and self._player:
             self._player.stop()
+        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.quit()
         super().reject()
 
     def accept(self) -> None:
         if hasattr(self, "_player") and self._player:
             self._player.stop()
+        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.quit()
         super().accept()
 
     # -------------------------------------------------------- results ----- #
@@ -1625,4 +1805,13 @@ class StyleDialog(QDialog):
             "sfx_preset": self.cb_sfx_preset.currentData() or "whoosh",
             "sfx_volume_db": float(self.sp_sfx_volume.value()),
         }
+
+    def mask_options(self) -> dict:
+        """Thông số cấu hình phương thức che / xóa phụ đề."""
+        return {
+            "mask_method": "ai_inpaint" if self.rb_mask_ai.isChecked() else "blur",
+            "inpaint_engine": self.cb_inpaint_engine.currentData() or "lama_onnx",
+            "inpaint_device": self.cb_inpaint_device.currentData() or "auto",
+        }
+
 

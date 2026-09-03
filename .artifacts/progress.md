@@ -1,6 +1,87 @@
 # TIẾN ĐỘ
 
-## voice-sync — HOÀN THÀNH TOÀN BỘ (2026-08-22) ✅
+## AI Multi-Speaker Smart Voice Director (Đạo diễn Lồng Tiếng Đa Nhân Vật Tự Động) — HOÀN THÀNH TOÀN BỘ ✅ (2026-09-02)
+
+Đã triển khai hoàn chỉnh toàn bộ 7 Task theo kế hoạch (`.artifacts/tasks/ai-multi-speaker-voice-director.md`):
+
+**File production & GUI:**
+- NEW `autodub/speech/voice_models.py`: Định nghĩa dataclass bất biến (`PitchStats`, `SpeakerProfile`, `VoiceProfile`, `VoiceAssignment`, `CastingResult`).
+- NEW `autodub/speech/speaker_profiler.py`: Trích xuất $F_0$ Autocorrelation FFT decimation trên CPU, tính toán thống kê, phân loại giới tính xác suất và phát hiện vai trò Dẫn chuyện (`narrator`).
+- NEW `autodub/speech/voice_catalog.py`: Unified Voice Catalog & Providers trừu tượng hóa cho cả **VieNeu (Offline)** và **CapCut (Online API)**.
+- NEW `autodub/speech/voice_director.py`: Động cơ chấm điểm phân vai (Compatibility Scoring), phạt trùng lặp (**Uniqueness Penalty**), tôn trọng **Manual Overrides** và Toggle On/Off.
+- MODIFY `autodub/config.py`: Bổ sung cấu hình `auto_voice_director_enabled: bool = True`.
+- MODIFY `autodub/pipeline.py`: Tích hợp Step 3.7 Auto Voice Casting và Step 5 Multi-Voice Synthesis.
+- MODIFY `autodub_gui/pages/editor_panels.py` & `autodub_gui/pages/editor_page.py`: Giao diện quản lý danh sách Nhân vật (Speaker Cards), Voice Picker per-speaker và toggle Bật/Tắt Auto Director.
+
+**Kiểm thử & Benchmark:**
+- NEW `tests/test_voice_models.py` (4 tests)
+- NEW `tests/test_speaker_profiler.py` (6 tests)
+- NEW `tests/benchmark_speaker_profiler.py` (Benchmark CPU: **Median = 327.1ms**, **P95 = 329.3ms** cho audio 5 phút, GPU = 0%)
+- NEW `tests/test_voice_catalog.py` (2 tests)
+- NEW `tests/test_voice_director.py` (3 tests)
+- NEW `tests/test_pipeline_multi_voice.py` (1 test)
+- NEW `tests/test_editor_voice_panel.py` (1 test)
+- NEW `tests/test_voice_director_integration.py` (1 test)
+- **Full Regression Test Suite: 1045 / 1045 passed (100%)** trong 87.15s.
+- **Final Audit: PASS** (`.artifacts/reviews/final-audit-ai-voice-director.md`).
+
+---
+
+## Fix: Bổ sung bộ cài Model & Scaling linh hoạt cho Phương thức 2 AI Inpaint — HOÀN THÀNH ✅ (2026-09-02)
+- Đã tải và tích hợp mô hình chuẩn **LaMa ONNX** (`models/inpaint/lama.onnx` ~198.4 MB).
+- Bổ sung script cài đặt tự động `scripts/setup_inpaint.py` và file batch `cai_them_inpaint.bat`.
+- Cập nhật `LaMaOnnxEngine` trong `autodub/media/inpaint/lama_onnx.py` hỗ trợ tự động co giãn tensor (fixed-shape 512x512 / dynamic-shape) và phục hồi đúng kích thước patch gốc.
+- Smoke test và toàn bộ test suite **1015 / 1015 passed (100%)**.
+
+---
+
+## AI Subtitle Remover Integration (Phương thức che/xóa phụ đề thứ 2) — HOÀN THÀNH TOÀN BỘ ✅ (2026-09-01)
+
+Đã triển khai hoàn chỉnh toàn bộ 6 Task theo kế hoạch đã duyệt (`.artifacts/tasks/ai-subtitle-remover-integration.md`):
+
+**File thêm mới & cập nhật:**
+- NEW `autodub/media/inpaint/__init__.py`: Cung cấp `inpaint_video_with_cache` và `get_inpaint_engine`.
+- NEW `autodub/media/inpaint/base.py`: Lớp cơ sở `BaseInpaintEngine`, tiện ích chuyển đổi `regions` thành mask và tính bounding box ROI.
+- NEW `autodub/media/inpaint/cache.py`: Quản lý bộ nhớ đệm SHA256 cache cho video sạch (`clean_video.mp4`).
+- NEW `autodub/media/inpaint/lama_onnx.py`: Engine LaMa ONNX nhúng trực tiếp, tối ưu hóa ROI patch crop và streaming FFmpeg pipes.
+- NEW `autodub/media/inpaint/vsr_bridge.py`: Adapter kết nối VSR CLI (`video-subtitle-remover`).
+- MODIFY `autodub/config.py`: Bổ sung cấu hình `mask_method`, `inpaint_engine`, `inpaint_device`, `inpaint_model_path`, `vsr_dir`.
+- MODIFY `autodub/editor.py`: Cập nhật `_render_options` đồng bộ lưu/đọc `render_opts.json`.
+- MODIFY `autodub/preflight.py`: Bổ sung hàm kiểm tra `_check_inpaint` cho model ONNX/VSR.
+- MODIFY `autodub/media/video.py`: Tích hợp quy trình 2-Stage trong `merge_video` (inpaint sạch ➔ final compose không còn boxblur).
+- MODIFY `autodub/pipeline.py`: Chuyển tiếp các tùy chọn inpaint vào pipeline.
+- MODIFY `.env.example`: Cập nhật tài liệu cấu hình chi tiết cho các biến inpaint.
+
+**Kiểm thử & Đánh giá:**
+- NEW `tests/test_inpaint_cache.py` (6 tests)
+- NEW `tests/test_inpaint_engine.py` (3 tests)
+- NEW `tests/test_video_render_inpaint.py` (3 tests)
+- Cập nhật `tests/test_config.py` (+2 tests), `tests/test_preflight.py` (+3 tests)
+- **Full Inpaint Test Suite: 49 / 49 passed (100%)** trong 1.15s.
+- **Final Audit: PASS** (`.artifacts/reviews/final-audit-ai-subtitle-remover.md`).
+
+---
+
+
+## AI Viral Shorts & Reels Clipper (9:16) — HOÀN THÀNH TOÀN BỘ (2026-08-31) ✅
+
+Đã triển khai hoàn chỉnh toàn bộ 5 Task theo kế hoạch đã duyệt (`docs/superpowers/plans/2026-08-31-ai-viral-shorts-clipper.md`):
+
+**File production & GUI:**
+- NEW `autodub/content/viral_clipper.py` (AI Direct API + Heuristic Highlight Analyzer + Boundary Snapping)
+- NEW `autodub/media/clipper.py` (ASS Subtitle Slicer & FFmpeg 9:16 Reframe Exporter)
+- NEW `autodub_gui/viral_clipper_dialog.py` (Qt GUI Viral Shorts Studio: thẻ Clip, xem trước, 1-click export)
+- MODIFY `autodub/editor.py` (`get_or_analyze_viral_clips`, `export_project_short_clip`, `viral_clips.json`)
+- MODIFY `autodub_gui/pages/editor_panels.py` (Nút "AI Tạo Shorts & Reels (9:16)" trong ExportPanel)
+- MODIFY `autodub_gui/pages/editor_export.py` & `autodub_gui/pages/editor_page.py` (Signal & Handler kết nối)
+
+**Kiểm thử:**
+- NEW `tests/test_viral_clipper.py` (4 tests)
+- NEW `tests/test_clipper_media.py` (2 tests)
+- NEW `tests/test_viral_clipper_dialog.py` (2 tests)
+- Full regression suite: **974 / 974 passed (100%)** trong 74.37s. Không còn lỗi emoji hay hardcoded hex.
+
+---
 
 TASK-1→6 xong theo `.artifacts/tasks/voice-sync.md`. Final audit: **PASS** (`.artifacts/reviews/final-audit-voice-sync.md`, review chi tiết TASK-1→5 ở `voice-sync-TASK-1-5.md`).
 
@@ -15,9 +96,25 @@ TASK-1→6 xong theo `.artifacts/tasks/voice-sync.md`. Final audit: **PASS** (`.
 
 ---
 
-## asr-accuracy-boost — TẠM DỪNG sau TASK-4
+## asr-accuracy-boost — HOÀN THÀNH TOÀN BỘ ✅ (TASK-1 -> TASK-7)
 
-> ⏸️ (2026-08-22) user đổi ưu tiên sang voice-sync. TASK-5 (fuse), TASK-6 (wiring), TASK-7 (audit) CHƯA làm; `fusion.py` hiện có detection + align_texts nhưng CHƯA được pipeline gọi — không ảnh hưởng luồng chạy.
+## TASK-7 — Integration Test & Final Audit ✅
+- **Ngày:** 2026-09-02
+- **File:** `tests/test_asr_accuracy_integration.py` (NEW, E2E flow test), `.artifacts/reviews/final-audit-asr-accuracy-boost.md` (Final Audit Report).
+- **Kết quả Regression:** **1027 / 1027 passed (100%)** trong 153s.
+- **Audit:** PASS toàn bộ 11/11 Acceptance Criteria.
+
+## TASK-6 — Pipeline wiring + settings + ASR source ✅
+- **Ngày:** 2026-09-02
+- **File:** `autodub/config.py` (`asr_use_vocals`), `autodub/pipeline.py` (`_asr_source`, Step 3 OCR/Fusion integration), `tests/test_pipeline_asr_source.py` (NEW, 2 tests), `tests/test_pipeline_wiring.py` (NEW, 1 test).
+- **Kết quả:** 3/3 tests pass. Nối hoàn chỉnh Step 3 với vocals 16kHz resample và OCR fusion fail-safe.
+- **Code review:** PASS (`.artifacts/reviews/TASK-6.md`).
+
+## TASK-5 — Fusion engine + scoring ✅
+- **Ngày:** 2026-09-02
+- **File:** `autodub/text/fusion.py` (hằng số `W_*`, hằng số ngưỡng, `fuse()`), `tests/test_fusion_scoring.py` (NEW, 7 tests), `tests/test_fusion_invariants.py` (NEW, property tests).
+- **Kết quả:** 18/18 tests pass. Invariants thỏa mãn: start < end, non-overlapping, len(fused) >= len(asr), passthrough an toàn.
+- **Code review:** PASS (`.artifacts/reviews/TASK-5.md`).
 
 ## TASK-4 — Text alignment ASR↔OCR ✅
 

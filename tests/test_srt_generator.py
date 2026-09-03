@@ -82,3 +82,17 @@ def test_cue_time_proportional_to_text():
 
 def test_empty_text_no_cues():
     assert split_for_display({"start": 0, "end": 1, "text_vi": " "}, "text_vi") == []
+
+
+def test_max_lines_single_line_strictly_one_line():
+    """Khi chọn max_lines=1, mọi cue sinh ra đều chỉ có đúng 1 dòng (không có \\n)."""
+    text = ("Hôm nay chúng ta sẽ cùng nhau khám phá một địa điểm vô cùng thú vị, "
+            "hấp dẫn tại Việt Nam mà có thể bạn chưa từng được biết tới trước đây.")
+    seg = {"start": 0.0, "end": 12.0, "text_vi": text}
+    cues = split_for_display(seg, "text_vi", max_lines=1)
+    assert len(cues) >= 3
+    for c in cues:
+        assert "\n" not in c["text"]
+        assert len(c["text"].splitlines()) == 1
+        assert len(c["text"]) <= 32
+

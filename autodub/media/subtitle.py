@@ -178,6 +178,8 @@ def build_force_style(style: dict | None = None) -> str:
     border_style = 3 if boxed else 1
     outline_colour = (hex_to_ass_color(s["box_color"], int(s["box_opacity"]))
                       if boxed else hex_to_ass_color(s["outline_color"]))
+    max_lines = int(s.get("max_lines", 2) or 2)
+    wrap_style = 2 if max_lines == 1 else 0
     return (
         f"FontName={safe_font_name(s['font'])},"
         f"FontSize={int(s['font_size'])},"
@@ -187,6 +189,9 @@ def build_force_style(style: dict | None = None) -> str:
         f"Shadow={int(s['shadow'])},"
         f"Alignment={align},"
         f"MarginV={int(s['margin_v'])},"
+        f"MarginL=15,"
+        f"MarginR=15,"
+        f"WrapStyle={wrap_style},"
         f"PrimaryColour={hex_to_ass_color(s['color'])},"
         f"OutlineColour={outline_colour},"
         f"BackColour={hex_to_ass_color('#000000', 40)}"

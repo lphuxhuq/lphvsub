@@ -18,6 +18,7 @@ SUBTITLE_FIELD = "sub_vi"
 
 # Giới hạn dễ đọc theo chuẩn phụ đề cho tiếng Việt.
 MAX_LINE_CHARS = 42
+MAX_LINE_CHARS_SINGLE = 28
 MAX_LINES_PER_CUE = 2
 MIN_CUE_SECONDS = 0.8
 
@@ -40,25 +41,33 @@ def has_subtitle_override(seg: dict, text_field: str = "text_vi") -> bool:
 
 
 def _wrap_lines(text: str, width: int = MAX_LINE_CHARS,
-                line_words: int = 0) -> list[str]:
+                line_words: int = 0, max_lines: int = 0) -> list[str]:
     """Ngắt dòng: theo SỐ CHỮ mỗi hàng khi ``line_words`` > 0, không thì gói
     tham lam theo bề rộng ký tự (chuẩn 42) — không bao giờ cắt giữa một chữ."""
+    text = " ".join(str(text or "").split())
+    if not text:
+        return []
     if line_words > 0:
         words = text.split()
-        return [" ".join(words[i:i + line_words])
-                for i in range(0, len(words), line_words)] or []
-    lines: list[str] = []
-    cur = ""
-    for word in text.split():
-        cand = f"{cur} {word}".strip()
-        if len(cand) <= width or not cur:
-            cur = cand
-        else:
+        res = [" ".join(words[i:i + line_words])
+               for i in range(0, len(words), line_words)] or []
+    else:
+        lines: list[str] = []
+        cur = ""
+        for word in text.split():
+            cand = f"{cur} {word}".strip()
+            if len(cand) <= width or not cur:
+                cur = cand
+            else:
+                lines.append(cur)
+                cur = word
+        if cur:
             lines.append(cur)
-            cur = word
-    if cur:
-        lines.append(cur)
-    return lines
+        res = lines
+
+    if max_lines > 0 and len(res) > max_lines:
+        res = res[:max_lines]
+    return res
 
 
 def split_for_display(seg: dict, text_field: str, line_words: int = 0,
@@ -74,13 +83,19 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
     """
     import re
 
-    text = subtitle_text(seg, text_field)
+    raw_text = subtitle_text(seg, text_field)
+    if not raw_text:
+        return []
+    text = " ".join(raw_text.split())
     if not text:
         return []
     if all_caps:
         text = text.upper()
 
     max_lines = max(1, int(max_lines or MAX_LINES_PER_CUE))
+    # Khi chọn hiển thị 1 dòng (max_lines = 1), giới hạn bề rộng dòng là 28 ký tự
+    # (hoặc line_words) để đảm bảo không bị tràn khung hình khiến libass/trình phát bẻ thành 2-3 dòng.
+    char_width = MAX_LINE_CHARS_SINGLE if max_lines == 1 else MAX_LINE_CHARS
 
     # Đơn vị đo theo chế độ: chữ (khi chỉnh tay) hoặc ký tự (khi tự động).
     if line_words > 0:
@@ -89,10 +104,10 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
         max_cue = line_words * max_lines
     else:
         measure = len
-        max_cue = MAX_LINE_CHARS * max_lines
+        max_cue = char_width * max_lines
 
     def _wrapped(chunk: str) -> str:
-        return "\n".join(_wrap_lines(chunk, line_words=line_words))
+        return "\n".join(_wrap_lines(chunk, width=char_width, line_words=line_words, max_lines=max_lines))
 
     if measure(text) <= max_cue:
         return [{"start": seg["start"], "end": seg["end"],
@@ -106,14 +121,17 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
         # Một mệnh đề dài hơn cả một dòng hiển thị thì phải cắt tiếp.
         while measure(part) > max_cue:
             if line_words > 0:
-                head = " ".join(part.split()[:max_cue])
+                words_list = part.split()
+                head = " ".join(words_list[:max_cue])
+                part = " ".join(words_list[max_cue:]).strip()
             else:
-                head = " ".join(_wrap_lines(part, max_cue)[:1])
+                lines_wrapped = _wrap_lines(part, width=char_width, max_lines=max_lines)
+                head = lines_wrapped[0] if lines_wrapped else part[:char_width]
+                part = part[len(head):].strip()
             if cur:
                 chunks.append(cur)
                 cur = ""
             chunks.append(head)
-            part = part[len(head):].strip()
         cand = f"{cur} {part}".strip()
         if measure(cand) <= max_cue or not cur:
             cur = cand

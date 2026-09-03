@@ -143,6 +143,7 @@ echo.
 echo   Mo ung dung: dup chuot vao file  chay_app.bat
 echo.
 echo   Cai them (khong bat buoc):
+echo     cai_them_inpaint.bat     - cai AI xoa phu de (LaMa ONNX - Phuong thuc 2)
 echo     cai_them_douyin.bat      - tai video tu Douyin
 echo     cai_them_paraformer.bat  - nghe tieng Trung chinh xac hon
 echo     nap_giong_doc.bat        - nap bo giong mau di kem repo

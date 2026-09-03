@@ -41,6 +41,7 @@ Thumbs.db
 
 
 # Build exe
+scratch/
 *.spec.bak
 pw-browsers/
 smoke_test_result.json

@@ -101,3 +101,36 @@ def test_logs_dir_and_file_logging(tmp_path, monkeypatch):
         root.removeHandler(h)
         h.close()
     monkeypatch.setattr(utils, "_FILE_HANDLER", None)
+
+
+def test_check_inpaint_blur_mode(settings):
+    from autodub.preflight import _check_inpaint
+    settings.mask_method = "blur"
+    res = _check_inpaint(settings)
+    assert res.key == "inpaint"
+    assert res.level == "ok"
+
+
+def test_check_inpaint_lama_missing_model(settings, tmp_path):
+    from autodub.preflight import _check_inpaint
+    settings.mask_method = "ai_inpaint"
+    settings.inpaint_engine = "lama_onnx"
+    settings.inpaint_model_path = str(tmp_path / "not_found.onnx")
+    res = _check_inpaint(settings)
+    assert res.key == "inpaint"
+    assert res.level == "warn"
+    assert "chưa có file model" in res.message.lower()
+
+
+def test_check_inpaint_lama_model_ready(settings, tmp_path):
+    from autodub.preflight import _check_inpaint
+    dummy_model = tmp_path / "lama.onnx"
+    dummy_model.write_bytes(b"dummy onnx content")
+
+    settings.mask_method = "ai_inpaint"
+    settings.inpaint_engine = "lama_onnx"
+    settings.inpaint_model_path = str(dummy_model)
+    res = _check_inpaint(settings)
+    assert res.key == "inpaint"
+    assert res.level == "ok"
+

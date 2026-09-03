@@ -356,3 +356,14 @@ def test_editor_rebuild_with_scene_cuts(work_dir, monkeypatch):
     editor.rebuild_output(work_dir, settings)
     assert cuts_loaded == [5.0, 10.0]
 
+
+def test_get_or_analyze_viral_clips(work_dir):
+    state = load_work_dir(work_dir)
+    clips = editor.get_or_analyze_viral_clips(state)
+    assert isinstance(clips, list)
+    assert len(clips) >= 1
+    # File viral_clips.json được tạo ra
+    cached = editor.get_or_analyze_viral_clips(state)
+    assert cached == clips
+
+

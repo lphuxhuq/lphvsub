@@ -250,12 +250,15 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.export_panel.subtitles_requested.connect(self._export_subtitles)
         self.export_panel.style_requested.connect(self._open_style_dialog)
         self.export_panel.preview_requested.connect(self._preview_segment)
+        self.export_panel.viral_shorts_requested.connect(self._open_viral_clipper_dialog)
         self.export_panel.export_srt_requested.connect(self._export_srt_file)
         self.export_panel.export_ass_requested.connect(self._export_ass_file)
         self.export_panel.export_audio_mp3_requested.connect(self._export_audio_mp3)
         self.export_panel.open_thumb_requested.connect(self._open_thumbnail)
         self.export_panel.copy_title_requested.connect(self._copy_youtube_title)
+        self.export_panel.copy_tags_requested.connect(self._copy_youtube_hashtags)
         self.export_panel.copy_desc_requested.connect(self._copy_youtube_description)
+        self.export_panel.copy_all_requested.connect(self._copy_youtube_all)
         self.export_panel.changed.connect(self._on_export_options_changed)
         self._preview.status_changed.connect(self.voice_panel.status.setText)
         # Khoá nút khi đang tổng hợp / phát, mở lại khi xong — giống hành vi
@@ -355,6 +358,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.banner.set_count(0, 0)
         self._refresh_qc()
         self.export_panel.refresh_history(self._work_dir)
+        self._refresh_social_metadata()
         self.save_indicator.set_state("idle")
         self._load_video()
         self._load_waveform()
@@ -502,37 +506,48 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts = load_render_opts(self._work_dir)
         settings = self._settings_provider()
         self.audio_panel.load(opts, settings)
-        # Lõi xử lý không giữ hai giá trị này trong cấu hình chung, chúng chỉ
-        # thuộc về từng lần chạy. Thiếu thì dùng lựa chọn an toàn nhất.
-        self.background_panel.mode.set_key(opts.get("bg_mode", "demucs"))
+        
+        # Nhạc nền: lấy từ opts của dự án hoặc fallback sang cài đặt mặc định đã lưu
+        bg_mode_default = getattr(settings, "bg_mode", "demucs")
+        bg_duck_default = getattr(settings, "bg_duck_db", DEFAULT_DUCK_DB)
+        self.background_panel.mode.set_key(opts.get("bg_mode", bg_mode_default))
         self.background_panel.duck.set_value(
-            float(opts.get("bg_duck_db", DEFAULT_DUCK_DB)))
+            float(opts.get("bg_duck_db", bg_duck_default)))
         self.background_panel.set_separated(self._has_separated_audio())
+
+        # Phụ đề
         self.export_panel.subtitle.set_key(
             opts.get("subtitle_mode", settings.subtitle_mode))
         self.voice_panel.picker.reload(settings)
-        # Giọng của dự án đã được pipeline ghim lại lúc chạy (tên thật, kể cả
-        # khi người dùng để mặc định). Chưa có tên ghim trong render_opts thì
-        # lấy tên trong report.json (pipeline luôn ghi); cả hai đều thiếu mới
-        # phân giải theo cài đặt chung — không bao giờ đoán mò.
+
+        # Giọng đọc
         from autodub.speech.tts import voices as voice_catalog
         project_voice = voice_catalog.resolve(
-            settings, opts.get("voice") or self._project.voice)
+            settings, opts.get("voice") or getattr(settings, "vieneu_voice", "") or self._project.voice)
         self.voice_panel.set_project_voice(project_voice)
         self.overview.set_voice(project_voice)
-        selected_voice = opts.get("selected_voice")
+        selected_voice = opts.get("selected_voice") or getattr(settings, "vieneu_voice", "")
         if selected_voice and selected_voice != project_voice:
             self.voice_panel.picker.set_voice(selected_voice)
             self.voice_panel._refresh_hint()
         self.voice_panel.speed.set_value(
             float(opts.get("voice_speed", settings.voice_speed)))
+        self.voice_panel.set_speakers(
+            self._segments,
+            opts.get("speaker_voices"),
+            opts.get("speaker_profiles"),
+        )
         self.export_panel.set_source_info(0, 0, 0)
-        self._blur_regions = list(opts.get("blur_regions") or [])
+
+        # Vùng che mờ và kiểu phụ đề
+        blur_def = getattr(settings, "blur_regions_list", lambda: [])() or []
+        self._blur_regions = list(opts.get("blur_regions") if "blur_regions" in opts else blur_def)
         self._subtitle_style = opts.get("subtitle_style")
         self.export_panel.preset.set_key(
             (self._subtitle_style or {}).get("preset")
             or opts.get("subtitle_preset") or settings.subtitle_preset)
 
+        # Logo & Watermark
         self._logo_path = opts.get("logo_path", getattr(settings, "logo_path", ""))
         self._logo_position = opts.get("logo_position", getattr(settings, "logo_position", "top_right"))
         self._logo_scale = opts.get("logo_scale", getattr(settings, "logo_scale", 0.12))
@@ -546,6 +561,11 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._watermark_speed = opts.get("watermark_speed", getattr(settings, "watermark_speed", 40))
         self._watermark_motion = opts.get("watermark_motion", getattr(settings, "watermark_motion", "bounce"))
 
+        # Mask options (Che / Xóa phụ đề)
+        self._mask_method = opts.get("mask_method", getattr(settings, "mask_method", "blur"))
+        self._inpaint_engine = opts.get("inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx"))
+        self._inpaint_device = opts.get("inpaint_device", getattr(settings, "inpaint_device", "auto"))
+
         self._apply_style_to_player()
 
     def _has_separated_audio(self) -> bool:
@@ -554,7 +574,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         return os.path.isfile(data_path(self._work_dir, "no_vocals.wav"))
 
     def _save_render_opts(self) -> None:
-        """Ghi tùy chọn riêng của dự án, không đụng tới cài đặt chung."""
+        """Ghi tùy chọn của dự án và đồng bộ thành mặc định cho các video sau."""
         if not self._work_dir:
             return
         from autodub.editor import load_render_opts, save_render_opts
@@ -583,10 +603,119 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts["watermark_color"] = getattr(self, "_watermark_color", "white")
         opts["watermark_speed"] = getattr(self, "_watermark_speed", 40)
         opts["watermark_motion"] = getattr(self, "_watermark_motion", "bounce")
+        opts["mask_method"] = getattr(self, "_mask_method", "blur")
+        opts["inpaint_engine"] = getattr(self, "_inpaint_engine", "lama_onnx")
+        opts["inpaint_device"] = getattr(self, "_inpaint_device", "auto")
         try:
             save_render_opts(self._work_dir, opts)
         except OSError as e:
             TOASTS.warn(f"Không lưu được tùy chọn của dự án: {e}")
+
+        # Tự động ghi nhớ cho các video tiếp theo
+        self._sync_editor_defaults_to_env(opts)
+
+    def _sync_editor_defaults_to_env(self, opts: dict) -> None:
+        """Tự động lưu các lựa chọn trong Trình chỉnh sửa thành cấu hình mặc định cho các video sau."""
+        try:
+            from autodub_gui.env_store import bool_to_env, write_env
+            import json
+
+            updates = {}
+            if "voice_speed" in opts:
+                updates["VOICE_SPEED"] = str(opts["voice_speed"])
+            if "selected_voice" in opts and opts["selected_voice"]:
+                updates["VIENEU_VOICE"] = str(opts["selected_voice"])
+            if "subtitle_mode" in opts:
+                updates["SUBTITLE_MODE"] = str(opts["subtitle_mode"])
+            if "subtitle_preset" in opts and opts["subtitle_preset"]:
+                updates["SUBTITLE_PRESET"] = str(opts["subtitle_preset"])
+            if "bg_mode" in opts:
+                updates["BG_MODE"] = str(opts["bg_mode"])
+            if "bg_duck_db" in opts:
+                updates["BG_DUCK_DB"] = str(opts["bg_duck_db"])
+            if "aspect_preset" in opts:
+                updates["VIDEO_ASPECT_PRESET"] = str(opts["aspect_preset"])
+            if "reframe_mode" in opts:
+                updates["VIDEO_REFRAME_MODE"] = str(opts["reframe_mode"])
+            if "auto_sfx_enabled" in opts:
+                updates["AUTO_SFX_ENABLED"] = bool_to_env(bool(opts["auto_sfx_enabled"]))
+            if "sfx_preset" in opts:
+                updates["SFX_PRESET"] = str(opts["sfx_preset"])
+            if "sfx_volume" in opts:
+                updates["SFX_VOLUME"] = str(opts["sfx_volume"])
+            if "voice_postprocess" in opts:
+                updates["VOICE_POSTPROCESS"] = bool_to_env(bool(opts["voice_postprocess"]))
+            if "voice_target_lufs" in opts:
+                updates["VOICE_TARGET_LUFS"] = str(opts["voice_target_lufs"])
+            if "bg_duck_voice_db" in opts:
+                updates["BG_DUCK_VOICE_DB"] = str(opts["bg_duck_voice_db"])
+            if "soft_timing_fit" in opts:
+                updates["SOFT_TIMING_FIT"] = bool_to_env(bool(opts["soft_timing_fit"]))
+            if "timing_max_drift_s" in opts:
+                updates["TIMING_MAX_DRIFT_S"] = str(opts["timing_max_drift_s"])
+            if "mask_method" in opts:
+                updates["MASK_METHOD"] = str(opts["mask_method"])
+            if "inpaint_engine" in opts:
+                updates["INPAINT_ENGINE"] = str(opts["inpaint_engine"])
+            if "inpaint_device" in opts:
+                updates["INPAINT_DEVICE"] = str(opts["inpaint_device"])
+
+
+            # Logo
+            if "logo_path" in opts:
+                updates["LOGO_PATH"] = str(opts["logo_path"])
+            if "logo_position" in opts:
+                updates["LOGO_POSITION"] = str(opts["logo_position"])
+            if "logo_scale" in opts:
+                updates["LOGO_SCALE"] = str(opts["logo_scale"])
+            if "logo_opacity" in opts:
+                updates["LOGO_OPACITY"] = str(opts["logo_opacity"])
+            if "logo_margin" in opts:
+                updates["LOGO_MARGIN"] = str(opts["logo_margin"])
+            if "logo_motion" in opts:
+                updates["LOGO_MOTION"] = str(opts["logo_motion"])
+
+            # Watermark
+            if "watermark_text" in opts:
+                updates["WATERMARK_TEXT"] = str(opts["watermark_text"])
+            if "watermark_opacity" in opts:
+                updates["WATERMARK_OPACITY"] = str(opts["watermark_opacity"])
+            if "watermark_font_size" in opts:
+                updates["WATERMARK_FONT_SIZE"] = str(opts["watermark_font_size"])
+            if "watermark_color" in opts:
+                updates["WATERMARK_COLOR"] = str(opts["watermark_color"])
+            if "watermark_speed" in opts:
+                updates["WATERMARK_SPEED"] = str(opts["watermark_speed"])
+            if "watermark_motion" in opts:
+                updates["WATERMARK_MOTION"] = str(opts["watermark_motion"])
+
+            # Blur regions
+            if "blur_regions" in opts and isinstance(opts["blur_regions"], list):
+                updates["BLUR_REGIONS"] = json.dumps(opts["blur_regions"])
+
+            # Subtitle style
+            style = opts.get("subtitle_style")
+            if isinstance(style, dict):
+                if "font" in style: updates["SUBTITLE_FONT"] = str(style["font"])
+                if "font_size" in style: updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
+                if "position" in style: updates["SUBTITLE_POSITION"] = str(style["position"])
+                if "color" in style: updates["SUBTITLE_COLOR"] = str(style["color"])
+                if "outline" in style: updates["SUBTITLE_OUTLINE"] = str(style["outline"])
+                if "outline_color" in style: updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
+                if "shadow" in style: updates["SUBTITLE_SHADOW"] = str(style["shadow"])
+                if "bold" in style: updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
+                if "box" in style: updates["SUBTITLE_BOX"] = str(style["box"])
+                if "box_color" in style: updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
+                if "box_opacity" in style: updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
+                if "display" in style: updates["SUBTITLE_DISPLAY"] = str(style["display"])
+                if "words_per_cue" in style: updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
+                if "effect" in style: updates["KARAOKE_EFFECT"] = str(style["effect"])
+                if "highlight_color" in style: updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
+
+            if updates:
+                write_env(updates)
+        except Exception:
+            pass
 
     def _on_export_options_changed(self) -> None:
         """Đổi bộ kiểu chữ ở ô chọn thì áp luôn vào kiểu đang dùng."""

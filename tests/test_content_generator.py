@@ -19,16 +19,27 @@ def test_generate_social_metadata_direct_with_api_key(monkeypatch):
     )
 
     fake_output = {
-        "title": "Bí Quyết Nấu Phở Bò Gia Truyền",
-        "description": "Hướng dẫn chi tiết cách nấu phở bò đậm đà chuẩn vị.",
-        "hashtags": ["#phobo", "#monngon", "#shorts"],
+        "youtube": {
+            "title": "Bí Quyết Nấu Phở Bò Gia Truyền",
+            "alternative_titles": ["Cách Nấu Phở Bò Đậm Đà", "Bí Mật Nồi Nước Dùng Phở Bò"],
+            "description": "Hướng dẫn chi tiết cách nấu phở bò đậm đà chuẩn vị.",
+            "tags": ["phở bò", "nấu ăn", "món ngon"],
+            "hashtags": ["#phobo", "#monngon", "#reviewphim"]
+        },
+        "youtube_shorts": {
+            "title": "Bí Quyết Nấu Nước Dùng Phở Bò Bất Bại #Shorts",
+            "description": "Bí quyết giúp nồi nước dùng trong vắt, đậm đà!",
+            "hashtags": ["#shorts", "#phobo", "#trending"]
+        },
         "tiktok": {
             "title": "Nấu phở bò chuẩn vị tại nhà cực dễ!",
+            "description": "Bạn có thích ăn phở bò tái nạm không?",
             "hashtags": ["#fyp", "#xuhuong", "#food"]
         },
         "facebook": {
             "title": "Ai mê phở bò thì vào xem ngay nhé!",
-            "hashtags": ["#reels", "#trending"]
+            "description": "Cùng học bí quyết nấu phở bò gia truyền ngon đỉnh cao.",
+            "hashtags": ["#reels", "#trending", "#monngon"]
         }
     }
 
@@ -49,9 +60,21 @@ def test_generate_social_metadata_direct_with_api_key(monkeypatch):
 
     assert len(calls) == 1
     assert meta["title"] == "Bí Quyết Nấu Phở Bò Gia Truyền"
-    assert len(meta["hashtags"]) == 3
+    assert "youtube" in meta
+    assert "youtube_shorts" in meta
+    assert "tiktok" in meta
+    assert "facebook" in meta
+
+    assert meta["youtube_shorts"]["title"] == "Bí Quyết Nấu Nước Dùng Phở Bò Bất Bại #Shorts"
+    assert meta["youtube_shorts"]["description"] == "Bí quyết giúp nồi nước dùng trong vắt, đậm đà!"
+    assert "#shorts" in meta["youtube_shorts"]["hashtags"]
+
     assert meta["tiktok"]["title"] == "Nấu phở bò chuẩn vị tại nhà cực dễ!"
+    assert meta["tiktok"]["description"] == "Bạn có thích ăn phở bò tái nạm không?"
+
     assert meta["facebook"]["title"] == "Ai mê phở bò thì vào xem ngay nhé!"
+    assert meta["facebook"]["description"] == "Cùng học bí quyết nấu phở bò gia truyền ngon đỉnh cao."
+
 
 
 def test_pipeline_load_translation_extracts_ai_studio_metadata(tmp_path):

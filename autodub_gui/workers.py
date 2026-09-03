@@ -356,13 +356,15 @@ class BatchWorker(QThread):
 
     def __init__(self, settings: Settings, req_template: DubRequest,
                  items: list, retry_done: bool = False, reuse_tts: bool = True,
-                 parent=None):
+                 concurrency: int = 1, export_dir: str | None = None, parent=None):
         super().__init__(parent)
         self._settings = settings
         self._template = req_template
         self._items = items          # list[BatchItem] (or pasted text lines)
         self._retry_done = retry_done
         self._reuse_tts = reuse_tts
+        self._concurrency = max(1, int(concurrency))
+        self._export_dir = export_dir
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -380,12 +382,21 @@ class BatchWorker(QThread):
         demucs_cache = None
         whisper_cache = None
         try:
+            if self._concurrency > 1:
+                summary = run_batch(
+                    self._items, self._settings, self._template,
+                    observer=observer,
+                    retry_done=self._retry_done,
+                    concurrency=self._concurrency,
+                    export_dir=self._export_dir,
+                )
+                self.finished_ok.emit(summary)
+                return
+
             if self._reuse_tts:
                 from autodub.speech.tts import SynthCache
                 synth_cache = SynthCache()
             if len(self._items) > 1:
-                # Giữ worker Demucs sống giữa các video — CLI (run_batch) đã
-                # làm vậy, nhánh GUI trước đây quên nên nạp lại model mỗi video.
                 from autodub.media.vocal_separator import DemucsCache
                 demucs_cache = DemucsCache()
                 from autodub.speech.transcriber import WhisperCache
@@ -400,7 +411,8 @@ class BatchWorker(QThread):
             )
             summary = run_batch(self._items, self._settings, self._template,
                                 pipeline=pipeline, observer=observer,
-                                retry_done=self._retry_done)
+                                retry_done=self._retry_done,
+                                export_dir=self._export_dir)
             self.finished_ok.emit(summary)
         except PipelineCancelled:
             self.cancelled.emit()

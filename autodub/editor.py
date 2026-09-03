@@ -532,7 +532,18 @@ def _render_options(state: EditorState, settings: Settings,
                     watermark_font_size: int | None = None,
                     watermark_color: str | None = None,
                     watermark_speed: int | None = None,
-                    watermark_motion: str | None = None) -> tuple[str, list[dict], dict, dict]:
+                    watermark_motion: str | None = None,
+                    smart_flip: bool | None = None,
+                    micro_zoom: bool | None = None,
+                    color_filter: str | None = None,
+                    aspect_preset: str | None = None,
+                    reframe_mode: str | None = None,
+                    auto_sfx_enabled: bool | None = None,
+                    sfx_preset: str | None = None,
+                    sfx_volume_db: float | None = None,
+                    mask_method: str | None = None,
+                    inpaint_engine: str | None = None,
+                    inpaint_device: str | None = None) -> tuple[str, list[dict], dict, dict]:
     """Chốt bộ tùy chọn xuất video và ghi lại vào ``render_opts.json``.
 
     Tham số nào để None thì lấy theo lựa chọn đã lưu của dự án, rồi mới tới
@@ -565,9 +576,17 @@ def _render_options(state: EditorState, settings: Settings,
     if watermark_color is not None: merged["watermark_color"] = watermark_color
     if watermark_speed is not None: merged["watermark_speed"] = watermark_speed
     if watermark_motion is not None: merged["watermark_motion"] = watermark_motion
+    if smart_flip is not None: merged["smart_flip"] = smart_flip
+    if micro_zoom is not None: merged["micro_zoom"] = micro_zoom
+    if color_filter is not None: merged["color_filter"] = color_filter
     if aspect_preset is not None: merged["aspect_preset"] = aspect_preset
-    if "reframe_mode" in opts: merged["reframe_mode"] = opts["reframe_mode"]
-    if "auto_sfx_enabled" in opts: merged["auto_sfx_enabled"] = opts["auto_sfx_enabled"]
+    if reframe_mode is not None: merged["reframe_mode"] = reframe_mode
+    if auto_sfx_enabled is not None: merged["auto_sfx_enabled"] = auto_sfx_enabled
+    if sfx_preset is not None: merged["sfx_preset"] = sfx_preset
+    if sfx_volume_db is not None: merged["sfx_volume_db"] = sfx_volume_db
+    if mask_method is not None: merged["mask_method"] = mask_method
+    if inpaint_engine is not None: merged["inpaint_engine"] = inpaint_engine
+    if inpaint_device is not None: merged["inpaint_device"] = inpaint_device
 
     save_render_opts(state.work_dir, merged)
     logo_opts = {
@@ -588,6 +607,12 @@ def _render_options(state: EditorState, settings: Settings,
         "color_filter": merged.get("color_filter", getattr(settings, "color_filter", "none")),
         "aspect_preset": merged.get("aspect_preset", getattr(settings, "video_aspect_preset", "original")),
         "reframe_mode": merged.get("reframe_mode", getattr(settings, "video_reframe_mode", "blur")),
+        "auto_sfx_enabled": merged.get("auto_sfx_enabled", getattr(settings, "auto_sfx_enabled", False)),
+        "sfx_preset": merged.get("sfx_preset", getattr(settings, "sfx_preset", "whoosh")),
+        "sfx_volume_db": merged.get("sfx_volume_db", getattr(settings, "sfx_volume_db", -14.0)),
+        "mask_method": merged.get("mask_method") or getattr(settings, "mask_method", "blur"),
+        "inpaint_engine": merged.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
+        "inpaint_device": merged.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
     }
     return subtitle_mode, blur_regions, style, logo_opts
 
@@ -715,6 +740,13 @@ def rebuild_output(
     micro_zoom: bool | None = None,
     color_filter: str | None = None,
     aspect_preset: str | None = None,
+    reframe_mode: str | None = None,
+    auto_sfx_enabled: bool | None = None,
+    sfx_preset: str | None = None,
+    sfx_volume_db: float | None = None,
+    mask_method: str | None = None,
+    inpaint_engine: str | None = None,
+    inpaint_device: str | None = None,
 ) -> str:
     """Dựng lại âm thanh và video từ danh sách câu hiện tại.
 
@@ -736,7 +768,14 @@ def rebuild_output(
         logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
         watermark_text=watermark_text, watermark_opacity=watermark_opacity,
         watermark_font_size=watermark_font_size, watermark_color=watermark_color,
-        watermark_speed=watermark_speed, watermark_motion=watermark_motion)
+        watermark_speed=watermark_speed, watermark_motion=watermark_motion,
+        smart_flip=smart_flip, micro_zoom=micro_zoom, color_filter=color_filter,
+        aspect_preset=aspect_preset, reframe_mode=reframe_mode,
+        auto_sfx_enabled=auto_sfx_enabled, sfx_preset=sfx_preset, sfx_volume_db=sfx_volume_db,
+        mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
+        inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
+        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None))
+
 
     def emit(step, status, **kw):
         if reporter is not None:
@@ -853,6 +892,9 @@ def rebuild_subtitles(
     micro_zoom: bool | None = None,
     color_filter: str | None = None,
     aspect_preset: str | None = None,
+    mask_method: str | None = None,
+    inpaint_engine: str | None = None,
+    inpaint_device: str | None = None,
 ) -> str:
     """Ghi lại PHỤ ĐỀ vào video, giữ nguyên phần âm thanh đã có.
 
@@ -872,7 +914,13 @@ def rebuild_subtitles(
         logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
         watermark_text=watermark_text, watermark_opacity=watermark_opacity,
         watermark_font_size=watermark_font_size, watermark_color=watermark_color,
-        watermark_speed=watermark_speed, watermark_motion=watermark_motion)
+        watermark_speed=watermark_speed, watermark_motion=watermark_motion,
+        smart_flip=smart_flip, micro_zoom=micro_zoom, color_filter=color_filter,
+        aspect_preset=aspect_preset,
+        mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
+        inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
+        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None))
+
 
     merged_audio_path = data_path(work_dir, target.audio_name)
     if not os.path.isfile(merged_audio_path):
@@ -1583,4 +1631,115 @@ def retranslate_all_segments_ai(
     )
     _commit(work_dir, target, translated, path, old_ids=[-1] * len(translated))
     return translated
+
+
+VIRAL_CLIPS_NAME = "viral_clips.json"
+
+
+def get_or_analyze_viral_clips(
+    state: EditorState,
+    settings: Any = None,
+    force_refresh: bool = False,
+    scene_cuts: list[float] | None = None,
+) -> list[dict]:
+    """Lấy danh sách các đoạn trích Viral Shorts đã lưu hoặc gọi AI phân tích mới."""
+    path = data_path(state.work_dir, VIRAL_CLIPS_NAME)
+    if not force_refresh and os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and data:
+                    return data
+        except Exception as e:
+            logger.warning(f"Không thể đọc {VIRAL_CLIPS_NAME}: {e}")
+
+    from autodub.content.viral_clipper import analyze_viral_highlights
+
+    title = os.path.basename(os.path.abspath(state.work_dir))
+    clips = analyze_viral_highlights(
+        state.segments,
+        settings=settings,
+        video_title=title,
+        scene_cuts=scene_cuts,
+    )
+    if clips:
+        save_json_atomic(clips, data_path(state.work_dir, VIRAL_CLIPS_NAME, create_dir=True))
+    return clips
+
+
+def export_project_short_clip(
+    state: EditorState,
+    clip_id: int,
+    settings: Any = None,
+    output_dir: str | None = None,
+    aspect_preset: str = "tiktok_9_16",
+    reframe_mode: str = "blur",
+    reporter: ProgressReporter | None = None,
+) -> str:
+    """Xuất một đoạn Shorts 9:16 độc lập từ dự án hiện tại."""
+    clips = get_or_analyze_viral_clips(state, settings=settings)
+    clip = next((c for c in clips if c.get("id") == clip_id), None)
+    if not clip:
+        raise EditorError(f"Không tìm thấy clip với ID={clip_id}")
+
+    start_time = float(clip.get("start", 0.0))
+    end_time = float(clip.get("end", start_time + 30.0))
+
+    # Tìm video nguồn
+    source_video = state.video_path or _find_source_video(state.work_dir)
+    if not source_video or not os.path.exists(source_video):
+        raise EditorError("Không tìm thấy video gốc để trích xuất clip")
+
+    # Tìm audio nguồn (ưu tiên audio lồng tiếng đã mix)
+    dubbed_audio = None
+    for audio_name in ("dubbed.wav", "audio_merged.wav", "tts_merged.wav"):
+        p = data_path(state.work_dir, audio_name)
+        if os.path.exists(p):
+            dubbed_audio = p
+            break
+
+    # Tìm và cắt phụ đề ASS nếu có
+    ass_path = None
+    for sub_name in ("final_sub.ass", "subtitles.ass", "translated.ass"):
+        p = data_path(state.work_dir, sub_name)
+        if os.path.exists(p):
+            ass_path = p
+            break
+
+    sliced_ass_path = None
+    if ass_path:
+        try:
+            from autodub.media.clipper import slice_ass_subtitles
+            with open(ass_path, encoding="utf-8") as f:
+                ass_text = f.read()
+            sliced_text = slice_ass_subtitles(ass_text, start_time, end_time)
+            sliced_ass_path = os.path.join(state.work_dir, f"short_{clip_id}_sub.ass")
+            with open(sliced_ass_path, "w", encoding="utf-8") as f:
+                f.write(sliced_text)
+        except Exception as e:
+            logger.warning(f"Cắt phụ đề ASS cho clip thất bại: {e}")
+
+    # Thư mục xuất
+    if not output_dir:
+        output_dir = os.path.join(state.work_dir, "shorts")
+    os.makedirs(output_dir, exist_ok=True)
+
+    clean_title = re.sub(r'[\\/*?:"<>|]', "", str(clip.get("title", f"short_{clip_id}")))[:30].strip()
+    out_name = f"short_{clip_id:02d}_{clean_title or 'clip'}.mp4"
+    out_path = os.path.join(output_dir, out_name)
+
+    from autodub.media.clipper import export_short_clip
+
+    return export_short_clip(
+        source_video=source_video,
+        source_audio=dubbed_audio,
+        ass_sub_path=sliced_ass_path,
+        start_time=start_time,
+        end_time=end_time,
+        output_path=out_path,
+        aspect_preset=aspect_preset,
+        reframe_mode=reframe_mode,
+        reporter=reporter,
+    )
+
 

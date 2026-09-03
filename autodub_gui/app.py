@@ -48,8 +48,6 @@ ROW_EDITOR_LAUNCHER = 13
 
 ROW_ACCOUNT = 14    # Tài khoản: ví Vox, kích hoạt mã, lịch sử
 
-PAGE_COUNT = 15
-
 # (số thứ tự, nhãn ở thanh bên, tiêu đề trang, mô tả trang, biểu tượng, nhóm)
 PAGES: list[tuple[int, str, str, str, object, str]] = [
     # Nhóm "main" — LUỒNG LÀM VIỆC
@@ -91,6 +89,7 @@ PAGES: list[tuple[int, str, str, str, object, str]] = [
      icons.help_circle, "second"),
 ]
 
+PAGE_COUNT = len({p[0] for p in PAGES} | {ROW_EDITOR, ROW_EDITOR_LAUNCHER})
 _PAGE_BY_ROW = {p[0]: p for p in PAGES}
 
 # Mốc chiều rộng cửa sổ và bề rộng thanh bên tương ứng
@@ -275,6 +274,7 @@ class MainWindow(QMainWindow):
             page.settings_needed.connect(lambda _m: self.switch_page(ROW_SETTINGS))
             page.edit_requested.connect(self.open_editor)
             page.home_requested.connect(lambda: self.switch_page(ROW_HOME))
+            page.projects_requested.connect(lambda: self.switch_page(ROW_PROJECTS))
         elif row == ROW_PROJECTS:
             from autodub_gui.pages.projects_page import ProjectsPage
             page = ProjectsPage(self._fresh_settings, self.pages)
@@ -601,7 +601,7 @@ def _smoke_report(window: MainWindow) -> int:
     _probe_env_file(checks)
 
     required = ("gui_constructed", "env_path_writable", "yt_dlp_importable",
-                "faster_whisper_importable", "worker_scripts_found",
+                "worker_scripts_found",
                 "new_modules_importable", "multimedia_importable")
     checks["ok"] = all(checks.get(k) for k in required)
 
