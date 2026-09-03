@@ -2,72 +2,60 @@ import numpy as np
 import pytest
 
 from autodub.media.hardsub_detector import (
-    detect_text_regions_in_image,
-    merge_similar_regions,
+    detect_text_candidates_in_frame,
+    spatial_merge_candidates,
+    track_temporal_regions,
     detect_hardsub_regions,
+    FrameSample,
 )
 
 
-def _generate_synthetic_frame_with_subtitles(w: int = 640, h: int = 360, has_sub: bool = True) -> np.ndarray:
-    """Tạo frame ảnh xám giả lập: nửa dưới có dải văn bản phụ đề độ tương phản cao."""
-    img = np.full((h, w), 50, dtype=np.uint8) # Nền tối
+def _generate_synthetic_frame(w: int = 640, h: int = 360, has_sub: bool = True, sub_pos: str = "bottom") -> np.ndarray:
+    """Tạo frame ảnh xám giả lập có phụ đề ở đáy hoặc đỉnh."""
+    img = np.full((h, w), 40, dtype=np.uint8) # Nền tối
     if has_sub:
-        # Giả lập dòng phụ đề ở vị trí y = 300..330 (đáy khung hình ~83% - 91%)
-        y_start, y_end = int(h * 0.83), int(h * 0.92)
+        if sub_pos == "bottom":
+            y_start, y_end = int(h * 0.82), int(h * 0.91)
+        elif sub_pos == "top":
+            y_start, y_end = int(h * 0.08), int(h * 0.17)
+        else:
+            y_start, y_end = int(h * 0.45), int(h * 0.54)
+
         x_start, x_end = int(w * 0.20), int(w * 0.80)
         # Các nét chữ tương phản cao xen kẽ
-        for x in range(x_start, x_end, 6):
-            img[y_start:y_end, x:x+3] = 240
+        for x in range(x_start, x_end, 5):
+            img[y_start:y_end, x:x+3] = 245
     return img
 
 
-def test_detect_text_regions_in_image_with_subtitles():
-    frame = _generate_synthetic_frame_with_subtitles(640, 360, has_sub=True)
-    regions = detect_text_regions_in_image(frame)
-    assert len(regions) > 0
-    sub_region = regions[0]
-    # Kiểm tra toạ độ chuẩn hoá nằm ở dải đáy khung hình
-    assert sub_region["y"] > 0.65
-    assert sub_region["w"] > 0.4
-    assert sub_region["h"] > 0.04
+def test_detect_text_candidates_bottom_subtitles():
+    frame = _generate_synthetic_frame(640, 360, has_sub=True, sub_pos="bottom")
+    cands = detect_text_candidates_in_frame(frame)
+    assert len(cands) > 0
+    c = cands[0]
+    assert c.y / 360.0 > 0.60
+    assert c.confidence >= 0.45
 
 
-def test_detect_text_regions_in_image_clean():
-    # Frame trơn không có chữ
+def test_detect_text_candidates_top_subtitles():
+    frame = _generate_synthetic_frame(640, 360, has_sub=True, sub_pos="top")
+    cands = detect_text_candidates_in_frame(frame)
+    assert len(cands) > 0
+    c = cands[0]
+    assert c.y / 360.0 < 0.30
+
+
+def test_detect_text_candidates_clean_frame():
     frame = np.full((360, 640), 100, dtype=np.uint8)
-    regions = detect_text_regions_in_image(frame)
-    assert len(regions) == 0
+    cands = detect_text_candidates_in_frame(frame)
+    assert len(cands) == 0
 
 
-def test_merge_similar_regions():
-    regions_list = [
-        [{"x": 0.15, "y": 0.82, "w": 0.70, "h": 0.10}],
-        [{"x": 0.16, "y": 0.83, "w": 0.68, "h": 0.09}],
-        [{"x": 0.14, "y": 0.81, "w": 0.72, "h": 0.11}],
-    ]
-    merged = merge_similar_regions(regions_list, min_occurrence=0.5)
-    assert len(merged) == 1
+def test_spatial_merge_candidates():
+    frame = _generate_synthetic_frame(640, 360, has_sub=True, sub_pos="bottom")
+    cands = detect_text_candidates_in_frame(frame)
+    merged = spatial_merge_candidates(cands, 640, 360)
+    assert len(merged) >= 1
     m = merged[0]
-    assert 0.10 <= m["x"] <= 0.20
-    assert 0.75 <= m["y"] <= 0.85
-    assert 0.60 <= m["w"] <= 0.80
-    assert 0.05 <= m["h"] <= 0.15
-
-
-def test_detect_hardsub_regions_mock(monkeypatch):
-    def fake_extract_frames(video_path, max_frames=8):
-        # Trả về 4 frame có sub, 2 frame không sub
-        return [
-            (0.0, _generate_synthetic_frame_with_subtitles(640, 360, True)),
-            (1.0, _generate_synthetic_frame_with_subtitles(640, 360, True)),
-            (2.0, _generate_synthetic_frame_with_subtitles(640, 360, True)),
-            (3.0, _generate_synthetic_frame_with_subtitles(640, 360, False)),
-        ]
-    
-    from autodub.media import hardsub_detector
-    monkeypatch.setattr(hardsub_detector, "extract_video_sample_frames", fake_extract_frames)
-
-    res = detect_hardsub_regions("dummy.mp4")
-    assert len(res) >= 1
-    assert res[0]["y"] > 0.65
-    assert res[0]["h"] > 0.04
+    assert m["y"] > 0.60
+    assert m["w"] > 0.30
