@@ -14,6 +14,7 @@ BG_APP            = "#07070f"   # Layer 0: Canvas nền sâu nhất (OLED dark)
 BG_SIDEBAR        = "#0a0a18"   # Layer 1: Thanh bên điều hướng
 BG_MAIN           = "#07070f"   # Layer 0: Vùng nội dung chính
 BG_PANEL          = "#0f0f22"   # Layer 2: Thẻ / Khung nhóm cơ bản (Surface L1)
+BG_CARD           = BG_PANEL   # Alias tương thích cho card/thẻ
 BG_PANEL_HOVER    = "#141430"   # Hover trên panel — indigo push nhẹ
 BG_ELEVATED       = "#161632"   # Layer 3: Bề mặt nổi (Dropdown, Modal, Popup)
 BG_INPUT          = "#0d0d1e"   # Sunken: Ô nhập liệu (chìm hơn panel)

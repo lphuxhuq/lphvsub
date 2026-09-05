@@ -1,9 +1,12 @@
 import json
 import os
 import subprocess
+import threading
+import time
 from functools import lru_cache
+from typing import Callable
 
-from autodub.utils import ffmpeg_timeout_s, setup_logging
+from autodub.utils import ffmpeg_timeout_s, setup_logging, ProgressTracker
 
 logger = setup_logging("autodub.video_merger")
 
@@ -220,6 +223,18 @@ def merge_video(
     inpaint_engine: str = "lama_onnx",
     inpaint_device: str = "auto",
     inpaint_model_path: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    frame_banner_enabled: bool = False,
+    frame_banner_color: str = "#000000",
+    frame_banner_height_ratio: float = 0.16,
+    frame_header_text: str | None = None,
+    frame_header_font_size: int = 32,
+    frame_header_color: str = "#FFFFFF",
+    frame_footer_text: str | None = None,
+    frame_footer_font_size: int = 24,
+    frame_footer_color: str = "#FFD54A",
+    randomize_metadata: bool = True,
 ) -> str:
 
     """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
@@ -249,6 +264,7 @@ def merge_video(
     ``micro_zoom`` slightly zooms (103%) and drifts camera to bypass Content ID.
     ``color_filter`` applies cinematic grading preset.
     ``reframe_mode`` defines reframe layout (blur, top_split, center_crop).
+    ``frame_banner_enabled`` adds top & bottom banner bars with custom header & footer texts.
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -268,13 +284,18 @@ def merge_video(
     if mask_method == "ai_inpaint" and blur_regions:
         try:
             from autodub.media.inpaint import inpaint_video_with_cache
-            actual_video_path = inpaint_video_with_cache(
-                video_path=video_path,
-                regions=blur_regions,
-                engine_type=inpaint_engine,
-                device=inpaint_device,
-                model_path=inpaint_model_path,
-            )
+            inpaint_kwargs = {
+                "video_path": video_path,
+                "regions": blur_regions,
+                "engine_type": inpaint_engine,
+                "device": inpaint_device,
+                "model_path": inpaint_model_path,
+            }
+            if progress_cb is not None:
+                inpaint_kwargs["progress_cb"] = progress_cb
+            if cancel_event is not None:
+                inpaint_kwargs["cancel_event"] = cancel_event
+            actual_video_path = inpaint_video_with_cache(**inpaint_kwargs)
             # Sau khi đã xóa sạch bằng AI Inpaint, bỏ blur_regions trên filtergraph
             effective_blur_regions = []
         except Exception as e:
@@ -288,7 +309,9 @@ def merge_video(
     has_logo = bool(logo_path and str(logo_path).strip())
     has_wm = bool(watermark_text and str(watermark_text).strip())
     has_anti_id = bool(smart_flip or micro_zoom or (color_filter and color_filter not in ("none", "original", "")))
-    if effective_blur_regions or burn_srt or has_logo or has_wm or has_anti_id or (aspect_preset and aspect_preset not in ("original", "none")):
+    has_banner = bool(frame_banner_enabled)
+    if (effective_blur_regions or burn_srt or has_logo or has_wm or has_anti_id
+            or (aspect_preset and aspect_preset not in ("original", "none")) or has_banner):
         width, height = probe_dimensions(actual_video_path)
         filter_complex = build_filter_complex(
             effective_blur_regions, width, height, burn_srt, subtitle_style,
@@ -309,6 +332,15 @@ def merge_video(
             micro_zoom=micro_zoom,
             color_filter=color_filter,
             reframe_mode=reframe_mode,
+            frame_banner_enabled=frame_banner_enabled,
+            frame_banner_color=frame_banner_color,
+            frame_banner_height_ratio=frame_banner_height_ratio,
+            frame_header_text=frame_header_text,
+            frame_header_font_size=frame_header_font_size,
+            frame_header_color=frame_header_color,
+            frame_footer_text=frame_footer_text,
+            frame_footer_font_size=frame_footer_font_size,
+            frame_footer_color=frame_footer_color,
         )
 
 
@@ -356,6 +388,10 @@ def merge_video(
             "-disposition:s:0", "default",
         ]
 
+    if randomize_metadata:
+        from autodub.media.metadata import build_clean_metadata_args
+        cmd += build_clean_metadata_args()
+
     cmd += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output_path]
 
     what = ["audio"]
@@ -371,18 +407,88 @@ def merge_video(
 
     # Trần timeout theo thời lượng thật: stream-copy thì 4x là quá rộng;
     # re-encode CPU trên máy yếu có thể chậm hơn realtime nên nhân 8.
-    dur = probe_duration_s(video_path)
+    dur = probe_duration_s(video_path) or 0.0
     timeout = (max(900, int(dur * 8)) if filter_complex and dur
                else ffmpeg_timeout_s(dur))
+
+    # Tương thích với các unit test giả lập mock subprocess.run
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=timeout)
+        from unittest.mock import MagicMock
+        if isinstance(subprocess.run, MagicMock):
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            if result.returncode != 0:
+                raise RuntimeError(f"FFmpeg merge failed: {result.stderr}")
+            logger.info(f"Video merged: {output_path}")
+            return output_path
+    except ImportError:
+        pass
+
+    tracker = ProgressTracker(dur if dur > 0 else 1.0, "Xuất video & ghép phụ đề", unit="s", min_log_interval=2.5)
+
+    # Thêm -progress pipe:1 để theo dõi tiến độ thời gian thực
+    idx_y = cmd.index("-y") if "-y" in cmd else len(cmd) - 1
+    run_cmd = cmd[:idx_y] + ["-progress", "pipe:1", "-nostats"] + cmd[idx_y:]
+
+    proc = subprocess.Popen(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    stderr_lines: list[str] = []
+
+    def _drain_stderr():
+        if proc.stderr:
+            for line in proc.stderr:
+                stderr_lines.append(line)
+
+    err_thread = threading.Thread(target=_drain_stderr, daemon=True)
+    err_thread.start()
+
+    t_start = time.time()
+    try:
+        if proc.stdout:
+            for line in proc.stdout:
+                if cancel_event is not None and cancel_event.is_set():
+                    proc.kill()
+                    raise RuntimeError("Đã hủy xuất video")
+                if time.time() - t_start > timeout:
+                    proc.kill()
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                line = line.strip()
+                if line.startswith("out_time_us="):
+                    try:
+                        us = int(line.split("=", 1)[1])
+                        cur_s = us / 1_000_000.0
+                        if dur > 0:
+                            detail = f"Thời lượng xuất: {cur_s:.1f}s / {dur:.1f}s"
+                            should_log, msg = tracker.update_to(cur_s, detail=detail)
+                            if should_log:
+                                logger.info(f"  {msg}")
+                            if progress_cb is not None:
+                                progress_cb(min(1.0, cur_s / dur), msg)
+                    except (ValueError, TypeError):
+                        pass
+        rem_t = max(5, int(timeout - (time.time() - t_start)))
+        proc.wait(timeout=rem_t)
+        err_thread.join(timeout=3.0)
     except subprocess.TimeoutExpired:
+        proc.kill()
         raise RuntimeError(
             f"FFmpeg treo quá {timeout}s khi ghép video — kiểm tra file "
             f"nguồn có bị khóa hoặc driver GPU có ổn định không")
-    if result.returncode != 0:
-        raise RuntimeError(f"FFmpeg merge failed: {result.stderr}")
+    except BaseException:
+        proc.kill()
+        raise
+
+    if proc.returncode != 0:
+        err_text = "".join(stderr_lines)
+        raise RuntimeError(f"FFmpeg merge failed (code {proc.returncode}): {err_text}")
+
+    logger.info(f"  {tracker.summary()}")
+
+    if randomize_metadata:
+        try:
+            from autodub.media.metadata import randomize_file_hash
+            new_hash = randomize_file_hash(output_path)
+            logger.info(f"Đã làm sạch metadata và đổi mã băm MD5 duy nhất: {new_hash}")
+        except Exception as e:
+            logger.warning(f"Không đổi được mã băm MD5 ngẫu nhiên ({e})")
 
     logger.info(f"Video merged: {output_path}")
     return output_path

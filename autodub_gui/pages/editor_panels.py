@@ -1022,6 +1022,7 @@ class ExportPanel(CollapsibleSection):
     export_ass_requested = Signal()
     export_audio_mp3_requested = Signal()
     open_thumb_requested = Signal()
+    open_studio_requested = Signal()
     copy_title_requested = Signal()
     copy_desc_requested = Signal()
     copy_tags_requested = Signal()
@@ -1139,6 +1140,27 @@ class ExportPanel(CollapsibleSection):
             f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;")
         self.add_widget(sep_post)
 
+        # Thumbnail Preview thu nhỏ
+        self.thumb_preview = QLabel()
+        self.thumb_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.thumb_preview.setStyleSheet(
+            f"background: {tokens.BG_INPUT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
+            f"border-radius: 6px; padding: 4px;")
+        self.thumb_preview.setToolTip("Bấm để mở xem ảnh bìa kích thước thật")
+        self.thumb_preview.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.thumb_preview.mousePressEvent = lambda _e: self.open_thumb_requested.emit()
+        self.thumb_preview.setVisible(False)
+        self.add_widget(self.thumb_preview)
+
+        self.btn_studio = PrimaryButton("Thiết kế ảnh bìa (Studio)")
+        self.btn_studio.setToolTip("Mở hộp thoại thiết kế ảnh bìa: chọn frame từ video, sửa chữ 3D và đổi preset.")
+        self.btn_studio.clicked.connect(self.open_studio_requested.emit)
+        row_studio = QHBoxLayout()
+        row_studio.setSpacing(tokens.SP_2)
+        row_studio.addWidget(self.btn_studio)
+        row_studio.addStretch()
+        self.add_layout(row_studio)
+
         self.video_meta_info = QLabel("")
         self.video_meta_info.setWordWrap(True)
         self.video_meta_info.setStyleSheet(
@@ -1189,8 +1211,27 @@ class ExportPanel(CollapsibleSection):
         self._hist_section.add_widget(self._hist_list)
         self.add_widget(self._hist_section)
 
-    def set_social_metadata(self, meta: dict, video_name: str = "") -> None:
-        """Cập nhật thông tin tiêu đề, hashtag và tên video lên giao diện."""
+    def set_social_metadata(self, meta: dict, video_name: str = "", thumb_path: str = "") -> None:
+        """Cập nhật thông tin tiêu đề, hashtag, mô tả và thumbnail lên giao diện."""
+        import os
+        from PySide6.QtGui import QPixmap
+
+        # Hiển thị ảnh bìa thu nhỏ nếu có
+        if thumb_path and os.path.exists(thumb_path):
+            pix = QPixmap(thumb_path)
+            if not pix.isNull():
+                scaled_pix = pix.scaled(
+                    250, 140,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.thumb_preview.setPixmap(scaled_pix)
+                self.thumb_preview.setVisible(True)
+            else:
+                self.thumb_preview.setVisible(False)
+        else:
+            self.thumb_preview.setVisible(False)
+
         if not meta and not video_name:
             self.video_meta_info.setVisible(False)
             return
@@ -1198,7 +1239,8 @@ class ExportPanel(CollapsibleSection):
         title = (meta or {}).get("title") or ""
         tags = (meta or {}).get("hashtags") or []
         tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
-        
+        desc = (meta or {}).get("description") or ""
+
         lines = []
         if video_name:
             lines.append(f"<b>Video:</b> {video_name}")
@@ -1206,6 +1248,9 @@ class ExportPanel(CollapsibleSection):
             lines.append(f"<b>Tiêu đề:</b> {title}")
         if tags_str:
             lines.append(f"<b>Hashtags:</b> <span style='color:{tokens.PRIMARY_HOVER};'>{tags_str}</span>")
+        if desc:
+            short_desc = (desc[:90] + "…") if len(desc) > 90 else desc
+            lines.append(f"<b>Mô tả:</b> <span style='color:{tokens.TEXT_SECONDARY};'>{short_desc}</span>")
 
         if lines:
             self.video_meta_info.setText("<br>".join(lines))

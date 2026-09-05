@@ -172,6 +172,35 @@ class MainWindow(QMainWindow):
         """
         self._prewarm_queue = list(_PREWARM_ORDER)
         QTimer.singleShot(_PREWARM_START_MS, self._prewarm_next)
+        QTimer.singleShot(_PREWARM_START_MS + 1200, self._start_model_preload)
+
+    def _start_model_preload(self) -> None:
+        """Kích hoạt nạp trước các model AI (Paraformer đầu tiên, Whisper, Demucs...) ở luồng nền."""
+        try:
+            from autodub.model_preloader import preload_models_async
+            settings = self._fresh_settings()
+            preload_models_async(
+                settings,
+                on_step=self._on_model_preload_step,
+                on_done=self._on_model_preload_done,
+            )
+        except Exception:
+            pass
+
+    def _on_model_preload_step(self, key: str, status: str) -> None:
+        labels = {
+            "paraformer": "Paraformer (tiếng Trung)",
+            "whisper": "Faster-Whisper",
+            "demucs": "Demucs",
+            "vieneu": "VieNeu-TTS",
+            "lama": "LaMa ONNX",
+        }
+        name = labels.get(key, key)
+        if status == "ready":
+            self.statusBar().showMessage(f"⚡ Model AI: {name} đã sẵn sàng", 3000)
+
+    def _on_model_preload_done(self, final_status: dict[str, str]) -> None:
+        self.statusBar().showMessage("⚡ Toàn bộ Model AI đã sẵn sàng (Không còn độ trễ chờ nạp)", 8000)
 
     def _prewarm_next(self) -> None:
         while self._prewarm_queue:
@@ -539,6 +568,14 @@ class MainWindow(QMainWindow):
                        self._update_worker):
             if worker is not None and worker.isRunning():
                 worker.wait(5000)
+
+        # Dọn dẹp an toàn Model Preloader Pool
+        try:
+            from autodub.model_preloader import close_global_models
+            close_global_models()
+        except Exception:
+            pass
+
         event.accept()
 
 
@@ -781,6 +818,8 @@ def main() -> int:
 
     settings = Settings.load()
     window = MainWindow()      # phím tắt được cửa sổ tự đăng ký khi dựng
+    from autodub.model_preloader import close_global_models
+    app.aboutToQuit.connect(close_global_models)
     window.show()
 
     # Wizard cài đặt lần đầu — hiện ngay sau window.show() để dialog modal

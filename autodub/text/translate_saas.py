@@ -306,8 +306,9 @@ def translate_segments(
         return merged
 
     from concurrent.futures import ThreadPoolExecutor
+    from autodub.utils import ProgressTracker
 
-    done = 0
+    tracker = ProgressTracker(len(segments), "Dịch lời thoại (VoxDub Cloud)", unit="câu")
     pool = ThreadPoolExecutor(max_workers=workers)
     try:
         futures = [pool.submit(_run_batch, i, b) for i, b in enumerate(batches)]
@@ -315,12 +316,22 @@ def translate_segments(
         for i, fut in enumerate(futures):
             if reporter is not None:
                 reporter.check_cancelled()
-            results.append(fut.result())
-            done += len(batches[i])
-            logger.info(f"  Đã dịch {done}/{len(segments)} câu")
+            batch_res = fut.result()
+            results.append(batch_res)
+            preview = ""
+            if batch_res:
+                txt = str(batch_res[0].get(target.text_field, "") or batch_res[0].get("text", "")).strip()
+                preview = (txt[:28] + "...") if len(txt) > 28 else txt
+            first_id = batches[i][0].get('id', '?') if batches[i] else '?'
+            last_id = batches[i][-1].get('id', '?') if batches[i] else '?'
+            detail = f"Lô {i+1}/{len(batches)} (câu #{first_id}-#{last_id}): \"{preview}\""
+            should_log, msg = tracker.step(len(batches[i]), detail=detail)
+            if should_log:
+                logger.info(f"  {msg}")
             if reporter is not None:
                 reporter.emit("translate", "progress",
-                              current=done, total=len(segments))
+                              current=int(tracker.done), total=len(segments))
+        logger.info(f"  {tracker.summary()}")
     except BaseException:
         # Hủy hoặc lỗi: không chờ các lô đang bay — trả điều khiển về ngay.
         pool.shutdown(wait=False, cancel_futures=True)

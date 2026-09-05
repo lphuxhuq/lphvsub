@@ -118,6 +118,7 @@ class _FrameCanvas(QWidget):
         self._style = dict(style)
         self._logo_opts: dict = {}
         self._wm_opts: dict = {}
+        self._banner_opts: dict = {}
         self._allow_regions = allow_regions
         self._rects: list[QRect] = []
         self._selected_index: int | None = None
@@ -169,6 +170,10 @@ class _FrameCanvas(QWidget):
 
     def set_watermark_options(self, opts: dict) -> None:
         self._wm_opts = dict(opts)
+        self.update()
+
+    def set_banner_options(self, opts: dict) -> None:
+        self._banner_opts = dict(opts)
         self.update()
 
     def set_rects_from_normalized(self, regions: list[dict]) -> None:
@@ -361,9 +366,61 @@ class _FrameCanvas(QWidget):
             painter.setPen(QPen(QColor(tokens.PREVIEW_BLUR_EDGE), 2, Qt.DashLine))
             painter.drawRect(self._drag_current)
 
+        self._paint_banner(painter, pr)
         self._paint_logo(painter, pr)
         self._paint_watermark(painter, pr)
         self._paint_subtitle(painter, pr)
+
+    def _paint_banner(self, painter: QPainter, pr: QRect) -> None:
+        """Vẽ khung viền dải trên & dưới (Top/Bottom Banner) xem trước trên canvas."""
+        if not self._banner_opts or not self._banner_opts.get("enabled"):
+            return
+
+        bg_color_hex = str(self._banner_opts.get("color", "#000000")).strip()
+        bg_col = QColor(bg_color_hex) if QColor.isValidColor(bg_color_hex) else QColor("#000000")
+
+        # Chiều cao mỗi dải banner theo tỷ lệ người dùng chọn (mặc định 16%)
+        height_ratio = float(self._banner_opts.get("frame_banner_height_ratio") or self._banner_opts.get("height_ratio") or 0.16)
+        banner_h = max(20, int(pr.height() * height_ratio))
+
+        top_rect = QRect(pr.x(), pr.y(), pr.width(), banner_h)
+        bot_rect = QRect(pr.x(), pr.bottom() - banner_h + 1, pr.width(), banner_h)
+
+        painter.save()
+        # Nền banner
+        painter.fillRect(top_rect, bg_col)
+        painter.fillRect(bot_rect, bg_col)
+
+        # Viền mờ phân cách
+        painter.setPen(QPen(QColor(255, 255, 255, 40), 1))
+        painter.drawLine(top_rect.bottomLeft(), top_rect.bottomRight())
+        painter.drawLine(bot_rect.topLeft(), bot_rect.topRight())
+
+        scale = self._ass_scale()
+
+        # Vẽ Header Text
+        header_text = str(self._banner_opts.get("frame_header_text") or self._banner_opts.get("header_text") or "").strip()
+        if header_text:
+            h_fs = int(self._banner_opts.get("frame_header_font_size") or self._banner_opts.get("header_font_size") or 32)
+            fs = max(10, int(h_fs * scale * 0.75))
+            c_hex = str(self._banner_opts.get("frame_header_color") or self._banner_opts.get("header_color") or "#FFFFFF").strip()
+            text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFFFFF")
+            painter.setFont(QFont("Arial", fs, QFont.Bold))
+            painter.setPen(text_col)
+            painter.drawText(top_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, header_text)
+
+        # Vẽ Footer Text
+        footer_text = str(self._banner_opts.get("frame_footer_text") or self._banner_opts.get("footer_text") or "").strip()
+        if footer_text:
+            f_fs = int(self._banner_opts.get("frame_footer_font_size") or self._banner_opts.get("footer_font_size") or 24)
+            fs = max(9, int(f_fs * scale * 0.75))
+            c_hex = str(self._banner_opts.get("frame_footer_color") or self._banner_opts.get("footer_color") or "#FFD54A").strip()
+            text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFD54A")
+            painter.setFont(QFont("Arial", fs, QFont.Bold))
+            painter.setPen(text_col)
+            painter.drawText(bot_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, footer_text)
+
+        painter.restore()
 
     def _paint_logo(self, painter: QPainter, pr: QRect) -> None:
         """Vẽ logo xem trước trên canvas."""
@@ -597,6 +654,7 @@ class StyleDialog(QDialog):
                  reframe_options: dict | None = None,
                  sfx_options: dict | None = None,
                  mask_options: dict | None = None,
+                 banner_options: dict | None = None,
                  video_url: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Phụ đề & hiệu ứng video")
@@ -608,6 +666,14 @@ class StyleDialog(QDialog):
         self._reframe_opts = dict(reframe_options or {})
         self._sfx_opts = dict(sfx_options or {})
         self._mask_opts = dict(mask_options or {})
+        self._banner_opts = dict(banner_options or {})
+        if not self._banner_opts and self._reframe_opts:
+            self._banner_opts = {
+                k: v for k, v in self._reframe_opts.items() if k.startswith("frame_")
+            }
+        self._banner_bg_color = str(self._banner_opts.get("frame_banner_color", "#000000"))
+        self._header_text_color = str(self._banner_opts.get("frame_header_color", "#FFFFFF"))
+        self._footer_text_color = str(self._banner_opts.get("frame_footer_color", "#FFD54A"))
         self._video_path = video_path
         self._regions_pending = regions
         self._frame_worker = None
@@ -1167,8 +1233,230 @@ class StyleDialog(QDialog):
         self.cb_reframe_mode.addItem("Mờ nền nghệ thuật (Blur Background)", "blur")
         self.cb_reframe_mode.addItem("Khung trên / Phụ đề dưới (Top-Split)", "top_split")
         self.cb_reframe_mode.addItem("Cắt vừa khít lấp đầy (Center Crop)", "center_crop")
+        self.cb_reframe_mode.addItem("Khung viền màu đặc (Solid Banner)", "banner")
         polish_combo(self.cb_reframe_mode)
         f_reframe.addRow("Kiểu căn chỉnh:", self.cb_reframe_mode)
+
+        _fx_section("Khung viền Banner (Top/Bottom Banner)")
+        f_banner = QFormLayout()
+        f_banner.setContentsMargins(0, 0, 0, 0)
+        f_banner.setLabelAlignment(Qt.AlignRight)
+        f_banner.setSpacing(7)
+        fx_l.addLayout(f_banner)
+
+        self.chk_banner_enabled = QCheckBox("Bật khung viền dải trên & dưới (Banner)")
+        self.chk_banner_enabled.setToolTip("Khung viền trên & dưới chuẩn phong cách video viral TikTok/Shorts/Facebook")
+        f_banner.addRow("", self.chk_banner_enabled)
+
+        row_bg_c = QHBoxLayout()
+        row_bg_c.setSpacing(6)
+        self.btn_banner_bg_color = QPushButton(self._banner_bg_color)
+        self.btn_banner_bg_color.setFixedWidth(85)
+        self.btn_banner_bg_color.setFixedHeight(28)
+        self.btn_banner_bg_color.setToolTip("Nhấn để mở bảng chọn màu nền")
+        self.btn_banner_bg_color.clicked.connect(lambda: self._pick_banner_color("banner_bg"))
+        row_bg_c.addWidget(self.btn_banner_bg_color)
+
+        def _make_preset_btn(text: str, hex_color: str) -> QPushButton:
+            b = QPushButton(text)
+            b.setMinimumWidth(56)
+            b.setFixedHeight(28)
+            b.setToolTip(f"Chọn nhanh màu {text} ({hex_color})")
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_PRIMARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 8px; font-size: 11px; font-weight: 500; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; background: rgba(255,255,255,0.06); }}"
+            )
+            b.clicked.connect(lambda: self._set_banner_bg_preset(hex_color))
+            return b
+
+        row_bg_c.addWidget(_make_preset_btn("Đen", "#000000"))
+        row_bg_c.addWidget(_make_preset_btn("Trắng", "#FFFFFF"))
+        row_bg_c.addWidget(_make_preset_btn("Vàng", "#F59E0B"))
+        row_bg_c.addWidget(_make_preset_btn("Navy", "#1E293B"))
+        row_bg_c.addStretch()
+        f_banner.addRow("Màu nền viền:", row_bg_c)
+
+        # Tuỳ chỉnh độ dài / độ dày dải nền trên & dưới (Chiều cao banner)
+        row_height = QHBoxLayout()
+        row_height.setSpacing(6)
+        self.slider_banner_height = QSlider(Qt.Horizontal)
+        self.slider_banner_height.setRange(8, 35)
+        self.slider_banner_height.setValue(16)
+        self.slider_banner_height.setToolTip("Kéo để điều chỉnh độ dày / chiều cao của dải viền trên và dưới")
+
+        self.sp_banner_height = QSpinBox()
+        self.sp_banner_height.setRange(8, 35)
+        self.sp_banner_height.setValue(16)
+        self.sp_banner_height.setSuffix(" %")
+        self.sp_banner_height.setFixedWidth(70)
+        self.sp_banner_height.setFixedHeight(28)
+
+        self.slider_banner_height.valueChanged.connect(self.sp_banner_height.setValue)
+        self.sp_banner_height.valueChanged.connect(self.slider_banner_height.setValue)
+        self.sp_banner_height.valueChanged.connect(self._sync_banner_preview)
+
+        def _make_height_chip(label: str, val: int) -> QPushButton:
+            b = QPushButton(label)
+            b.setFixedHeight(28)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_SECONDARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 7px; font-size: 11px; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; color: {tokens.TEXT_PRIMARY}; }}"
+            )
+            b.clicked.connect(lambda: self.sp_banner_height.setValue(val))
+            return b
+
+        row_height.addWidget(self.slider_banner_height, 1)
+        row_height.addWidget(self.sp_banner_height)
+        row_height.addWidget(_make_height_chip("Mỏng 12%", 12))
+        row_height.addWidget(_make_height_chip("Chuẩn 16%", 16))
+        row_height.addWidget(_make_height_chip("Dày 22%", 22))
+        f_banner.addRow("Độ dày dải nền:", row_height)
+
+        self.txt_header_text = QLineEdit()
+        self.txt_header_text.setPlaceholderText("VD: TẬP 1: BÍ MẬT ĐỘNG TRỜI...")
+        f_banner.addRow("Tiêu đề trên:", self.txt_header_text)
+
+        # Tuỳ chỉnh cỡ chữ tiêu đề trên
+        row_hdr_fs = QHBoxLayout()
+        row_hdr_fs.setSpacing(6)
+        self.slider_header_font_size = QSlider(Qt.Orientation.Horizontal)
+        self.slider_header_font_size.setRange(14, 80)
+        self.slider_header_font_size.setValue(32)
+        self.sp_header_font_size = QSpinBox()
+        self.sp_header_font_size.setRange(14, 80)
+        self.sp_header_font_size.setValue(32)
+        self.sp_header_font_size.setSuffix(" px")
+        self.sp_header_font_size.setFixedWidth(65)
+        self.sp_header_font_size.setFixedHeight(28)
+
+        self.slider_header_font_size.valueChanged.connect(self.sp_header_font_size.setValue)
+        self.sp_header_font_size.valueChanged.connect(self.slider_header_font_size.setValue)
+        self.sp_header_font_size.valueChanged.connect(self._sync_banner_preview)
+
+        def _make_hdr_chip(label: str, val: int) -> QPushButton:
+            b = QPushButton(label)
+            b.setFixedHeight(28)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_SECONDARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 7px; font-size: 11px; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; color: {tokens.TEXT_PRIMARY}; }}"
+            )
+            b.clicked.connect(lambda: self.sp_header_font_size.setValue(val))
+            return b
+
+        row_hdr_fs.addWidget(self.slider_header_font_size, 1)
+        row_hdr_fs.addWidget(self.sp_header_font_size)
+        row_hdr_fs.addWidget(_make_hdr_chip("24px", 24))
+        row_hdr_fs.addWidget(_make_hdr_chip("32px", 32))
+        row_hdr_fs.addWidget(_make_hdr_chip("42px", 42))
+        row_hdr_fs.addWidget(_make_hdr_chip("52px", 52))
+        f_banner.addRow("Cỡ chữ trên:", row_hdr_fs)
+
+        # Màu chữ tiêu đề trên
+        row_hdr_color = QHBoxLayout()
+        row_hdr_color.setSpacing(6)
+        self.btn_header_color = QPushButton(self._header_text_color)
+        self.btn_header_color.setFixedWidth(85)
+        self.btn_header_color.setFixedHeight(28)
+        self.btn_header_color.setToolTip("Nhấn để mở bảng chọn màu chữ tiêu đề trên")
+        self.btn_header_color.clicked.connect(lambda: self._pick_banner_color("header_color"))
+        row_hdr_color.addWidget(self.btn_header_color)
+
+        def _make_hdr_c_chip(text: str, hex_c: str) -> QPushButton:
+            b = QPushButton(text)
+            b.setMinimumWidth(50)
+            b.setFixedHeight(28)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_PRIMARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 6px; font-size: 11px; font-weight: 500; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; }}"
+            )
+            b.clicked.connect(lambda: self._set_header_color_preset(hex_c))
+            return b
+
+        row_hdr_color.addWidget(_make_hdr_c_chip("Trắng", "#FFFFFF"))
+        row_hdr_color.addWidget(_make_hdr_c_chip("Vàng", "#FFD54A"))
+        row_hdr_color.addWidget(_make_hdr_c_chip("Đỏ", "#EF4444"))
+        row_hdr_color.addWidget(_make_hdr_c_chip("Đen", "#000000"))
+        row_hdr_color.addStretch()
+        f_banner.addRow("Màu chữ trên:", row_hdr_color)
+
+        self.txt_footer_text = QLineEdit()
+        self.txt_footer_text.setPlaceholderText("VD: KÊNH PHIM HAY • FOLLOW ĐỂ XEM TIẾP...")
+        f_banner.addRow("Tiêu đề dưới:", self.txt_footer_text)
+
+        # Tuỳ chỉnh cỡ chữ tiêu đề dưới
+        row_ftr_fs = QHBoxLayout()
+        row_ftr_fs.setSpacing(6)
+        self.slider_footer_font_size = QSlider(Qt.Orientation.Horizontal)
+        self.slider_footer_font_size.setRange(12, 70)
+        self.slider_footer_font_size.setValue(24)
+        self.sp_footer_font_size = QSpinBox()
+        self.sp_footer_font_size.setRange(12, 70)
+        self.sp_footer_font_size.setValue(24)
+        self.sp_footer_font_size.setSuffix(" px")
+        self.sp_footer_font_size.setFixedWidth(65)
+        self.sp_footer_font_size.setFixedHeight(28)
+
+        self.slider_footer_font_size.valueChanged.connect(self.sp_footer_font_size.setValue)
+        self.sp_footer_font_size.valueChanged.connect(self.slider_footer_font_size.setValue)
+        self.sp_footer_font_size.valueChanged.connect(self._sync_banner_preview)
+
+        def _make_ftr_chip(label: str, val: int) -> QPushButton:
+            b = QPushButton(label)
+            b.setFixedHeight(28)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_SECONDARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 7px; font-size: 11px; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; color: {tokens.TEXT_PRIMARY}; }}"
+            )
+            b.clicked.connect(lambda: self.sp_footer_font_size.setValue(val))
+            return b
+
+        row_ftr_fs.addWidget(self.slider_footer_font_size, 1)
+        row_ftr_fs.addWidget(self.sp_footer_font_size)
+        row_ftr_fs.addWidget(_make_ftr_chip("18px", 18))
+        row_ftr_fs.addWidget(_make_ftr_chip("24px", 24))
+        row_ftr_fs.addWidget(_make_ftr_chip("32px", 32))
+        row_ftr_fs.addWidget(_make_ftr_chip("40px", 40))
+        f_banner.addRow("Cỡ chữ dưới:", row_ftr_fs)
+
+        # Màu chữ tiêu đề dưới
+        row_ftr_color = QHBoxLayout()
+        row_ftr_color.setSpacing(6)
+        self.btn_footer_color = QPushButton(self._footer_text_color)
+        self.btn_footer_color.setFixedWidth(85)
+        self.btn_footer_color.setFixedHeight(28)
+        self.btn_footer_color.setToolTip("Nhấn để mở bảng chọn màu chữ tiêu đề dưới")
+        self.btn_footer_color.clicked.connect(lambda: self._pick_banner_color("footer_color"))
+        row_ftr_color.addWidget(self.btn_footer_color)
+
+        def _make_ftr_c_chip(text: str, hex_c: str) -> QPushButton:
+            b = QPushButton(text)
+            b.setMinimumWidth(50)
+            b.setFixedHeight(28)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_BUTTON}; color: {tokens.TEXT_PRIMARY}; "
+                f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
+                f"padding: 2px 6px; font-size: 11px; font-weight: 500; }} "
+                f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; }}"
+            )
+            b.clicked.connect(lambda: self._set_footer_color_preset(hex_c))
+            return b
+
+        row_ftr_color.addWidget(_make_ftr_c_chip("Vàng", "#FFD54A"))
+        row_ftr_color.addWidget(_make_ftr_c_chip("Trắng", "#FFFFFF"))
+        row_ftr_color.addWidget(_make_ftr_c_chip("Đỏ", "#EF4444"))
+        row_ftr_color.addWidget(_make_ftr_c_chip("Đen", "#000000"))
+        row_ftr_color.addStretch()
+        f_banner.addRow("Màu chữ dưới:", row_ftr_color)
 
         _fx_section("Âm thanh chuyển cảnh (Auto SFX)")
         f_sfx = QFormLayout()
@@ -1204,6 +1492,13 @@ class StyleDialog(QDialog):
 
         # --- Bottom: actions ---
         actions = QHBoxLayout()
+        self.btn_save_checkpoint = QPushButton("💾 Lưu làm Checkpoint")
+        self.btn_save_checkpoint.setToolTip(
+            "Lưu toàn bộ cài đặt Logo, Watermark, Kiểu chữ, Khung hình, Vùng che "
+            "thành một bộ nhớ Checkpoint riêng."
+        )
+        self.btn_save_checkpoint.clicked.connect(self._save_current_as_checkpoint)
+        actions.addWidget(self.btn_save_checkpoint)
         actions.addStretch()
         btn_cancel = QPushButton("Huỷ")
         btn_cancel.clicked.connect(self.reject)
@@ -1425,6 +1720,35 @@ class StyleDialog(QDialog):
         idx_dev = self.cb_inpaint_device.findData(inpaint_dev)
         self.cb_inpaint_device.setCurrentIndex(idx_dev if idx_dev >= 0 else 0)
 
+        # Banner controls
+        opts = dict(self._banner_opts)
+        self.chk_banner_enabled.setChecked(bool(opts.get("frame_banner_enabled", opts.get("enabled", False))))
+        self._banner_bg_color = str(opts.get("frame_banner_color", opts.get("color", "#000000")))
+        height_ratio = float(opts.get("frame_banner_height_ratio") or opts.get("height_ratio") or 0.16)
+        pct = max(8, min(35, int(round(height_ratio * 100))))
+
+        hdr_text = str(opts.get("frame_header_text", opts.get("header_text", "")))
+        h_sz = int(opts.get("frame_header_font_size", opts.get("header_font_size", 32)))
+        self._header_text_color = str(opts.get("frame_header_color", opts.get("header_color", "#FFFFFF")))
+
+        ftr_text = str(opts.get("frame_footer_text", opts.get("footer_text", "")))
+        f_sz = int(opts.get("frame_footer_font_size", opts.get("footer_font_size", 24)))
+        self._footer_text_color = str(opts.get("frame_footer_color", opts.get("footer_color", "#FFD54A")))
+
+        self.sp_banner_height.setValue(pct)
+        self.slider_banner_height.setValue(pct)
+        self.txt_header_text.setText(hdr_text)
+        self.sp_header_font_size.setValue(h_sz)
+        self.slider_header_font_size.setValue(h_sz)
+        self.txt_footer_text.setText(ftr_text)
+        self.sp_footer_font_size.setValue(f_sz)
+        self.slider_footer_font_size.setValue(f_sz)
+
+        self._paint_color_button(self.btn_banner_bg_color, self._banner_bg_color)
+        self._paint_color_button(self.btn_header_color, self._header_text_color)
+        self._paint_color_button(self.btn_footer_color, self._footer_text_color)
+        self._sync_banner_preview()
+
         self._sync_logo_wm_from_controls()
 
     def _connect_controls(self) -> None:
@@ -1462,6 +1786,12 @@ class StyleDialog(QDialog):
         self.sp_wm_font_size.valueChanged.connect(self._sync_logo_wm_from_controls)
         self.sp_wm_speed.valueChanged.connect(self._sync_logo_wm_from_controls)
 
+        self.chk_banner_enabled.toggled.connect(self._on_banner_enabled_toggled)
+        self.txt_header_text.textChanged.connect(self._sync_banner_preview)
+        self.sp_header_font_size.valueChanged.connect(self._sync_banner_preview)
+        self.txt_footer_text.textChanged.connect(self._sync_banner_preview)
+        self.sp_footer_font_size.valueChanged.connect(self._sync_banner_preview)
+
     def _browse_logo_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Chọn hình ảnh Logo / Watermark", "",
@@ -1490,6 +1820,78 @@ class StyleDialog(QDialog):
         }
         self.canvas.set_logo_options(self._logo_opts)
         self.canvas.set_watermark_options(self._wm_opts)
+
+    def _on_banner_enabled_toggled(self, checked: bool) -> None:
+        if checked and self.cb_aspect.currentData() == "original":
+            idx = self.cb_aspect.findData("tiktok_9_16")
+            if idx >= 0:
+                self.cb_aspect.setCurrentIndex(idx)
+        self._sync_banner_preview()
+
+    def _sync_banner_preview(self, *_args) -> None:
+        height_ratio = float(self.sp_banner_height.value() / 100.0)
+        self._banner_opts = {
+            "enabled": self.chk_banner_enabled.isChecked(),
+            "frame_banner_enabled": self.chk_banner_enabled.isChecked(),
+            "color": self._banner_bg_color,
+            "frame_banner_color": self._banner_bg_color,
+            "height_ratio": height_ratio,
+            "frame_banner_height_ratio": height_ratio,
+            "header_text": self.txt_header_text.text().strip(),
+            "frame_header_text": self.txt_header_text.text().strip(),
+            "header_font_size": self.sp_header_font_size.value(),
+            "frame_header_font_size": self.sp_header_font_size.value(),
+            "header_color": self._header_text_color,
+            "frame_header_color": self._header_text_color,
+            "footer_text": self.txt_footer_text.text().strip(),
+            "frame_footer_text": self.txt_footer_text.text().strip(),
+            "footer_font_size": self.sp_footer_font_size.value(),
+            "frame_footer_font_size": self.sp_footer_font_size.value(),
+            "footer_color": self._footer_text_color,
+            "frame_footer_color": self._footer_text_color,
+        }
+        self.canvas.set_banner_options(self._banner_opts)
+
+    def _set_banner_bg_preset(self, hex_color: str) -> None:
+        self._banner_bg_color = hex_color
+        self._paint_color_button(self.btn_banner_bg_color, hex_color)
+        self._sync_banner_preview()
+
+    def _set_header_color_preset(self, hex_color: str) -> None:
+        self._header_text_color = hex_color
+        self._paint_color_button(self.btn_header_color, hex_color)
+        self._sync_banner_preview()
+
+    def _set_footer_color_preset(self, hex_color: str) -> None:
+        self._footer_text_color = hex_color
+        self._paint_color_button(self.btn_footer_color, hex_color)
+        self._sync_banner_preview()
+
+    def _pick_banner_color(self, target: str) -> None:
+        from PySide6.QtWidgets import QColorDialog
+        if target == "banner_bg":
+            curr = self._banner_bg_color
+        elif target == "header_color":
+            curr = self._header_text_color
+        else:
+            curr = self._footer_text_color
+
+        c = QColorDialog.getColor(QColor(curr), self, "Chọn màu")
+        if not c.isValid():
+            return
+        hex_c = c.name().upper()
+
+        if target == "banner_bg":
+            self._banner_bg_color = hex_c
+            self._paint_color_button(self.btn_banner_bg_color, hex_c)
+        elif target == "header_color":
+            self._header_text_color = hex_c
+            self._paint_color_button(self.btn_header_color, hex_c)
+        else:
+            self._footer_text_color = hex_c
+            self._paint_color_button(self.btn_footer_color, hex_c)
+
+        self._sync_banner_preview()
 
     def _update_karaoke_enabled(self) -> None:
         karaoke = self.cb_display.currentData() == "karaoke"
@@ -1551,13 +1953,16 @@ class StyleDialog(QDialog):
 
     def _paint_color_button(self, btn: QPushButton, hex_color: str) -> None:
         btn.setText(hex_color)
-        # Chữ đen/trắng theo độ sáng thật của màu (so sánh chuỗi hex là
-        # so sánh từ điển, nên màu đỏ sẫm cũng bị coi nhầm là màu sáng).
-        c = QColor(hex_color)
+        c = QColor(hex_color) if QColor.isValidColor(hex_color) else QColor("#FFFFFF")
         luminance = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+        text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
         btn.setStyleSheet(
-            f"background: {hex_color}; color: "
-            f"{tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT};")
+            f"QPushButton {{ background: {hex_color}; color: {text_color}; "
+            f"border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; "
+            f"font-family: monospace; font-size: 11px; font-weight: bold; "
+            f"padding: 0 4px; }}"
+            f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; }}"
+        )
 
     def _populate_fonts(self) -> None:
         """Đổ danh sách phông chữ, CHỈ lấy từ thư mục phông của dự án.
@@ -1763,6 +2168,43 @@ class StyleDialog(QDialog):
             self._thumb_worker.quit()
         super().accept()
 
+    def _save_current_as_checkpoint(self) -> None:
+        """Hỏi tên và lưu bộ thiết lập hiện tại thành Checkpoint."""
+        from PySide6.QtWidgets import QInputDialog
+        from autodub.checkpoint_store import (
+            bundle_checkpoint_data, save_checkpoint,
+            set_active_checkpoint_name, get_active_checkpoint_name,
+        )
+        from autodub_gui.ui.toast import TOASTS
+
+        default_name = get_active_checkpoint_name() or "Kênh chính"
+        name, ok = QInputDialog.getText(
+            self, "Lưu Checkpoint",
+            "Nhập tên Checkpoint cần lưu (VD: Kênh Review, TikTok Shorts):",
+            text=default_name,
+        )
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+
+        vals = {
+            "subtitle_mode": "burn",
+            "subtitle_preset": "custom",
+            **self.logo_options(),
+            **self.watermark_options(),
+        }
+        bundle = bundle_checkpoint_data(
+            values=vals,
+            subtitle_style=self.style(),
+            blur_regions=self.regions(),
+            mask_opts=self.mask_options(),
+            banner_opts=self.banner_options(),
+            reframe_opts=self.reframe_options(),
+        )
+        save_checkpoint(name, bundle)
+        set_active_checkpoint_name(name)
+        TOASTS.info(f"Đã lưu checkpoint «{name}» thành công!")
+
     # -------------------------------------------------------- results ----- #
 
     def style(self) -> dict:
@@ -1791,12 +2233,30 @@ class StyleDialog(QDialog):
             "watermark_speed": self.sp_wm_speed.value(),
         }
 
+    def banner_options(self) -> dict:
+        """Thông số cấu hình khung viền dải trên & dưới (Top/Bottom Banner)."""
+        height_ratio = float(self.sp_banner_height.value() / 100.0) if hasattr(self, "sp_banner_height") else 0.16
+        return {
+            "frame_banner_enabled": self.chk_banner_enabled.isChecked(),
+            "frame_banner_color": self._banner_bg_color,
+            "frame_banner_height_ratio": height_ratio,
+            "height_ratio": height_ratio,
+            "frame_header_text": self.txt_header_text.text().strip(),
+            "frame_header_font_size": self.sp_header_font_size.value(),
+            "frame_header_color": self._header_text_color,
+            "frame_footer_text": self.txt_footer_text.text().strip(),
+            "frame_footer_font_size": self.sp_footer_font_size.value(),
+            "frame_footer_color": self._footer_text_color,
+        }
+
     def reframe_options(self) -> dict:
         """Thông số cấu hình tỷ lệ khung hình và chế độ Reframe."""
-        return {
+        res = {
             "aspect_preset": self.cb_aspect.currentData() or "original",
             "reframe_mode": self.cb_reframe_mode.currentData() or "blur",
         }
+        res.update(self.banner_options())
+        return res
 
     def sfx_options(self) -> dict:
         """Thông số cấu hình âm thanh chuyển cảnh Auto SFX."""

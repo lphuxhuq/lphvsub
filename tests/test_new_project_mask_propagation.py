@@ -27,10 +27,16 @@ def test_dub_request_mask_defaults_and_explicit():
         mask_method="ai_inpaint",
         inpaint_engine="lama_onnx",
         inpaint_device="cpu",
+        randomize_metadata=True,
+        frame_banner_enabled=True,
+        frame_header_text="Tập 1",
     )
     assert req_ai.mask_method == "ai_inpaint"
     assert req_ai.inpaint_engine == "lama_onnx"
     assert req_ai.inpaint_device == "cpu"
+    assert req_ai.randomize_metadata is True
+    assert req_ai.frame_banner_enabled is True
+    assert req_ai.frame_header_text == "Tập 1"
 
 
 def test_new_project_page_values_default(qapp):

@@ -9,6 +9,8 @@ Chữ hiển thị lấy từ :func:`subtitle_text`: nếu câu có trường ph
 (``sub_vi``) thì dùng nó, không thì dùng chính lời đọc. Nhờ vậy sửa một lỗi
 chính tả trên phụ đề không bắt phải đọc lại giọng cho câu đó.
 """
+import os
+
 from autodub.utils import format_timestamp, setup_logging
 
 logger = setup_logging("autodub.srt_generator")
@@ -161,20 +163,34 @@ def generate_srt(segments: list[dict], output_path: str,
                  text_field: str = "text", line_words: int = 0,
                  max_lines: int = MAX_LINES_PER_CUE,
                  all_caps: bool = False) -> str:
-    lines = []
-    n = 0
+    all_cues: list[dict] = []
     for seg in segments:
         for cue in split_for_display(seg, text_field, line_words=line_words,
                                      max_lines=max_lines, all_caps=all_caps):
-            n += 1
-            start_ts = format_timestamp(cue["start"])
-            end_ts = format_timestamp(cue["end"])
-            lines.append(f"{n}\n{start_ts} --> {end_ts}\n{cue['text']}\n")
+            all_cues.append(dict(cue))
+
+    # Khử triệt để chồng phụ đề giữa các dòng hiển thị liên tiếp (Zero Overlap Invariant)
+    MIN_CUE_DUR = 0.200
+    MIN_CUE_GAP = 0.010  # 10ms giữa 2 phụ đề liên tiếp
+    for i in range(len(all_cues) - 1):
+        cur = all_cues[i]
+        nxt = all_cues[i + 1]
+        if cur["end"] > nxt["start"] - MIN_CUE_GAP:
+            if nxt["start"] < cur["start"] + MIN_CUE_DUR:
+                nxt["start"] = round(cur["start"] + MIN_CUE_DUR + MIN_CUE_GAP, 3)
+                nxt["end"] = max(nxt["end"], round(nxt["start"] + MIN_CUE_DUR, 3))
+            cur["end"] = round(min(cur["end"], nxt["start"] - MIN_CUE_GAP), 3)
+
+    lines = []
+    for n, cue in enumerate(all_cues, start=1):
+        start_ts = format_timestamp(cue["start"])
+        end_ts = format_timestamp(cue["end"])
+        lines.append(f"{n}\n{start_ts} --> {end_ts}\n{cue['text']}\n")
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    logger.info(f"Đã ghi phụ đề: {output_path} ({n} dòng hiện từ "
+    logger.info(f"Đã ghi phụ đề: {output_path} ({len(all_cues)} dòng hiện từ "
                 f"{len(segments)} câu)")
     return output_path
 
@@ -194,3 +210,59 @@ def generate_srt_styled(segments: list[dict], output_path: str,
                         line_words=int(s["line_words"]),
                         max_lines=int(s["max_lines"]),
                         all_caps=bool(s["all_caps"]))
+
+
+def sanitize_srt_file(srt_path: str) -> int:
+    """Khử triệt để hiện tượng đè/chồng cue trong một file .srt có sẵn trên ổ đĩa.
+    Trả về số cặp cue đã được xử lý chống chồng lấn.
+    """
+    import re
+    if not os.path.isfile(srt_path):
+        return 0
+    with open(srt_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    pattern = re.compile(
+        r"(\d+)\s*\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\s*\n(.*?)(?=\n\s*\n\d+\s*\n|\Z)",
+        re.DOTALL
+    )
+    matches = list(pattern.finditer(content))
+    if not matches:
+        return 0
+
+    def to_s(tc: str) -> float:
+        h, m, s_ms = tc.split(":")
+        s, ms = s_ms.split(",")
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
+
+    cues = []
+    for m in matches:
+        cues.append({
+            "start": to_s(m.group(2)),
+            "end": to_s(m.group(3)),
+            "text": m.group(4).strip()
+        })
+
+    MIN_CUE_DUR = 0.200
+    MIN_CUE_GAP = 0.010
+    fixed_count = 0
+    for i in range(len(cues) - 1):
+        cur = cues[i]
+        nxt = cues[i + 1]
+        if cur["end"] > nxt["start"] - MIN_CUE_GAP:
+            fixed_count += 1
+            if nxt["start"] < cur["start"] + MIN_CUE_DUR:
+                nxt["start"] = round(cur["start"] + MIN_CUE_DUR + MIN_CUE_GAP, 3)
+                nxt["end"] = max(nxt["end"], round(nxt["start"] + MIN_CUE_DUR, 3))
+            cur["end"] = round(min(cur["end"], nxt["start"] - MIN_CUE_GAP), 3)
+
+    if fixed_count > 0:
+        lines = []
+        for n, cue in enumerate(cues, start=1):
+            start_ts = format_timestamp(cue["start"])
+            end_ts = format_timestamp(cue["end"])
+            lines.append(f"{n}\n{start_ts} --> {end_ts}\n{cue['text']}\n")
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        logger.info(f"Đã khử {fixed_count} đoạn phụ đề chồng trong {srt_path}")
+    return fixed_count

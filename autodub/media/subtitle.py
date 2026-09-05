@@ -18,6 +18,7 @@ nên ``C:\\out\\a.srt`` phải thành ``C\\:/out/a.srt``.
 """
 from __future__ import annotations
 
+import os
 import re
 
 # Độ mờ của vùng che: boxblur luma_radius:luma_power. Bán kính 10 xóa sạch
@@ -220,6 +221,8 @@ def build_aspect_ratio_filter(
     video_w: int,
     video_h: int,
     reframe_mode: str = "blur",
+    banner_color: str = "#000000",
+    banner_height_ratio: float = 0.16,
 ) -> tuple[str, int, int] | None:
     """Tạo filtergraph đổi tỷ lệ khung hình với các chế độ Reframe linh hoạt.
 
@@ -227,13 +230,14 @@ def build_aspect_ratio_filter(
     - 'blur': Nền làm mờ nghệ thuật + tối nhẹ và tăng bão hòa, video gốc ở giữa.
     - 'top_split': Video gốc ở nửa trên (căn top ~12%), nửa dưới thoáng cho phụ đề lớn.
     - 'center_crop': Phóng to vừa khít tỷ lệ đích và cắt chính giữa (Full canvas).
+    - 'banner': Nền khung viền màu đặc (solid color), video ở giữa chừa khoảng trống cho banner trên & dưới.
 
     Trả về (filter_str, target_w, target_h) hoặc None nếu giữ nguyên tỷ lệ gốc.
     """
     if not aspect_preset or aspect_preset in ("original", "none"):
         return None
 
-    preset = aspect_preset.strip().lower()
+    preset = str(aspect_preset).strip().lower()
     if preset in ("tiktok_9_16", "9:16", "vertical", "shorts"):
         target_ratio = 9.0 / 16.0
     elif preset in ("youtube_16_9", "16:9", "horizontal"):
@@ -243,8 +247,12 @@ def build_aspect_ratio_filter(
     else:
         return None
 
-    curr_ratio = float(video_w) / float(video_h)
-    if abs(curr_ratio - target_ratio) < 0.02:
+    curr_ratio = video_w / float(video_h)
+    mode = (reframe_mode or "blur").strip().lower()
+    is_banner_mode = mode in ("banner", "solid_banner", "pad")
+
+    # Nếu cùng tỷ lệ (sai số < 2%) và không yêu cầu banner đặc thì giữ nguyên
+    if abs(curr_ratio - target_ratio) < 0.02 and not is_banner_mode:
         return None
 
     if target_ratio < 1.0:  # 9:16
@@ -262,9 +270,20 @@ def build_aspect_ratio_filter(
         dim = dim + (dim % 2)
         tw = th = dim
 
-    mode = (reframe_mode or "blur").strip().lower()
+    if is_banner_mode:
+        pad_col = (banner_color or "#000000").strip()
+        if pad_col.startswith("#"):
+            pad_col = "0x" + pad_col[1:]
 
-    if mode in ("center_crop", "crop", "fill"):
+        # Đảm bảo video chừa đủ chỗ cho top & bottom banner theo tỷ lệ người dùng chọn
+        min_bar_h = int(th * banner_height_ratio)
+        scale_limit_h = int(th * max(0.20, (1.0 - 2 * banner_height_ratio)))
+        scaled_h = round(tw * float(video_h) / float(video_w))
+        if (th - scaled_h) / 2 < min_bar_h:
+            flt = f"scale={tw}:{scale_limit_h}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
+        else:
+            flt = f"scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
+    elif mode in ("center_crop", "crop", "fill"):
         # Phóng to vừa khít và cắt chính giữa
         flt = f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th}"
     elif mode in ("top_split", "top", "split"):
@@ -374,6 +393,62 @@ def _build_color_filter(filter_name: str | None) -> str | None:
     return None
 
 
+def _build_drawtext_banner_filter(
+    text: str,
+    is_header: bool,
+    banner_bar_h: int,
+    target_h: int,
+    font_size: int = 32,
+    color: str = "#FFFFFF",
+    font_file: str | None = None,
+) -> str:
+    """Tạo bộ lọc drawtext cho chữ tiêu đề dải trên hoặc dải dưới (Top/Bottom Banner)."""
+    from autodub.utils import bundled_font_files, ffmpeg_escape_path
+
+    escaped_text = (
+        str(text or "")
+        .replace("\\", "\\\\")
+        .replace("'", r"\'")
+        .replace(":", r"\:")
+        .replace("%", r"\%")
+    )
+    fs = max(10, min(150, int(font_size if font_size is not None else 32)))
+
+    clean_color = (color or "#FFFFFF").strip()
+    if clean_color.startswith("#"):
+        font_color_arg = "0x" + clean_color[1:]
+    else:
+        font_color_arg = clean_color
+
+    font_arg = ""
+    target_font = font_file
+    if not target_font:
+        fonts = bundled_font_files()
+        if fonts:
+            bolds = [f for f in fonts if "bold" in os.path.basename(f).lower()]
+            target_font = bolds[0] if bolds else fonts[0]
+    if target_font:
+        escaped_font = ffmpeg_escape_path(target_font)
+        font_arg = f":fontfile='{escaped_font}'"
+
+    bar_h = max(20, int(banner_bar_h))
+    t_h = max(bar_h * 2, int(target_h))
+    if is_header:
+        y_expr = f"({bar_h}-th)/2"
+    else:
+        y_expr = f"{t_h}-({bar_h}+th)/2"
+
+    is_dark = clean_color.lower() in ("#000000", "black", "0x000000")
+    border_color = "0xFFFFFF@0.8" if is_dark else "0x000000@0.8"
+
+    return (
+        f"drawtext=text='{escaped_text}'{font_arg}:fontsize={fs}"
+        f":fontcolor={font_color_arg}:borderw=2:bordercolor={border_color}"
+        f":shadowx=2:shadowy=2:shadowcolor=0x000000@0.5"
+        f":x=(w-tw)/2:y='{y_expr}'"
+    )
+
+
 def build_filter_complex(
     blur_regions: list[dict] | None,
     video_w: int,
@@ -397,6 +472,15 @@ def build_filter_complex(
     micro_zoom: bool = False,
     color_filter: str = "none",
     reframe_mode: str = "blur",
+    frame_banner_enabled: bool = False,
+    frame_banner_color: str = "#000000",
+    frame_banner_height_ratio: float = 0.16,
+    frame_header_text: str | None = None,
+    frame_header_font_size: int = 32,
+    frame_header_color: str = "#FFFFFF",
+    frame_footer_text: str | None = None,
+    frame_footer_font_size: int = 24,
+    frame_footer_color: str = "#FFD54A",
 ) -> str | None:
     """Dựng chuỗi ``-filter_complex``, hoặc None khi không cần lọc gì.
 
@@ -404,20 +488,40 @@ def build_filter_complex(
     1. Lật gương thông minh video gốc (smart_flip)
     2. Zoom động & trượt camera vi mô (micro_zoom)
     3. Bộ lọc màu điện ảnh (color_filter)
-    4. Chuyển đổi tỷ lệ khung hình (aspect_preset) với reframe_mode
+    4. Chuyển đổi tỷ lệ khung hình & Khung viền Banner (aspect_preset, frame_banner_*)
     5. Che/làm mờ các vùng phụ đề cũ (blur_regions)
     6. Chèn logo thương hiệu (logo_path)
     7. Chèn watermark chìm chuyển động (watermark_text)
     8. Ghi đè phụ đề mới (subtitles=...)
     """
     regions = list(blur_regions or [])
-    asp_res = build_aspect_ratio_filter(aspect_preset, video_w, video_h, reframe_mode=reframe_mode)
+    has_banner = bool(frame_banner_enabled)
+    has_header = has_banner and bool(frame_header_text and str(frame_header_text).strip())
+    has_footer = has_banner and bool(frame_footer_text and str(frame_footer_text).strip())
+
+    actual_reframe_mode = (
+        "banner" if (has_banner and reframe_mode not in ("top_split", "center_crop"))
+        else reframe_mode
+    )
+    actual_aspect_preset = (
+        "tiktok_9_16" if (has_banner and (not aspect_preset or aspect_preset in ("original", "none")))
+        else aspect_preset
+    )
+    asp_res = build_aspect_ratio_filter(
+        actual_aspect_preset,
+        video_w,
+        video_h,
+        reframe_mode=actual_reframe_mode,
+        banner_color=frame_banner_color,
+        banner_height_ratio=frame_banner_height_ratio,
+    )
     has_logo = bool(logo_path and str(logo_path).strip())
     has_wm = bool(watermark_text and str(watermark_text).strip())
     c_flt = _build_color_filter(color_filter)
 
     if (not regions and not srt_path and not asp_res and not has_logo
-            and not has_wm and not smart_flip and not micro_zoom and not c_flt):
+            and not has_wm and not smart_flip and not micro_zoom and not c_flt
+            and not has_banner):
         return None
 
     parts: list[str] = []
@@ -438,11 +542,45 @@ def build_filter_complex(
         parts.append(f"[{current}]{c_flt}[vcolor]")
         current = "vcolor"
 
-    # 4. Chuyển đổi tỷ lệ khung hình
+    # 4. Chuyển đổi tỷ lệ khung hình & Khung viền Banner
     if asp_res:
-        asp_flt, video_w, video_h = asp_res
+        asp_flt, target_w, target_h = asp_res
         parts.append(f"[{current}]{asp_flt}[vasp]")
         current = "vasp"
+
+        if has_banner:
+            min_bar_h = int(target_h * frame_banner_height_ratio)
+            scale_limit_h = int(target_h * max(0.20, (1.0 - 2 * frame_banner_height_ratio)))
+            scaled_h = round(target_w * float(video_h) / float(video_w))
+            if (target_h - scaled_h) / 2 < min_bar_h:
+                scaled_h = scale_limit_h
+            banner_bar_h = max(20, int((target_h - scaled_h) / 2))
+
+            if has_header:
+                hdr_flt = _build_drawtext_banner_filter(
+                    str(frame_header_text).strip(),
+                    is_header=True,
+                    banner_bar_h=banner_bar_h,
+                    target_h=target_h,
+                    font_size=frame_header_font_size,
+                    color=frame_header_color,
+                )
+                parts.append(f"[{current}]{hdr_flt}[vhdr]")
+                current = "vhdr"
+
+            if has_footer:
+                ftr_flt = _build_drawtext_banner_filter(
+                    str(frame_footer_text).strip(),
+                    is_header=False,
+                    banner_bar_h=banner_bar_h,
+                    target_h=target_h,
+                    font_size=frame_footer_font_size,
+                    color=frame_footer_color,
+                )
+                parts.append(f"[{current}]{ftr_flt}[vftr]")
+                current = "vftr"
+
+        video_w, video_h = target_w, target_h
 
     for i, region in enumerate(regions):
         x, y, w, h = _to_pixels(region, video_w, video_h)

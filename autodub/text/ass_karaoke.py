@@ -19,6 +19,7 @@ Toạ độ style dùng canvas PlayResY=288 — cùng hệ với force_style c�
 from __future__ import annotations
 
 import os
+from typing import Callable
 
 from autodub.utils import seg_wav_path, setup_logging
 
@@ -82,6 +83,7 @@ def resolve_word_times(
     text_field: str,
     settings=None,
     cache_path: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
 ) -> dict[int, list[tuple[str, float, float]]]:
     """Mốc từng chữ cho mọi segment: alignment thật trước, ước lượng bù sau.
 
@@ -98,7 +100,8 @@ def resolve_word_times(
         try:
             from autodub.speech.align import align_segments
             aligned = align_segments(segments, merge_dir, text_field,
-                                     cache_path=cache_path)
+                                     cache_path=cache_path,
+                                     progress_cb=progress_cb)
         except Exception as e:
             logger.warning(f"Không canh được phụ đề theo giọng đọc ({e}) — "
                            "chữ sẽ chia đều theo thời lượng câu")
@@ -228,6 +231,7 @@ def build_karaoke_ass(
     text_field: str = "text_vi",
     settings=None,
     cache_path: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
 ) -> str:
     """Sinh file .ass hoàn chỉnh cho toàn video. Trả về ``out_path``.
 
@@ -242,9 +246,10 @@ def build_karaoke_ass(
     all_caps = bool(s["all_caps"])
 
     word_times = resolve_word_times(segments, merge_dir, text_field,
-                                    settings=settings, cache_path=cache_path)
+                                    settings=settings, cache_path=cache_path,
+                                    progress_cb=progress_cb)
 
-    events: list[str] = []
+    raw_events: list[dict] = []
     for seg in segments:
         words = word_times.get(seg.get("id"))
         if not words:
@@ -252,8 +257,6 @@ def build_karaoke_ass(
         chunks = chunk_words(words, n_words)
         for i, chunk in enumerate(chunks):
             t0 = chunk[0][1]
-            # Cụm hiển thị liền mạch tới cụm sau (không nháy tắt/bật);
-            # cụm cuối câu giữ thêm _TAIL_S.
             t1 = (chunks[i + 1][0][1] if i + 1 < len(chunks)
                   else chunk[-1][2] + _TAIL_S)
             t1 = max(t1, t0 + _MIN_CUE_S)
@@ -263,10 +266,24 @@ def build_karaoke_ass(
                 words_text = " ".join(w for w, _, _ in chunk)
                 body = _escape_text(words_text.upper() if all_caps
                                     else words_text)
-            events.append(
-                f"Dialogue: 0,{_ass_time(t0)},{_ass_time(t1)},Kara,,0,0,0,,"
-                f"{_effect_prefix(effect)}{body}"
-            )
+            raw_events.append({
+                "t0": t0,
+                "t1": t1,
+                "body": body,
+            })
+
+    # Khử triệt để chồng phụ đề cụm karaoke giữa các dialogue events liên tiếp
+    for i in range(len(raw_events) - 1):
+        cur = raw_events[i]
+        nxt = raw_events[i + 1]
+        if cur["t1"] > nxt["t0"]:
+            cur["t1"] = max(cur["t0"] + 0.10, nxt["t0"])
+
+    events: list[str] = [
+        f"Dialogue: 0,{_ass_time(e['t0'])},{_ass_time(e['t1'])},Kara,,0,0,0,,"
+        f"{_effect_prefix(effect)}{e['body']}"
+        for e in raw_events
+    ]
 
     header = (
         "[Script Info]\n"

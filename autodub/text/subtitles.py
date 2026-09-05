@@ -34,6 +34,7 @@ def refresh_subtitles(
     merge_dir: str | None = None,
     settings=None,
     for_burn: bool = False,
+    progress_cb=None,
 ) -> tuple[str, str]:
     """Ghi lại phụ đề từ danh sách câu hiện tại.
 
@@ -59,7 +60,8 @@ def refresh_subtitles(
         burn_path = build_karaoke_ass(
             segments, merge_dir, data_path(work_dir, KARAOKE_NAME),
             style, text_field=target.text_field, settings=settings,
-            cache_path=data_path(work_dir, "align_cache.json"))
+            cache_path=data_path(work_dir, "align_cache.json"),
+            progress_cb=progress_cb)
         return srt_path, burn_path
     except Exception as e:
         logger.warning(f"Không tạo được phụ đề kiểu cụm chữ ({e}) — "

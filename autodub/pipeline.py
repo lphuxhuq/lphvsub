@@ -29,7 +29,7 @@ from datetime import datetime
 from autodub.config import Settings
 from autodub.languages import TargetLang, get_target, resolve_source_lang
 from autodub.progress import PipelineCancelled, ProgressFn, ProgressReporter
-from autodub.utils import setup_logging, ensure_dir, seg_wav_path
+from autodub.utils import setup_logging, ensure_dir, seg_wav_path, ProgressTracker
 from autodub.workdir import data_dir, data_path, youtube_dir
 
 logger = setup_logging("autodub.pipeline")
@@ -129,6 +129,24 @@ class DubRequest:
     micro_zoom: bool | None = None
     color_filter: str | None = None
     reframe_mode: str | None = None
+    randomize_metadata: bool | None = None
+
+    # Khung viền banner trên/dưới
+    frame_banner_enabled: bool | None = None
+    frame_banner_color: str | None = None
+    frame_header_text: str | None = None
+    frame_header_font_size: int | None = None
+    frame_header_color: str | None = None
+    frame_footer_text: str | None = None
+    frame_footer_font_size: int | None = None
+    frame_footer_color: str | None = None
+    frame_banner_top_text: str | None = None
+    frame_banner_top_size: int | None = None
+    frame_banner_top_color: str | None = None
+    frame_banner_bottom_text: str | None = None
+    frame_banner_bottom_size: int | None = None
+    frame_banner_bottom_color: str | None = None
+    frame_banner_height_ratio: float | None = None
 
     # Âm thanh chuyển cảnh tự động
     auto_sfx_enabled: bool | None = None
@@ -136,9 +154,6 @@ class DubRequest:
     sfx_volume_db: float | None = None
 
     # The dub target is always Vietnamese now.
-
-
-
     target: str = "vi"
 
     #: Luồng wizard: giữ chỗ Vox sau ASR, chạy tới hết ghép audio rồi DỪNG
@@ -146,6 +161,20 @@ class DubRequest:
     #: dưới dạng mã hóa cho tới khi người dùng bấm Xuất video (commit hold).
     #: Batch/legacy giữ False: trừ Vox theo từng lượt như cũ, không mã hóa.
     defer_export: bool = False
+
+    def __post_init__(self):
+        if self.frame_header_text is None and self.frame_banner_top_text is not None:
+            self.frame_header_text = self.frame_banner_top_text
+        if self.frame_header_font_size is None and self.frame_banner_top_size is not None:
+            self.frame_header_font_size = self.frame_banner_top_size
+        if self.frame_header_color is None and self.frame_banner_top_color is not None:
+            self.frame_header_color = self.frame_banner_top_color
+        if self.frame_footer_text is None and self.frame_banner_bottom_text is not None:
+            self.frame_footer_text = self.frame_banner_bottom_text
+        if self.frame_footer_font_size is None and self.frame_banner_bottom_size is not None:
+            self.frame_footer_font_size = self.frame_banner_bottom_size
+        if self.frame_footer_color is None and self.frame_banner_bottom_color is not None:
+            self.frame_footer_color = self.frame_banner_bottom_color
 
 
 @dataclass
@@ -167,6 +196,7 @@ class DubPipeline:
         synth_cache=None,
         demucs_cache=None,
         whisper_cache=None,
+        paraformer_cache=None,
     ):
         self.settings = settings
         self._reporter = ProgressReporter(progress, cancel_event)
@@ -180,6 +210,8 @@ class DubPipeline:
         # Optional autodub.speech.transcriber.WhisperCache — batch runs reuse
         # one loaded Whisper model across videos (caller owns lifecycle).
         self._whisper_cache = whisper_cache
+        # Optional autodub.speech.paraformer_transcriber.ParaformerCache
+        self._paraformer_cache = paraformer_cache
         # Work dir of the most recent run() call (set even when the run
         # fails mid-way) — batch uses it to resume the same folder later.
         self.last_work_dir = ""
@@ -511,6 +543,7 @@ class DubPipeline:
             meta: dict = {}
             segments = transcribe(asr_audio, lang_code, settings,
                                   whisper_cache=self._whisper_cache,
+                                  paraformer_cache=self._paraformer_cache,
                                   meta=meta)
 
             # --- OCR Hard-sub Selective Fallback & Fusion ---
@@ -1257,6 +1290,16 @@ class DubPipeline:
                 inpaint_engine=getattr(req, "inpaint_engine", None) or render_opts.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
                 inpaint_device=getattr(req, "inpaint_device", None) or render_opts.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
                 inpaint_model_path=getattr(settings, "inpaint_model_path", None),
+                frame_banner_enabled=req.frame_banner_enabled if req.frame_banner_enabled is not None else getattr(settings, "frame_banner_enabled", False),
+                frame_banner_color=req.frame_banner_color if req.frame_banner_color is not None else getattr(settings, "frame_banner_color", "#000000"),
+                frame_banner_height_ratio=req.frame_banner_height_ratio if req.frame_banner_height_ratio is not None else getattr(settings, "frame_banner_height_ratio", 0.16),
+                frame_header_text=req.frame_header_text if req.frame_header_text is not None else getattr(settings, "frame_header_text", ""),
+                frame_header_font_size=req.frame_header_font_size if req.frame_header_font_size is not None else getattr(settings, "frame_header_font_size", 32),
+                frame_header_color=req.frame_header_color if req.frame_header_color is not None else getattr(settings, "frame_header_color", "#FFFFFF"),
+                frame_footer_text=req.frame_footer_text if req.frame_footer_text is not None else getattr(settings, "frame_footer_text", ""),
+                frame_footer_font_size=req.frame_footer_font_size if req.frame_footer_font_size is not None else getattr(settings, "frame_footer_font_size", 24),
+                frame_footer_color=req.frame_footer_color if req.frame_footer_color is not None else getattr(settings, "frame_footer_color", "#FFD54A"),
+                randomize_metadata=req.randomize_metadata if req.randomize_metadata is not None else getattr(settings, "randomize_metadata", True),
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
@@ -1981,9 +2024,6 @@ class DubPipeline:
 
 
         total = len(segments)
-        # Mỗi câu một dòng nhật ký sẽ ngập giao diện khi video dài — lấy mẫu
-        # để video 10 nghìn câu chỉ sinh khoảng 100 dòng tiến độ.
-        log_every = 1 if total <= 60 else max(10, total // 100)
         # Số luồng gửi việc bám theo số tiến trình con đang sống thật (một
         # tiến trình chết giữa chừng sẽ bị loại khỏi nhóm).
         n_threads = max(1, getattr(
@@ -2012,9 +2052,7 @@ class DubPipeline:
             + f", chạy {n_threads} luồng song song")
 
         results: list[dict | None] = [None] * total
-        count_lock = threading.Lock()
-        done_count = 0
-        t_tts_start = time.time()
+        tracker = ProgressTracker(total, "Tạo giọng đọc (TTS)", unit="câu")
 
         def _one(seg: dict) -> dict:
             rep.check_cancelled()
@@ -2058,23 +2096,16 @@ class DubPipeline:
                         i = futures[fut]
                         result = fut.result()  # re-raises errors / cancellation
                         results[i] = result
-                        with count_lock:
-                            done_count += 1
-                            n = done_count
-                        rep.emit("tts", "progress", current=n, total=total)
-                        if (n % log_every == 0 or n == total
-                                or result["speed_adjusted"]):
-                            elapsed = time.time() - t_tts_start
-                            rate = n / elapsed if elapsed > 0 else 0
-                            rem_n = max(0, total - n)
-                            rem_s = rem_n / rate if rate > 0 else 0
-                            from autodub.utils import format_eta
-                            eta_info = f" [⏱ {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)} | {rate:.1f} câu/s]" if rem_n > 0 else f" [⏱ Tổng: {format_eta(elapsed)}]"
-                            logger.info(
-                                f"  Segment {segments[i]['id']}: "
-                                f"{result['actual_duration']:.1f}s "
-                                f"[{n}/{total}]{eta_info}"
-                            )
+                        seg_item = segments[i]
+                        seg_txt = str(seg_item.get(text_field, "")).strip()
+                        preview = (seg_txt[:28] + "...") if len(seg_txt) > 28 else seg_txt
+                        status_tag = " (cache)" if result.get("rate_applied") == "cached" else ""
+                        detail = f"Câu #{seg_item.get('id', i+1)}: \"{preview}\" [{result.get('actual_duration', 0.0):.1f}s{status_tag}]"
+                        should_log, msg = tracker.step(1, detail=detail)
+                        rep.emit("tts", "progress", current=int(tracker.done), total=total)
+                        if should_log or result.get("speed_adjusted"):
+                            logger.info(f"  {msg}")
+                    logger.info(f"  {tracker.summary()}")
                 except BaseException:
                     # Unstarted tasks never run; in-flight renders (a few
                     # seconds each) finish as the pool context exits, then we

@@ -349,6 +349,9 @@ FIELDS: tuple[Field, ...] = (
               ("Moody Dark (Tương phản cao sâu lắng)", "moody_dark"),
               ("Clean Film (Trong trẻo sắc nét)", "clean_film"),
           ]),
+    Field("RANDOMIZE_METADATA", CHECK, "Đổi mã băm MD5 & Làm sạch Metadata", TAB_ADVANCED,
+          "Chống quét bản quyền (Anti-Content ID)", "true",
+          "Tự động xóa sạch thông tin thiết bị/phần mềm cũ và chèn mã băm ngẫu nhiên duy nhất cho mỗi video xuất ra để tránh bị quét trùng lặp tệp."),
 
     Field("TRANSLATE_ANALYSIS", CHECK, "Đọc hiểu video trước khi dịch",
           TAB_ADVANCED, "Chất lượng dịch", "true",

@@ -1,8 +1,10 @@
 import json
-import os
 import logging
+import os
 import sys
 import tempfile
+import threading
+import time
 
 
 def app_root() -> str:
@@ -212,4 +214,105 @@ def ffmpeg_escape_path(path: str) -> str:
     escaped = escaped.replace(":", "\\:")
     escaped = escaped.replace("'", r"'\''")
     return escaped
+
+
+class ProgressTracker:
+    """Theo dõi và định dạng tiến độ đồng nhất cho mọi khâu trong pipeline.
+
+    Hỗ trợ đa luồng an toàn (thread-safe), tự động tính phần trăm (%),
+    tốc độ (items/s hoặc x thời gian thực) và thời gian ước tính còn lại (ETA).
+    """
+
+    def __init__(
+        self,
+        total: int | float,
+        step_name: str,
+        unit: str = "câu",
+        log_step: int | None = None,
+        min_log_interval: float = 3.0,
+    ):
+        self.total = max(0.001, float(total))
+        self.step_name = step_name
+        self.unit = unit
+        self.min_log_interval = min_log_interval
+        self.start_time = time.time()
+        self.last_log_time = self.start_time
+        self.done = 0.0
+        self._logged_first = False
+        self._lock = threading.Lock()
+
+        if log_step is not None:
+            self.log_step = max(1, log_step)
+        elif self.unit == "s":
+            self.log_step = max(5, int(self.total // 20)) or 10
+        elif self.total <= 20:
+            self.log_step = 2
+        elif self.total <= 100:
+            self.log_step = 10
+        elif self.total <= 300:
+            self.log_step = 20
+        else:
+            self.log_step = 25
+
+    def _check_log_locked(self, detail: str = "", forced: bool = False) -> tuple[bool, str]:
+        n = self.done
+        now = time.time()
+        elapsed = now - self.start_time
+        is_first = False
+        if not self._logged_first and n > 0:
+            is_first = True
+            self._logged_first = True
+
+        is_milestone = (
+            forced
+            or is_first
+            or (int(n) % self.log_step == 0 and int(n) > 0)
+            or n >= self.total
+            or (now - self.last_log_time >= self.min_log_interval)
+        )
+        if is_milestone:
+            self.last_log_time = now
+            pct = min(100.0, (n / self.total) * 100.0)
+            rate = n / elapsed if elapsed > 0 else 0.0
+            rem_n = max(0.0, self.total - n)
+            rem_s = rem_n / rate if rate > 0 else 0.0
+            eta_str = f"còn ~{format_eta(rem_s)}" if rem_n > 0 else "hoàn tất"
+            speed_str = f"{rate:.1f}x" if self.unit == "s" else f"{rate:.1f} {self.unit}/s"
+            detail_str = f" | {detail}" if detail else ""
+            n_str = f"{int(n)}" if self.unit == "câu" else f"{n:.1f}"
+            total_str = f"{int(self.total)}" if self.unit == "câu" else f"{self.total:.1f}"
+            msg = (
+                f"{self.step_name}: {n_str}/{total_str} {self.unit} ({pct:.1f}%) | "
+                f"Tốc độ: {speed_str} ({eta_str}){detail_str}"
+            )
+            return True, msg
+        return False, ""
+
+    def step(self, count: int | float = 1, detail: str = "") -> tuple[bool, str]:
+        """Tăng tiến độ thêm count đơn vị.
+        Trả về (should_log, message). should_log là True khi chạm mốc milestone
+        hoặc khi đã trôi qua quá min_log_interval giây.
+        """
+        with self._lock:
+            self.done += count
+            return self._check_log_locked(detail=detail)
+
+    def update_to(self, current: int | float, detail: str = "") -> tuple[bool, str]:
+        """Cập nhật tiến độ tới mốc tuyệt đối current (thường dùng cho mốc giây audio/video)."""
+        with self._lock:
+            self.done = min(self.total, max(0.0, float(current)))
+            return self._check_log_locked(detail=detail, forced=(self.done >= self.total))
+
+    def summary(self) -> str:
+        """Tạo chuỗi tổng kết khi hoàn tất công việc."""
+        with self._lock:
+            elapsed = time.time() - self.start_time
+            rate = self.total / elapsed if elapsed > 0 else 0.0
+            total_str = f"{int(self.total)}" if self.unit == "câu" else f"{self.total:.1f}"
+            speed_str = f"{rate:.1f}x" if self.unit == "s" else f"{rate:.1f} {self.unit}/s"
+            return (
+                f"{self.step_name} hoàn tất: {total_str} {self.unit} "
+                f"trong {format_eta(elapsed)} (trung bình {speed_str})"
+            )
+
 

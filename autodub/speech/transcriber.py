@@ -8,7 +8,7 @@ from collections import deque
 from autodub.config import Settings
 from autodub.languages import WHISPER_LANG_MAP
 from autodub.resources import GPU_LOCK
-from autodub.utils import bundled_file, gpu_venv_dir, save_json_atomic, setup_logging
+from autodub.utils import bundled_file, gpu_venv_dir, save_json_atomic, setup_logging, ProgressTracker
 
 logger = setup_logging("autodub.transcriber")
 
@@ -81,6 +81,8 @@ def _load_whisper_model(model_name: str, settings: Settings):
         if free_vram is not None:
             logger.info(f"VRAM khả dụng trước khi nạp Whisper: {free_vram:.1f} GB")
         resolved = settings.resolved_whisper_model(cuda_available=True, vram_gb=free_vram)
+        model_dir = settings.whisper_model_dir_path()
+        dl_root = model_dir if os.path.isdir(model_dir) else None
         # GPU_LOCK chỉ quanh lúc NẠP: đây là đoạn xin VRAM, cũng là chỗ chen
         # với Demucs thì OOM. Giữ lock suốt lượt nghe sẽ chặn Demucs hàng chục
         # phút mà không cần thiết. Xem autodub/resources.py.
@@ -90,8 +92,10 @@ def _load_whisper_model(model_name: str, settings: Settings):
             # float16 dù ít VRAM hơn — chỉ dùng khi float16 không nạp được.
             for compute in ("float16", "int8_float16", "int8"):
                 try:
-                    model = WhisperModel(resolved, device="cuda",
-                                         compute_type=compute)
+                    kw = {"device": "cuda", "compute_type": compute}
+                    if dl_root:
+                        kw["download_root"] = dl_root
+                    model = WhisperModel(resolved, **kw)
                     logger.info(f"Whisper '{resolved}' chạy trên GPU "
                                 f"(CUDA, {compute})")
                     return model, "cuda"
@@ -100,7 +104,11 @@ def _load_whisper_model(model_name: str, settings: Settings):
                         f"Whisper GPU {compute} không chạy được ({e})")
         logger.warning("Không chạy được Whisper trên GPU — dùng CPU")
     resolved = settings.resolved_whisper_model(cuda_available=False)
-    return WhisperModel(resolved, device="cpu", compute_type="int8"), "cpu"
+    cpu_kw = {"device": "cpu", "compute_type": "int8"}
+    model_dir = settings.whisper_model_dir_path()
+    if os.path.isdir(model_dir):
+        cpu_kw["download_root"] = model_dir
+    return WhisperModel(resolved, **cpu_kw), "cpu"
 
 
 def _gpu_total_vram_gb() -> float:
@@ -116,12 +124,11 @@ class WhisperCache:
 
     Nạp large-v3 từ đĩa mất hàng chục giây mỗi video — với lô hàng trăm
     video là hàng giờ vô ích. Giữ thường trú thì phải cân VRAM: trên CPU
-    luôn an toàn; trên GPU chỉ giữ khi card ≥ 10 GB (card 6 GB cần trả
-    ~2 GB của Whisper cho Demucs của video kế tiếp — giữ lại sẽ đẩy
-    Demucs rơi về CPU, chậm hơn nhiều so với 20 giây tiết kiệm được).
+    luôn an toàn; trên GPU chỉ giữ khi card ≥ 6 GB (Demucs nhàn rỗi tự giải
+    phóng VRAM về CPU nên card 6-8 GB vẫn đủ chỗ cho Whisper thường trú).
     """
 
-    _KEEP_GPU_MIN_VRAM_GB = 10.0
+    _KEEP_GPU_MIN_VRAM_GB = 6.0
 
     def __init__(self):
         self._model = None
@@ -152,6 +159,7 @@ class WhisperCache:
 
 def transcribe(audio_path: str, language: str, settings: Settings,
                whisper_cache: "WhisperCache | None" = None,
+               paraformer_cache: "ParaformerCache | None" = None,
                meta: dict | None = None) -> list[dict]:
     """Transcribe audio with the configured local ASR (free, offline).
 
@@ -168,7 +176,12 @@ def transcribe(audio_path: str, language: str, settings: Settings,
     timeline (strict 1:1 rendering, one clip per segment).
     """
     segments = None
-    if settings.asr_engine == "paraformer":
+    # Nếu đang chọn Paraformer hoặc ngôn ngữ là tiếng Trung và Paraformer có sẵn
+    use_paraformer = (
+        settings.asr_engine == "paraformer"
+        or (settings.asr_engine == "auto" and (language or "").lower().startswith("zh") and settings.paraformer_configured())
+    )
+    if use_paraformer:
         if not (language or "").lower().startswith("zh"):
             logger.warning("Paraformer chỉ hỗ trợ tiếng Trung — dùng Whisper "
                            f"cho ngôn ngữ '{language}'")
@@ -180,7 +193,8 @@ def transcribe(audio_path: str, language: str, settings: Settings,
                 from autodub.speech.paraformer_transcriber import (
                     transcribe_paraformer)
                 segments = transcribe_paraformer(audio_path, settings,
-                                                 meta=meta)
+                                                 meta=meta,
+                                                 paraformer_cache=paraformer_cache)
             except Exception as e:
                 logger.warning(f"Paraformer lỗi ({e}) — chuyển sang Whisper")
     if segments is None:
@@ -290,11 +304,10 @@ def _transcribe_whisper_subprocess(
     proc.stdin.close()
 
     from autodub.media.audio import wav_duration_s
-    from autodub.utils import format_eta
-    import time
 
     total_audio_dur = wav_duration_s(audio_path) or 0.0
-    t0 = time.time()
+    tracker = ProgressTracker(total_audio_dur if total_audio_dur > 0 else 1.0,
+                              "Nhận dạng giọng nói (ASR)", unit="s", min_log_interval=2.5)
     segments: list[dict] = []
     done = False
     try:
@@ -311,9 +324,11 @@ def _transcribe_whisper_subprocess(
             if msg.get("seg"):
                 start = float(msg["start"])
                 end   = float(msg["end"])
+                seg_id = msg.get("id", len(segments) + 1)
+                txt = str(msg.get("text", "")).strip()
                 seg: dict = {
-                    "id":       msg.get("id", len(segments) + 1),
-                    "text":     str(msg.get("text", "")).strip(),
+                    "id":       seg_id,
+                    "text":     txt,
                     "start":    round(start, 3),
                     "end":      round(end, 3),
                     "duration": round(end - start, 3),
@@ -322,16 +337,11 @@ def _transcribe_whisper_subprocess(
                 if words:
                     seg["words"] = words
                 segments.append(seg)
-                elapsed = time.time() - t0
-                eta_text = ""
-                if total_audio_dur > 0 and end > 0:
-                    pct = min(99, int((end / total_audio_dur) * 100))
-                    rate = end / elapsed if elapsed > 0 else 1.0
-                    rem_s = max(0.0, total_audio_dur - end) / rate
-                    eta_text = f" [{pct}% | ⏱ Đã chạy: {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]"
-                logger.info(f"Segment {seg['id']}: "
-                            f"[{start:.1f}s-{end:.1f}s]{eta_text} "
-                            f"{seg['text'][:40]}...")
+                preview = (txt[:30] + "...") if len(txt) > 30 else txt
+                detail = f"Câu #{seg_id} [{start:.1f}s-{end:.1f}s]: \"{preview}\""
+                should_log, log_msg = tracker.update_to(end, detail=detail)
+                if should_log:
+                    logger.info(f"  {log_msg}")
             elif msg.get("done"):
                 done = True
                 lang = msg.get("language", "")
@@ -340,6 +350,8 @@ def _transcribe_whisper_subprocess(
                         f"Ngôn ngữ: {lang} "
                         f"({msg.get('language_prob', 0):.0%})")
         proc.wait(timeout=7200)
+        if done:
+            logger.info(f"  {tracker.summary()}")
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -417,6 +429,12 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         logger.info(f"Ngôn ngữ tự nhận dạng: {info.language} "
                     f"(độ tin cậy {getattr(info, 'language_probability', 0):.0%})")
 
+    from autodub.media.audio import wav_duration_s
+
+    total_audio_dur = getattr(info, "duration", None) or wav_duration_s(audio_path) or 0.0
+    tracker = ProgressTracker(total_audio_dur if total_audio_dur > 0 else 1.0,
+                              "Nhận dạng giọng nói (ASR)", unit="s", min_log_interval=2.5)
+
     segments = []
     segment_id = 0
     for seg in raw_segments:
@@ -442,7 +460,13 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
             ]
         segment = _anchor_segment_to_words(segment)
         segments.append(segment)
-        logger.info(f"Segment {segment_id}: [{segment['start']:.1f}s-{segment['end']:.1f}s] {text[:50]}...")
+        preview = (text[:30] + "...") if len(text) > 30 else text
+        detail = f"Câu #{segment_id} [{start:.1f}s-{end:.1f}s]: \"{preview}\""
+        should_log, log_msg = tracker.update_to(end, detail=detail)
+        if should_log:
+            logger.info(f"  {log_msg}")
+
+    logger.info(f"  {tracker.summary()}")
 
     # The transcript is fully materialised — hand the VRAM back before the
     # TTS step sizes its worker pool. raw_segments (a generator) also pins

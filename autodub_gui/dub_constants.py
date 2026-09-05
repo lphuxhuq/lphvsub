@@ -13,8 +13,8 @@ SOURCE_LANGS: list[tuple[str, str]] = [
 ]
 
 ASR_ENGINES: list[tuple[str, str]] = [
+    ("Paraformer — chuyên tiếng Trung (khuyên dùng)", "paraformer"),
     ("Whisper — nghe được mọi ngôn ngữ", "whisper"),
-    ("Paraformer — chuyên tiếng Trung", "paraformer"),
 ]
 
 WHISPER_MODELS: list[tuple[str, str]] = [

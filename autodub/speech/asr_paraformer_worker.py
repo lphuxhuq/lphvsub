@@ -96,77 +96,21 @@ def padded_range(seg_start: int, seg_end: int, prev_end: int,
     return s, e
 
 
-def main() -> None:
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
-    # Keep the real stdout for the JSON protocol only; library prints → stderr.
-    proto_out = sys.stdout
-    sys.stdout = sys.stderr
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--audio", required=True, help="16 kHz mono WAV")
-    parser.add_argument("--model-dir", required=True,
-                        help="dir with model.int8.onnx + tokens.txt + "
-                             "silero_vad.onnx (+ punct/)")
-    parser.add_argument("--num-threads", type=int, default=4)
-    parser.add_argument("--no-punct", action="store_true")
-    parser.add_argument("--vad-pad", type=float, default=0.3,
-                        help="giây đệm hai bên mỗi VAD chunk trước khi decode")
-    parser.add_argument("--no-gap-rescan", action="store_true",
-                        help="tắt pass 3 quét lại khoảng trống bắt lời VAD bỏ sót")
-    parser.add_argument("--gap-min", type=float, default=1.0,
-                        help="khoảng trống tối thiểu (giây) để quét lại ở pass 3")
-    args = parser.parse_args()
-
-    model_file = os.path.join(args.model_dir, "model.int8.onnx")
-    tokens_file = os.path.join(args.model_dir, "tokens.txt")
-    vad_file = os.path.join(args.model_dir, "silero_vad.onnx")
-    for p in (model_file, tokens_file, vad_file):
-        if not os.path.isfile(p):
-            _die(proto_out, f"missing model file: {p}")
-
-    try:
-        import numpy as np  # noqa: F401 — fail early with a clear message
-        import sherpa_onnx
-    except ImportError as e:
-        _die(proto_out, f"missing package in .venv-asr: {e}")
-
-    try:
-        recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
-            paraformer=model_file,
-            tokens=tokens_file,
-            num_threads=max(1, args.num_threads),
-            sample_rate=16000,
-            feature_dim=80,
-            decoding_method="greedy_search",
-        )
-    except Exception as e:
-        _die(proto_out, f"failed to load Paraformer: {type(e).__name__}: {e}")
-
-    # Punctuation (CT-Transformer zh-en) — optional, warn-only on failure.
-    punct = None
-    punct_dir = os.path.join(args.model_dir, "punct")
-    punct_model = os.path.join(punct_dir, "model.onnx")
-    if not args.no_punct and os.path.isfile(punct_model):
-        try:
-            punct_cfg = sherpa_onnx.OfflinePunctuationConfig(
-                model=sherpa_onnx.OfflinePunctuationModelConfig(
-                    ct_transformer=punct_model,
-                    num_threads=max(1, args.num_threads)))
-            punct = sherpa_onnx.OfflinePunctuation(punct_cfg)
-        except Exception as e:
-            print(f"punctuation model failed to load ({e}) — continuing "
-                  "without punctuation", file=sys.stderr, flush=True)
-
-    try:
-        samples, rate = _read_wav(args.audio)
-    except Exception as e:
-        _die(proto_out, f"cannot read audio: {type(e).__name__}: {e}")
+def process_audio(
+    audio_path: str,
+    recognizer,
+    vad_file: str,
+    punct,
+    vad_pad: float,
+    no_gap_rescan: bool,
+    gap_min: float,
+    proto_out,
+    sherpa_onnx,
+) -> tuple[int, int]:
+    """Nhận dạng một file audio (16 kHz mono WAV) bằng recognizer và VAD đã nạp sẵn."""
+    samples, rate = _read_wav(audio_path)
     if rate != 16000:
-        _die(proto_out, f"expected 16 kHz audio, got {rate} Hz")
-
-    print(json.dumps({"ready": True}), file=proto_out, flush=True)
+        raise ValueError(f"expected 16 kHz audio, got {rate} Hz")
 
     # VAD chunking mirrors faster-whisper's vad_filter (500 ms min silence, 0.35 threshold).
     vad_cfg = sherpa_onnx.VadModelConfig()
@@ -179,7 +123,7 @@ def main() -> None:
     vad = sherpa_onnx.VoiceActivityDetector(vad_cfg, buffer_size_in_seconds=120)
 
     window = 512  # samples per VAD feed (silero requirement at 16 kHz)
-    pad_samples = max(0, int(round(args.vad_pad * rate)))
+    pad_samples = max(0, int(round(vad_pad * rate)))
     n_segments = 0
     n_empty = 0
 
@@ -237,8 +181,8 @@ def main() -> None:
     # Pass 3 (gap-rescan): quét lại khoảng trống ≥ gap-min giây mà không
     # chunk nào phủ — decode thẳng KHÔNG qua VAD. Biên cửa sổ thô; pipeline
     # chính thu hẹp lại bằng RMS (refine_speech_boundaries chỉ thu hẹp).
-    if not args.no_gap_rescan:
-        min_gap = max(1, int(round(args.gap_min * rate)))
+    if not no_gap_rescan:
+        min_gap = max(1, int(round(gap_min * rate)))
         max_span = int(_GAP_RESCAN_MAX_S * rate)
         recovered = 0
         for s, e in uncovered_spans(len(samples), ok_spans, min_gap):
@@ -270,6 +214,125 @@ def main() -> None:
     print(json.dumps({"done": True, "num_segments": n_segments,
                       "num_empty": n_empty}),
           file=proto_out, flush=True)
+    return n_segments, n_empty
+
+
+def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+    # Keep the real stdout for the JSON protocol only; library prints → stderr.
+    proto_out = sys.stdout
+    sys.stdout = sys.stderr
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--serve", action="store_true",
+                        help="Chế độ phục vụ bền vững (JSON qua stdin/stdout)")
+    parser.add_argument("--audio", help="16 kHz mono WAV (bắt buộc khi không --serve)")
+    parser.add_argument("--model-dir", required=True,
+                        help="dir with model.int8.onnx + tokens.txt + "
+                             "silero_vad.onnx (+ punct/)")
+    parser.add_argument("--num-threads", type=int, default=4)
+    parser.add_argument("--no-punct", action="store_true")
+    parser.add_argument("--vad-pad", type=float, default=0.3,
+                        help="giây đệm hai bên mỗi VAD chunk trước khi decode")
+    parser.add_argument("--no-gap-rescan", action="store_true",
+                        help="tắt pass 3 quét lại khoảng trống bắt lời VAD bỏ sót")
+    parser.add_argument("--gap-min", type=float, default=1.0,
+                        help="khoảng trống tối thiểu (giây) để quét lại ở pass 3")
+    args = parser.parse_args()
+
+    if not args.serve and not args.audio:
+        _die(proto_out, "--audio là bắt buộc khi không dùng --serve")
+
+    model_file = os.path.join(args.model_dir, "model.int8.onnx")
+    tokens_file = os.path.join(args.model_dir, "tokens.txt")
+    vad_file = os.path.join(args.model_dir, "silero_vad.onnx")
+    for p in (model_file, tokens_file, vad_file):
+        if not os.path.isfile(p):
+            _die(proto_out, f"missing model file: {p}")
+
+    try:
+        import numpy as np  # noqa: F401 — fail early with a clear message
+        import sherpa_onnx
+    except ImportError as e:
+        _die(proto_out, f"missing package in .venv-asr: {e}")
+
+    try:
+        recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
+            paraformer=model_file,
+            tokens=tokens_file,
+            num_threads=max(1, args.num_threads),
+            sample_rate=16000,
+            feature_dim=80,
+            decoding_method="greedy_search",
+        )
+    except Exception as e:
+        _die(proto_out, f"failed to load Paraformer: {type(e).__name__}: {e}")
+
+    # Punctuation (CT-Transformer zh-en) — optional, warn-only on failure.
+    punct = None
+    punct_dir = os.path.join(args.model_dir, "punct")
+    punct_model = os.path.join(punct_dir, "model.onnx")
+    if not args.no_punct and os.path.isfile(punct_model):
+        try:
+            punct_cfg = sherpa_onnx.OfflinePunctuationConfig(
+                model=sherpa_onnx.OfflinePunctuationModelConfig(
+                    ct_transformer=punct_model,
+                    num_threads=max(1, args.num_threads)))
+            punct = sherpa_onnx.OfflinePunctuation(punct_cfg)
+        except Exception as e:
+            print(f"punctuation model failed to load ({e}) — continuing "
+                  "without punctuation", file=sys.stderr, flush=True)
+
+    if args.serve:
+        print(json.dumps({"ready": True}), file=proto_out, flush=True)
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = json.loads(line)
+                audio_path = req.get("audio")
+                if not audio_path or not os.path.isfile(audio_path):
+                    print(json.dumps({"error": f"audio file not found: {audio_path}"}),
+                          file=proto_out, flush=True)
+                    continue
+                pad = float(req.get("vad_pad", args.vad_pad))
+                no_rescan = bool(req.get("no_gap_rescan", args.no_gap_rescan))
+                gap = float(req.get("gap_min", args.gap_min))
+                process_audio(
+                    audio_path=audio_path,
+                    recognizer=recognizer,
+                    vad_file=vad_file,
+                    punct=punct,
+                    vad_pad=pad,
+                    no_gap_rescan=no_rescan,
+                    gap_min=gap,
+                    proto_out=proto_out,
+                    sherpa_onnx=sherpa_onnx,
+                )
+            except Exception as e:
+                print(json.dumps({"error": f"{type(e).__name__}: {e}"}),
+                      file=proto_out, flush=True)
+        return
+
+    # One-shot mode
+    try:
+        print(json.dumps({"ready": True}), file=proto_out, flush=True)
+        process_audio(
+            audio_path=args.audio,
+            recognizer=recognizer,
+            vad_file=vad_file,
+            punct=punct,
+            vad_pad=args.vad_pad,
+            no_gap_rescan=args.no_gap_rescan,
+            gap_min=args.gap_min,
+            proto_out=proto_out,
+            sherpa_onnx=sherpa_onnx,
+        )
+    except Exception as e:
+        _die(proto_out, f"{type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":

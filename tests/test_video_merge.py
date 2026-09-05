@@ -202,3 +202,43 @@ def test_aspect_preset_forces_reencode(paths, captured):
     assert "force_original_aspect_ratio=increase" in fc
     assert get_opt(cmd, "-c:v") == "libx264"
 
+
+def test_merge_video_with_frame_banner(paths, captured):
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        frame_banner_enabled=True,
+        frame_banner_color="#000000",
+        frame_header_text="TẬP 1: BÍ MẬT",
+        frame_footer_text="FOLLOW KÊNH",
+    )
+    cmd = captured[0]
+    assert "-filter_complex" in cmd
+    fc = get_opt(cmd, "-filter_complex")
+    assert "pad=" in fc
+    assert "drawtext=" in fc
+    assert "TẬP 1\\: BÍ MẬT" in fc
+    assert "FOLLOW KÊNH" in fc
+    assert get_opt(cmd, "-c:v") == "libx264"
+
+
+def test_merge_video_with_randomize_metadata(paths, captured):
+    # Pre-create output file so randomize_file_hash can append to it
+    with open(paths["out"], "wb") as f:
+        f.write(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00isommp42")
+
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        randomize_metadata=True,
+    )
+    cmd = captured[0]
+    assert "-map_metadata" in cmd
+    idx = cmd.index("-map_metadata")
+    assert cmd[idx + 1] == "-1"
+
+    # Confirm file content has 'free' box appended
+    with open(paths["out"], "rb") as f:
+        data = f.read()
+    assert b"free" in data
+
+
+

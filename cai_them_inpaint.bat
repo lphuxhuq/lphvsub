@@ -4,7 +4,8 @@ title VoxDub - Cai them AI Subtitle Remover (LaMa ONNX)
 cd /d "%~dp0"
 
 set "PY="
-py -3 --version >nul 2>&1 && set "PY=py -3"
+py -3.11 --version >nul 2>&1 && set "PY=py -3.11"
+if not defined PY py -3 --version >nul 2>&1 && set "PY=py -3"
 if not defined PY python --version >nul 2>&1 && set "PY=python"
 
 if not defined PY (

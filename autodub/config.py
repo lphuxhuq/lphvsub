@@ -249,6 +249,7 @@ class Settings:
     timing_max_drift_s: float = 1.5     # trần dồn trễ tích lũy
     timing_min_gap_s: float = 0.12      # khoảng thở tối thiểu giữa hai câu
     timing_max_atempo: float = 1.1      # trần nén bất khả kháng (mỗi câu)
+    prevent_voice_overlap: bool = True  # Chống chồng tiếng / chồng sub giữa các câu thuyết minh
 
     # --- Phân tách người nói (Speaker Diarization) -----------------------------
     #: Bật/tắt tự động phân tách người nói sau bước nhận dạng ASR
@@ -403,6 +404,7 @@ class Settings:
     smart_flip: bool = False
     micro_zoom: bool = False
     color_filter: str = "none"
+    randomize_metadata: bool = True
 
     # Cải tiến Voice Sync (3-Tier Adaptive Sync)
     voice_vad_trim_enabled: bool = True
@@ -417,6 +419,17 @@ class Settings:
     vsr_dir: str = ""                   # đường dẫn thư mục cài VSR ngoài
     # Tự động phân vai đa giọng thông minh bằng AI (AI Multi-Speaker Smart Voice Director)
     auto_voice_director_enabled: bool = True
+
+    # Khung viền dải trên & dưới (Top/Bottom Banner Frame)
+    frame_banner_enabled: bool = False
+    frame_banner_color: str = "#000000"
+    frame_header_text: str = ""
+    frame_header_font_size: int = 32
+    frame_header_color: str = "#FFFFFF"
+    frame_footer_text: str = ""
+    frame_footer_font_size: int = 24
+    frame_footer_color: str = "#FFD54A"
+    frame_banner_height_ratio: float = 0.16
 
 
 
@@ -552,6 +565,7 @@ class Settings:
                 env_float("TIMING_MIN_GAP_S", "0.12"))),
             timing_max_atempo=min(1.3, max(1.0,
                 env_float("TIMING_MAX_ATEMPO", "1.1"))),
+            prevent_voice_overlap=env_bool("PREVENT_VOICE_OVERLAP", "true"),
             diarization_enabled=env_bool("DIARIZATION_ENABLED", "true"),
             diarization_num_speakers=max(0, min(16, env_int("DIARIZATION_NUM_SPEAKERS", "0"))),
             diarization_max_speakers=max(2, min(16, env_int("DIARIZATION_MAX_SPEAKERS", "4"))),
@@ -646,6 +660,7 @@ class Settings:
             smart_flip=env_bool("SMART_FLIP", False),
             micro_zoom=env_bool("MICRO_ZOOM", False),
             color_filter=env("COLOR_FILTER", "none").strip() or "none",
+            randomize_metadata=env_bool("RANDOMIZE_METADATA", True),
             video_aspect_preset=env("VIDEO_ASPECT_PRESET", "original").strip() or "original",
             video_reframe_mode=env("VIDEO_REFRAME_MODE", "blur").strip() or "blur",
             auto_sfx_enabled=env_bool("AUTO_SFX_ENABLED", False),
@@ -666,6 +681,15 @@ class Settings:
             inpaint_model_path=env_dir("INPAINT_MODEL_PATH", ""),
             vsr_dir=env_dir("VSR_DIR", ""),
             auto_voice_director_enabled=env_bool("AUTO_VOICE_DIRECTOR", True),
+            frame_banner_enabled=env_bool("FRAME_BANNER_ENABLED", False),
+            frame_banner_color=env("FRAME_BANNER_COLOR", "#000000").strip() or "#000000",
+            frame_header_text=env("FRAME_HEADER_TEXT", "").strip(),
+            frame_header_font_size=max(12, min(150, env_int("FRAME_HEADER_FONT_SIZE", 32))),
+            frame_header_color=env("FRAME_HEADER_COLOR", "#FFFFFF").strip() or "#FFFFFF",
+            frame_footer_text=env("FRAME_FOOTER_TEXT", "").strip(),
+            frame_footer_font_size=max(12, min(150, env_int("FRAME_FOOTER_FONT_SIZE", 24))),
+            frame_footer_color=env("FRAME_FOOTER_COLOR", "#FFD54A").strip() or "#FFD54A",
+            frame_banner_height_ratio=max(0.08, min(0.40, env_float("FRAME_BANNER_HEIGHT_RATIO", 0.16))),
         )
 
 

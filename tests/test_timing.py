@@ -155,9 +155,20 @@ def test_apply_soft_timing_mutates_timeline(tmp_path):
     # Câu 1 (4.0s, slot 3.0, next 3.0) → tempo 1.15 → PHẢI render.
     assert segments[0]["tempo_factor"] == pytest.approx(1.15, abs=1e-3)
     assert report.segments_compressed == 1
-    # Onset câu 2 giữ ≤ 3.15 (không còn dồn 1.1s như scheduler cũ).
-    assert segments[1]["start"] <= 3.0 + settings.timing_max_start_drift_s \
+    # Mặc định prevent_voice_overlap=True: câu 2 không được bắt đầu khi câu 1 chưa dứt lời.
+    assert segments[1]["start"] >= segments[0]["end"]
+
+    # Khi tắt prevent_voice_overlap: Onset câu 2 giữ ≤ 3.15 (không dồn trễ lũy kế)
+    segs_overlap = [
+        {"id": 1, "start": 0.0, "end": 3.0, "duration": 3.0},
+        {"id": 2, "start": 3.0, "end": 5.0, "duration": 2.0},
+    ]
+    settings_allow_overlap = Settings(prevent_voice_overlap=False)
+    apply_soft_timing(
+        segs_overlap, str(seg_dir), str(tmp_path / "timed_overlap"), settings_allow_overlap)
+    assert segs_overlap[1]["start"] <= 3.0 + settings_allow_overlap.timing_max_start_drift_s \
         + 1e-6
+
     # end = vị trí đặt + thời lượng clip thật sau tempo.
     from autodub.media.audio import wav_duration_s
     from autodub.utils import seg_wav_path

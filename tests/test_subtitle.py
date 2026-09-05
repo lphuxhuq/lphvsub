@@ -290,8 +290,60 @@ def test_build_aspect_ratio_filter_reframe_modes():
     assert "crop=" in flt_crop
     assert abs((tw_crop / th_crop) - (9.0 / 16.0)) < 0.02
 
+def test_build_aspect_ratio_filter_banner_mode():
+    from autodub.media.subtitle import build_aspect_ratio_filter
+
+    # Banner mode 9:16
+    res_banner = build_aspect_ratio_filter(
+        "tiktok_9_16", 1920, 1080, reframe_mode="banner", banner_color="#F59E0B"
+    )
+    assert res_banner is not None
+    flt_banner, tw, th = res_banner
+    assert "pad=" in flt_banner
+    assert "0xF59E0B" in flt_banner or "F59E0B" in flt_banner
+    assert abs((tw / th) - (9.0 / 16.0)) < 0.02
 
 
+def test_build_filter_complex_with_top_bottom_banner():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        aspect_preset="tiktok_9_16",
+        frame_banner_enabled=True,
+        frame_banner_color="#000000",
+        frame_header_text="TẬP 1: BÍ MẬT ĐỘNG TRỜI",
+        frame_header_font_size=36,
+        frame_header_color="#FFFFFF",
+        frame_footer_text="KÊNH PHIM HAY • FOLLOW ĐỂ XEM TIẾP",
+        frame_footer_font_size=26,
+        frame_footer_color="#FFD54A",
+    )
+    assert graph is not None
+    assert "pad=" in graph
+    assert "0x000000" in graph or "black" in graph
+    assert "drawtext=" in graph
+    assert "TẬP 1\\: BÍ MẬT ĐỘNG TRỜI" in graph
+    assert "KÊNH PHIM HAY • FOLLOW ĐỂ XEM TIẾP" in graph
+    assert "fontsize=36" in graph
+    assert "fontsize=26" in graph
+    assert graph.endswith("null[vout]")
 
+
+def test_build_filter_complex_banner_vietnamese_escaping():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        aspect_preset="square_1_1",
+        frame_banner_enabled=True,
+        frame_banner_color="#FFFFFF",
+        frame_header_text="PHIM 'HOT': GIẢM GIÁ 100%!",
+        frame_footer_text="NGƯỜI DÙNG: BẤT NGỜ CHƯA?",
+    )
+    assert graph is not None
+    assert "PHIM \\'HOT\\'\\: GIẢM GIÁ 100\\%!" in graph or "100\\%" in graph
+    assert "NGƯỜI DÙNG\\: BẤT NGỜ CHƯA?" in graph
+    assert graph.endswith("null[vout]")
 
 

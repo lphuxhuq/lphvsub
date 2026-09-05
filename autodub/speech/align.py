@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable
 
 from autodub.utils import save_json_atomic, seg_wav_path, setup_logging
 
@@ -145,6 +147,7 @@ def align_segments(
     merge_dir: str,
     text_field: str,
     cache_path: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
 ) -> dict[int, list[tuple[str, float, float]]]:
     """Alignment thật cho mọi segment. Trả ``{id: [(chữ, t0, t1), ...]}``.
 
@@ -190,46 +193,119 @@ def align_segments(
     if not todo:
         return out
 
+    total = len(todo)
     n_cached = len(out)
-    logger.info(f"Đang canh phụ đề nhảy đúng nhịp giọng đọc "
-                f"({len(todo)} câu"
-                + (f", {n_cached} câu dùng lại của lần trước" if n_cached else "")
-                + ") — chờ chút...")
+    cached_info = f", {n_cached} câu dùng lại từ bộ nhớ đệm" if n_cached else ""
+    logger.info(
+        f"Đang canh phụ đề nhảy đúng nhịp giọng đọc ({total} câu{cached_info}) "
+        f"— đang khởi động mô hình Whisper {ALIGN_MODEL}..."
+    )
+    if progress_cb:
+        try:
+            progress_cb(0.0, f"Khởi động mô hình canh nhịp phụ đề ({total} câu)...")
+        except Exception:
+            pass
+
     try:
-        model, _device, n_workers = _load_align_model()
+        model, device, n_workers = _load_align_model()
     except Exception as e:
-        logger.warning(f"Không canh được phụ đề theo giọng đọc ({e}) — "
-                       "chữ sẽ chia đều theo thời lượng câu")
+        logger.warning(
+            f"Không canh được phụ đề theo giọng đọc ({e}) — "
+            "chữ sẽ chia đều theo thời lượng câu"
+        )
         return out
+
+    dev_name = str(device).upper()
+    logger.info(
+        f"Đã nạp Whisper {ALIGN_MODEL} ({dev_name}, {n_workers} luồng). "
+        f"Bắt đầu canh nhịp chi tiết {total} câu:"
+    )
 
     def _one(item):
         seg, wav, dur, key = item
         sid = seg.get("id")
-        text_words = str(seg.get(text_field, "")).split()
+        text = str(seg.get(text_field, "")).strip()
+        text_words = text.split()
         try:
             asr = _asr_words(model, wav)
         except Exception as e:
             logger.debug(f"ASR alignment câu {sid} lỗi ({e}) — ước lượng")
-            return None
+            return sid, key, float(seg["start"]), None, "error", str(e), text
         mapped = _map_words(text_words, asr, float(seg["start"]), dur)
         if mapped is None:
-            return None
-        return sid, key, float(seg["start"]), mapped
+            n_asr = len(asr) if asr is not None else 0
+            return sid, key, float(seg["start"]), None, "sparse", f"{n_asr}/{len(text_words)} từ", text
+        return sid, key, float(seg["start"]), mapped, "ok", len(mapped), text
 
-    if n_workers > 1:
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            done = list(pool.map(_one, todo))
+    start_time = time.perf_counter()
+    last_log_time = start_time
+    done_cnt = 0
+    ok_cnt = 0
+    est_cnt = 0
+    done = []
+
+    # Tần suất log chi tiết:
+    # Với số câu lớn (như 607 câu): log mỗi 25 câu hoặc khi quá 3 giây không có log
+    if total <= 20:
+        log_step = 2
+    elif total <= 100:
+        log_step = 10
+    elif total <= 300:
+        log_step = 20
     else:
-        done = [_one(item) for item in todo]
+        log_step = 25
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {pool.submit(_one, item): item for item in todo}
+        for fut in as_completed(futures):
+            res = fut.result()
+            done.append(res)
+            done_cnt += 1
+            sid, key, base, mapped, status, detail, text = res
+            if mapped is not None:
+                ok_cnt += 1
+            else:
+                est_cnt += 1
+
+            now = time.perf_counter()
+            elapsed = now - start_time
+            is_milestone = (
+                (done_cnt == 1)
+                or (done_cnt % log_step == 0)
+                or (done_cnt == total)
+                or (now - last_log_time >= 3.0)
+            )
+
+            if is_milestone:
+                last_log_time = now
+                pct = (done_cnt / total) * 100.0
+                speed = done_cnt / elapsed if elapsed > 0 else 0.0
+                eta = (total - done_cnt) / speed if speed > 0 else 0.0
+                eta_str = f"{eta:.0f}s" if eta < 60 else f"{int(eta // 60)}m{int(eta % 60):02d}s"
+                preview = text[:32] + ("..." if len(text) > 32 else "")
+                tag = f"OK ({detail} từ)" if status == "ok" else f"ước lượng ({detail})"
+
+                logger.info(
+                    f"Canh nhịp: {done_cnt}/{total} câu ({pct:.1f}%) | "
+                    f"Khớp: {ok_cnt} | Ước lượng: {est_cnt} | "
+                    f"Tốc độ: {speed:.1f} câu/s (còn ~{eta_str}) | "
+                    f"Câu {sid}: \"{preview}\" → {tag}"
+                )
+                if progress_cb:
+                    try:
+                        progress_cb(
+                            done_cnt / total,
+                            f"Canh nhịp phụ đề: {done_cnt}/{total} ({pct:.0f}%)",
+                        )
+                    except Exception:
+                        pass
 
     new_cache_entries: dict = {}
-    n_ok = 0
     for res in done:
-        if res is None:
+        sid, key, base, mapped, status, _detail, _text = res
+        if mapped is None:
             continue
-        sid, key, base, mapped = res
         out[sid] = mapped
-        n_ok += 1
         new_cache_entries[key] = [
             [w, round(t0 - base, 3), round(t1 - base, 3)]
             for w, t0, t1 in mapped
@@ -238,10 +314,20 @@ def align_segments(
     # Model base nhỏ; thả tham chiếu là đủ (ctranslate2 tự nhả khi GC).
     del model
 
-    n_est = len(todo) - n_ok
-    logger.info(f"Canh phụ đề xong: {n_ok}/{len(todo)} câu khớp chính xác "
-                "theo giọng đọc"
-                + (f", {n_est} câu chia đều theo thời lượng" if n_est else ""))
+    elapsed_total = time.perf_counter() - start_time
+    speed_total = total / elapsed_total if elapsed_total > 0 else 0.0
+    pct_ok = (ok_cnt / total) * 100.0 if total > 0 else 0.0
+    logger.info(
+        f"Canh phụ đề xong: {ok_cnt}/{total} câu khớp chính xác ({pct_ok:.1f}%)"
+        + (f", {est_cnt} câu chia đều theo thời lượng" if est_cnt else "")
+        + f" trong {elapsed_total:.1f}s (trung bình {speed_total:.1f} câu/s)"
+    )
+    if progress_cb:
+        try:
+            progress_cb(1.0, f"Canh nhịp xong ({ok_cnt}/{total} câu chuẩn)")
+        except Exception:
+            pass
+
     if cache_path and new_cache_entries:
         try:
             save_json_atomic({**cache, **new_cache_entries}, cache_path)

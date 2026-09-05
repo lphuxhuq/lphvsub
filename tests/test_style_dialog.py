@@ -222,3 +222,51 @@ def test_pipeline_stop_for_export_saves_logo_and_watermark_to_render_opts(tmp_pa
         HOLD.clear()
 
 
+def test_style_dialog_banner_options(qtbot):
+    app = QApplication.instance() or QApplication([])
+    style = {"font": "Arial", "font_size": 24, "margin_v": 40, "position": "bottom"}
+    banner_opts = {
+        "frame_banner_enabled": True,
+        "frame_banner_color": "#F59E0B",
+        "frame_header_text": "TẬP 1: BÍ MẬT",
+        "frame_header_font_size": 36,
+        "frame_header_color": "#FFFFFF",
+        "frame_footer_text": "FOLLOW KÊNH",
+        "frame_footer_font_size": 26,
+        "frame_footer_color": "#000000",
+    }
+    dialog = StyleDialog(
+        video_path=None,
+        style=style,
+        regions=[],
+        banner_options=banner_opts,
+    )
+    qtbot.addWidget(dialog)
+
+    assert dialog.chk_banner_enabled.isChecked() is True
+    assert dialog.txt_header_text.text() == "TẬP 1: BÍ MẬT"
+    assert dialog.sp_header_font_size.value() == 36
+    assert dialog.slider_header_font_size.value() == 36
+    assert dialog.txt_footer_text.text() == "FOLLOW KÊNH"
+    assert dialog.sp_footer_font_size.value() == 26
+    assert dialog.slider_footer_font_size.value() == 26
+
+    # Test slider and spinbox synchronization
+    dialog.slider_header_font_size.setValue(48)
+    assert dialog.sp_header_font_size.value() == 48
+    dialog.sp_footer_font_size.setValue(32)
+    assert dialog.slider_footer_font_size.value() == 32
+
+    out_b = dialog.banner_options()
+    assert out_b["frame_banner_enabled"] is True
+    assert out_b["frame_banner_color"] == "#F59E0B"
+    assert out_b["frame_header_text"] == "TẬP 1: BÍ MẬT"
+    assert out_b["frame_header_font_size"] == 48
+    assert out_b["frame_footer_text"] == "FOLLOW KÊNH"
+    assert out_b["frame_footer_font_size"] == 32
+
+    # Test painting with banner enabled doesn't throw
+    dialog.canvas.repaint()
+
+
+

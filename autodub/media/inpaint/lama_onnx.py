@@ -23,6 +23,9 @@ from autodub.utils import app_root, setup_logging
 
 logger = setup_logging("autodub.media.inpaint.lama_onnx")
 
+_SESSION_CACHE: dict[tuple[str, str], dict] = {}
+_SESSION_LOCK = threading.Lock()
+
 
 def default_lama_model_path() -> str:
     """Đường dẫn tệp model LaMa ONNX mặc định trong thư mục ứng dụng."""
@@ -40,7 +43,7 @@ class LaMaOnnxEngine(BaseInpaintEngine):
         self._output_name = None
 
     def _ensure_session(self, device: str | None = None):
-        """Khởi tạo session ONNX Runtime khi cần dùng."""
+        """Khởi tạo session ONNX Runtime khi cần dùng (chia sẻ session đã nạp trước)."""
         if self._session is not None:
             return
 
@@ -52,46 +55,95 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             self._session = None
             return
 
-        try:
-            import onnxruntime as ort
-        except ImportError:
-            logger.warning(
-                "Chưa cài đặt onnxruntime — chuyển sang Inpainting OpenCV Telea."
-            )
-            self._session = None
-            return
-
         target_device = (device or self.device).strip().lower()
-        available_providers = ort.get_available_providers()
+        cache_key = (os.path.abspath(self.model_path), target_device)
 
-        providers = []
-        if target_device == "cuda":
-            if "CUDAExecutionProvider" in available_providers:
-                providers.append("CUDAExecutionProvider")
-            else:
-                logger.warning("Yêu cầu CUDA nhưng không tìm thấy CUDAExecutionProvider — fallback CPU.")
-        elif target_device == "directml":
-            if "DmlExecutionProvider" in available_providers:
-                providers.append("DmlExecutionProvider")
-            else:
-                logger.warning("Yêu cầu DirectML nhưng không tìm thấy DmlExecutionProvider — fallback CPU.")
-        elif target_device == "cpu":
+        with _SESSION_LOCK:
+            if cache_key in _SESSION_CACHE:
+                cached = _SESSION_CACHE[cache_key]
+                self._session = cached["session"]
+                self._input_names = cached["input_names"]
+                self._input_shapes = cached["input_shapes"]
+                self._output_name = cached["output_name"]
+                self._fixed_h = cached["fixed_h"]
+                self._fixed_w = cached["fixed_w"]
+                self._cached_mask_key = None
+                self._cached_mask_tensor = None
+                logger.debug("Dùng lại session LaMa ONNX đã nạp sẵn từ cache")
+                return
+
+            try:
+                import onnxruntime as ort
+            except ImportError:
+                logger.warning(
+                    "Chưa cài đặt onnxruntime — chuyển sang Inpainting OpenCV Telea."
+                )
+                self._session = None
+                return
+
+            available_providers = ort.get_available_providers()
+
+            providers = []
+            if target_device == "cuda":
+                if "CUDAExecutionProvider" in available_providers:
+                    providers.append("CUDAExecutionProvider")
+                else:
+                    logger.warning("Yêu cầu CUDA nhưng không tìm thấy CUDAExecutionProvider — fallback CPU.")
+            elif target_device == "directml":
+                if "DmlExecutionProvider" in available_providers:
+                    providers.append("DmlExecutionProvider")
+                else:
+                    logger.warning("Yêu cầu DirectML nhưng không tìm thấy DmlExecutionProvider — fallback CPU.")
+            elif target_device == "cpu":
+                providers.append("CPUExecutionProvider")
+            else:  # "auto"
+                if "CUDAExecutionProvider" in available_providers:
+                    providers.append("CUDAExecutionProvider")
+                elif "DmlExecutionProvider" in available_providers:
+                    providers.append("DmlExecutionProvider")
+
             providers.append("CPUExecutionProvider")
-        else:  # "auto"
-            if "CUDAExecutionProvider" in available_providers:
-                providers.append("CUDAExecutionProvider")
-            elif "DmlExecutionProvider" in available_providers:
-                providers.append("DmlExecutionProvider")
 
-        providers.append("CPUExecutionProvider")
+            logger.info(f"Khởi tạo LaMa ONNX Session với providers: {providers} (đang nạp weights, chờ chút)...")
+            import time
+            t_init_start = time.time()
+            so = ort.SessionOptions()
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            session = ort.InferenceSession(self.model_path, sess_options=so, providers=providers)
+            input_names = [i.name for i in session.get_inputs()]
+            input_shapes = [i.shape for i in session.get_inputs()]
+            output_name = session.get_outputs()[0].name
+            fixed_h, fixed_w = None, None
+            for shape in input_shapes:
+                if shape and len(shape) == 4:
+                    sh_h, sh_w = shape[2], shape[3]
+                    if isinstance(sh_h, int) and sh_h > 0 and isinstance(sh_w, int) and sh_w > 0:
+                        fixed_h, fixed_w = sh_h, sh_w
+                        break
 
-        logger.info(f"Khởi tạo LaMa ONNX Session với providers: {providers}")
-        so = ort.SessionOptions()
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(self.model_path, sess_options=so, providers=providers)
-        self._input_names = [i.name for i in self._session.get_inputs()]
-        self._input_shapes = [i.shape for i in self._session.get_inputs()]
-        self._output_name = self._session.get_outputs()[0].name
+            active_providers = session.get_providers()
+            logger.info(
+                f"Nạp LaMa ONNX Session thành công ({time.time() - t_init_start:.1f}s) "
+                f"— Provider hoạt động: {active_providers[0] if active_providers else 'Unknown'}"
+            )
+
+            _SESSION_CACHE[cache_key] = {
+                "session": session,
+                "input_names": input_names,
+                "input_shapes": input_shapes,
+                "output_name": output_name,
+                "fixed_h": fixed_h,
+                "fixed_w": fixed_w,
+            }
+
+            self._session = session
+            self._input_names = input_names
+            self._input_shapes = input_shapes
+            self._output_name = output_name
+            self._fixed_h = fixed_h
+            self._fixed_w = fixed_w
+            self._cached_mask_key = None
+            self._cached_mask_tensor = None
 
     def inpaint_frame(self, frame_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Inpaint 1 ảnh/patch BGR (H, W, 3) với mask (H, W)."""
@@ -109,26 +161,33 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             mask_dilated = cv2.dilate(mask_uint8, kernel, iterations=1)
             return cv2.inpaint(frame_bgr, mask_dilated, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
 
-        # Kiểm tra xem mô hình ONNX có kích thước đầu vào cố định (ví dụ 512x512) hay linh hoạt (dynamic)
-        fixed_h, fixed_w = None, None
-        for shape in getattr(self, "_input_shapes", []):
-            if shape and len(shape) == 4:
-                # shape format: [batch, channels, H, W]
-                sh_h, sh_w = shape[2], shape[3]
-                if isinstance(sh_h, int) and sh_h > 0 and isinstance(sh_w, int) and sh_w > 0:
-                    fixed_h, fixed_w = sh_h, sh_w
-                    break
+        fixed_h = getattr(self, "_fixed_h", None)
+        fixed_w = getattr(self, "_fixed_w", None)
+        if fixed_h is None or fixed_w is None:
+            for shape in getattr(self, "_input_shapes", []) or []:
+                if shape and len(shape) == 4:
+                    sh_h, sh_w = shape[2], shape[3]
+                    if isinstance(sh_h, int) and sh_h > 0 and isinstance(sh_w, int) and sh_w > 0:
+                        fixed_h, fixed_w = sh_h, sh_w
+                        self._fixed_h, self._fixed_w = fixed_h, fixed_w
+                        break
 
         if fixed_h and fixed_w:
             # Mô hình kích thước cố định (ví dụ 512x512)
             cur_img = cv2.resize(frame_bgr, (fixed_w, fixed_h), interpolation=cv2.INTER_LINEAR)
             img_rgb = cur_img[:, :, ::-1].astype(np.float32) / 255.0
 
-            cur_mask = cv2.resize((mask > 0).astype(np.uint8) * 255, (fixed_w, fixed_h), interpolation=cv2.INTER_NEAREST)
-            mask_f = (cur_mask > 0).astype(np.float32)
+            mask_key = (id(mask), mask.shape, fixed_w, fixed_h)
+            if getattr(self, "_cached_mask_key", None) == mask_key:
+                mask_tensor = self._cached_mask_tensor
+            else:
+                cur_mask = cv2.resize((mask > 0).astype(np.uint8) * 255, (fixed_w, fixed_h), interpolation=cv2.INTER_NEAREST)
+                mask_f = (cur_mask > 0).astype(np.float32)
+                mask_tensor = mask_f[np.newaxis, np.newaxis, :, :].astype(np.float32)
+                self._cached_mask_key = mask_key
+                self._cached_mask_tensor = mask_tensor
 
             img_tensor = np.transpose(img_rgb, (2, 0, 1))[np.newaxis, :, :, :].astype(np.float32)
-            mask_tensor = mask_f[np.newaxis, np.newaxis, :, :].astype(np.float32)
 
             inputs = {}
             for name in self._input_names:
@@ -276,6 +335,10 @@ class LaMaOnnxEngine(BaseInpaintEngine):
         )
 
         frame_idx = 0
+        import time
+        t_start_inpaint = time.time()
+        prev_patch = None
+        prev_clean_patch = None
         try:
             while True:
                 if cancel_event and cancel_event.is_set():
@@ -292,8 +355,13 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 # Crop ROI patch
                 patch = frame[ry : ry + rh, rx : rx + rw]
 
-                # Inpaint patch
-                clean_patch = self.inpaint_frame(patch, roi_mask)
+                # Tái sử dụng kết quả nếu patch giống hệt frame trước (tiết kiệm GPU với freeze-frame, slides, 24->30fps judder)
+                if prev_patch is not None and prev_clean_patch is not None and np.array_equal(patch, prev_patch):
+                    clean_patch = prev_clean_patch
+                else:
+                    clean_patch = self.inpaint_frame(patch, roi_mask)
+                    prev_patch = patch.copy()
+                    prev_clean_patch = clean_patch.copy()
 
                 # Dán đè lại vào frame gốc
                 frame[ry : ry + rh, rx : rx + rw] = clean_patch
@@ -302,10 +370,17 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 enc_proc.stdin.write(frame.tobytes())
 
                 frame_idx += 1
-                if frame_idx % 15 == 0 or frame_idx == total_frames:
+                if frame_idx == 1 or frame_idx % 30 == 0 or frame_idx == total_frames:
                     pct = min(1.0, frame_idx / total_frames)
-                    msg = f"[AI-INPAINT] {int(pct * 100)}% ({frame_idx}/{total_frames} frames)"
-                    logger.debug(msg)
+                    elapsed = max(0.001, time.time() - t_start_inpaint)
+                    fps_val = frame_idx / elapsed
+                    eta_s = int((total_frames - frame_idx) / max(0.001, fps_val))
+                    eta_str = f"{eta_s // 60}m{eta_s % 60:02d}s" if eta_s >= 60 else f"{eta_s}s"
+                    msg = (
+                        f"[AI-INPAINT] {int(pct * 100)}% "
+                        f"({frame_idx}/{total_frames} frames | {fps_val:.1f} fps | ETA: ~{eta_str})"
+                    )
+                    logger.info(msg)
                     if progress_cb:
                         progress_cb(pct, msg)
 

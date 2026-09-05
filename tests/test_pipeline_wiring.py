@@ -35,3 +35,10 @@ def test_pipeline_step3_ocr_fusion_wiring(tmp_path):
         assert fused_segs[0]["text"] == "你为什么不告诉我"
         assert report["version"] == 1
 
+
+def test_pipeline_save_transcript_is_module_level():
+    import autodub.pipeline as p
+    assert hasattr(p, "save_transcript")
+    assert callable(p.save_transcript)
+
+

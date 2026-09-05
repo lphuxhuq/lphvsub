@@ -26,7 +26,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from autodub.utils import ensure_dir, seg_wav_path, setup_logging
+from autodub.utils import ensure_dir, seg_wav_path, setup_logging, ProgressTracker
 
 logger = setup_logging("autodub.timing")
 
@@ -305,8 +305,21 @@ def apply_soft_timing(
                 # Copy thay vì link: dst_dir có thể bị xoá độc lập.
                 shutil.copyfile(src, dst)
 
+        tracker = ProgressTracker(len(segments), "Khớp tốc độ giọng đọc (Atempo)", unit="câu")
+
+        def _tracked(i: int) -> None:
+            _one(i)
+            seg = segments[i]
+            atempo = placements[i]["atempo"]
+            detail = f"Câu #{seg.get('id', i+1)} [tốc độ {atempo:.2f}x]"
+            should_log, msg = tracker.step(1, detail=detail)
+            if should_log:
+                logger.info(f"  {msg}")
+
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            list(pool.map(_one, range(len(segments))))
+            list(pool.map(_tracked, range(len(segments))))
+
+        logger.info(f"  {tracker.summary()}")
 
     # Mutate start/end lên timeline THẬT (dub) — SRT, merge và
     # total_duration cùng nhìn một sự thật. GIỮ NGUYÊN seg["duration"] (thời
@@ -314,16 +327,28 @@ def apply_soft_timing(
     from autodub.media.audio import wav_duration_s as _dur
     total = len(segments)
     log_every = 1 if total <= 60 else max(10, total // 100)
+    prev_actual_end = float("-inf")
+    prevent_overlap = getattr(settings, "prevent_voice_overlap", True)
+    min_gap_safe = max(0.010, float(getattr(settings, "timing_min_gap_s", 0.08) or 0.08))
+
     for i, seg in enumerate(segments):
         p = placements[i]
         t = p["start"]
         final = _dur(seg_wav_path(out_dir, seg["id"])) or durations[i] or \
             float(seg.get("duration", 0) or 0)
+
+        # Chống chồng tiếng / chồng sub (Voice & Subtitle Anti-Collision Invariant):
+        # Không bao giờ để câu sau bắt đầu trước khi câu trước kết thúc nói
+        if prevent_overlap and final > 0 and prev_actual_end > float("-inf"):
+            if t < prev_actual_end + min_gap_safe:
+                t = round(prev_actual_end + min_gap_safe, 3)
+
         seg["start"] = round(t, 3)
         seg["end"] = round(t + final, 3)
         seg["dub_start"] = round(t, 3)
         seg["dub_end"] = round(t + final, 3)
         seg["dub_duration"] = round(final, 3)
+        prev_actual_end = seg["end"]
         seg["tempo_factor"] = p["atempo"]
         seg["timing_adjustment"] = p["adjustment"]
         seg["timing_reason"] = p["reason"]

@@ -81,6 +81,15 @@ class VoiceAndExportMixin:
             mask_method=getattr(self, "_mask_method", getattr(base_settings, "mask_method", "blur")),
             inpaint_engine=getattr(self, "_inpaint_engine", getattr(base_settings, "inpaint_engine", "lama_onnx")),
             inpaint_device=getattr(self, "_inpaint_device", getattr(base_settings, "inpaint_device", "auto")),
+            frame_banner_enabled=getattr(self, "_frame_banner_enabled", getattr(base_settings, "frame_banner_enabled", False)),
+            frame_banner_color=getattr(self, "_frame_banner_color", getattr(base_settings, "frame_banner_color", "#000000")),
+            frame_banner_top_text=getattr(self, "_frame_banner_top_text", getattr(base_settings, "frame_banner_top_text", "")),
+            frame_banner_top_size=getattr(self, "_frame_banner_top_size", getattr(base_settings, "frame_banner_top_size", 42)),
+            frame_banner_top_color=getattr(self, "_frame_banner_top_color", getattr(base_settings, "frame_banner_top_color", "#FFFFFF")),
+            frame_banner_bottom_text=getattr(self, "_frame_banner_bottom_text", getattr(base_settings, "frame_banner_bottom_text", "")),
+            frame_banner_bottom_size=getattr(self, "_frame_banner_bottom_size", getattr(base_settings, "frame_banner_bottom_size", 36)),
+            frame_banner_bottom_color=getattr(self, "_frame_banner_bottom_color", getattr(base_settings, "frame_banner_bottom_color", "#FFFF00")),
+            randomize_metadata=getattr(self, "_randomize_metadata", getattr(base_settings, "randomize_metadata", True)),
         )
 
 
@@ -254,12 +263,23 @@ class VoiceAndExportMixin:
             "inpaint_engine": getattr(self, "_inpaint_engine", "lama_onnx"),
             "inpaint_device": getattr(self, "_inpaint_device", "auto"),
         }
+        banner_opts = {
+            "enabled": getattr(self, "_frame_banner_enabled", False),
+            "color": getattr(self, "_frame_banner_color", "#000000"),
+            "top_text": getattr(self, "_frame_banner_top_text", ""),
+            "top_size": getattr(self, "_frame_banner_top_size", 42),
+            "top_color": getattr(self, "_frame_banner_top_color", "#FFFFFF"),
+            "bottom_text": getattr(self, "_frame_banner_bottom_text", ""),
+            "bottom_size": getattr(self, "_frame_banner_bottom_size", 36),
+            "bottom_color": getattr(self, "_frame_banner_bottom_color", "#FFFF00"),
+        }
         dialog = StyleDialog(video, style,
                              list(getattr(self, "_blur_regions", [])), self,
                              preview_text=preview_text,
                              logo_options=logo_opts,
                              watermark_options=wm_opts,
-                             mask_options=mask_opts)
+                             mask_options=mask_opts,
+                             banner_options=banner_opts)
         if not dialog.exec():
             return
         self._subtitle_style = dialog.style()
@@ -287,6 +307,16 @@ class VoiceAndExportMixin:
         self._mask_method = new_mask["mask_method"]
         self._inpaint_engine = new_mask["inpaint_engine"]
         self._inpaint_device = new_mask["inpaint_device"]
+
+        new_banner = dialog.banner_options()
+        self._frame_banner_enabled = new_banner["enabled"]
+        self._frame_banner_color = new_banner["color"]
+        self._frame_banner_top_text = new_banner["top_text"]
+        self._frame_banner_top_size = new_banner["top_size"]
+        self._frame_banner_top_color = new_banner["top_color"]
+        self._frame_banner_bottom_text = new_banner["bottom_text"]
+        self._frame_banner_bottom_size = new_banner["bottom_size"]
+        self._frame_banner_bottom_color = new_banner["bottom_color"]
 
 
         if self.export_panel.subtitle.current_key() != "burn":
@@ -515,6 +545,9 @@ class VoiceAndExportMixin:
         except Exception:
             pass
         self.export_panel.refresh_history(self._work_dir)
+        # Tự động sinh Thumbnail High-CTR ngầm (không block UI) & cập nhật metadata
+        self._trigger_auto_thumbnail(path)
+        self._refresh_social_metadata()
 
     def _reload_player(self, path: str) -> None:
         """Mở lại video kết quả để bạn xem ngay phụ đề vừa ghi."""
@@ -772,6 +805,65 @@ class VoiceAndExportMixin:
         else:
             TOASTS.info("Chưa có nội dung metadata.")
 
+    def _open_thumbnail_studio(self) -> None:
+        """Mở hộp thoại Thumbnail Studio độc lập để thiết kế ảnh bìa."""
+        import os
+        if not self._work_dir:
+            TOASTS.info("Chưa có dự án nào được mở.")
+            return
+        from autodub_gui.thumbnail_dialog import ThumbnailStudioDialog
+        video_path = getattr(self._state, "video_path", "")
+        if not video_path and hasattr(self, "_project") and self._project:
+            video_path = getattr(self._project, "video_path", "") or getattr(self._project, "input_video", "") or ""
+        title = getattr(self._project, "title", "") or "SIÊU PHẨM MỚI NHẤT"
+        dlg = ThumbnailStudioDialog(self._work_dir, video_path=video_path, initial_title=title, parent=self)
+        dlg.thumbnail_saved.connect(lambda _p: self._refresh_social_metadata())
+        dlg.exec()
+        self._refresh_social_metadata()
+
+    def _trigger_auto_thumbnail(self, video_path: str) -> None:
+        """Tự động sinh thumbnail High-CTR 16:9 và 9:16 chạy ngầm không block UI."""
+        import os
+        import threading
+        if not self._work_dir or not video_path or not os.path.exists(video_path):
+            return
+
+        yt_dir = os.path.join(self._work_dir, "youtube")
+        os.makedirs(yt_dir, exist_ok=True)
+        out_16_9 = os.path.join(yt_dir, "thumbnail_landscape.jpg")
+        out_9_16 = os.path.join(yt_dir, "thumbnail_portrait.jpg")
+
+        # Nếu đã có thumbnail người dùng tự thiết kế thì không ghi đè
+        if os.path.exists(out_16_9) and os.path.getsize(out_16_9) > 1000:
+            return
+
+        meta = self._get_social_metadata()
+        title = meta.get("title") or getattr(self._project, "title", "") or "SIÊU PHẨM MỚI NHẤT"
+        top_title = meta.get("top_title", "")
+        bottom_title = meta.get("bottom_title", "")
+        badge = meta.get("badge_text", "1-100")
+        preset = meta.get("preset", "co_dai")
+
+        def _worker():
+            try:
+                from autodub.media.thumbnail import generate_high_ctr_thumbnail
+                generate_high_ctr_thumbnail(
+                    video_path, title, out_16_9, aspect="16:9",
+                    badge_text=badge, top_title=top_title, bottom_title=bottom_title, preset=preset,
+                )
+                generate_high_ctr_thumbnail(
+                    video_path, title, out_9_16, aspect="9:16",
+                    badge_text=badge, top_title=top_title, bottom_title=bottom_title, preset=preset,
+                )
+                from PySide6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(self, "_refresh_social_metadata", Qt.ConnectionType.QueuedConnection)
+            except Exception as e:
+                # Lỗi khi tạo thumbnail tuyệt đối không làm fail video export
+                pass
+
+        th = threading.Thread(target=_worker, daemon=True)
+        th.start()
+
     def _refresh_social_metadata(self) -> None:
         """Cập nhật thông tin tiêu đề, hashtag và tên video lên panel xuất video."""
         import os
@@ -780,8 +872,13 @@ class VoiceAndExportMixin:
         if hasattr(self, "_project") and self._project:
             video_path = getattr(self._project, "video_path", "") or getattr(self._project, "input_video", "") or ""
             video_name = os.path.basename(video_path) if video_path else ""
+        thumb_path = ""
+        if self._work_dir:
+            cand = os.path.join(self._work_dir, "youtube", "thumbnail_landscape.jpg")
+            if os.path.exists(cand):
+                thumb_path = cand
         if hasattr(self, "export_panel") and hasattr(self.export_panel, "set_social_metadata"):
-            self.export_panel.set_social_metadata(meta, video_name)
+            self.export_panel.set_social_metadata(meta, video_name, thumb_path=thumb_path)
 
     def _open_viral_clipper_dialog(self) -> None:
         """Mở hộp thoại AI Viral Shorts & Reels Clipper."""

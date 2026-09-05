@@ -60,10 +60,16 @@ class DemucsCache:
         if not python:
             self._failed = True
             return False
-        from autodub.sysinfo import available_ram_gb
+        from autodub.sysinfo import available_ram_gb, total_ram_gb
         avail = available_ram_gb()
-        if avail is not None and avail < 6.0:
-            # Máy ít RAM: giữ worker + model thường trực chỉ làm chật thêm.
+        total = total_ram_gb()
+        # Máy thực sự ít RAM (< 8GB total và < 1.5GB trống, hoặc < 1.0GB trống bất kể tổng):
+        # giữ worker thường trực làm chật RAM, nên tự rơi về đường chạy đơn.
+        low_ram = (
+            (avail is not None and avail < 1.0)
+            or (total is not None and total < 8.0 and avail is not None and avail < 1.5)
+        )
+        if low_ram:
             self._failed = True
             return False
         try:

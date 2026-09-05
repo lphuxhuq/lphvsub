@@ -9,15 +9,16 @@ import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from autodub_gui import dub_constants as consts
 from autodub_gui import tokens
 from autodub_gui.formatting import format_size
-from autodub_gui.ui.buttons import GhostButton, SegmentedControl
+from autodub_gui.ui.buttons import GhostButton, PrimaryButton, SegmentedControl
 from autodub_gui.ui.inputs import (
-    LabeledCombo, LabeledLineEdit, LabeledSlider, LabeledWidget,
+    LabeledCombo, LabeledLineEdit, LabeledSlider, LabeledWidget, polish_combo,
 )
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.style import clear_background
@@ -271,8 +272,12 @@ class VideoStep(_StepPanel):
         from autodub.config import cache_dir
         from autodub_gui.workers import PrefetchWorker
 
+        urls = self.urls()
+        if len(urls) <= 1:
+            return  # Single URL is prefetched by NewProjectPage when clicking Next
+
         out_dir = os.path.join(cache_dir(), "preview_videos")
-        for u in self.urls():
+        for u in urls:
             if u and u.startswith(("http://", "https://")):
                 if u not in self._prefetched_paths or not os.path.isfile(self._prefetched_paths[u]):
                     worker = PrefetchWorker(u, out_dir, self)
@@ -378,6 +383,16 @@ class VideoStep(_StepPanel):
             "inpaint_engine": getattr(settings, "inpaint_engine", "lama_onnx"),
             "inpaint_device": getattr(settings, "inpaint_device", "auto"),
         }
+        banner_opts = custom.get("banner_opts") or {
+            "frame_banner_enabled": getattr(settings, "frame_banner_enabled", False),
+            "frame_banner_color": getattr(settings, "frame_banner_color", "#000000"),
+            "frame_header_text": getattr(settings, "frame_header_text", ""),
+            "frame_header_font_size": getattr(settings, "frame_header_font_size", 32),
+            "frame_header_color": getattr(settings, "frame_header_color", "#FFFFFF"),
+            "frame_footer_text": getattr(settings, "frame_footer_text", ""),
+            "frame_footer_font_size": getattr(settings, "frame_footer_font_size", 24),
+            "frame_footer_color": getattr(settings, "frame_footer_color", "#FFD54A"),
+        }
 
         dialog = StyleDialog(
             video_path=video_path,
@@ -389,6 +404,7 @@ class VideoStep(_StepPanel):
             reframe_options=reframe_opts,
             sfx_options=sfx_opts,
             mask_options=mask_opts,
+            banner_options=banner_opts,
         )
         if not dialog.exec():
             return
@@ -401,6 +417,7 @@ class VideoStep(_StepPanel):
             "reframe_opts": dialog.reframe_options(),
             "sfx_opts": dialog.sfx_options(),
             "mask_opts": dialog.mask_options(),
+            "banner_opts": dialog.banner_options(),
         }
 
         self._refresh_setup_table()
@@ -1134,6 +1151,9 @@ class VoiceStep(_StepPanel):
 
     preview_requested = Signal(str)     # tên giọng
     style_requested = Signal()
+    checkpoint_save_requested = Signal(str)
+    checkpoint_load_requested = Signal(str)
+    checkpoint_delete_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Giọng đọc & phụ đề",
@@ -1144,6 +1164,51 @@ class VoiceStep(_StepPanel):
         from autodub.media.subtitle import PRESET_CHOICES
         from autodub_gui.ui.collapsible import CollapsibleSection
         from autodub_gui.voice_picker import VoicePicker
+
+        # ── Thanh Checkpoint Cấu Hình (Lưu 1 lần dùng mãi mãi) ──
+        ckpt_box = QFrame()
+        ckpt_box.setStyleSheet(
+            f"QFrame {{"
+            f"  background: {tokens.BG_INPUT}; border: 1px solid {tokens.BORDER_SUBTLE};"
+            f"  border-radius: 8px;"
+            f"}}"
+        )
+        ckpt_layout = QHBoxLayout(ckpt_box)
+        ckpt_layout.setContentsMargins(10, 6, 10, 6)
+        ckpt_layout.setSpacing(8)
+
+        lbl_ckpt = QLabel("🔖 Checkpoint:")
+        lbl_ckpt.setStyleSheet(
+            f"color: {tokens.TEXT_PRIMARY}; font-weight: 600; font-size: {tokens.FS_BODY}px;"
+        )
+        ckpt_layout.addWidget(lbl_ckpt)
+
+        self.cb_checkpoints = QComboBox()
+        self.cb_checkpoints.setToolTip("Chọn bộ cấu hình đã lưu (Logo, Watermark, Anti-Reup, Khung hình, Subtitle...)")
+        self.cb_checkpoints.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        polish_combo(self.cb_checkpoints)
+        ckpt_layout.addWidget(self.cb_checkpoints, 1)
+
+        self.btn_load_ckpt = GhostButton("⚡ Nạp")
+        self.btn_load_ckpt.setToolTip("Nạp toàn bộ thiết lập từ Checkpoint đang chọn")
+        self.btn_load_ckpt.clicked.connect(self._on_load_checkpoint_clicked)
+        ckpt_layout.addWidget(self.btn_load_ckpt)
+
+        self.btn_save_ckpt = PrimaryButton("💾 Lưu")
+        self.btn_save_ckpt.setToolTip("Lưu toàn bộ thiết lập hiện tại thành Checkpoint (theo tên kênh)")
+        self.btn_save_ckpt.clicked.connect(self._on_save_checkpoint_clicked)
+        ckpt_layout.addWidget(self.btn_save_ckpt)
+
+        self.btn_del_ckpt = GhostButton("🗑️")
+        self.btn_del_ckpt.setToolTip("Xóa Checkpoint đang chọn")
+        self.btn_del_ckpt.clicked.connect(self._on_delete_checkpoint_clicked)
+        ckpt_layout.addWidget(self.btn_del_ckpt)
+
+        self.btn_load_checkpoint = self.btn_load_ckpt
+        self.btn_save_checkpoint = self.btn_save_ckpt
+        self.btn_delete_checkpoint = self.btn_del_ckpt
+
+        self.body.addWidget(ckpt_box)
 
         # Giọng mặc định đang dùng + nút nghe thử ngay
         default_row = QHBoxLayout()
@@ -1309,14 +1374,22 @@ class VoiceStep(_StepPanel):
 
         self.color_filter = LabeledCombo(
             "Bộ lọc màu điện ảnh",
-            [("none", "Nguyên bản (Không lọc màu)"),
-             ("cinematic_warm", "Cinematic Warm (Ấm áp điện ảnh)"),
-             ("teal_orange", "Teal & Orange (Phim bom tấn Hollywood)"),
-             ("vintage", "Vintage Retro (Hoài niệm cổ điển)"),
-             ("moody_dark", "Moody Dark (Tương phản cao)"),
-             ("clean_film", "Clean Film (Trong trẻo sắc nét)")])
+            [("Nguyên bản (Không lọc màu)", "none"),
+             ("Cinematic Warm (Ấm áp điện ảnh)", "cinematic_warm"),
+             ("Teal & Orange (Phim bom tấn Hollywood)", "teal_orange"),
+             ("Vintage Retro (Hoài niệm cổ điển)", "vintage"),
+             ("Moody Dark (Tương phản cao)", "moody_dark"),
+             ("Clean Film (Trong trẻo sắc nét)", "clean_film")])
         self.color_filter.changed.connect(lambda *_a: self.changed.emit())
         self._anti_id_section.add_widget(self.color_filter)
+
+        self.chk_randomize_metadata = QCheckBox("Đổi mã băm MD5 & Làm sạch Metadata")
+        self.chk_randomize_metadata.setToolTip(
+            "Tự động xóa sạch dấu vết camera/phần mềm cũ và chèn mã băm ngẫu nhiên duy nhất cho tệp video."
+        )
+        self.chk_randomize_metadata.setChecked(True)
+        self.chk_randomize_metadata.toggled.connect(lambda _c: self.changed.emit())
+        self._anti_id_section.add_widget(self.chk_randomize_metadata)
 
         self.body.addWidget(self._anti_id_section)
 
@@ -1395,6 +1468,7 @@ class VoiceStep(_StepPanel):
             "smart_flip": self.smart_flip.isChecked() if self._anti_id_section.is_expanded() else False,
             "micro_zoom": self.micro_zoom.isChecked() if self._anti_id_section.is_expanded() else False,
             "color_filter": self.color_filter.current_key() if self._anti_id_section.is_expanded() else "none",
+            "randomize_metadata": self.chk_randomize_metadata.isChecked(),
             "skip_video": self.audio_only.isChecked(),
         }
 
@@ -1421,10 +1495,16 @@ class VoiceStep(_StepPanel):
             fb_wm_motion = settings.watermark_motion
             fb_wm_opacity = settings.watermark_opacity
             fb_wm_speed = settings.watermark_speed
+            fb_rand_meta = getattr(settings, "randomize_metadata", True)
+            fb_smart_flip = getattr(settings, "smart_flip", False)
+            fb_micro_zoom = getattr(settings, "micro_zoom", False)
+            fb_color_filter = getattr(settings, "color_filter", "none")
         except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
             fb_mode, fb_preset = "none", "clean"
             fb_logo_path, fb_logo_pos, fb_logo_scale, fb_logo_opacity, fb_logo_motion = "", "top_right", 0.12, 0.85, "static"
             fb_wm_text, fb_wm_motion, fb_wm_opacity, fb_wm_speed = "", "bounce", 0.28, 40
+            fb_smart_flip, fb_micro_zoom, fb_color_filter = False, False, "none"
+            fb_rand_meta = True
 
         self.mode.set_key(data.get("subtitle_mode", fb_mode))
         self.preset.set_key(data.get("subtitle_preset", fb_preset))
@@ -1444,6 +1524,17 @@ class VoiceStep(_StepPanel):
         self.wm_speed.set_value(float(data.get("watermark_speed", fb_wm_speed or 40)))
         self._wm_section.set_expanded(bool(wm_text))
 
+        self.smart_flip.setChecked(bool(data.get("smart_flip", fb_smart_flip)))
+        self.micro_zoom.setChecked(bool(data.get("micro_zoom", fb_micro_zoom)))
+        self.color_filter.set_key(data.get("color_filter", fb_color_filter or "none"))
+        anti_active = bool(
+            self.smart_flip.isChecked()
+            or self.micro_zoom.isChecked()
+            or self.color_filter.current_key() != "none"
+        )
+        self._anti_id_section.set_expanded(anti_active)
+
+        self.chk_randomize_metadata.setChecked(bool(data.get("randomize_metadata", fb_rand_meta)))
         self.audio_only.setChecked(bool(data.get("skip_video", False)))
         self._refresh_default_label()
 
@@ -1472,6 +1563,79 @@ class VoiceStep(_StepPanel):
             self.wm_speed.set_value(float(opts["watermark_speed"]))
         self._wm_section.set_expanded(bool(text))
         self.changed.emit()
+
+    def set_anti_id_options(self, opts: dict) -> None:
+        if "smart_flip" in opts:
+            self.smart_flip.setChecked(bool(opts["smart_flip"]))
+        if "micro_zoom" in opts:
+            self.micro_zoom.setChecked(bool(opts["micro_zoom"]))
+        if "color_filter" in opts:
+            self.color_filter.set_key(opts["color_filter"])
+        if "randomize_metadata" in opts:
+            self.chk_randomize_metadata.setChecked(bool(opts["randomize_metadata"]))
+        is_active = bool(
+            opts.get("smart_flip")
+            or opts.get("micro_zoom")
+            or (opts.get("color_filter") and opts.get("color_filter") != "none")
+        )
+        self._anti_id_section.set_expanded(is_active)
+        self.changed.emit()
+
+    def set_subtitle_options(self, mode: str = "", preset: str = "") -> None:
+        if mode:
+            self.mode.set_key(mode)
+        if preset:
+            self.preset.set_key(preset)
+        self.changed.emit()
+
+    def reload_checkpoints(self, names: list[str], active_name: str = "") -> None:
+        """Nạp danh sách các tên Checkpoint vào dropdown."""
+        self.cb_checkpoints.blockSignals(True)
+        self.cb_checkpoints.clear()
+        if not names:
+            self.cb_checkpoints.addItem("Mặc định (Chưa lưu checkpoint)", "")
+        else:
+            for n in names:
+                self.cb_checkpoints.addItem(n, n)
+            idx = self.cb_checkpoints.findData(active_name)
+            if idx >= 0:
+                self.cb_checkpoints.setCurrentIndex(idx)
+        self.cb_checkpoints.blockSignals(False)
+
+    def current_checkpoint_name(self) -> str:
+        """Tên checkpoint đang được chọn."""
+        data = self.cb_checkpoints.currentData()
+        return str(data or self.cb_checkpoints.currentText()).strip()
+
+    def _on_load_checkpoint_clicked(self) -> None:
+        name = self.current_checkpoint_name()
+        if name and not name.startswith("Mặc định (Chưa lưu"):
+            self.checkpoint_load_requested.emit(name)
+
+    def _on_save_checkpoint_clicked(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        curr = self.current_checkpoint_name()
+        if curr.startswith("Mặc định (Chưa lưu"):
+            curr = "Mặc định"
+        name, ok = QInputDialog.getText(
+            self, "Lưu Checkpoint Cấu Hình",
+            "Nhập tên Checkpoint (ví dụ: Kênh Review Phim, TikTok Shorts, Mặc định):",
+            text=curr,
+        )
+        if ok and name.strip():
+            self.checkpoint_save_requested.emit(name.strip())
+
+    def _on_delete_checkpoint_clicked(self) -> None:
+        name = self.current_checkpoint_name()
+        if name and not name.startswith("Mặc định (Chưa lưu"):
+            from autodub_gui.ui.modal import ConfirmDialog
+            confirmed, _ = ConfirmDialog.ask(
+                self, "Xóa Checkpoint",
+                f"Bạn có chắc chắn muốn xóa Checkpoint «{name}» không?",
+                kind="warning", confirm_label="Xóa"
+            )
+            if confirmed:
+                self.checkpoint_delete_requested.emit(name)
 
 
 class RunStep(_StepPanel):

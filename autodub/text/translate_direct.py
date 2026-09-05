@@ -19,7 +19,7 @@ from autodub.progress import ProgressReporter
 from autodub.text.glossary import _DEFAULT_PHONETIC_GLOSSARY
 from autodub.text.translate_common import TranslateCheckpoint, TranslateError
 from autodub.text.translate_hint import annotate_slots, effective_cps, ensure_terminal_punct, payload_segment
-from autodub.utils import setup_logging
+from autodub.utils import setup_logging, ProgressTracker
 
 logger = setup_logging("autodub.translate_direct")
 
@@ -724,9 +724,8 @@ def translate_segments_direct(
         reporter.emit("translate", "start", detail=f"0/{len(segments)} câu ({provider_desc})")
 
     translated_segments_map: Dict[int, dict] = {}
-    completed_count = 0
+    tracker = ProgressTracker(len(segments), f"Dịch lời thoại ({provider_desc})", unit="câu")
     state_lock = threading.Lock()
-    t_trans_start = time.time()
 
     pending_batches: List[Tuple[int, List[dict], str]] = []
     for idx, (b_idx, batch) in enumerate(batches):
@@ -734,13 +733,13 @@ def translate_segments_direct(
         if cached_batch is not None:
             for s in cached_batch:
                 translated_segments_map[s["id"]] = s
-            completed_count += len(batch)
+            tracker.step(len(batch), detail=f"Dùng lại {len(batch)} câu từ cache")
         else:
             assigned_key = client.get_key(idx)
             pending_batches.append((b_idx, batch, assigned_key))
 
-    if reporter and completed_count > 0:
-        reporter.emit("translate", "progress", detail=f"{completed_count}/{len(segments)} câu")
+    if reporter and tracker.done > 0:
+        reporter.emit("translate", "progress", detail=f"{int(tracker.done)}/{len(segments)} câu")
 
     batch_schema = {
         "type": "ARRAY",
@@ -831,22 +830,23 @@ def translate_segments_direct(
             batch_results.append(new_seg)
 
         elapsed = time.time() - _t0
-        nonlocal completed_count
         with state_lock:
             for s in batch_results:
                 translated_segments_map[s["id"]] = s
             if checkpoint:
                 checkpoint.put(batch_results)
-            completed_count += len(batch)
-            total_elapsed = time.time() - t_trans_start
-            rate = completed_count / total_elapsed if total_elapsed > 0 else 0
-            rem_count = max(0, len(segments) - completed_count)
-            rem_s = rem_count / rate if rate > 0 else 0
-            from autodub.utils import format_eta
-            eta_info = f" (⏱ Đã chạy: {format_eta(total_elapsed)} | ETA: ~{format_eta(rem_s)})" if rem_count > 0 else f" (⏱ Tổng: {format_eta(total_elapsed)})"
-            logger.info(f"  ✓ Lô {b_idx}/{total_batches} hoàn thành ({completed_count}/{len(segments)} câu) — {elapsed:.1f}s{eta_info}")
+            preview = ""
+            if batch_results:
+                txt = str(batch_results[0].get(target.text_field, "") or batch_results[0].get("text", "")).strip()
+                preview = (txt[:28] + "...") if len(txt) > 28 else txt
+            first_id = batch[0].get('id', '?') if batch else '?'
+            last_id = batch[-1].get('id', '?') if batch else '?'
+            detail = f"Lô {b_idx}/{total_batches} (câu #{first_id}-#{last_id}): \"{preview}\""
+            should_log, msg = tracker.step(len(batch), detail=detail)
+            if should_log:
+                logger.info(f"  {msg}")
             if reporter:
-                reporter.emit("translate", "progress", detail=f"{completed_count}/{len(segments)} câu")
+                reporter.emit("translate", "progress", detail=f"{int(tracker.done)}/{len(segments)} câu")
 
     if pending_batches:
         if max_workers > 1:
@@ -867,6 +867,7 @@ def translate_segments_direct(
                 except TranslateError as exc:
                     logger.warning(f"Lô dịch bị bỏ qua do lỗi: {exc}")
 
+    logger.info(f"  {tracker.summary()}")
     results = [translated_segments_map.get(s["id"], s) for s in segments]
 
     # Hậu xử lý tự động chống sót chữ CJK (Tính năng cốt lõi của Gemini SRT)

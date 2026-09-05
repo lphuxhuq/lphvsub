@@ -543,7 +543,16 @@ def _render_options(state: EditorState, settings: Settings,
                     sfx_volume_db: float | None = None,
                     mask_method: str | None = None,
                     inpaint_engine: str | None = None,
-                    inpaint_device: str | None = None) -> tuple[str, list[dict], dict, dict]:
+                    inpaint_device: str | None = None,
+                    frame_banner_enabled: bool | None = None,
+                    frame_banner_color: str | None = None,
+                    frame_header_text: str | None = None,
+                    frame_header_font_size: int | None = None,
+                    frame_header_color: str | None = None,
+                    frame_footer_text: str | None = None,
+                    frame_footer_font_size: int | None = None,
+                    frame_footer_color: str | None = None,
+                    randomize_metadata: bool | None = None) -> tuple[str, list[dict], dict, dict]:
     """Chốt bộ tùy chọn xuất video và ghi lại vào ``render_opts.json``.
 
     Tham số nào để None thì lấy theo lựa chọn đã lưu của dự án, rồi mới tới
@@ -587,6 +596,15 @@ def _render_options(state: EditorState, settings: Settings,
     if mask_method is not None: merged["mask_method"] = mask_method
     if inpaint_engine is not None: merged["inpaint_engine"] = inpaint_engine
     if inpaint_device is not None: merged["inpaint_device"] = inpaint_device
+    if frame_banner_enabled is not None: merged["frame_banner_enabled"] = frame_banner_enabled
+    if frame_banner_color is not None: merged["frame_banner_color"] = frame_banner_color
+    if frame_header_text is not None: merged["frame_header_text"] = frame_header_text
+    if frame_header_font_size is not None: merged["frame_header_font_size"] = frame_header_font_size
+    if frame_header_color is not None: merged["frame_header_color"] = frame_header_color
+    if frame_footer_text is not None: merged["frame_footer_text"] = frame_footer_text
+    if frame_footer_font_size is not None: merged["frame_footer_font_size"] = frame_footer_font_size
+    if frame_footer_color is not None: merged["frame_footer_color"] = frame_footer_color
+    if randomize_metadata is not None: merged["randomize_metadata"] = randomize_metadata
 
     save_render_opts(state.work_dir, merged)
     logo_opts = {
@@ -613,6 +631,15 @@ def _render_options(state: EditorState, settings: Settings,
         "mask_method": merged.get("mask_method") or getattr(settings, "mask_method", "blur"),
         "inpaint_engine": merged.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
         "inpaint_device": merged.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
+        "frame_banner_enabled": merged.get("frame_banner_enabled", getattr(settings, "frame_banner_enabled", False)),
+        "frame_banner_color": merged.get("frame_banner_color", getattr(settings, "frame_banner_color", "#000000")),
+        "frame_header_text": merged.get("frame_header_text", getattr(settings, "frame_header_text", "")),
+        "frame_header_font_size": merged.get("frame_header_font_size", getattr(settings, "frame_header_font_size", 32)),
+        "frame_header_color": merged.get("frame_header_color", getattr(settings, "frame_header_color", "#FFFFFF")),
+        "frame_footer_text": merged.get("frame_footer_text", getattr(settings, "frame_footer_text", "")),
+        "frame_footer_font_size": merged.get("frame_footer_font_size", getattr(settings, "frame_footer_font_size", 24)),
+        "frame_footer_color": merged.get("frame_footer_color", getattr(settings, "frame_footer_color", "#FFD54A")),
+        "randomize_metadata": merged.get("randomize_metadata", getattr(settings, "randomize_metadata", True)),
     }
     return subtitle_mode, blur_regions, style, logo_opts
 
@@ -747,6 +774,15 @@ def rebuild_output(
     mask_method: str | None = None,
     inpaint_engine: str | None = None,
     inpaint_device: str | None = None,
+    frame_banner_enabled: bool | None = None,
+    frame_banner_color: str | None = None,
+    frame_header_text: str | None = None,
+    frame_header_font_size: int | None = None,
+    frame_header_color: str | None = None,
+    frame_footer_text: str | None = None,
+    frame_footer_font_size: int | None = None,
+    frame_footer_color: str | None = None,
+    randomize_metadata: bool | None = None,
 ) -> str:
     """Dựng lại âm thanh và video từ danh sách câu hiện tại.
 
@@ -774,7 +810,16 @@ def rebuild_output(
         auto_sfx_enabled=auto_sfx_enabled, sfx_preset=sfx_preset, sfx_volume_db=sfx_volume_db,
         mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
         inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None))
+        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None),
+        frame_banner_enabled=frame_banner_enabled,
+        frame_banner_color=frame_banner_color,
+        frame_header_text=frame_header_text,
+        frame_header_font_size=frame_header_font_size,
+        frame_header_color=frame_header_color,
+        frame_footer_text=frame_footer_text,
+        frame_footer_font_size=frame_footer_font_size,
+        frame_footer_color=frame_footer_color,
+        randomize_metadata=randomize_metadata)
 
 
     def emit(step, status, **kw):
@@ -895,6 +940,15 @@ def rebuild_subtitles(
     mask_method: str | None = None,
     inpaint_engine: str | None = None,
     inpaint_device: str | None = None,
+    frame_banner_enabled: bool | None = None,
+    frame_banner_color: str | None = None,
+    frame_header_text: str | None = None,
+    frame_header_font_size: int | None = None,
+    frame_header_color: str | None = None,
+    frame_footer_text: str | None = None,
+    frame_footer_font_size: int | None = None,
+    frame_footer_color: str | None = None,
+    randomize_metadata: bool | None = None,
 ) -> str:
     """Ghi lại PHỤ ĐỀ vào video, giữ nguyên phần âm thanh đã có.
 
@@ -919,7 +973,16 @@ def rebuild_subtitles(
         aspect_preset=aspect_preset,
         mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
         inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None))
+        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None),
+        frame_banner_enabled=frame_banner_enabled,
+        frame_banner_color=frame_banner_color,
+        frame_header_text=frame_header_text,
+        frame_header_font_size=frame_header_font_size,
+        frame_header_color=frame_header_color,
+        frame_footer_text=frame_footer_text,
+        frame_footer_font_size=frame_footer_font_size,
+        frame_footer_color=frame_footer_color,
+        randomize_metadata=randomize_metadata)
 
 
     merged_audio_path = data_path(work_dir, target.audio_name)
@@ -986,7 +1049,7 @@ def render_segment_preview(
 
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
-    subtitle_mode, _blur, style = _render_options(
+    subtitle_mode, _blur, style, *_ = _render_options(
         state, settings, subtitle_mode, None, subtitle_style)
 
     seg = next((s for s in segments if s.get("id") == seg_id), None)

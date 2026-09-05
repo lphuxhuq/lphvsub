@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pydub import AudioSegment
 
 from autodub.resources import FFMPEG_SLOTS
-from autodub.utils import setup_logging, ensure_dir, ffmpeg_timeout_s, seg_wav_path
+from autodub.utils import setup_logging, ensure_dir, ffmpeg_timeout_s, seg_wav_path, ProgressTracker
 
 logger = setup_logging("autodub.audio")
 
@@ -381,31 +381,21 @@ def postprocess_voice_clips(segments: list[dict], src_dir: str, dst_dir: str,
             return
         postprocess_voice_clip(src, dst, target_lufs, speed=speed)
 
-    done = 0
-    lock = threading.Lock()
-    t_post_start = time.time()
     total_segs = len(segments)
-    log_step = max(1, min(50, total_segs // 5))
+    tracker = ProgressTracker(total_segs, "Hậu kỳ âm thanh", unit="câu")
 
     def _tracked(seg: dict) -> None:
-        nonlocal done
         _one(seg)
-        with lock:
-            done += 1
-            n = done
+        detail = f"Câu #{seg.get('id', '?')}"
+        should_log, msg = tracker.step(1, detail=detail)
         if on_done is not None:
-            on_done(n, total_segs)
-        if n % log_step == 0 or n == total_segs:
-            elapsed = time.time() - t_post_start
-            rate = n / elapsed if elapsed > 0 else 0
-            rem_n = max(0, total_segs - n)
-            rem_s = rem_n / rate if rate > 0 else 0
-            from autodub.utils import format_eta
-            eta_info = f" [⏱ {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]" if rem_n > 0 else f" [⏱ Tổng: {format_eta(elapsed)}]"
-            logger.info(f"  Hậu kỳ âm thanh: {n}/{total_segs} câu ({int(n / total_segs * 100)}%){eta_info}")
+            on_done(int(tracker.done), total_segs)
+        if should_log:
+            logger.info(f"  {msg}")
 
     with ThreadPoolExecutor(max_workers=max_workers or _FFMPEG_WORKERS) as pool:
         list(pool.map(_tracked, segments))
+    logger.info(f"  {tracker.summary()}")
     return dst_dir
 
 
@@ -648,6 +638,17 @@ def merge_segments(
         seg_index.append((float(seg["start"]), float(seg["start"]) + dur, seg))
     seg_index.sort(key=lambda x: x[0])
 
+    # Phòng vệ đa tầng: Chống chồng tiếng trong merge_segments (Sequential Audio Guarantee)
+    adjusted_seg_index: list[tuple[float, float, dict]] = []
+    last_audio_end = float("-inf")
+    for s_start, s_end, seg in seg_index:
+        dur = s_end - s_start
+        actual_start = max(s_start, last_audio_end + 0.010) if last_audio_end > float("-inf") else s_start
+        actual_end = actual_start + dur
+        adjusted_seg_index.append((actual_start, actual_end, seg))
+        last_audio_end = actual_end
+    seg_index = adjusted_seg_index
+
     # Chọn nguồn duck: speech segment tiếng gốc (dub mode) > giọng VI (demucs).
     if (speech_intervals and speech_duck_db < 0 and bg_wave is not None):
         duck_intervals = [tuple(iv) for iv in speech_intervals if iv[1] > iv[0]]
@@ -667,10 +668,15 @@ def merge_segments(
     # id, xóa ngay khi block đã đi qua hết segment (RAM giữ tối đa vài
     # segment đang chồng lên block hiện tại). Kết quả byte-identical.
     seg_cache: dict = {}
+    tracker = ProgressTracker(total_duration if total_duration > 0 else 1.0, "Hòa trộn âm thanh", unit="s", min_log_interval=2.5)
 
     try:
         for b0 in range(0, total_frames, block_frames):
             b1 = min(b0 + block_frames, total_frames)
+            cur_s = b1 / rate
+            should_log, msg = tracker.update_to(cur_s, detail=f"Khung audio {cur_s:.1f}s/{total_duration:.1f}s")
+            if should_log:
+                logger.info(f"  {msg}")
             n = b1 - b0
             if bg_wave is not None:
                 raw = bg_wave.readframes(n)
@@ -735,6 +741,8 @@ def merge_segments(
             bg_wave.close()
         if os.path.exists(bg_tmp):
             os.remove(bg_tmp)
+
+    logger.info(f"  {tracker.summary()}")
 
     if bg_wave is not None:
         gain_note = f" (gain {background_gain_db:+.1f} dB)" if background_gain_db else ""

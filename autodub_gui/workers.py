@@ -79,10 +79,20 @@ class DubWorker(QThread):
     def run(self) -> None:
         handler = attach_gui_logging(self.log)
         try:
+            from autodub.model_preloader import (
+                get_global_demucs_cache,
+                get_global_whisper_cache,
+                get_global_synth_cache,
+                get_global_paraformer_cache,
+            )
             pipeline = DubPipeline(
                 self._settings,
                 progress=self.progress.emit,
                 cancel_event=self._cancel_event,
+                synth_cache=get_global_synth_cache(),
+                demucs_cache=get_global_demucs_cache(),
+                whisper_cache=get_global_whisper_cache(),
+                paraformer_cache=get_global_paraformer_cache(),
             )
             result: DubResult = pipeline.run(self._request)
             self.finished_ok.emit(result)
@@ -393,14 +403,17 @@ class BatchWorker(QThread):
                 self.finished_ok.emit(summary)
                 return
 
-            if self._reuse_tts:
-                from autodub.speech.tts import SynthCache
-                synth_cache = SynthCache()
-            if len(self._items) > 1:
-                from autodub.media.vocal_separator import DemucsCache
-                demucs_cache = DemucsCache()
-                from autodub.speech.transcriber import WhisperCache
-                whisper_cache = WhisperCache()
+            from autodub.model_preloader import (
+                get_global_demucs_cache,
+                get_global_whisper_cache,
+                get_global_synth_cache,
+                get_global_paraformer_cache,
+            )
+            synth_cache = get_global_synth_cache() if self._reuse_tts else None
+            demucs_cache = get_global_demucs_cache()
+            whisper_cache = get_global_whisper_cache()
+            paraformer_cache = get_global_paraformer_cache()
+
             pipeline = DubPipeline(
                 self._settings,
                 progress=self.progress.emit,
@@ -408,6 +421,7 @@ class BatchWorker(QThread):
                 synth_cache=synth_cache,
                 demucs_cache=demucs_cache,
                 whisper_cache=whisper_cache,
+                paraformer_cache=paraformer_cache,
             )
             summary = run_batch(self._items, self._settings, self._template,
                                 pipeline=pipeline, observer=observer,
@@ -419,12 +433,6 @@ class BatchWorker(QThread):
         except Exception as e:  # noqa: BLE001
             self.failed.emit(str(e))
         finally:
-            if synth_cache is not None:
-                synth_cache.close()
-            if demucs_cache is not None:
-                demucs_cache.close()
-            if whisper_cache is not None:
-                whisper_cache.close()
             detach_gui_logging(handler)
 
 

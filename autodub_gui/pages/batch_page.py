@@ -88,6 +88,7 @@ class BatchPage(BasePage):
         self._pending_adds: set[str] = set()   # video thêm vào khi đang chạy
         self._shared_style: dict | None = None
         self._shared_regions: list[dict] = []
+        self._shared_banner_opts: dict | None = None
         self._rows: dict[str, int] = {}
         self._narrator = Narrator()
         self._build()
@@ -591,12 +592,24 @@ class BatchPage(BasePage):
             "inpaint_engine": getattr(self, "_shared_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")),
             "inpaint_device": getattr(self, "_shared_inpaint_device", getattr(settings, "inpaint_device", "auto")),
         }
+        banner_opts = getattr(self, "_shared_banner_opts", None) or {
+            "frame_banner_enabled": getattr(settings, "frame_banner_enabled", False),
+            "frame_banner_color": getattr(settings, "frame_banner_color", "#000000"),
+            "frame_banner_height_ratio": getattr(settings, "frame_banner_height_ratio", 0.16),
+            "frame_header_text": getattr(settings, "frame_header_text", getattr(settings, "frame_banner_top_text", "")),
+            "frame_header_font_size": getattr(settings, "frame_header_font_size", getattr(settings, "frame_banner_top_size", 32)),
+            "frame_header_color": getattr(settings, "frame_header_color", getattr(settings, "frame_banner_top_color", "#FFFFFF")),
+            "frame_footer_text": getattr(settings, "frame_footer_text", getattr(settings, "frame_banner_bottom_text", "")),
+            "frame_footer_font_size": getattr(settings, "frame_footer_font_size", getattr(settings, "frame_banner_bottom_size", 24)),
+            "frame_footer_color": getattr(settings, "frame_footer_color", getattr(settings, "frame_banner_bottom_color", "#FFD54A")),
+        }
         try:
             dialog = StyleDialog(
                 video, style, list(self._shared_regions), self,
                 logo_options=logo_opts,
                 watermark_options=wm_opts,
                 mask_options=mask_opts,
+                banner_options=banner_opts,
             )
         except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
             ConfirmDialog.show_error(
@@ -630,6 +643,8 @@ class BatchPage(BasePage):
         self._shared_inpaint_engine = new_mask["inpaint_engine"]
         self._shared_inpaint_device = new_mask["inpaint_device"]
 
+        self._shared_banner_opts = dialog.banner_options()
+
 
         count = len(self._shared_regions)
         self.lbl_style.setText(
@@ -644,6 +659,7 @@ class BatchPage(BasePage):
     # -- Chạy ----------------------------------------------------------
     def _template(self) -> DubRequest:
         settings = self._settings_provider()
+        banner_opts = self._shared_banner_opts or {}
         return DubRequest(
             source_lang=self.opt_lang.current_key(),
             voice=self.opt_voice.voice(),
@@ -661,6 +677,16 @@ class BatchPage(BasePage):
             smart_flip=getattr(settings, "smart_flip", False),
             micro_zoom=getattr(settings, "micro_zoom", False),
             color_filter=getattr(settings, "color_filter", "none"),
+            randomize_metadata=getattr(settings, "randomize_metadata", True),
+            frame_banner_enabled=banner_opts.get("frame_banner_enabled", banner_opts.get("enabled", getattr(settings, "frame_banner_enabled", False))),
+            frame_banner_color=banner_opts.get("frame_banner_color", banner_opts.get("color", getattr(settings, "frame_banner_color", "#000000"))),
+            frame_banner_height_ratio=banner_opts.get("frame_banner_height_ratio", getattr(settings, "frame_banner_height_ratio", 0.16)),
+            frame_banner_top_text=banner_opts.get("frame_header_text", banner_opts.get("top_text", getattr(settings, "frame_header_text", ""))),
+            frame_banner_top_size=banner_opts.get("frame_header_font_size", banner_opts.get("top_size", getattr(settings, "frame_header_font_size", 32))),
+            frame_banner_top_color=banner_opts.get("frame_header_color", banner_opts.get("top_color", getattr(settings, "frame_header_color", "#FFFFFF"))),
+            frame_banner_bottom_text=banner_opts.get("frame_footer_text", banner_opts.get("bottom_text", getattr(settings, "frame_footer_text", ""))),
+            frame_banner_bottom_size=banner_opts.get("frame_footer_font_size", banner_opts.get("bottom_size", getattr(settings, "frame_footer_font_size", 24))),
+            frame_banner_bottom_color=banner_opts.get("frame_footer_color", banner_opts.get("bottom_color", getattr(settings, "frame_footer_color", "#FFD54A"))),
         )
 
     def _start_all(self) -> None:

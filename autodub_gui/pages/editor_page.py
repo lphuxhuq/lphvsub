@@ -255,6 +255,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.export_panel.export_ass_requested.connect(self._export_ass_file)
         self.export_panel.export_audio_mp3_requested.connect(self._export_audio_mp3)
         self.export_panel.open_thumb_requested.connect(self._open_thumbnail)
+        self.export_panel.open_studio_requested.connect(self._open_thumbnail_studio)
         self.export_panel.copy_title_requested.connect(self._copy_youtube_title)
         self.export_panel.copy_tags_requested.connect(self._copy_youtube_hashtags)
         self.export_panel.copy_desc_requested.connect(self._copy_youtube_description)
@@ -566,6 +567,17 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._inpaint_engine = opts.get("inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx"))
         self._inpaint_device = opts.get("inpaint_device", getattr(settings, "inpaint_device", "auto"))
 
+        # Banner options (Khung viền trên & dưới)
+        self._frame_banner_enabled = opts.get("frame_banner_enabled", getattr(settings, "frame_banner_enabled", False))
+        self._frame_banner_color = opts.get("frame_banner_color", getattr(settings, "frame_banner_color", "#000000"))
+        self._frame_banner_top_text = opts.get("frame_banner_top_text", getattr(settings, "frame_banner_top_text", ""))
+        self._frame_banner_top_size = opts.get("frame_banner_top_size", getattr(settings, "frame_banner_top_size", 42))
+        self._frame_banner_top_color = opts.get("frame_banner_top_color", getattr(settings, "frame_banner_top_color", "#FFFFFF"))
+        self._frame_banner_bottom_text = opts.get("frame_banner_bottom_text", getattr(settings, "frame_banner_bottom_text", ""))
+        self._frame_banner_bottom_size = opts.get("frame_banner_bottom_size", getattr(settings, "frame_banner_bottom_size", 36))
+        self._frame_banner_bottom_color = opts.get("frame_banner_bottom_color", getattr(settings, "frame_banner_bottom_color", "#FFFF00"))
+        self._randomize_metadata = opts.get("randomize_metadata", getattr(settings, "randomize_metadata", True))
+
         self._apply_style_to_player()
 
     def _has_separated_audio(self) -> bool:
@@ -606,6 +618,15 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts["mask_method"] = getattr(self, "_mask_method", "blur")
         opts["inpaint_engine"] = getattr(self, "_inpaint_engine", "lama_onnx")
         opts["inpaint_device"] = getattr(self, "_inpaint_device", "auto")
+        opts["frame_banner_enabled"] = getattr(self, "_frame_banner_enabled", False)
+        opts["frame_banner_color"] = getattr(self, "_frame_banner_color", "#000000")
+        opts["frame_banner_top_text"] = getattr(self, "_frame_banner_top_text", "")
+        opts["frame_banner_top_size"] = getattr(self, "_frame_banner_top_size", 42)
+        opts["frame_banner_top_color"] = getattr(self, "_frame_banner_top_color", "#FFFFFF")
+        opts["frame_banner_bottom_text"] = getattr(self, "_frame_banner_bottom_text", "")
+        opts["frame_banner_bottom_size"] = getattr(self, "_frame_banner_bottom_size", 36)
+        opts["frame_banner_bottom_color"] = getattr(self, "_frame_banner_bottom_color", "#FFFF00")
+        opts["randomize_metadata"] = getattr(self, "_randomize_metadata", True)
         try:
             save_render_opts(self._work_dir, opts)
         except OSError as e:
@@ -659,6 +680,26 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                 updates["INPAINT_ENGINE"] = str(opts["inpaint_engine"])
             if "inpaint_device" in opts:
                 updates["INPAINT_DEVICE"] = str(opts["inpaint_device"])
+
+            # Banner
+            if "frame_banner_enabled" in opts:
+                updates["FRAME_BANNER_ENABLED"] = bool_to_env(bool(opts["frame_banner_enabled"]))
+            if "frame_banner_color" in opts:
+                updates["FRAME_BANNER_COLOR"] = str(opts["frame_banner_color"])
+            if "frame_banner_top_text" in opts:
+                updates["FRAME_BANNER_TOP_TEXT"] = str(opts["frame_banner_top_text"])
+            if "frame_banner_top_size" in opts:
+                updates["FRAME_BANNER_TOP_SIZE"] = str(opts["frame_banner_top_size"])
+            if "frame_banner_top_color" in opts:
+                updates["FRAME_BANNER_TOP_COLOR"] = str(opts["frame_banner_top_color"])
+            if "frame_banner_bottom_text" in opts:
+                updates["FRAME_BANNER_BOTTOM_TEXT"] = str(opts["frame_banner_bottom_text"])
+            if "frame_banner_bottom_size" in opts:
+                updates["FRAME_BANNER_BOTTOM_SIZE"] = str(opts["frame_banner_bottom_size"])
+            if "frame_banner_bottom_color" in opts:
+                updates["FRAME_BANNER_BOTTOM_COLOR"] = str(opts["frame_banner_bottom_color"])
+            if "randomize_metadata" in opts:
+                updates["RANDOMIZE_METADATA"] = bool_to_env(bool(opts["randomize_metadata"]))
 
 
             # Logo

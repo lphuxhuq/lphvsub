@@ -74,3 +74,102 @@ def youtube_dir(work_dir: str, create: bool = False) -> str:
     if create:
         os.makedirs(d, exist_ok=True)
     return d
+
+
+def load_social_metadata(work_dir: str, default_title: str = "") -> dict:
+    """Tải nội dung đăng bài (tiêu đề, caption, mô tả, hashtag) từ work_dir.
+
+    Hỗ trợ đọc từ youtube/youtube_metadata.json, youtube_metadata.json,
+    hoặc tự sinh fallback chất lượng cao nếu chưa có file metadata.
+    """
+    import json
+    candidates = [
+        os.path.join(youtube_dir(work_dir), "youtube_metadata.json"),
+        os.path.join(work_dir, "youtube", "youtube_metadata.json"),
+        os.path.join(work_dir, "youtube_metadata.json"),
+        data_path(work_dir, "video_meta.json"),
+    ]
+    raw_data: dict = {}
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                if isinstance(d, dict) and (d.get("title") or d.get("hashtags") or d.get("youtube")):
+                    raw_data = d
+                    break
+            except Exception:
+                pass
+
+    video_meta = load_video_meta(work_dir)
+    title = (
+        raw_data.get("title")
+        or (raw_data.get("youtube") or {}).get("title")
+        or default_title
+        or video_meta.get("title")
+        or "Video lồng tiếng hay nhất"
+    )
+
+    desc = (
+        raw_data.get("description")
+        or (raw_data.get("youtube") or {}).get("description")
+        or f"{title}\n\nVideo hay chọn lọc lồng tiếng tiếng Việt chuẩn cảm xúc. Chúc các bạn xem video vui vẻ và đừng quên bấm Like & Đăng ký kênh nhé!"
+    )
+
+    tags = (
+        raw_data.get("hashtags")
+        or (raw_data.get("youtube") or {}).get("hashtags")
+        or ["#shorts", "#reviewphim", "#trending", "#viral", "#xuhuong", "#phimhay"]
+    )
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split() if t.strip()]
+
+    tags_str = " ".join([t if t.startswith("#") else f"#{t}" for t in tags])
+
+    tiktok_data = raw_data.get("tiktok") or {}
+    tiktok_caption = (
+        raw_data.get("caption")
+        or tiktok_data.get("caption")
+        or tiktok_data.get("title")
+        or tiktok_data.get("description")
+        or ((title[:65] + "...") if len(title) > 65 else title)
+    )
+    tiktok_tags = tiktok_data.get("hashtags") or tags
+    if isinstance(tiktok_tags, str):
+        tiktok_tags = [t.strip() for t in tiktok_tags.split() if t.strip()]
+    tiktok_tags_str = " ".join([t if t.startswith("#") else f"#{t}" for t in tiktok_tags])
+
+    return {
+        "title": title,
+        "description": desc,
+        "caption": tiktok_caption,
+        "hashtags": tags,
+        "hashtags_str": tags_str,
+        "tiktok_caption": tiktok_caption,
+        "tiktok_hashtags": tiktok_tags,
+        "tiktok_hashtags_str": tiktok_tags_str,
+        "raw": raw_data,
+    }
+
+
+def save_social_metadata(work_dir: str, meta: dict) -> str:
+    """Lưu metadata nội dung bài đăng vào youtube/youtube_metadata.json."""
+    import json
+    out_dir = youtube_dir(work_dir, create=True)
+    out_path = os.path.join(out_dir, "youtube_metadata.json")
+
+    existing: dict = {}
+    if os.path.exists(out_path):
+        try:
+            with open(out_path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict):
+                existing = d
+        except Exception:
+            pass
+
+    existing.update(meta)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
+    return out_path
+
