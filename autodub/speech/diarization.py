@@ -238,7 +238,26 @@ def load_audio_mono16k(audio_path: str) -> tuple[np.ndarray, int]:
         data = signal.resample(data, num_target_samples)
         sr = 16000
 
+    # Lọc dải thông loại bỏ tạp âm nền thấp (DC/hum) và rít cao tần
+    data = _bandpass_filter(data, sr=16000, low=80.0, high=7500.0)
+
     return data, sr
+
+
+def _bandpass_filter(data: np.ndarray, sr: int = 16000, low: float = 80.0, high: float = 7500.0) -> np.ndarray:
+    """Lọc dải thông âm thanh để loại bỏ tạp âm ù tần số thấp và rít cao tần."""
+    if len(data) < 64:
+        return data
+    try:
+        nyq = 0.5 * sr
+        low_norm = max(0.001, low / nyq)
+        high_norm = min(0.999, high / nyq)
+        b, a = signal.butter(2, [low_norm, high_norm], btype="band")
+        filtered = signal.filtfilt(b, a, data)
+        return filtered.astype(np.float32)
+    except Exception:
+        return data
+
 
 
 def estimate_num_speakers(

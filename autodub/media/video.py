@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+_REAL_SUBPROCESS_RUN = subprocess.run
 import threading
 import time
 from functools import lru_cache
@@ -48,17 +49,22 @@ def _encoder_works(*args: str) -> bool:
 
 
 #: Các bộ mã hóa phần cứng theo thứ tự ưu tiên, kèm tham số chất lượng
-#: tương đương crf 23 của libx264. NVIDIA → Intel (QSV) → AMD (AMF).
+#: tương đương crf 23 của libx264. NVIDIA → Apple (VideoToolbox) → Intel (QSV) → AMD (AMF) → Linux (VAAPI).
 #: Máy không có GPU nào trong số này rơi về libx264 trên CPU.
 _HW_ENCODERS: tuple[tuple[str, list[str]], ...] = (
     ("NVIDIA NVENC",
-     ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "23", "-b:v", "0"]),
+     ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "23", "-b:v", "0", "-multipass", "0"]),
+    ("Apple VideoToolbox",
+     ["-c:v", "h264_videotoolbox", "-q:v", "55"]),
     ("Intel QuickSync",
      ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"]),
     ("AMD AMF",
      ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "23",
       "-qp_p", "23"]),
+    ("Linux VAAPI",
+     ["-c:v", "h264_vaapi", "-qp", "23"]),
 )
+
 
 
 @lru_cache(maxsize=1)
@@ -71,15 +77,18 @@ def _resolve_encoder() -> tuple[str, tuple[str, ...]]:
             ("-c:v", "libx264", "-preset", "veryfast", "-crf", "20"))
 
 
-def video_codec_args() -> list[str]:
+def video_codec_args(quality_mode: str = "fast") -> list[str]:
     """Encoder argv shared by every re-encode in the app (merge, retime).
 
     Ưu tiên mã hóa bằng GPU (NVENC/QSV/AMF) — nhanh gấp nhiều lần libx264 ở
     chất lượng tương đương với video lồng tiếng; máy không có thì dùng CPU.
-    veryfast ≈ 2-3× faster than medium at the same crf; the size bump is
-    irrelevant for upload-and-delete dub outputs.
     """
-    return list(_resolve_encoder()[1])
+    from autodub.media.encoder_profile import EncoderProfile, QualityMode
+    name, default_args = _resolve_encoder()
+    try:
+        return EncoderProfile.get_args(name, mode=quality_mode)
+    except Exception:
+        return list(default_args)
 
 
 def video_encoder_name() -> str:
@@ -156,8 +165,9 @@ def render_preview_clip(
         filters.append(f"setpts=PTS/{speed}")
         if fps:
             filters.append(f"fps={fps}")
-    # Không phóng to video vốn đã nhỏ hơn 480 điểm; -2 giữ chiều rộng chẵn.
-    filters.append(f"scale=-2:'min({height},ih)'")
+    # Không phóng to video vốn đã nhỏ hơn 480 điểm; bảo đảm cả 2 chiều luôn chẵn (chia hết cho 2).
+    from autodub.media.dimension import build_even_scale_filter
+    filters.append(build_even_scale_filter(height))
     if srt_path and os.path.exists(srt_path):
         from autodub.media.subtitle import (build_force_style,
                                             escape_subtitles_path)
@@ -355,23 +365,38 @@ def merge_video(
             filter_complex = (f"[0:v]{setpts}[vslow];"
                               + filter_complex.replace("[0:v]", "[vslow]", 1))
         else:
-            filter_complex = f"[0:v]{setpts}[vout]"
+            from autodub.media.dimension import build_dimension_filter
+            filter_complex = f"[0:v]{setpts},{build_dimension_filter()}[vout]"
 
-    cmd = ["ffmpeg", "-i", actual_video_path, "-i", audio_path]
+    hw_args = ["-hwaccel", "auto"] if video_encoder_name() != "CPU (libx264)" else []
+    cmd = ["ffmpeg", *hw_args, "-threads", "0", "-i", actual_video_path, "-i", audio_path]
     if subtitle_mode == "soft":
         cmd += ["-i", srt_path]
 
+    filter_script_file = None
     if filter_complex:
         # Re-encode: the filtergraph rewrites pixels, so -c:v copy is impossible.
         codec = video_codec_args()
+        # Chuyển sang -filter_complex_script nếu chuỗi quá dài (> 1024 ký tự) hoặc nhiều vùng làm mờ
+        # để xóa bỏ hoàn toàn giới hạn 32,767 ký tự trên dòng lệnh Windows.
+        if len(filter_complex) > 1024 or "\n" in filter_complex or len(effective_blur_regions or []) > 2:
+            import tempfile
+            fd, filter_script_file = tempfile.mkstemp(prefix="filtergraph_", suffix=".txt")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(filter_complex)
+            filter_args = ["-filter_complex_script", filter_script_file]
+        else:
+            filter_args = ["-filter_complex", filter_complex]
+
         cmd += [
-            "-filter_complex", filter_complex,
+            *filter_args,
             "-map", "[vout]", "-map", "1:a",
             *codec,
             "-pix_fmt", "yuv420p",
         ]
         if apply_speed:
             cmd += ["-fps_mode", "cfr"]
+
     else:
         # 0:v:0 (not 0:v): downloaded MP4s can carry an attached-picture
         # thumbnail stream that would also be stream-copied.
@@ -411,84 +436,103 @@ def merge_video(
     timeout = (max(900, int(dur * 8)) if filter_complex and dur
                else ffmpeg_timeout_s(dur))
 
-    # Tương thích với các unit test giả lập mock subprocess.run
     try:
-        from unittest.mock import MagicMock
-        if isinstance(subprocess.run, MagicMock):
+        # Tương thích với các unit test giả lập mock / monkeypatch subprocess.run
+        if subprocess.run is not _REAL_SUBPROCESS_RUN:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if result.returncode != 0:
                 raise RuntimeError(f"FFmpeg merge failed: {result.stderr}")
+            if randomize_metadata:
+                try:
+                    from autodub.media.metadata import randomize_file_hash
+                    randomize_file_hash(output_path)
+                except Exception:
+                    pass
             logger.info(f"Video merged: {output_path}")
             return output_path
-    except ImportError:
-        pass
 
-    tracker = ProgressTracker(dur if dur > 0 else 1.0, "Xuất video & ghép phụ đề", unit="s", min_log_interval=2.5)
 
-    # Thêm -progress pipe:1 để theo dõi tiến độ thời gian thực
-    idx_y = cmd.index("-y") if "-y" in cmd else len(cmd) - 1
-    run_cmd = cmd[:idx_y] + ["-progress", "pipe:1", "-nostats"] + cmd[idx_y:]
+        tracker = ProgressTracker(dur if dur > 0 else 1.0, "Xuất video & ghép phụ đề", unit="s", min_log_interval=2.5)
 
-    proc = subprocess.Popen(run_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-    stderr_lines: list[str] = []
+        # Thêm -progress pipe:1 để theo dõi tiến độ thời gian thực
+        idx_y = cmd.index("-y") if "-y" in cmd else len(cmd) - 1
+        run_cmd = cmd[:idx_y] + ["-progress", "pipe:1", "-nostats"] + cmd[idx_y:]
+        no_win_flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(
+            run_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            creationflags=no_win_flag,
+        )
+        stderr_lines: list[str] = []
 
-    def _drain_stderr():
-        if proc.stderr:
-            for line in proc.stderr:
-                stderr_lines.append(line)
+        def _drain_stderr():
+            if proc.stderr:
+                for line in proc.stderr:
+                    stderr_lines.append(line)
 
-    err_thread = threading.Thread(target=_drain_stderr, daemon=True)
-    err_thread.start()
+        err_thread = threading.Thread(target=_drain_stderr, daemon=True)
+        err_thread.start()
 
-    t_start = time.time()
-    try:
-        if proc.stdout:
-            for line in proc.stdout:
-                if cancel_event is not None and cancel_event.is_set():
-                    proc.kill()
-                    raise RuntimeError("Đã hủy xuất video")
-                if time.time() - t_start > timeout:
-                    proc.kill()
-                    raise subprocess.TimeoutExpired(cmd, timeout)
-                line = line.strip()
-                if line.startswith("out_time_us="):
-                    try:
-                        us = int(line.split("=", 1)[1])
-                        cur_s = us / 1_000_000.0
-                        if dur > 0:
-                            detail = f"Thời lượng xuất: {cur_s:.1f}s / {dur:.1f}s"
-                            should_log, msg = tracker.update_to(cur_s, detail=detail)
-                            if should_log:
-                                logger.info(f"  {msg}")
-                            if progress_cb is not None:
-                                progress_cb(min(1.0, cur_s / dur), msg)
-                    except (ValueError, TypeError):
-                        pass
-        rem_t = max(5, int(timeout - (time.time() - t_start)))
-        proc.wait(timeout=rem_t)
-        err_thread.join(timeout=3.0)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        raise RuntimeError(
-            f"FFmpeg treo quá {timeout}s khi ghép video — kiểm tra file "
-            f"nguồn có bị khóa hoặc driver GPU có ổn định không")
-    except BaseException:
-        proc.kill()
-        raise
-
-    if proc.returncode != 0:
-        err_text = "".join(stderr_lines)
-        raise RuntimeError(f"FFmpeg merge failed (code {proc.returncode}): {err_text}")
-
-    logger.info(f"  {tracker.summary()}")
-
-    if randomize_metadata:
+        t_start = time.time()
         try:
-            from autodub.media.metadata import randomize_file_hash
-            new_hash = randomize_file_hash(output_path)
-            logger.info(f"Đã làm sạch metadata và đổi mã băm MD5 duy nhất: {new_hash}")
-        except Exception as e:
-            logger.warning(f"Không đổi được mã băm MD5 ngẫu nhiên ({e})")
+            if proc.stdout:
+                for line in proc.stdout:
+                    if cancel_event is not None and cancel_event.is_set():
+                        proc.kill()
+                        raise RuntimeError("Đã hủy xuất video")
+                    if time.time() - t_start > timeout:
+                        proc.kill()
+                        raise subprocess.TimeoutExpired(cmd, timeout)
+                    line = line.strip()
+                    if line.startswith("out_time_us="):
+                        try:
+                            us = int(line.split("=", 1)[1])
+                            cur_s = us / 1_000_000.0
+                            if dur > 0:
+                                detail = f"Thời lượng xuất: {cur_s:.1f}s / {dur:.1f}s"
+                                should_log, msg = tracker.update_to(cur_s, detail=detail)
+                                if should_log:
+                                    logger.info(f"  {msg}")
+                                if progress_cb is not None:
+                                    progress_cb(min(1.0, cur_s / dur), msg)
+                        except (ValueError, TypeError):
+                            pass
+            rem_t = max(5, int(timeout - (time.time() - t_start)))
+            proc.wait(timeout=rem_t)
+            err_thread.join(timeout=3.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RuntimeError(
+                f"FFmpeg treo quá {timeout}s khi ghép video — kiểm tra file "
+                f"nguồn có bị khóa hoặc driver GPU có ổn định không")
+        except BaseException:
+            proc.kill()
+            raise
 
-    logger.info(f"Video merged: {output_path}")
-    return output_path
+        if proc.returncode != 0:
+            err_text = "".join(stderr_lines)
+            raise RuntimeError(f"FFmpeg merge failed (code {proc.returncode}): {err_text}")
+
+        logger.info(f"  {tracker.summary()}")
+
+        if randomize_metadata:
+            try:
+                from autodub.media.metadata import randomize_file_hash
+                new_hash = randomize_file_hash(output_path)
+                logger.info(f"Đã làm sạch metadata và đổi mã băm MD5 duy nhất: {new_hash}")
+            except Exception as e:
+                logger.warning(f"Không đổi được mã băm MD5 ngẫu nhiên ({e})")
+
+        logger.info(f"Video merged: {output_path}")
+        return output_path
+    finally:
+        if filter_script_file and os.path.exists(filter_script_file):
+            try:
+                os.remove(filter_script_file)
+            except OSError:
+                pass
+
+
