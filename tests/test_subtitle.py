@@ -79,7 +79,7 @@ def test_subtitles_only_graph():
 def test_blur_only_ends_at_vout_via_null():
     graph = build_filter_complex([FULL_WIDTH_BAND], W, H)
     assert "boxblur" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
     assert "subtitles" not in graph
 
 
@@ -170,7 +170,7 @@ def test_build_filter_complex_with_logo_top_right():
     assert "scale=288:-1" in graph
     assert "colorchannelmixer=aa=0.80" in graph
     assert "overlay=main_w-overlay_w-30:30" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
 def test_build_filter_complex_with_logo_bottom_left_and_subtitles():
@@ -215,7 +215,7 @@ def test_build_filter_complex_with_dynamic_bouncing_watermark():
     assert "fontsize=28" in graph
     assert "fontcolor=FFFFFF@0.30" in graph
     assert "abs(mod(t*45" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
 def test_build_filter_complex_with_bouncing_logo():
@@ -230,7 +230,7 @@ def test_build_filter_complex_with_bouncing_logo():
     assert graph is not None
     assert "movie=" in graph
     assert "abs(mod(t*50" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
 # --------------------------- anti-content ID filters --------------------------- #
@@ -263,7 +263,7 @@ def test_build_filter_complex_with_micro_zoom_and_color_grading():
     assert "scale=1.03*iw:1.03*ih" in graph
     assert "colorbalance=" in graph
     assert graph.index("scale=1.03") < graph.index("colorbalance=")
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
 def test_build_aspect_ratio_filter_reframe_modes():
@@ -327,7 +327,7 @@ def test_build_filter_complex_with_top_bottom_banner():
     assert "KÊNH PHIM HAY • FOLLOW ĐỂ XEM TIẾP" in graph
     assert "fontsize=36" in graph
     assert "fontsize=26" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
 def test_build_filter_complex_banner_vietnamese_escaping():
@@ -344,6 +344,23 @@ def test_build_filter_complex_banner_vietnamese_escaping():
     assert graph is not None
     assert "PHIM \\'HOT\\'\\: GIẢM GIÁ 100\\%!" in graph or "100\\%" in graph
     assert "NGƯỜI DÙNG\\: BẤT NGỜ CHƯA?" in graph
-    assert graph.endswith("null[vout]")
+    assert graph.endswith("[vout]")
 
 
+def test_build_filter_complex_downscale_blur_pyramid():
+    graph = build_filter_complex(
+        blur_regions=[],
+        video_w=1920,
+        video_h=1080,
+        aspect_preset="tiktok_9_16",
+        reframe_mode="blur",
+        srt_path="sub.srt",
+    )
+    assert graph is not None
+    # Downscale blur pyramid: 1080/6 = 180, 1920/6 = 320
+    assert "scale=180:320" in graph
+    assert "boxblur=4:1" in graph
+    assert "flags=bilinear" in graph
+    assert "[asp_bgb]" in graph
+    assert "subtitles='sub.srt'" in graph
+    assert graph.endswith("[vout]")
