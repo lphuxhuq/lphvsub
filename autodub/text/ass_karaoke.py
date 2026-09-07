@@ -223,20 +223,15 @@ def _style_line(style: dict) -> str:
     )
 
 
-def build_karaoke_ass(
+def render_karaoke_events(
     segments: list[dict],
-    merge_dir: str,
-    out_path: str,
+    word_times: dict[int, list[tuple[str, float, float]]],
     style: dict | None,
-    text_field: str = "text_vi",
-    settings=None,
-    cache_path: str | None = None,
-    progress_cb: Callable[[float, str], None] | None = None,
-) -> str:
-    """Sinh file .ass hoàn chỉnh cho toàn video. Trả về ``out_path``.
+) -> list[str]:
+    """Sinh danh sách sự kiện Dialogue ASS từ word_times đã tính trước.
 
-    ``merge_dir`` là thư mục clip CUỐI CÙNG (đã hậu kỳ + voice speed +
-    timing mềm) — mốc chữ tính trên đúng audio người nghe sẽ nghe.
+    Hàm thuần túy (pure function) — không I/O đĩa, không chạy lại model AI,
+    đảm bảo một nguồn sự thật timing duy nhất cho toàn bộ phụ đề.
     """
     from autodub.media.subtitle import normalize_style
 
@@ -244,10 +239,6 @@ def build_karaoke_ass(
     effect = str(s["effect"])
     n_words = int(s["words_per_cue"])
     all_caps = bool(s["all_caps"])
-
-    word_times = resolve_word_times(segments, merge_dir, text_field,
-                                    settings=settings, cache_path=cache_path,
-                                    progress_cb=progress_cb)
 
     raw_events: list[dict] = []
     for seg in segments:
@@ -277,13 +268,50 @@ def build_karaoke_ass(
         cur = raw_events[i]
         nxt = raw_events[i + 1]
         if cur["t1"] > nxt["t0"]:
-            cur["t1"] = max(cur["t0"] + 0.10, nxt["t0"])
+            if nxt["t0"] > cur["t0"] + 0.05:
+                cur["t1"] = nxt["t0"]
+            else:
+                cur["t1"] = cur["t0"] + 0.05
+                if nxt["t0"] < cur["t1"]:
+                    nxt["t0"] = cur["t1"]
+                    if nxt["t1"] <= nxt["t0"]:
+                        nxt["t1"] = nxt["t0"] + _MIN_CUE_S
 
-    events: list[str] = [
+    return [
         f"Dialogue: 0,{_ass_time(e['t0'])},{_ass_time(e['t1'])},Kara,,0,0,0,,"
         f"{_effect_prefix(effect)}{e['body']}"
         for e in raw_events
     ]
+
+
+def build_karaoke_ass(
+    segments: list[dict],
+    merge_dir: str,
+    out_path: str,
+    style: dict | None,
+    text_field: str = "text_vi",
+    settings=None,
+    cache_path: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
+    word_times: dict[int, list[tuple[str, float, float]]] | None = None,
+) -> str:
+    """Sinh file .ass hoàn chỉnh cho toàn video. Trả về ``out_path``.
+
+    ``merge_dir`` là thư mục clip CUỐI CÙNG (đã hậu kỳ + voice speed +
+    timing mềm) — mốc chữ tính trên đúng audio người nghe sẽ nghe.
+    Nếu ``word_times`` đã được tính trước, bỏ qua ASR và I/O đĩa để render tức thì.
+    """
+    from autodub.media.subtitle import normalize_style
+
+    s = normalize_style(style)
+    n_words = int(s["words_per_cue"])
+
+    if word_times is None:
+        word_times = resolve_word_times(segments, merge_dir, text_field,
+                                        settings=settings, cache_path=cache_path,
+                                        progress_cb=progress_cb)
+
+    events = render_karaoke_events(segments, word_times, style)
 
     header = (
         "[Script Info]\n"

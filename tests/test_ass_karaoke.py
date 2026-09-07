@@ -183,3 +183,74 @@ def test_map_words_monotonic_after_bad_asr_times():
         assert s2 >= s1
     for _, s, e in out:
         assert e >= s
+
+
+def test_render_karaoke_events_pure():
+    """Kiểm tra render_karaoke_events là hàm thuần, không cần audio/model AI."""
+    from autodub.text.ass_karaoke import render_karaoke_events
+
+    segments = [
+        {"id": 1, "text_vi": "xin chào các bạn"},
+        {"id": 2, "text_vi": "hẹn gặp lại"},
+    ]
+    word_times = {
+        1: [("xin", 0.0, 0.3), ("chào", 0.3, 0.6), ("các", 0.6, 0.9), ("bạn", 0.9, 1.2)],
+        2: [("hẹn", 2.0, 2.3), ("gặp", 2.3, 2.6), ("lại", 2.6, 2.9)],
+    }
+    style = {"effect": "karaoke", "words_per_cue": 2, "highlight_color": "#FFD54A"}
+
+    events = render_karaoke_events(segments, word_times, style)
+    assert len(events) >= 3
+    for ev in events:
+        assert ev.startswith("Dialogue:")
+        assert "{\\k" in ev  # Phải có thẻ karaoke centi-giây
+
+
+def test_build_karaoke_ass_with_precomputed_word_times(tmp_path):
+    """Khi đã có word_times, build_karaoke_ass không cần gọi ASR hay đọc audio."""
+    from autodub.text.ass_karaoke import build_karaoke_ass
+
+    segments = [{"id": 1, "text_vi": "xin chào"}]
+    word_times = {1: [("xin", 0.0, 0.4), ("chào", 0.4, 0.8)]}
+    out_file = tmp_path / "kara_precomputed.ass"
+
+    # merge_dir không tồn tại vẫn phải build thành công vì đã có precomputed word_times
+    fake_merge_dir = str(tmp_path / "non_existent_dir")
+    build_karaoke_ass(segments, fake_merge_dir, str(out_file), style={"effect": "pop"},
+                      word_times=word_times)
+
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8-sig")
+    assert "Dialogue:" in content
+    assert "xin" in content
+
+
+def test_render_karaoke_events_strictly_no_overlap():
+    from autodub.text.ass_karaoke import render_karaoke_events
+
+    segments = [
+        {"id": 1, "text_vi": "câu một"},
+        {"id": 2, "text_vi": "câu hai kế tiếp"},
+    ]
+    # Simulate tight timings with potential micro-overlap
+    word_times = {
+        1: [("câu", 1.0, 1.15), ("một", 1.15, 1.25)],
+        2: [("câu", 1.25, 1.35), ("hai", 1.35, 1.45), ("kế", 1.45, 1.55), ("tiếp", 1.55, 1.65)],
+    }
+    events = render_karaoke_events(segments, word_times, {"effect": "pop", "words_per_cue": 2})
+    assert len(events) >= 2
+
+    # Parse dialogue times: Dialogue: 0,H:MM:SS.cc,H:MM:SS.cc,...
+    times = []
+    for ev in events:
+        parts = ev.split(",")
+        start_str = parts[1]
+        end_str = parts[2]
+        times.append((start_str, end_str))
+
+    for i in range(len(times) - 1):
+        _, end_cur = times[i]
+        start_nxt, _ = times[i + 1]
+        # End of current dialogue must be <= start of next dialogue
+        assert end_cur <= start_nxt
+
