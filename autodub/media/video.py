@@ -245,6 +245,7 @@ def merge_video(
     frame_footer_font_size: int = 24,
     frame_footer_color: str = "#FFD54A",
     randomize_metadata: bool = True,
+    faststart: bool = True,
 ) -> str:
 
     """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
@@ -390,6 +391,7 @@ def merge_video(
 
         cmd += [
             *filter_args,
+            "-filter_complex_threads", "0",
             "-map", "[vout]", "-map", "1:a",
             *codec,
             "-pix_fmt", "yuv420p",
@@ -417,7 +419,8 @@ def merge_video(
         from autodub.media.metadata import build_clean_metadata_args
         cmd += build_clean_metadata_args()
 
-    cmd += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-y", output_path]
+    movflags = ["-movflags", "+faststart"] if faststart else []
+    cmd += ["-c:a", "aac", "-b:a", "192k", *movflags, "-y", output_path]
 
     what = ["audio"]
     if subtitle_mode != "none":

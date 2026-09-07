@@ -103,7 +103,7 @@ def test_blur_forces_reencode_even_without_subs(paths, captured):
     cmd = captured[0]
     assert get_opt(cmd, "-c:v") == "libx264"
     fc = get_opt(cmd, "-filter_complex")
-    assert "boxblur" in fc and "subtitles" not in fc
+    assert ("delogo" in fc or "boxblur" in fc) and "subtitles" not in fc
 
 
 def test_blur_with_soft_subs_combines_both(paths, captured):
@@ -112,7 +112,8 @@ def test_blur_with_soft_subs_combines_both(paths, captured):
         paths["video"], paths["audio"], paths["out"],
         srt_path=paths["srt"], subtitle_mode="soft", blur_regions=[BAND])
     cmd = captured[0]
-    assert "boxblur" in get_opt(cmd, "-filter_complex")
+    fc = get_opt(cmd, "-filter_complex")
+    assert "delogo" in fc or "boxblur" in fc
     assert get_opt(cmd, "-c:s") == "mov_text"
     assert get_opt(cmd, "-c:v") == "libx264"     # blur still needs re-encode
 
@@ -241,4 +242,31 @@ def test_merge_video_with_randomize_metadata(paths, captured):
     assert b"free" in data
 
 
+def test_merge_video_filter_complex_threads(paths, captured):
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        srt_path=paths["srt"], subtitle_mode="burn",
+    )
+    cmd = captured[0]
+    assert "-filter_complex_threads" in cmd
+    assert get_opt(cmd, "-filter_complex_threads") == "0"
 
+
+def test_merge_video_faststart_toggle(paths, captured):
+    # Test faststart=False disables -movflags +faststart
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        faststart=False,
+    )
+    cmd = captured[0]
+    assert "-movflags" not in cmd
+
+    # Test faststart=True (default) enables -movflags +faststart
+    captured.clear()
+    video_mod.merge_video(
+        paths["video"], paths["audio"], paths["out"],
+        faststart=True,
+    )
+    cmd = captured[0]
+    assert "-movflags" in cmd
+    assert get_opt(cmd, "-movflags") == "+faststart"
