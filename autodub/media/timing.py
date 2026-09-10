@@ -145,21 +145,30 @@ def plan_voice_placements(
         # 2) Slot + silence-aware availability: mượn khoảng lặng TRƯỚC
         #    speech của câu kế, không bao giờ ăn vào speech kế.
         slot = _resolve_slot(seg)
+        min_slot_floor = min(slot, MIN_SLOT_S) if slot is not None else MIN_SLOT_S
+        min_slot_floor = max(0.05, min_slot_floor)
+
         next_natural = _natural(segments[i + 1]) if i + 1 < len(segments) \
             else None
         if next_natural is not None:
             usable_end = next_natural - min_gap_s
         else:
-            usable_end = t + (slot if slot else TAIL_SILENCE_S) \
+            usable_end = t + (slot if slot else max(dur, TAIL_SILENCE_S)) \
                 + TAIL_SILENCE_S
 
         # Giới hạn bởi điểm chuyển cảnh video kế tiếp (Scene Drift Guard)
+        # BẢO ĐẢM: không cắt cụt câu nói xuống dưới ngưỡng khả dụng tối thiểu.
         if scene_cuts:
             next_scene = find_next_scene_boundary(t, scene_cuts)
-            if next_scene is not None:
-                usable_end = min(usable_end, next_scene - 0.02)
+            if next_scene is not None and next_scene > t:
+                candidate_scene_end = next_scene - 0.02
+                if candidate_scene_end >= t + min_slot_floor:
+                    usable_end = min(usable_end, candidate_scene_end)
 
-        available = max(slot, usable_end - t) if slot is not None else None
+        # BẤT BIẾN (INVARIANT): usable_end LUÔN LUÔN > t (usable_start).
+        # Không có bất kỳ hoàn cảnh nào usable_end <= t.
+        usable_end = max(usable_end, t + min_slot_floor)
+        available = max(min_slot_floor, usable_end - t) if slot is not None else max(min_slot_floor, usable_end - t)
 
         # 3) Per-segment tempo. Clip TRÀN slot → nén theo ``available``
         #    (mượn khoảng lặng trước câu kế). Clip NGẮN hơn slot → chỉ
@@ -168,11 +177,11 @@ def plan_voice_placements(
         tempo = 1.0
         adjustment = "none"
         reason = ""
-        if available is not None and dur > 0:
+        if slot is not None and available is not None and dur > 0:
             if dur > available:
                 tempo = _decide_tempo(dur, available, min_speed, max_speed,
                                       _MIN_WORTHWHILE_ATEMPO)
-            elif allow_stretch and slot is not None and slot > dur:
+            elif allow_stretch and slot > dur:
                 # Stretch chỉ hướng tới SLOT (không lấn khoảng lặng trước
                 # câu kế) và chỉ khi VOICE_FIT_STRETCH bật.
                 tempo = _decide_tempo(dur, slot, min_speed, max_speed,
@@ -182,13 +191,13 @@ def plan_voice_placements(
                 tempo = 1.0
             final = dur / tempo if tempo != 1.0 else dur
             residual = (t + final) - usable_end
-            if dur <= slot:
+            if slot is not None and dur <= slot:
                 adjustment = "stretch" if tempo < 1.0 else "none"
             elif tempo > 1.0:
                 if residual > ALLOWED_RESIDUAL_S:
                     adjustment = "overlap"
                     reason = "needs_compaction"
-                elif available > slot + 1e-9:
+                elif slot is not None and available > slot + 1e-9:
                     adjustment = "silence+tempo"
                 else:
                     adjustment = "tempo"
@@ -230,6 +239,7 @@ def plan_voice_placements(
             "reason": reason,
             "slot": round(slot, 3) if slot is not None else None,
             "available": round(available, 3) if available is not None else None,
+            "usable_end": round(usable_end, 3),
         })
         if dur > 0:
             prev_end = max(prev_end, t + final_dur)

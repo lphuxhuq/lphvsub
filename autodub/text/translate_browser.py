@@ -226,13 +226,30 @@ def get_cached_login_status() -> str:
         return ""
 
 
+def _kill_orphaned_chrome_for_profile(profile_dir: str) -> None:
+    """Dọn dẹp các tiến trình Chrome mồ côi đang khóa thư mục profile."""
+    if not profile_dir or not os.path.exists(profile_dir):
+        return
+    norm_profile = os.path.normpath(profile_dir).lower()
+    try:
+        import subprocess
+        ps_cmd = (
+            f"Get-WmiObject Win32_Process -Filter \"name = 'chrome.exe'\" | "
+            f"Where-Object {{ $_.CommandLine -like '*{norm_profile}*' }} | "
+            f"ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
+        )
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=8)
+    except Exception as e:
+        logger.debug(f"Dọn dẹp Chrome profile mồ côi lỗi: {e}")
+
+
 class AiStudioBrowserClient:
     """Quản lý phiên Playwright tự động hóa Google AI Studio.
 
     Vận hành an toàn và tối ưu:
     - launch_persistent_context với bộ cờ chống crash
-    - Chạy off-screen window (--window-position=-32000,-32000) khi ẩn thay vì headless=True
-      để tránh Google bot detection và tránh lỗi WebGL
+    - Mặc định HIỆN CỬA SỔ Chrome (hide_window=False) để người dùng có thể nhìn thấy,
+      chọn tài khoản Google (nếu có nhiều tài khoản) và quan sát tiến trình dịch
     - permission denied → mở chat mới, thử lại
     - internal error / crash → tự động dọn dẹp và khởi chạy lại context sạch sẽ
     """
@@ -241,12 +258,14 @@ class AiStudioBrowserClient:
         self,
         profile_dir: str | None = None,
         headless: bool = False,
-        hide_window: bool = True,
+        hide_window: bool = False,
     ):
         self.profile_dir = profile_dir or _get_default_profile_dir()
         os.makedirs(self.profile_dir, exist_ok=True)
-        # Luôn dùng headless=False + off-screen window để Google nhận diện là browser thật
-        self.hide_window = hide_window or headless
+        # Mặc định KHÔNG ẨN CỬA SỔ (hide_window=False) để người dùng nhìn thấy cửa sổ chọn tài khoản Google
+        from autodub_gui.env_store import read_env
+        env_hide = read_env().get("AI_STUDIO_HIDE_WINDOW", "false").lower() in ("1", "true", "yes")
+        self.hide_window = bool(hide_window or headless or env_hide)
         self._playwright = None
         self._browser_context = None
         self._page = None
@@ -262,12 +281,25 @@ class AiStudioBrowserClient:
             if self.hide_window:
                 args.append("--window-position=-32000,-32000")
             else:
-                args.append("--window-position=80,80")
-            self._browser_context = self._playwright.chromium.launch_persistent_context(
-                user_data_dir=self.profile_dir,
-                headless=False,
-                args=args,
-            )
+                args.extend(["--window-position=80,80", "--window-size=1240,840"])
+            try:
+                self._browser_context = self._playwright.chromium.launch_persistent_context(
+                    user_data_dir=self.profile_dir,
+                    headless=False,
+                    args=args,
+                )
+            except Exception as ex:
+                if "ProcessSingleton" in str(ex) or "already in use" in str(ex):
+                    logger.warning("Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng...")
+                    _kill_orphaned_chrome_for_profile(self.profile_dir)
+                    time.sleep(1.0)
+                    self._browser_context = self._playwright.chromium.launch_persistent_context(
+                        user_data_dir=self.profile_dir,
+                        headless=False,
+                        args=args,
+                    )
+                else:
+                    raise
         if self._page is None or self._page.is_closed():
             self._page = (
                 self._browser_context.pages[0]
@@ -278,11 +310,25 @@ class AiStudioBrowserClient:
     def open_login_window(self) -> None:
         from playwright.sync_api import sync_playwright
         pw = sync_playwright().start()
-        ctx = pw.chromium.launch_persistent_context(
-            user_data_dir=self.profile_dir,
-            headless=False,
-            args=list(CHROME_ANTI_CRASH_ARGS) + ["--window-size=1100,850"],
-        )
+        args = list(CHROME_ANTI_CRASH_ARGS) + ["--window-size=1200,850", "--window-position=80,80"]
+        try:
+            ctx = pw.chromium.launch_persistent_context(
+                user_data_dir=self.profile_dir,
+                headless=False,
+                args=args,
+            )
+        except Exception as ex:
+            if "ProcessSingleton" in str(ex) or "already in use" in str(ex):
+                logger.warning("Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng...")
+                _kill_orphaned_chrome_for_profile(self.profile_dir)
+                time.sleep(1.0)
+                ctx = pw.chromium.launch_persistent_context(
+                    user_data_dir=self.profile_dir,
+                    headless=False,
+                    args=args,
+                )
+            else:
+                raise
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         logger.info("Đang mở Google AI Studio để đăng nhập...")
         try:

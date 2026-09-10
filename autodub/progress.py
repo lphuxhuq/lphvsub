@@ -11,6 +11,10 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from autodub.utils import setup_logging
+
+logger = setup_logging("autodub.progress")
+
 # Pipeline step identifiers, in execution order
 STEPS = (
     "acquire",      # download video / use local file
@@ -77,10 +81,10 @@ class ProgressReporter:
                 self._last_progress[step] = now
         try:
             self._callback(ProgressEvent(step, status, detail, current, total))
-        except Exception:
+        except Exception as e:
             # Progress là quan sát, không phải điều khiển — một handler GUI
-            # lỗi không được phép giết cả pipeline đang chạy.
-            pass
+            # lỗi không được phép giết cả pipeline đang chạy, nhưng vẫn cần ghi log.
+            logger.debug(f"Progress callback exception: {e}")
 
     def check_cancelled(self) -> None:
         if self._cancel_event is not None and self._cancel_event.is_set():

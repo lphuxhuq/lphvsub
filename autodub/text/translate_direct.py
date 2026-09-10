@@ -34,7 +34,11 @@ _FALLBACK_GEMINI_MODELS = [
 
 
 class _KeyRateLimiter:
-    """Điều phối nhịp gửi API cho từng API Key riêng biệt."""
+    """Điều phối nhịp gửi API cho từng API Key riêng biệt.
+
+    Khóa chỉ giữ đủ lâu để đọc/ghi lịch, ``time.sleep`` nằm NGOÀI khóa
+    nên các key khác nhau chạy song song trọn vẹn (BUG-001 fix).
+    """
 
     def __init__(self, min_interval_s: float = 0.3):
         self.min_interval_s = min_interval_s
@@ -46,9 +50,12 @@ class _KeyRateLimiter:
             now = time.monotonic()
             last = self._last_hits.get(key, 0.0)
             wait = self.min_interval_s - (now - last)
-            if wait > 0:
-                time.sleep(wait)
-            self._last_hits[key] = time.monotonic()
+            # Đặt lịch TRƯỚC khi nhả khóa — luồng tiếp theo cùng key sẽ
+            # thấy mốc mới và tự xếp hàng sau, không chen lên trước.
+            self._last_hits[key] = now + max(0.0, wait)
+        # Sleep NGOÀI lock — key khác không bị chặn.
+        if wait > 0:
+            time.sleep(wait)
 
 
 KEY_LIMITER = _KeyRateLimiter(min_interval_s=0.3)
@@ -735,6 +742,20 @@ def translate_segments_direct(
                 translated_segments_map[s["id"]] = s
             tracker.step(len(batch), detail=f"Dùng lại {len(batch)} câu từ cache")
         else:
+            # Check individual items from checkpoint if full batch take returned None
+            if checkpoint and getattr(checkpoint, "_items", None):
+                needed = []
+                for s in batch:
+                    item = checkpoint._items.get(checkpoint._key(s))
+                    if item and item.get("src") == s.get("text") and item.get("text"):
+                        translated_segments_map[s["id"]] = {**s, target.text_field: item["text"]}
+                        tracker.step(1, detail="Dùng lại câu từ cache")
+                    else:
+                        needed.append(s)
+                if not needed:
+                    continue
+                batch = needed
+
             assigned_key = client.get_key(idx)
             pending_batches.append((b_idx, batch, assigned_key))
 
@@ -898,6 +919,18 @@ def translate_segments_direct(
         # Các câu độc lập — dịch bù song song thay vì từng câu tuần tự.
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(_fix_cjk, cjk_untranslated))
+
+        # Fallback an toàn: nếu AI vẫn sót ký tự CJK (vd danh từ riêng trong ngoặc),
+        # làm sạch để bảo đảm bộ đọc TTS tiếng Việt không bị vấp/lỗi.
+        for s in cjk_untranslated:
+            cur_txt = s.get(target.text_field, "")
+            if _has_cjk(cur_txt):
+                cleaned = re.sub(r"[㐀-䶿一-鿿]+", "", cur_txt).strip()
+                cleaned = re.sub(r"[\(\[\{]\s*[\)\]\}]", "", cleaned).strip()
+                cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+                if cleaned:
+                    s[target.text_field] = ensure_terminal_punct(cleaned)
+                    logger.info(f"  [Làm sạch CJK] Câu #{s['id']} đã lọc chữ CJK sót: '{cleaned}'")
 
     if checkpoint_path and os.path.exists(checkpoint_path):
         try:

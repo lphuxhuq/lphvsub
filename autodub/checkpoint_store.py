@@ -11,7 +11,7 @@ import os
 from typing import Any
 
 from autodub.config import cache_dir
-from autodub_gui.env_store import bool_to_env, write_env
+from autodub.env_io import bool_to_env, write_env
 
 CHECKPOINT_FILENAME = "checkpoints.json"
 ACTIVE_CHECKPOINT_KEY = "_last_active_checkpoint"
@@ -317,7 +317,13 @@ def apply_checkpoint_to_env(checkpoint_data: dict[str, Any] | str, env_path: str
             if env_path:
                 write_env(updates, path=env_path)
             else:
-                from autodub_gui import env_store
-                write_env(updates, path=env_store.ENV_PATH)
+                target_path = None
+                import sys
+                if "autodub_gui.env_store" in sys.modules:
+                    target_path = getattr(sys.modules["autodub_gui.env_store"], "ENV_PATH", None)
+                if not target_path:
+                    import autodub.env_io as env_io
+                    target_path = env_io.ENV_PATH
+                write_env(updates, path=target_path)
         except OSError:
             pass
