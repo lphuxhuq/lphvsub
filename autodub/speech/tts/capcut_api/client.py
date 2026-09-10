@@ -404,7 +404,7 @@ class CapCutClient:
         resource_id: Optional[str] = None,
         rate: str = "1.0",
         wait: bool = True,
-        poll_interval: float = 0.1,
+        poll_interval: float = 0.35,
         timeout: float = 60.0,
     ) -> Dict[str, Any]:
         """
@@ -426,10 +426,28 @@ class CapCutClient:
             raise CapCutTaskError(f"No task returned from API: {create_res}")
 
         start_time = time.time()
-        time.sleep(0.08)
+        # CapCut cần tối thiểu ~0.3s để sinh audio; query quá sớm (<0.1s) sẽ bị máy chủ chặn rate limit
+        time.sleep(0.35)
         last_query: Dict[str, Any] = {}
+        interval = max(0.3, poll_interval)
         while time.time() - start_time < timeout:
-            query_res = self.query_tts_task(task_id, token, bind_id=bind_id)
+            try:
+                query_res = self.query_tts_task(task_id, token, bind_id=bind_id)
+            except CapCutAPIError as e:
+                err_str = str(e).lower()
+                # ret=3100 (task rate limit) hoặc ret=1014 (system busy): máy chủ chỉ thông báo truy vấn quá dồn dập,
+                # task vẫn đang chạy bình thường trên backend. Tạm nghỉ 0.8s và tiếp tục poll thay vì làm hỏng toàn bộ task.
+                if (
+                    "3100" in err_str
+                    or "rate limit" in err_str
+                    or "too many requests" in err_str
+                    or "1014" in err_str
+                    or "system busy" in err_str
+                ):
+                    time.sleep(0.8)
+                    continue
+                raise
+
             last_query = query_res
             query_tasks = (query_res.get("data") or {}).get("tasks") or []
 
@@ -446,7 +464,7 @@ class CapCutClient:
                     return query_tasks[0]
                 if status in ("failed", "fail", "error"):
                     raise CapCutTaskError(f"TTS Task failed: {query_res}")
-            time.sleep(poll_interval)
+            time.sleep(interval)
 
         raise CapCutTaskError(
             f"TTS Task timed out after {timeout} seconds: {last_query}"

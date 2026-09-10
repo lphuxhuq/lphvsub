@@ -17,12 +17,8 @@ class _FakePipeProc:
         self.poll_val = None
         self.lines = [json.dumps({"ready": True})] + [json.dumps(r) for r in responses]
         self._line_idx = 0
-
-    def poll(self):
-        return self.poll_val
-
-    @property
-    def stdout(self):
+        self.stderr = []
+        
         class _Stdout:
             def __init__(inner):
                 inner._idx = 0
@@ -32,11 +28,10 @@ class _FakePipeProc:
                     inner._idx += 1
                     return res
                 return ""
-        return _Stdout()
+        self.stdout = _Stdout()
 
-    @property
-    def stderr(self):
-        return []
+    def poll(self):
+        return self.poll_val
 
     def wait(self, timeout=None):
         return 0

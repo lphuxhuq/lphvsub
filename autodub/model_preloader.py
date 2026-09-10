@@ -1,12 +1,10 @@
 """Bộ điều phối nạp trước toàn cục cho các Model AI (Model Preloader Pool).
 
-Giúp tải và làm ấm (pre-warm) trước các mô hình AI trong luồng nền (background thread),
-tránh người dùng phải chờ 30-75 giây khi bấm bắt đầu xử lý video:
+Giúp tải và làm ấm (pre-warm) trước các mô hình AI trong luồng nền (background thread):
 1. Paraformer (ĐẦU TIÊN): khởi động worker sherpa-onnx CPU (.venv-asr) nhận diện tiếng Trung.
 2. Faster-Whisper: nạp model vào VRAM/RAM qua WhisperCache.
 3. Demucs: khởi động worker --serve trong .venv-gpu, sau đó tự trả VRAM về CPU.
-4. VieNeu-TTS: khởi động trước pool tiến trình con tạo giọng đọc tiếng Việt.
-5. LaMa ONNX: biên dịch đồ thị InferenceSession xóa phụ đề AI.
+(Các model khác như VieNeu-TTS, LaMa ONNX được nạp on-demand khi có tác vụ yêu cầu).
 """
 from __future__ import annotations
 
@@ -31,6 +29,7 @@ class GlobalModelPool:
         self._demucs_cache = None
         self._synth_cache = None
         self._lama_engine = None
+        self._align_model = None
 
         self._status: dict[str, str] = {
             "paraformer": "idle",
@@ -38,8 +37,10 @@ class GlobalModelPool:
             "demucs": "idle",
             "vieneu": "idle",
             "lama": "idle",
+            "align": "idle",
         }
         self._preload_thread: threading.Thread | None = None
+        self._cancel_event = threading.Event()
         self._is_preloading = False
 
     def get_paraformer_cache(self):
@@ -77,13 +78,20 @@ class GlobalModelPool:
                 self._lama_engine = LaMaOnnxEngine()
             return self._lama_engine
 
+    def get_align_model(self):
+        with self._lock:
+            if self._align_model is None:
+                from autodub.speech.align import _create_whisper_align_model
+                self._align_model = _create_whisper_align_model()
+            return self._align_model
+
     def status(self) -> dict[str, str]:
         with self._lock:
             return dict(self._status)
 
     def is_all_ready(self) -> bool:
         with self._lock:
-            active = [v for k, v in self._status.items() if v != "unsupported"]
+            active = [self._status[k] for k in ("paraformer", "whisper", "demucs") if self._status.get(k) != "unsupported"]
             return len(active) > 0 and all(v in ("ready", "skipped") for v in active)
 
     def preload_all_async(
@@ -98,17 +106,23 @@ class GlobalModelPool:
                 logger.info("Tiến trình nạp trước model đang chạy dở — bỏ qua gọi trùng")
                 return
             self._is_preloading = True
+            self._cancel_event.clear()
 
         def _worker():
-            logger.info("Bắt đầu tiến trình nạp trước các model AI trong luồng nền...")
+            logger.info("Bắt đầu tiến trình nạp trước các model AI (Paraformer, Whisper, Demucs)...")
+
+            if self._cancel_event.is_set():
+                with self._lock:
+                    self._is_preloading = False
+                return
 
             # -------------------------------------------------------------
-            # 1. 🥇 PARAFORMER (ĐẦU TIÊN): Nhẹ, nhanh (~1s, CPU), sẵn sàng nhận diện
+            # 1. PARAFORMER (ĐẦU TIÊN): Nhẹ, nhanh (~1s, CPU), nhận diện tiếng Trung
             # -------------------------------------------------------------
             if settings.paraformer_configured():
                 try:
                     self._set_status("paraformer", "loading", on_step)
-                    logger.info("⚡ [1/5] Nạp trước Paraformer (tiếng Trung, CPU)...")
+                    logger.info("⚡ [1/3] Nạp trước Paraformer (tiếng Trung, CPU)...")
                     pf_cache = self.get_paraformer_cache()
                     ok = pf_cache._ensure(settings)
                     self._set_status("paraformer", "ready" if ok else "failed", on_step)
@@ -120,12 +134,17 @@ class GlobalModelPool:
             else:
                 self._set_status("paraformer", "unsupported", on_step)
 
+            if self._cancel_event.is_set():
+                with self._lock:
+                    self._is_preloading = False
+                return
+
             # -------------------------------------------------------------
-            # 2. 🥈 FASTER-WHISPER: Nạp model vào GPU/CPU
+            # 2. FASTER-WHISPER: Nạp model nhận diện/alignment vào GPU/CPU
             # -------------------------------------------------------------
             try:
                 self._set_status("whisper", "loading", on_step)
-                logger.info("⚡ [2/5] Nạp trước Faster-Whisper...")
+                logger.info("⚡ [2/3] Nạp trước Faster-Whisper...")
                 w_cache = self.get_whisper_cache()
                 w_cache.get(settings)
                 self._set_status("whisper", "ready", on_step)
@@ -134,14 +153,19 @@ class GlobalModelPool:
                 logger.warning(f"Nạp trước Faster-Whisper gặp lỗi ({e})")
                 self._set_status("whisper", "failed", on_step)
 
+            if self._cancel_event.is_set():
+                with self._lock:
+                    self._is_preloading = False
+                return
+
             # -------------------------------------------------------------
-            # 3. 🥉 DEMUCS: Khởi động worker phục vụ tách nhạc nền
+            # 3. DEMUCS: Khởi động worker phục vụ tách nhạc nền (GPU worker)
             # -------------------------------------------------------------
             from autodub.media.vocal_separator import gpu_venv_python
             if gpu_venv_python():
                 try:
                     self._set_status("demucs", "loading", on_step)
-                    logger.info("⚡ [3/5] Nạp trước Demucs vocal separator (GPU worker)...")
+                    logger.info("⚡ [3/3] Nạp trước Demucs vocal separator (GPU worker)...")
                     d_cache = self.get_demucs_cache()
                     ok = d_cache._ensure()
                     self._set_status("demucs", "ready" if ok else "failed", on_step)
@@ -153,51 +177,12 @@ class GlobalModelPool:
             else:
                 self._set_status("demucs", "unsupported", on_step)
 
-            # -------------------------------------------------------------
-            # 4. 🏅 VIENEU-TTS: Khởi động pool worker tạo giọng đọc
-            # -------------------------------------------------------------
-            if settings.vieneu_configured():
-                try:
-                    self._set_status("vieneu", "loading", on_step)
-                    logger.info("⚡ [4/5] Nạp trước VieNeu-TTS (CPU pool)...")
-                    s_cache = self.get_synth_cache()
-                    synth = s_cache.get("vn", settings)
-                    warm = getattr(synth, "warm_up_async", None)
-                    if warm:
-                        warm()
-                    self._set_status("vieneu", "ready", on_step)
-                    logger.info("✓ VieNeu-TTS đã khởi động pool thành công!")
-                except Exception as e:
-                    logger.warning(f"Nạp trước VieNeu-TTS gặp lỗi ({e})")
-                    self._set_status("vieneu", "failed", on_step)
-            else:
-                self._set_status("vieneu", "unsupported", on_step)
-
-            # -------------------------------------------------------------
-            # 5. 🏅 LAMA ONNX: Khởi tạo đồ thị Inpainting xóa phụ đề
-            # -------------------------------------------------------------
-            from autodub.media.inpaint.lama_onnx import default_lama_model_path
-            lama_model_path = default_lama_model_path()
-            if os.path.isfile(lama_model_path):
-                try:
-                    self._set_status("lama", "loading", on_step)
-                    logger.info("⚡ [5/5] Nạp trước LaMa ONNX Inpainting...")
-                    lama_eng = self.get_lama_engine()
-                    lama_eng._ensure_session()
-                    self._set_status("lama", "ready", on_step)
-                    logger.info("✓ LaMa ONNX đã sẵn sàng!")
-                except Exception as e:
-                    logger.warning(f"Nạp trước LaMa ONNX gặp lỗi ({e})")
-                    self._set_status("lama", "failed", on_step)
-            else:
-                self._set_status("lama", "unsupported", on_step)
-
             with self._lock:
                 self._is_preloading = False
                 final_status = dict(self._status)
 
             logger.info(f"Hoàn tất nạp trước các model AI: {final_status}")
-            if on_done:
+            if on_done and not self._cancel_event.is_set():
                 try:
                     on_done(final_status)
                 except Exception as e:
@@ -218,6 +203,11 @@ class GlobalModelPool:
 
     def close_all(self) -> None:
         """Đóng toàn bộ session và dừng mọi tiến trình worker khi thoát ứng dụng."""
+        self._cancel_event.set()
+        t = self._preload_thread
+        if t is not None and t.is_alive() and t != threading.current_thread():
+            t.join(timeout=1.5)
+
         with self._lock:
             logger.info("Dọn dẹp và đóng toàn bộ Model Preloader Pool...")
             if self._paraformer_cache is not None:
@@ -248,10 +238,19 @@ class GlobalModelPool:
                     logger.warning(f"Đóng WhisperCache lỗi ({e})")
                 self._whisper_cache = None
 
+            if self._align_model is not None:
+                try:
+                    from autodub.speech.align import unload_align_model
+                    unload_align_model()
+                except Exception as e:
+                    logger.warning(f"Unload align model lỗi ({e})")
+
             self._lama_engine = None
+            self._align_model = None
             for k in self._status:
                 self._status[k] = "idle"
             self._is_preloading = False
+            self._preload_thread = None
 
 
 # Global Pool Instance
@@ -280,6 +279,10 @@ def get_global_synth_cache():
 
 def get_global_lama_engine():
     return _GLOBAL_POOL.get_lama_engine()
+
+
+def get_global_align_model():
+    return _GLOBAL_POOL.get_align_model()
 
 
 def preload_models_async(settings: Settings, on_step=None, on_done=None) -> None:

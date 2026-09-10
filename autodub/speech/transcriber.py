@@ -133,24 +133,31 @@ class WhisperCache:
     def __init__(self):
         self._model = None
         self._key = None
+        self._lock = threading.Lock()
 
     def get(self, settings: Settings):
         """Trả về model đã nạp; tự quyết định có giữ thường trú hay không."""
-        key = settings.whisper_model
-        if self._model is not None and self._key == key:
-            logger.info("Dùng lại model Whisper đã nạp (batch)")
-            return self._model
-        self.close()
-        model, device = _load_whisper_model(key, settings)
-        if device == "cpu" or _gpu_total_vram_gb() >= self._KEEP_GPU_MIN_VRAM_GB:
-            self._model = model
-            self._key = key
-        return model
+        with self._lock:
+            key = settings.whisper_model
+            if self._model is not None and self._key == key:
+                logger.info("Dùng lại model Whisper đã nạp (batch)")
+                return self._model
+            self._close_locked()
+            model, device = _load_whisper_model(key, settings)
+            if device == "cpu" or _gpu_total_vram_gb() >= self._KEEP_GPU_MIN_VRAM_GB:
+                self._model = model
+                self._key = key
+            return model
 
     def owns(self, model) -> bool:
-        return model is not None and model is self._model
+        with self._lock:
+            return model is not None and model is self._model
 
     def close(self) -> None:
+        with self._lock:
+            self._close_locked()
+
+    def _close_locked(self) -> None:
         if self._model is not None:
             self._model = None
             self._key = None

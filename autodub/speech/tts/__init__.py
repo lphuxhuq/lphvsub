@@ -8,6 +8,8 @@ engine kia.
 """
 from __future__ import annotations
 
+import threading
+
 from autodub.config import ConfigError, Settings
 from autodub.languages import TargetLang
 from autodub.speech.tts import voices as voice_catalog
@@ -34,26 +36,29 @@ class SynthCache:
 
     def __init__(self):
         self._cache: dict[str, Synthesizer] = {}
+        self._lock = threading.Lock()
 
     def get(self, target: TargetLang, settings: Settings,
             voice: str | None = None) -> Synthesizer:
         name = voice_catalog.resolve(settings, voice)
-        synth = self._cache.get(name)
-        if synth is None:
-            synth = get_synthesizer(target, settings, name)
-            self._cache[name] = synth
-        return synth
+        with self._lock:
+            synth = self._cache.get(name)
+            if synth is None:
+                synth = get_synthesizer(target, settings, name)
+                self._cache[name] = synth
+            return synth
 
     def close(self) -> None:
-        # Đóng từng bộ một: một lỗi khi đóng không được làm rò rỉ các bộ khác.
-        for synth in self._cache.values():
-            close = getattr(synth, "close", None)
-            if close is not None:
-                try:
-                    close()
-                except Exception as e:
-                    logger.warning(f"Lỗi khi đóng bộ tạo giọng ({e}) — bỏ qua")
-        self._cache.clear()
+        with self._lock:
+            # Đóng từng bộ một: một lỗi khi đóng không được làm rò rỉ các bộ khác.
+            for synth in self._cache.values():
+                close = getattr(synth, "close", None)
+                if close is not None:
+                    try:
+                        close()
+                    except Exception as e:
+                        logger.warning(f"Lỗi khi đóng bộ tạo giọng ({e}) — bỏ qua")
+            self._cache.clear()
 
 
 def get_synthesizer(

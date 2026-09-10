@@ -22,8 +22,8 @@ logger = setup_logging("autodub.tts.capcut")
 RECOMMENDED_THREADS = min(16, max(1, int(os.environ.get("CAPCUT_THREADS", "8"))))
 
 #: Khoảng cách tối thiểu giữa hai lần gửi toàn cục và per-device
-GLOBAL_MIN_GAP_S = 0.12
-MIN_GAP_S = 0.15
+GLOBAL_MIN_GAP_S = 0.15
+MIN_GAP_S = 0.20
 
 #: Số lần thử lại một câu khi mạng chập chờn hoặc máy chủ báo bận.
 RETRIES = 6
@@ -125,14 +125,22 @@ def _is_hard_block(error: Exception) -> bool:
 
 
 def _is_rate_limited(error: Exception) -> bool:
-    """Máy chủ báo bận hoặc giới hạn tần suất tạm thời (system busy / ret 1014 / 1004 / 429)."""
+    """Máy chủ báo bận hoặc giới hạn tần suất tạm thời (system busy / ret 1014 / 1004 / 3100 / 429)."""
     text = str(error).lower()
     return (
         "'ret': '1014'" in text
         or '"ret": "1014"' in text
+        or "ret=1014" in text
+        or "'ret': '3100'" in text
+        or '"ret": "3100"' in text
+        or "ret=3100" in text
+        or "3100" in text
+        or "task rate limit" in text
+        or "rate limit" in text
         or "system busy" in text
         or "'ret': '1004'" in text
         or '"ret": "1004"' in text
+        or "ret=1004" in text
         or "429" in text
         or "too many requests" in text
     )
@@ -278,6 +286,7 @@ class CapCutSynthesizer:
                 task = client.generate_speech(
                     texts=text, voice=self._voice_type,
                     resource_id=self._resource_id, wait=True,
+                    poll_interval=0.35,
                     timeout=TASK_TIMEOUT_S)
                 url = (task or {}).get("speech_url") or (task or {}).get("audio_url")
                 if not url:

@@ -35,18 +35,19 @@ class ParaformerCache:
     def __init__(self):
         self._proc: subprocess.Popen | None = None
         self._failed = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._stderr_tail: deque[str] = deque(maxlen=20)
 
     def _ensure(self, settings: Settings) -> bool:
         """Khởi động worker nếu chưa chạy; False khi không dùng được."""
-        if self._failed:
-            return False
-        if self._proc is not None and self._proc.poll() is None:
-            return True
-        if not settings.paraformer_configured():
-            self._failed = True
-            return False
+        with self._lock:
+            if self._failed:
+                return False
+            if self._proc is not None and self._proc.poll() is None:
+                return True
+            if not settings.paraformer_configured():
+                self._failed = True
+                return False
 
         python = settings.asr_venv_python_path()
         model_dir = settings.paraformer_model_dir_path()

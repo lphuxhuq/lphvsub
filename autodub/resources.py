@@ -31,6 +31,10 @@ _CPU = os.cpu_count() or 4
 #: thay vì âm thầm nới trần.
 FFMPEG_SLOTS = threading.BoundedSemaphore(max(2, min(6, _CPU - 1)))
 
+#: Trần riêng cho các tác vụ ffmpeg audio siêu nhẹ (loudnorm, fade, atempo).
+#: Audio tốn rất ít RAM (<5MB) và <3% CPU nên cho phép mở nhiều luồng song song hơn.
+FFMPEG_AUDIO_SLOTS = threading.BoundedSemaphore(max(4, min(16, (_CPU - 1) * 2)))
+
 #: Giữ khi dùng GPU: nhánh Demucs GPU và lúc nạp model Whisper trên CUDA.
 #: Cổng sẵn có trong pipeline chỉ là *dự đoán* xem ASR có dùng GPU không; lock
 #: này là sự thật. Dự đoán sai thì hai việc chạy lần lượt — chậm, nhưng không
