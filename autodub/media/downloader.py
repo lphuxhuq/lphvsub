@@ -5,6 +5,8 @@ import shutil
 import time
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
+from typing import Any, Callable
+
 import requests
 import yt_dlp
 
@@ -101,21 +103,58 @@ def normalize_url(url: str) -> str:
 
 
 def _clean_broken_partials(directory: str) -> None:
-    """Xóa CHỈ các file dở dang (.part, .aria2, .temp, .ytdl) để tránh HTTP 416.
+    """Xóa CHỈ các file dở dang không thể khôi phục (.aria2, .temp) hoặc .part quá cũ.
 
-    GIỮ LẠI các stream đã tải xong (.f*.mp4, .f*.m4a) vì yt-dlp sẽ tự
-    nhận ra "already downloaded" và bỏ qua, chỉ tải lại stream bị hỏng.
+    GIỮ LẠI các file có .progress.json để cơ chế Smart Resume có thể tiếp tục tải.
     """
     if not os.path.isdir(directory):
         return
+    now = time.time()
     for fname in os.listdir(directory):
         lower = fname.lower()
-        if lower.endswith((".part", ".ytdl", ".temp")) or lower.endswith(".aria2"):
+        full_path = os.path.join(directory, fname)
+        # Never delete active progress metadata
+        if lower.endswith(".progress.json"):
+            continue
+        if lower.endswith(".part"):
+            meta_path = os.path.join(directory, f"{fname.replace('.part', '')}.progress.json")
+            # If progress meta exists and was touched in the last 24 hours, preserve it!
+            if os.path.exists(meta_path):
+                try:
+                    if (now - os.path.getmtime(meta_path)) < 86400:
+                        continue
+                except OSError:
+                    pass
+        if lower.endswith((".temp", ".ytdl")) or lower.endswith(".aria2"):
             try:
-                os.remove(os.path.join(directory, fname))
-                logger.info(f"Dọn tệp dở dang: {fname}")
+                os.remove(full_path)
+            except OSError as e:
+                logger.debug(f"Không xóa được file tạm {fname}: {e}")
             except OSError:
                 pass
+
+
+def _make_ydl_progress_hook(progress_cb):
+    def _ydl_hook(d):
+        if not progress_cb or not isinstance(d, dict):
+            return
+        status = d.get("status")
+        if status == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
+            speed = d.get("speed") or 0.0
+            speed_mb = speed / (1024 * 1024) if speed else 0.0
+            pct = (downloaded / total) if total > 0 else 0.0
+            down_mb = downloaded / (1024 * 1024)
+            tot_mb = total / (1024 * 1024) if total > 0 else 0.0
+            if total > 0:
+                msg = f"Đang tải: {down_mb:.1f}MB / {tot_mb:.1f}MB ({int(pct*100)}%) - {speed_mb:.1f} MB/s"
+            else:
+                msg = f"Đang tải: {down_mb:.1f}MB - {speed_mb:.1f} MB/s"
+            progress_cb(min(0.95, max(0.0, pct)), msg)
+        elif status == "finished":
+            progress_cb(0.96, "Đang xử lý tệp video...")
+    return _ydl_hook
 
 
 def _get_optimized_opts(
@@ -124,6 +163,7 @@ def _get_optimized_opts(
     cookies_from_browser: str | None = None,
     cookies_file: str | None = None,
     fallback_level: int = 0,
+    progress_cb: Any = None,
 ) -> dict:
     """Cấu hình yt-dlp tối ưu tốc độ tải (native, không aria2c, không chunk).
 
@@ -179,6 +219,8 @@ def _get_optimized_opts(
         opts["cookiesfrombrowser"] = (cookies_from_browser,)
     if cookies_file:
         opts["cookiefile"] = cookies_file
+    if progress_cb:
+        opts["progress_hooks"] = [_make_ydl_progress_hook(progress_cb)]
 
     return opts
 
@@ -207,11 +249,51 @@ def update_ytdlp() -> bool:
 _MAX_OUTER_RETRIES = 3
 
 
-def download_video(url: str, output_dir: str) -> str:
+def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
     if not url:
         raise ValueError("URL cannot be empty")
 
     ensure_dir(output_dir)
+
+    def _engine_cb(status_dict):
+        if not progress_cb or not isinstance(status_dict, dict):
+            return
+        pct = status_dict.get("progress")
+        if pct is None and "percent" in status_dict:
+            pct = status_dict["percent"] / 100.0
+        pct = pct or 0.0
+        msg = status_dict.get("message")
+        if not msg:
+            mb_d = status_dict.get("bytes_downloaded", 0) / (1024 * 1024)
+            mb_t = status_dict.get("total_bytes", 0) / (1024 * 1024)
+            speed = status_dict.get("speed_mb", 0.0)
+            if mb_t > 0:
+                msg = f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+            else:
+                msg = f"Đang tải: {mb_d:.1f}MB - {speed:.1f} MB/s"
+        progress_cb(min(1.0, max(0.0, pct)), msg)
+
+    # 1. Try Turbo + Reliable Smart Download Engine first
+    try:
+        from autodub.media.download.contract import DownloadRequest
+        from autodub.media.download.decision_engine import get_decision_engine
+
+        engine = get_decision_engine()
+        req = DownloadRequest(
+            url=url,
+            output_dir=output_dir,
+            progress_callback=_engine_cb if progress_cb else None,
+        )
+        res = engine.execute(req)
+        if res.success and res.path and os.path.exists(res.path):
+            _save_meta(output_dir, res.media_id, "")
+            logger.info(f"Smart Download Engine succeeded: {res.path} ({res.backend})")
+            if progress_cb:
+                progress_cb(1.0, "Tải video hoàn tất!")
+            return res.path
+        logger.info(f"Smart Download Engine returned unsuccessful ({res.error_message}), trying fallback...")
+    except Exception as e:
+        logger.warning(f"Smart Download Engine encountered error ({e}), falling back to standard path...")
 
     # Douyin's yt-dlp extractor is broken upstream (requires `a_bogus`
     # signature). Route Douyin URLs (including v.douyin.com short links)
@@ -220,7 +302,7 @@ def download_video(url: str, output_dir: str) -> str:
     clean_url = extract_clean_url(url)
     if is_douyin_url(clean_url):
         logger.info(f"Routing to Douyin extractor: {clean_url}")
-        info = download_douyin(clean_url, output_dir)
+        info = download_douyin(clean_url, output_dir, progress_cb=progress_cb)
         _save_meta(output_dir, info.get("title", ""), info.get("uploader", ""))
         return info["filepath"]
 
@@ -248,6 +330,7 @@ def download_video(url: str, output_dir: str) -> str:
                 output_dir,
                 outtmpl=os.path.join(output_dir, "%(id)s.%(ext)s"),
                 fallback_level=attempt - 1,
+                progress_cb=progress_cb,
             )
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(canonical, download=True)
@@ -297,6 +380,7 @@ def build_ydl_opts(
     cookies_from_browser: str | None = None,
     cookies_file: str | None = None,
     fallback_level: int = 0,
+    progress_cb: Any = None,
 ) -> dict:
     """yt-dlp options for the standalone `autodub download` command."""
     opts = _get_optimized_opts(
@@ -305,6 +389,7 @@ def build_ydl_opts(
         cookies_from_browser=cookies_from_browser,
         cookies_file=cookies_file,
         fallback_level=fallback_level,
+        progress_cb=progress_cb,
     )
     opts["noprogress"] = False
     return opts
@@ -377,18 +462,70 @@ def download_one(
     output_dir: str,
     cookies_from_browser: str | None = None,
     cookies_file: str | None = None,
+    progress_cb: Any = None,
 ) -> dict:
     """Download a single URL and return metadata + saved filepath.
 
-    Douyin URLs (including short-link v.douyin.com/...) are routed to a
-    Playwright-based extractor because yt-dlp's Douyin path is broken upstream.
-    All other sites continue through yt-dlp.
+    Routes through Turbo + Reliable Smart Download Engine first,
+    with automatic fallback to legacy extractors.
     """
+    ensure_dir(output_dir)
+
+    def _engine_cb(status_dict):
+        if not progress_cb or not isinstance(status_dict, dict):
+            return
+        pct = status_dict.get("progress")
+        if pct is None and "percent" in status_dict:
+            pct = status_dict["percent"] / 100.0
+        pct = pct or 0.0
+        msg = status_dict.get("message")
+        if not msg:
+            mb_d = status_dict.get("bytes_downloaded", 0) / (1024 * 1024)
+            mb_t = status_dict.get("total_bytes", 0) / (1024 * 1024)
+            speed = status_dict.get("speed_mb", 0.0)
+            if mb_t > 0:
+                msg = f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+            else:
+                msg = f"Đang tải: {mb_d:.1f}MB - {speed:.1f} MB/s"
+        progress_cb(min(1.0, max(0.0, pct)), msg)
+
+    # 1. Try Turbo + Reliable Smart Download Engine first
+    try:
+        from autodub.media.download.contract import DownloadRequest
+        from autodub.media.download.decision_engine import get_decision_engine
+
+        engine = get_decision_engine()
+        req = DownloadRequest(
+            url=url,
+            output_dir=output_dir,
+            cookie_file=cookies_file,
+            progress_callback=_engine_cb if progress_cb else None,
+        )
+        res = engine.execute(req)
+        if res.success and res.path and os.path.exists(res.path):
+            _save_meta(output_dir, res.media_id, "")
+            logger.info(f"Smart Download Engine download_one succeeded: {res.path} ({res.backend})")
+            if progress_cb:
+                progress_cb(1.0, "Tải video hoàn tất!")
+            return {
+                "input_url": url,
+                "canonical_url": url,
+                "platform": res.platform or "video",
+                "video_id": res.media_id,
+                "title": res.media_id,
+                "uploader": "",
+                "duration": res.duration,
+                "filepath": res.path,
+            }
+        logger.info(f"Smart Download Engine download_one returned unsuccessful ({res.error_message}), falling back...")
+    except Exception as e:
+        logger.warning(f"Smart Download Engine download_one error ({e}), falling back...")
+
     from autodub.media.douyin import is_douyin_url, download_douyin, extract_clean_url
     clean_url = extract_clean_url(url)
     if is_douyin_url(clean_url):
         logger.info(f"Routing to Douyin extractor: {clean_url}")
-        return download_douyin(clean_url, output_dir)
+        return download_douyin(clean_url, output_dir, progress_cb=progress_cb)
 
     canonical = normalize_url(clean_url)
     if canonical != url:
@@ -409,6 +546,7 @@ def download_one(
                 cookies_from_browser=cookies_from_browser,
                 cookies_file=cookies_file,
                 fallback_level=attempt - 1,
+                progress_cb=progress_cb,
             )
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(canonical, download=True)
@@ -447,6 +585,7 @@ def download_one_isolated(
     output_dir: str,
     cookies_from_browser: str | None = None,
     cookies_file: str | None = None,
+    progress_cb: Any = None,
 ) -> dict:
     """``download_one`` vào thư mục riêng rồi gỡ file về ``output_dir``.
 
@@ -463,9 +602,13 @@ def download_one_isolated(
     ensure_dir(output_dir)
     tmp_dir = os.path.join(output_dir, ".dl_tmp")
     ensure_dir(tmp_dir)
+    kwargs = {}
+    if progress_cb is not None:
+        kwargs["progress_cb"] = progress_cb
     entry = download_one(url, tmp_dir,
                          cookies_from_browser=cookies_from_browser,
-                         cookies_file=cookies_file)
+                         cookies_file=cookies_file,
+                         **kwargs)
     try:
         src = entry["filepath"]
         dst = os.path.join(output_dir, os.path.basename(src))

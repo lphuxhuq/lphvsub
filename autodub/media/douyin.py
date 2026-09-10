@@ -19,6 +19,7 @@ import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, Callable
 
 import requests
 
@@ -40,7 +41,10 @@ _IES_REFERER = "https://www.iesdouyin.com/"
 
 _DASH_VIDEO_RE = re.compile(r"/media-video-")
 _DASH_AUDIO_RE = re.compile(r"/media-audio-")
-_CDN_HOST_RE = re.compile(r"\.(zjcdn|douyinvod|douyincdn)\.com|\.bytecdntp\.com")
+_CDN_HOST_RE = re.compile(
+    r"(?:douyinvod\.com|zjcdn\.com|douyincdn\.com|bytecdntp\.com|zijieapi\.com|pstatp\.com|bytegoofy\.com)",
+    re.IGNORECASE,
+)
 _VIDEO_MIME_RE = re.compile(r"mime_type=video_mp4")
 _ROUTER_DATA_RE = re.compile(r"window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
 _SSR_DATA_RE = re.compile(r"window\._SSR_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
@@ -351,64 +355,133 @@ def _extract_via_playwright(
     wait_seconds: float = 20.0,
     headless: bool = True,
 ) -> dict:
-    """Open the Douyin page and capture direct CDN URLs for video + audio."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        raise RuntimeError(
-            "Tính năng tải Douyin chưa được cài. Đúp chuột file "
-            "'Cai dat tinh nang Douyin.bat' trong thư mục VoxDub, đợi cài "
-            "xong rồi mở lại app."
-        ) from None
+    """Điều khiển Chromium bóc tách luồng phát Douyin (ưu tiên BrowserPool singleton)."""
+    captured = {"dash_video": [], "dash_audio": [], "progressive": []}
+    title = ""
+    canonical = url
 
-    launch_args = [
-        "--disable-blink-features=AutomationControlled",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-features=IsolateOrigins,site-per-process",
-    ]
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, args=launch_args)
+    def _drive_page(page):
+        nonlocal title, canonical
+
+        def on_request(req):
+            u = req.url
+            if not _CDN_HOST_RE.search(u):
+                return
+            if _DASH_VIDEO_RE.search(u):
+                captured["dash_video"].append(u)
+            elif _DASH_AUDIO_RE.search(u):
+                captured["dash_audio"].append(u)
+            elif _VIDEO_MIME_RE.search(u):
+                captured["progressive"].append(u)
+
+        def on_response(resp):
+            nonlocal title
+            try:
+                if "aweme/v1/web/aweme/detail" in resp.url:
+                    data = resp.json()
+                    detail = data.get("aweme_detail") or {}
+                    if detail:
+                        if not title:
+                            desc = detail.get("desc")
+                            if desc:
+                                title = desc.strip()
+                        vid_obj = detail.get("video") or {}
+                        bit_rates = vid_obj.get("bit_rate") or []
+                        if bit_rates:
+                            sorted_br = sorted(bit_rates, key=lambda b: b.get("bit_rate", 0), reverse=True)
+                            for br in sorted_br:
+                                for play_u in br.get("play_addr", {}).get("url_list", []):
+                                    if play_u and play_u not in captured["progressive"]:
+                                        captured["progressive"].append(play_u)
+                        for play_u in vid_obj.get("play_addr", {}).get("url_list", []):
+                            if play_u and play_u not in captured["progressive"]:
+                                captured["progressive"].append(play_u)
+            except Exception:
+                pass
+
+        page.on("request", on_request)
+        page.on("response", on_response)
+
+        logger.info(f"Loading Douyin page: {url}")
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+        # Dismiss modal login popup if present
         try:
-            context = browser.new_context(
-                user_agent=_UA,
-                viewport={"width": 1280, "height": 800},
-                locale="zh-CN",
-            )
-            context.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-            )
-            page = context.new_page()
+            page.wait_for_timeout(600)
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
 
-            captured = {"dash_video": [], "dash_audio": [], "progressive": []}
-
-            def on_request(req):
-                u = req.url
-                if not _CDN_HOST_RE.search(u):
-                    return
-                if _DASH_VIDEO_RE.search(u):
-                    captured["dash_video"].append(u)
-                elif _DASH_AUDIO_RE.search(u):
-                    captured["dash_audio"].append(u)
-                elif _VIDEO_MIME_RE.search(u):
-                    captured["progressive"].append(u)
-
-            page.on("request", on_request)
-
-            logger.info(f"Loading Douyin page: {url}")
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-
-            deadline = time.time() + wait_seconds
-            while time.time() < deadline:
-                if captured["progressive"] or (captured["dash_video"] and captured["dash_audio"]):
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            if captured["progressive"] or (captured["dash_video"] and captured["dash_audio"]):
+                break
+            try:
+                dom_src = page.evaluate("""() => {
+                    const vids = Array.from(document.querySelectorAll('video'));
+                    for (const v of vids) {
+                        const s = v.currentSrc || v.src;
+                        if (s && s.startsWith('http') && !s.includes('blob:') && !s.includes('uuu_265')) {
+                            return s;
+                        }
+                    }
+                    return '';
+                }""")
+                if dom_src and _CDN_HOST_RE.search(dom_src) and dom_src not in captured["progressive"]:
+                    captured["progressive"].append(dom_src)
                     break
-                page.wait_for_timeout(500)
+            except Exception:
+                pass
+            page.wait_for_timeout(400)
 
+        if not title:
             title = page.title() or ""
             title = re.sub(r"\s*[-–]\s*抖音\s*$", "", title).strip()
-            canonical = page.url
-        finally:
-            browser.close()
+        canonical = page.url
+
+    # 1. Ưu tiên BrowserPool singleton an toàn với asyncio loop
+    used_pool = False
+    try:
+        from autodub.media.download.browser_pool import get_browser_pool
+        pool = get_browser_pool()
+        with pool.borrow_page(user_agent=_UA) as page:
+            _drive_page(page)
+            used_pool = True
+    except Exception as pool_err:
+        logger.debug(f"BrowserPool attempt in douyin.py non-fatal: {pool_err}")
+
+    # 2. Fallback trực tiếp qua sync_playwright nếu chưa dùng được BrowserPool
+    if not used_pool:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise RuntimeError(
+                "Tính năng tải Douyin chưa được cài. Đúp chuột file "
+                "'Cai dat tinh nang Douyin.bat' trong thư mục VoxDub, đợi cài "
+                "xong rồi mở lại app."
+            ) from None
+
+        launch_args = [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-features=IsolateOrigins,site-per-process",
+        ]
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless, args=launch_args)
+            try:
+                context = browser.new_context(
+                    user_agent=_UA,
+                    viewport={"width": 1280, "height": 800},
+                    locale="zh-CN",
+                )
+                context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                )
+                page = context.new_page()
+                _drive_page(page)
+            finally:
+                browser.close()
 
     logger.info(
         f"Captured: progressive={len(captured['progressive'])} "
@@ -443,18 +516,45 @@ def _extract_via_playwright(
     )
 
 
-def _download_stream(url: str, dest: Path) -> int:
+def _download_stream(
+    url: str,
+    dest: Path,
+    progress_cb: Callable[[float, str], None] | None = None,
+    label: str = "video",
+    weight: float = 1.0,
+    base_pct: float = 0.0,
+) -> int:
     headers = {"User-Agent": _UA, "Referer": _REFERER}
     size = 0
     part = Path(str(dest) + ".part")
+    t_last = time.time()
+    last_size = 0
     try:
         with requests.get(url, headers=headers, stream=True, timeout=120) as r:
             r.raise_for_status()
+            total_size = int(r.headers.get("content-length", 0))
             with open(part, "wb") as f:
                 for chunk in r.iter_content(chunk_size=1024 * 256):
                     if chunk:
                         f.write(chunk)
                         size += len(chunk)
+                        now = time.time()
+                        if progress_cb and (now - t_last >= 0.25 or size == total_size):
+                            dt = now - t_last
+                            speed = ((size - last_size) / dt) / (1024 * 1024) if dt > 0 else 0.0
+                            t_last = now
+                            last_size = size
+                            if total_size > 0:
+                                ratio = min(1.0, size / total_size)
+                                pct = base_pct + (ratio * weight)
+                                mb_s = size / (1024 * 1024)
+                                mb_tot = total_size / (1024 * 1024)
+                                msg = f"Đang tải {label} Douyin: {mb_s:.1f}MB / {mb_tot:.1f}MB ({int(ratio*100)}%) - {speed:.1f} MB/s"
+                            else:
+                                pct = base_pct + 0.5 * weight
+                                mb_s = size / (1024 * 1024)
+                                msg = f"Đang tải {label} Douyin: {mb_s:.1f}MB - {speed:.1f} MB/s"
+                            progress_cb(min(0.98, max(0.01, pct)), msg)
         if size < 10_000:
             raise RuntimeError(f"CDN trả về tệp quá nhỏ ({size}B)")
         os.replace(part, dest)
@@ -497,7 +597,7 @@ def _ffprobe_duration(path: Path) -> float:
         return 0.0
 
 
-def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, initial_url: str | None = None) -> dict:
+def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, initial_url: str | None = None, progress_cb: Callable[[float, str], None] | None = None) -> dict:
     """Fallback: sniff CDN streams with a headless browser.
 
     Tries multiple URLs in order of specificity:
@@ -526,11 +626,13 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, ini
     for page_url in deduped:
         try:
             logger.info(f"Playwright fallback trying: {page_url}")
+            if progress_cb:
+                progress_cb(0.05, "Đang kết nối Douyin & vượt anti-bot...")
             info = _extract_via_playwright(page_url, wait_seconds=20.0)
 
             if info["mode"] == "progressive":
                 logger.info(f"Downloading progressive MP4 id={video_id}")
-                size = _download_stream(info["video_url"], final_path)
+                size = _download_stream(info["video_url"], final_path, progress_cb=progress_cb, label="video", weight=0.85, base_pct=0.10)
                 logger.info(f"Stream downloaded: {size:,}B")
             else:
                 tmp_video = out_dir / f"_tmp_{video_id}.video.mp4"
@@ -538,12 +640,16 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, ini
                 try:
                     logger.info(f"Downloading DASH video+audio in parallel id={video_id}")
                     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="douyin-dash") as pool:
-                        v_fut = pool.submit(_download_stream, info["video_url"], tmp_video)
-                        a_fut = pool.submit(_download_stream, info["audio_url"], tmp_audio)
+                        v_fut = pool.submit(_download_stream, info["video_url"], tmp_video, progress_cb, "video", 0.75, 0.10)
+                        a_fut = pool.submit(_download_stream, info["audio_url"], tmp_audio, progress_cb, "audio", 0.10, 0.85)
                         v_size = v_fut.result()
                         a_size = a_fut.result()
                     logger.info(f"Streams downloaded: video={v_size:,}B audio={a_size:,}B")
+                    if progress_cb:
+                        progress_cb(0.96, "Đang ghép tệp âm thanh và hình ảnh Douyin...")
                     _ffmpeg_mux(tmp_video, tmp_audio, final_path)
+                    if progress_cb:
+                        progress_cb(1.0, "Tải video Douyin hoàn tất!")
                 finally:
                     for p in (tmp_video, tmp_audio):
                         if p.exists():
@@ -566,6 +672,7 @@ def download_douyin(
     url: str,
     output_dir: str,
     filename: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
 ) -> dict:
     """Download a Douyin video and return metadata matching download_one() shape.
 
@@ -580,6 +687,52 @@ def download_douyin(
         clean_url = "https://" + clean_url
 
     ensure_dir(output_dir)
+
+    # 1. Try Turbo + Reliable DouyinDownloader first
+    try:
+        from autodub.media.download.contract import DownloadRequest
+        from autodub.media.download.douyin_engine import DouyinDownloader
+
+        def _dy_cb(d: dict):
+            if not progress_cb or not isinstance(d, dict):
+                return
+            pct = d.get("progress", 0.0)
+            if pct <= 0 and "percent" in d:
+                pct = d["percent"] / 100.0
+            msg = d.get("message")
+            if not msg:
+                mb_d = d.get("bytes_downloaded", 0) / (1024 * 1024)
+                mb_t = d.get("total_bytes", 0) / (1024 * 1024)
+                speed = d.get("speed_mb", 0.0)
+                if mb_t > 0:
+                    msg = f"Đang tải Douyin: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+                else:
+                    msg = f"Đang tải Douyin: {mb_d:.1f}MB - {speed:.1f} MB/s"
+            progress_cb(min(1.0, max(0.0, pct)), msg)
+
+        dy_engine = DouyinDownloader()
+        req = DownloadRequest(
+            url=clean_url,
+            output_dir=str(output_dir),
+            custom_filename=filename,
+            progress_callback=_dy_cb if progress_cb else None,
+        )
+        res = dy_engine.download(req)
+        if res.success and res.path and os.path.exists(res.path):
+            logger.info(f"DouyinDownloader succeeded: {res.path} ({res.backend})")
+            return {
+                "input_url": clean_url,
+                "canonical_url": f"https://www.douyin.com/video/{res.media_id}",
+                "platform": "Douyin",
+                "video_id": res.media_id,
+                "title": res.media_id,
+                "uploader": "",
+                "duration": res.duration,
+                "filepath": str(res.path),
+            }
+        logger.info(f"DouyinDownloader returned unsuccessful ({res.error_message}), falling back to legacy...")
+    except Exception as e:
+        logger.warning(f"DouyinDownloader error ({e}), falling back to legacy...")
 
     video_id = resolve_video_id(clean_url)
     if not video_id:
@@ -610,7 +763,7 @@ def download_douyin(
 
     # --- Fallback: Playwright stream sniffing (share page, id-verified) ---
     if not downloaded:
-        info = _download_via_playwright(video_id, out_dir, final_path, initial_url=clean_url)
+        info = _download_via_playwright(video_id, out_dir, final_path, initial_url=clean_url, progress_cb=progress_cb)
         title = title or info.get("title", "")
 
     duration = _ffprobe_duration(final_path)
