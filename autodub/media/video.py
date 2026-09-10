@@ -370,6 +370,86 @@ def merge_video(
             filter_complex = f"[0:v]{setpts},{build_dimension_filter()}[vout]"
 
     hw_args = ["-hwaccel", "auto"] if video_encoder_name() != "CPU (libx264)" else []
+
+    # ---- Đường xuất SONG SONG theo chunk (tối ưu video dài) ----
+    # Điều kiện: re-encode (filter_complex), ffmpeg thật (không mock trong
+    # test), có duration, và env không tắt tính năng.
+    parallel_enabled = os.environ.get("VOXDUB_PARALLEL_EXPORT", "1") != "0"
+    dur_probe = probe_duration_s(video_path) if parallel_enabled and filter_complex else 0.0
+    if (parallel_enabled and filter_complex and dur_probe
+            and dur_probe >= 120.0
+            and subprocess.run is _REAL_SUBPROCESS_RUN):
+        try:
+            from autodub.media.parallel_export import parallel_chunked_export
+
+            soft_args = (["-i", srt_path]
+                         + ["-map", "2:s", "-c:s", "mov_text",
+                            "-metadata:s:s:0", f"language={subtitle_lang}",
+                            "-disposition:s:0", "default"]
+                         if subtitle_mode == "soft" else [])
+
+            def _build_chunk_cmd(src: str, start_s: float, end_s: float,
+                                 chunk_out: str) -> list:
+                chunk_cmd = ["ffmpeg", *hw_args, "-threads", "0",
+                             "-ss", f"{start_s:.3f}", "-to", f"{end_s:.3f}",
+                             "-i", src, "-i", audio_path]
+                chunk_cmd += [
+                    *filter_args_holder["args"],
+                    "-filter_complex_threads", "0",
+                    "-map", "[vout]", "-map", "1:a",
+                    *codec_holder["args"],
+                    "-pix_fmt", "yuv420p",
+                ]
+                if apply_speed:
+                    chunk_cmd += ["-fps_mode", "cfr"]
+                if soft_args:
+                    chunk_cmd += soft_args
+                if randomize_metadata:
+                    from autodub.media.metadata import build_clean_metadata_args
+                    chunk_cmd += build_clean_metadata_args()
+                chunk_cmd += ["-c:a", "aac", "-b:a", "192k", "-y", chunk_out]
+                return chunk_cmd
+
+            # filter_args / codec cần sẵn cho callback — dùng holder dict
+            # vì callback closure được gọi sau khi biến local được gán.
+            if len(filter_complex) > 1024 or "\n" in filter_complex or len(effective_blur_regions or []) > 2:
+                import tempfile
+                fd, filter_script_file = tempfile.mkstemp(prefix="filtergraph_", suffix=".txt")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(filter_complex)
+                filter_args_holder = {"args": ["-filter_complex_script", filter_script_file]}
+            else:
+                filter_args_holder = {"args": ["-filter_complex", filter_complex]}
+            codec_holder = {"args": video_codec_args()}
+
+            from autodub.media.metadata import randomize_file_hash
+
+            def _rand_meta() -> None:
+                randomize_file_hash(output_path)
+
+            try:
+                result_path = parallel_chunked_export(
+                    _build_chunk_cmd,
+                    actual_video_path, audio_path, output_path,
+                    duration_s=dur_probe,
+                    progress_cb=progress_cb,
+                    cancel_event=cancel_event,
+                    randomize_metadata_fn=_rand_meta if randomize_metadata else None,
+                )
+                logger.info(f"Video merged (parallel chunked): {result_path}")
+                return result_path
+            except Exception as e:
+                logger.warning(
+                    f"Parallel export thất bại ({e}) — fallback 1 process.")
+            finally:
+                if filter_script_file and os.path.exists(filter_script_file):
+                    try:
+                        os.remove(filter_script_file)
+                    except OSError:
+                        pass
+        except ImportError as e:
+            logger.warning(f"parallel_export không khả dụng ({e}) — dùng 1 process")
+
     cmd = ["ffmpeg", *hw_args, "-threads", "0", "-i", actual_video_path, "-i", audio_path]
     if subtitle_mode == "soft":
         cmd += ["-i", srt_path]
@@ -388,7 +468,6 @@ def merge_video(
             filter_args = ["-filter_complex_script", filter_script_file]
         else:
             filter_args = ["-filter_complex", filter_complex]
-
         cmd += [
             *filter_args,
             "-filter_complex_threads", "0",
@@ -435,7 +514,7 @@ def merge_video(
 
     # Trần timeout theo thời lượng thật: stream-copy thì 4x là quá rộng;
     # re-encode CPU trên máy yếu có thể chậm hơn realtime nên nhân 8.
-    dur = probe_duration_s(video_path) or 0.0
+    dur = dur_probe or probe_duration_s(video_path) or 0.0
     timeout = (max(900, int(dur * 8)) if filter_complex and dur
                else ffmpeg_timeout_s(dur))
 
