@@ -175,3 +175,9 @@ def test_new_project_page_shows_social_card_on_complete(qapp, tmp_path):
     page._set_running(False)
     assert not page.social_card.isHidden()
     assert page.preview.isHidden()
+
+    # Đóng page tường minh — widget tree lớn (player, workers) để lại cho GC
+    # dọn giữa session đã gây access violation khi kết hợp QtMultimedia +
+    # onnxruntime ở các test sau.
+    page.close()
+    page.deleteLater()

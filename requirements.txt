@@ -41,3 +41,4 @@ gemini-srt-translator>=3.7.0
 
 # --- Dev ---
 pytest>=8.0.0
+pytest-qt>=4.4.0

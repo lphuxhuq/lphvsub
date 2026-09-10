@@ -104,6 +104,28 @@ class _FrameWorker(QThread):
                 self.failed.emit(str(e))
 
 
+class _AutoDetectWorker(QThread):
+    """Quét phụ đề cứng trong luồng nền — detect_hardsub_regions quét nhiều
+    frame bằng OpenCV/FFmpeg nên phải chạy ngoài UI thread để không đóng băng
+    giao diện và tránh reentrant access vào Qt event loop.
+    """
+
+    ready = Signal(list)  # danh sách region normalized [{x,y,w,h}, ...]
+    failed = Signal(str)
+
+    def __init__(self, video_path: str, parent=None):
+        super().__init__(parent)
+        self._video = video_path
+
+    def run(self) -> None:
+        try:
+            from autodub.media.hardsub_detector import detect_hardsub_regions
+            regs = detect_hardsub_regions(self._video) or []
+            self.ready.emit(regs)
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(str(e))
+
+
 def subtitle_zone(center_ratio: float) -> str:
     """Map a dragged text's vertical centre (0=top, 1=bottom) to a position."""
     if center_ratio < 0.38:
@@ -684,6 +706,7 @@ class StyleDialog(QDialog):
         self._regions_pending = regions
         self._frame_worker = None
         self._thumb_worker = None
+        self._auto_detect_worker = None
 
 
         if preview_text:
@@ -1600,7 +1623,12 @@ class StyleDialog(QDialog):
         TOASTS.warn(f"Không lấy được frame video: {message}")
 
     def _on_auto_detect_clicked(self) -> None:
-        """Tự động quét video để tìm dải phụ đề cứng gốc."""
+        """Tự động quét video để tìm dải phụ đề cứng gốc.
+
+        Quét chạy trong _AutoDetectWorker (QThread) — không chặn UI thread,
+        không gọi processEvents() reentrant (nguồn gốc crash access violation
+        khi combined-test GUI trước đó để lại Qt native state không sạch).
+        """
         if not self._video_path or not os.path.exists(self._video_path):
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
@@ -1609,32 +1637,42 @@ class StyleDialog(QDialog):
             )
             return
 
-        from autodub.media.hardsub_detector import detect_hardsub_regions
+        if self._auto_detect_worker is not None and self._auto_detect_worker.isRunning():
+            return
+
         self.btn_auto_detect.setEnabled(False)
-        app = QApplication.instance()
-        if app is not None:
-            try:
-                app.processEvents()
-            except Exception:
-                pass
-        try:
-            regs = detect_hardsub_regions(self._video_path)
-            if regs:
-                self.canvas.set_rects_from_normalized(regs)
-                from autodub_gui.ui.toast import TOASTS
-                TOASTS.info(f"Đã phát hiện {len(regs)} vùng phụ đề cứng.")
-            else:
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.information(
-                    self, "Tự động dò phụ đề",
-                    "Không phát hiện thấy dải phụ đề cứng cố định nào trong video."
-                )
-        except Exception as e:
+        self.btn_auto_detect.setText("Đang dò...")
+
+        worker = _AutoDetectWorker(self._video_path, parent=self)
+        worker.ready.connect(self._on_auto_detect_done)
+        worker.failed.connect(self._on_auto_detect_failed)
+        self._auto_detect_worker = worker
+        worker.start()
+
+    def _on_auto_detect_done(self, regs: list) -> None:
+        """Nhận kết quả quét từ worker và áp vùng lên canvas."""
+        self._auto_detect_worker = None
+        self._reset_auto_detect_button()
+        if regs:
+            self.canvas.set_rects_from_normalized(regs)
             from autodub_gui.ui.toast import TOASTS
-            TOASTS.warn(f"Lỗi khi quét phụ đề: {e}")
-        finally:
-            self.btn_auto_detect.setEnabled(True)
-            self.btn_auto_detect.setText("Dò tự động")
+            TOASTS.info(f"Đã phát hiện {len(regs)} vùng phụ đề cứng.")
+        else:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Tự động dò phụ đề",
+                "Không phát hiện thấy dải phụ đề cứng cố định nào trong video."
+            )
+
+    def _on_auto_detect_failed(self, message: str) -> None:
+        self._auto_detect_worker = None
+        self._reset_auto_detect_button()
+        from autodub_gui.ui.toast import TOASTS
+        TOASTS.warn(f"Lỗi khi quét phụ đề: {message}")
+
+    def _reset_auto_detect_button(self) -> None:
+        self.btn_auto_detect.setEnabled(True)
+        self.btn_auto_detect.setText("Dò tự động")
 
 
 
@@ -2157,11 +2195,30 @@ class StyleDialog(QDialog):
         return f"{m:02d}:{s:02d}"
 
     def _cleanup_workers(self) -> None:
+        # Dừng worker quét phụ đề trước tiên — tránh signal về widget đã hủy.
+        if getattr(self, "_auto_detect_worker", None):
+            try:
+                if self._auto_detect_worker.isRunning():
+                    self._auto_detect_worker.wait(2000)
+            except Exception:
+                pass
+            self._auto_detect_worker = None
         if hasattr(self, "_player") and self._player:
             try:
                 self._player.stop()
             except Exception:
                 pass
+            try:
+                # Detach source/sink trước khi dialog bị hủy — backend WMF có
+                # thể phát event vào sink đã teardown gây access violation.
+                self._player.setVideoSink(None)
+                self._player.setAudioOutput(None)
+                self._player.setSource(QUrl())
+            except Exception:
+                pass
+            self._player = None
+            self._audio_output = None
+            self._video_sink = None
         if hasattr(self, "_thumb_worker") and self._thumb_worker:
             try:
                 if self._thumb_worker.isRunning():

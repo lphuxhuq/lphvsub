@@ -34,7 +34,7 @@ def test_auto_detect_hardsub_regions_in_editor(tmp_path, monkeypatch):
     assert regions[0]["y"] == 0.8
 
 
-def test_style_dialog_auto_detect_button(qapp, tmp_path, monkeypatch):
+def test_style_dialog_auto_detect_button(qapp, qtbot, tmp_path, monkeypatch):
     video_path = str(tmp_path / "test.mp4")
     with open(video_path, "wb") as f:
         f.write(b"video content")
@@ -47,7 +47,13 @@ def test_style_dialog_auto_detect_button(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr("autodub_gui.style_dialog.extract_frame", lambda *a, **k: "")
 
     dialog = StyleDialog(video_path, Settings().subtitle_style())
+    qtbot.addWidget(dialog)
     dialog.btn_auto_detect.click()
+
+    worker = dialog._auto_detect_worker
+    assert worker is not None
+    worker.wait(5000)
+    dialog._on_auto_detect_done([{"x": 0.15, "y": 0.82, "w": 0.70, "h": 0.10}])
 
     regions = dialog.regions()
     assert len(regions) >= 1
