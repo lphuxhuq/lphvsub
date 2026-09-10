@@ -321,18 +321,53 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             output_path,
         ]
 
+        from collections import deque
+        import threading
+
+        dec_stderr_tail: deque[str] = deque(maxlen=30)
+        enc_stderr_tail: deque[str] = deque(maxlen=30)
+
+        def _drain_stderr(stream, tail: deque[str]) -> None:
+            if not stream:
+                return
+            try:
+                if hasattr(stream, "readline") and callable(stream.readline):
+                    for line in iter(stream.readline, b""):
+                        if not line:
+                            break
+                        decoded = line.decode("utf-8", errors="replace").rstrip() if isinstance(line, (bytes, bytearray)) else str(line).rstrip()
+                        if decoded:
+                            tail.append(decoded)
+                else:
+                    for line in stream:
+                        decoded = line.decode("utf-8", errors="replace").rstrip() if isinstance(line, (bytes, bytearray)) else str(line).rstrip()
+                        if decoded:
+                            tail.append(decoded)
+            except Exception:
+                pass
+            finally:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
         dec_proc = subprocess.Popen(
             dec_cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=frame_bytes * 4,
         )
         enc_proc = subprocess.Popen(
             enc_cmd,
             stdin=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=frame_bytes * 4,
         )
+
+        t_dec_err = threading.Thread(target=_drain_stderr, args=(dec_proc.stderr, dec_stderr_tail), daemon=True)
+        t_enc_err = threading.Thread(target=_drain_stderr, args=(enc_proc.stderr, enc_stderr_tail), daemon=True)
+        t_dec_err.start()
+        t_enc_err.start()
 
         frame_idx = 0
         import time
@@ -344,6 +379,10 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 if cancel_event and cancel_event.is_set():
                     logger.warning("Đã nhận tín hiệu HỦY inpaint video.")
                     raise RuntimeError("Inpaint video bị hủy bởi người dùng.")
+
+                if enc_proc.poll() is not None:
+                    enc_err = "\n".join(enc_stderr_tail)
+                    raise RuntimeError(f"FFmpeg encoder thoát bất thường (code {enc_proc.returncode}):\n{enc_err}")
 
                 raw_frame = dec_proc.stdout.read(frame_bytes)
                 if not raw_frame or len(raw_frame) < frame_bytes:
@@ -367,7 +406,11 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 frame[ry : ry + rh, rx : rx + rw] = clean_patch
 
                 # Ghi vào encoder pipe
-                enc_proc.stdin.write(frame.tobytes())
+                try:
+                    enc_proc.stdin.write(frame.tobytes())
+                except (BrokenPipeError, OSError):
+                    enc_err = "\n".join(enc_stderr_tail)
+                    raise RuntimeError(f"FFmpeg encoder pipe bị đứt (code {enc_proc.returncode}):\n{enc_err}")
 
                 frame_idx += 1
                 if frame_idx == 1 or frame_idx % 30 == 0 or frame_idx == total_frames:
@@ -385,13 +428,40 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                         progress_cb(pct, msg)
 
         finally:
+            if dec_proc.poll() is None:
+                try:
+                    dec_proc.kill()
+                except OSError:
+                    pass
             if dec_proc.stdout:
-                dec_proc.stdout.close()
-            dec_proc.kill()
+                try:
+                    dec_proc.stdout.close()
+                except Exception:
+                    pass
 
             if enc_proc.stdin:
-                enc_proc.stdin.close()
-            enc_proc.wait()
+                try:
+                    enc_proc.stdin.close()
+                except Exception:
+                    pass
+            try:
+                enc_proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                logger.warning("FFmpeg encoder không dừng sau 30s — ép buộc tắt.")
+                enc_proc.kill()
+                enc_proc.wait(timeout=5)
+
+            t_dec_err.join(timeout=1.0)
+            t_enc_err.join(timeout=1.0)
+
+        if enc_proc.returncode != 0:
+            enc_err = "\n".join(enc_stderr_tail)
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+            raise RuntimeError(f"FFmpeg inpaint encoder thất bại (exit {enc_proc.returncode}):\n{enc_err}")
 
         if progress_cb:
             progress_cb(1.0, "[AI-INPAINT] Hoàn tất xóa phụ đề bằng AI.")

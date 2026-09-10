@@ -48,50 +48,51 @@ class DemucsCache:
     def __init__(self):
         self._proc: subprocess.Popen | None = None
         self._failed = False        # worker chết một lần → thôi, dùng đường cũ
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def _ensure(self) -> bool:
         """Khởi động worker nếu chưa chạy; False khi không dùng được."""
-        if self._failed:
-            return False
-        if self._proc is not None and self._proc.poll() is None:
+        with self._lock:
+            if self._failed:
+                return False
+            if self._proc is not None and self._proc.poll() is None:
+                return True
+            python = gpu_venv_python()
+            if not python:
+                self._failed = True
+                return False
+            from autodub.sysinfo import available_ram_gb, total_ram_gb
+            avail = available_ram_gb()
+            total = total_ram_gb()
+            # Máy thực sự ít RAM (< 8GB total và < 1.5GB trống, hoặc < 1.0GB trống bất kể tổng):
+            # giữ worker thường trực làm chật RAM, nên tự rơi về đường chạy đơn.
+            low_ram = (
+                (avail is not None and avail < 1.0)
+                or (total is not None and total < 8.0 and avail is not None and avail < 1.5)
+            )
+            if low_ram:
+                self._failed = True
+                return False
+            try:
+                self._proc = subprocess.Popen(
+                    [python, _WORKER_SCRIPT, "--serve"],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, encoding="utf-8", errors="replace")
+                ready = json.loads(self._read_line(_SEPARATE_TIMEOUT))
+            except Exception as e:
+                logger.warning(f"Demucs cache không khởi động được ({e}) — "
+                               "mỗi video sẽ tự nạp model như cũ")
+                self._shutdown()
+                self._failed = True
+                return False
+            if not ready.get("ready"):
+                logger.warning(f"Demucs cache từ chối chạy ({ready.get('error')})")
+                self._shutdown()
+                self._failed = True
+                return False
+            logger.info(f"Demucs cache sẵn sàng trên {ready.get('device')} — "
+                        "model dùng chung cho cả lô")
             return True
-        python = gpu_venv_python()
-        if not python:
-            self._failed = True
-            return False
-        from autodub.sysinfo import available_ram_gb, total_ram_gb
-        avail = available_ram_gb()
-        total = total_ram_gb()
-        # Máy thực sự ít RAM (< 8GB total và < 1.5GB trống, hoặc < 1.0GB trống bất kể tổng):
-        # giữ worker thường trực làm chật RAM, nên tự rơi về đường chạy đơn.
-        low_ram = (
-            (avail is not None and avail < 1.0)
-            or (total is not None and total < 8.0 and avail is not None and avail < 1.5)
-        )
-        if low_ram:
-            self._failed = True
-            return False
-        try:
-            self._proc = subprocess.Popen(
-                [python, _WORKER_SCRIPT, "--serve"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, encoding="utf-8", errors="replace")
-            ready = json.loads(self._read_line(_SEPARATE_TIMEOUT))
-        except Exception as e:
-            logger.warning(f"Demucs cache không khởi động được ({e}) — "
-                           "mỗi video sẽ tự nạp model như cũ")
-            self._shutdown()
-            self._failed = True
-            return False
-        if not ready.get("ready"):
-            logger.warning(f"Demucs cache từ chối chạy ({ready.get('error')})")
-            self._shutdown()
-            self._failed = True
-            return False
-        logger.info(f"Demucs cache sẵn sàng trên {ready.get('device')} — "
-                    "model dùng chung cho cả lô")
-        return True
 
     def _read_line(self, timeout: float) -> str:
         """Đọc một dòng stdout với thời hạn (thread — Windows không select được pipe).
@@ -204,6 +205,19 @@ def separate_vocals(
         logger.error(f"Input audio not found: {input_wav}")
         return {"vocals": None, "no_vocals": None}
 
+    # Cross-project persistent cache: a new work_dir must not force another
+    # multi-minute Demucs run for byte-identical audio.
+    try:
+        from autodub.pipeline_cache import get_demucs_cache
+        cached = get_demucs_cache().lookup_and_restore(
+            input_wav, output_dir, model, sample_rate, channels
+        )
+        if cached:
+            logger.info("Demucs UPC cache HIT — reuse stems from previous project")
+            return cached
+    except Exception as exc:
+        logger.debug(f"Demucs UPC cache lookup failed; continue normally: {exc}")
+
     raw_vocals = os.path.join(output_dir, "_vocals_raw.wav")
     raw_no_vocals = os.path.join(output_dir, "_no_vocals_raw.wav")
 
@@ -243,6 +257,15 @@ def separate_vocals(
         for path in (raw_vocals, raw_no_vocals):
             if os.path.exists(path):
                 os.remove(path)
+
+    try:
+        from autodub.pipeline_cache import get_demucs_cache
+        get_demucs_cache().store_result(
+            input_wav, vocals_out, no_vocals_out, model, sample_rate, channels
+        )
+        logger.info("Demucs UPC cache stored")
+    except Exception as exc:
+        logger.debug(f"Demucs UPC cache store failed: {exc}")
 
     logger.info(f"Vocal separation complete: {no_vocals_out}")
     return {"vocals": vocals_out, "no_vocals": no_vocals_out}

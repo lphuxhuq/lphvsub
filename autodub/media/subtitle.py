@@ -234,76 +234,16 @@ def build_aspect_ratio_filter(
 
     Trả về (filter_str, target_w, target_h) hoặc None nếu giữ nguyên tỷ lệ gốc.
     """
-    if not aspect_preset or aspect_preset in ("original", "none"):
-        return None
-
-    preset = str(aspect_preset).strip().lower()
-    if preset in ("tiktok_9_16", "9:16", "vertical", "shorts"):
-        target_ratio = 9.0 / 16.0
-    elif preset in ("youtube_16_9", "16:9", "horizontal"):
-        target_ratio = 16.0 / 9.0
-    elif preset in ("square_1_1", "1:1", "square"):
-        target_ratio = 1.0
-    else:
-        return None
-
-    curr_ratio = video_w / float(video_h)
-    mode = (reframe_mode or "blur").strip().lower()
-    is_banner_mode = mode in ("banner", "solid_banner", "pad")
-
-    # Nếu cùng tỷ lệ (sai số < 2%) và không yêu cầu banner đặc thì giữ nguyên
-    if abs(curr_ratio - target_ratio) < 0.02 and not is_banner_mode:
-        return None
-
-    if target_ratio < 1.0:  # 9:16
-        th = video_h if video_h >= video_w else int(round(video_w / target_ratio))
-        th = th + (th % 2)
-        tw = int(round(th * target_ratio))
-        tw = tw + (tw % 2)
-    elif target_ratio > 1.0:  # 16:9
-        tw = video_w if video_w >= video_h else int(round(video_h * target_ratio))
-        tw = tw + (tw % 2)
-        th = int(round(tw / target_ratio))
-        th = th + (th % 2)
-    else:  # 1:1
-        dim = max(video_w, video_h)
-        dim = dim + (dim % 2)
-        tw = th = dim
-
-    if is_banner_mode:
-        pad_col = (banner_color or "#000000").strip()
-        if pad_col.startswith("#"):
-            pad_col = "0x" + pad_col[1:]
-
-        # Đảm bảo video chừa đủ chỗ cho top & bottom banner theo tỷ lệ người dùng chọn
-        min_bar_h = int(th * banner_height_ratio)
-        scale_limit_h = int(th * max(0.20, (1.0 - 2 * banner_height_ratio)))
-        scaled_h = round(tw * float(video_h) / float(video_w))
-        if (th - scaled_h) / 2 < min_bar_h:
-            flt = f"scale={tw}:{scale_limit_h}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
-        else:
-            flt = f"scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
-    elif mode in ("center_crop", "crop", "fill"):
-        # Phóng to vừa khít và cắt chính giữa
-        flt = f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th}"
-    elif mode in ("top_split", "top", "split"):
-        # Video ở nửa trên (căn top ~12% chiều cao), nền mờ tối ở sau
-        flt = (
-            f"split[asp_bg][asp_fg];"
-            f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=30:8,eq=brightness=-0.12:saturation=1.2[asp_bgb];"
-            f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
-            f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:H*0.12"
-        )
-    else:  # 'blur' (default)
-        # Nền mờ nghệ thuật cân đối ở giữa
-        flt = (
-            f"split[asp_bg][asp_fg];"
-            f"[asp_bg]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=30:8,eq=brightness=-0.08:saturation=1.15[asp_bgb];"
-            f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
-            f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2"
-        )
-
-    return flt, tw, th
+    from autodub.media.render_plan import RenderPlan
+    plan = RenderPlan.build(
+        video_w=video_w,
+        video_h=video_h,
+        aspect_preset=aspect_preset,
+        reframe_mode=reframe_mode,
+        banner_color=banner_color,
+        banner_height_ratio=banner_height_ratio,
+    )
+    return plan.build_reframe_filter()
 
 
 def _logo_overlay_coords(position: str, margin: int) -> tuple[str, str]:
@@ -481,6 +421,7 @@ def build_filter_complex(
     frame_footer_text: str | None = None,
     frame_footer_font_size: int = 24,
     frame_footer_color: str = "#FFD54A",
+    mask_method: str = "boxblur",
 ) -> str | None:
     """Dựng chuỗi ``-filter_complex``, hoặc None khi không cần lọc gì.
 
@@ -534,7 +475,10 @@ def build_filter_complex(
 
     # 2. Phóng to nhẹ 103% và trượt camera vi mô
     if micro_zoom:
-        parts.append(f"[{current}]scale=1.03*iw:1.03*ih,crop=iw/1.03:ih/1.03:(iw-ow)/2+sin(t*0.6)*6:(ih-oh)/2+cos(t*0.5)*6[vzoom]")
+        parts.append(
+            f"[{current}]scale=1.03*iw:1.03*ih,"
+            f"crop=trunc(iw/1.03/2)*2:trunc(ih/1.03/2)*2:(iw-ow)/2+sin(t*0.6)*6:(ih-oh)/2+cos(t*0.5)*6[vzoom]"
+        )
         current = "vzoom"
 
     # 3. Bộ lọc màu điện ảnh
@@ -584,21 +528,23 @@ def build_filter_complex(
 
     for i, region in enumerate(regions):
         x, y, w, h = _to_pixels(region, video_w, video_h)
-        base, blurred = f"b{i}", f"bl{i}"
+        reg_method = region.get("method") or mask_method
         nxt = f"v{i + 1}"
-
-        # Tách luồng để cùng một khung vừa làm nền dán vừa làm nguồn cắt.
-        parts.append(f"[{current}]split[{base}][{base}c]")
-        parts.append(
-            f"[{base}c]crop={w}:{h}:{x}:{y},{blur_filter(w, h)}[{blurred}]"
-        )
-
-        overlay = f"overlay={x}:{y}"
         t_start, t_end = region.get("t_start"), region.get("t_end")
-        if t_start is not None and t_end is not None:
-            overlay += f":enable='between(t,{float(t_start)},{float(t_end)})'"
-        parts.append(f"[{base}][{blurred}]{overlay}[{nxt}]")
-        current = nxt
+        timing = f":enable='between(t,{float(t_start)},{float(t_end)})'" if (t_start is not None and t_end is not None) else ""
+
+        if reg_method == "delogo":
+            parts.append(f"[{current}]delogo=x={x}:y={y}:w={w}:h={h}:show=0{timing}[{nxt}]")
+            current = nxt
+        else:
+            base, blurred = f"b{i}", f"bl{i}"
+            parts.append(f"[{current}]split[{base}][{base}c]")
+            parts.append(
+                f"[{base}c]crop={w}:{h}:{x}:{y},{blur_filter(w, h)}[{blurred}]"
+            )
+            overlay = f"overlay={x}:{y}{timing}"
+            parts.append(f"[{base}][{blurred}]{overlay}[{nxt}]")
+            current = nxt
 
     if has_logo:
         clean_logo = str(logo_path).strip()
@@ -645,10 +591,12 @@ def build_filter_complex(
             subs += f":fontsdir='{escape_subtitles_path(fonts_dir())}'"
         if not srt_path.lower().endswith(".ass"):
             subs += f":force_style='{build_force_style(style)}'"
-        parts.append(f"[{current}]{subs}[vout]")
-    else:
-        # Không còn gì để vẽ — đặt tên đầu ra cho bước cuối cùng.
-        parts.append(f"[{current}]null[vout]")
+        parts.append(f"[{current}]{subs}[vsub]")
+        current = "vsub"
+
+    from autodub.media.dimension import build_dimension_filter
+    dim_flt = build_dimension_filter()
+    parts.append(f"[{current}]{dim_flt}[vout]")
 
     return ";".join(parts)
 

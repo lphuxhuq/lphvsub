@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pydub import AudioSegment
 
-from autodub.resources import FFMPEG_SLOTS
+from autodub.resources import FFMPEG_SLOTS, FFMPEG_AUDIO_SLOTS
 from autodub.utils import setup_logging, ensure_dir, ffmpeg_timeout_s, seg_wav_path, ProgressTracker
 
 logger = setup_logging("autodub.audio")
@@ -334,7 +334,7 @@ def postprocess_voice_clip(src: str, dst: str,
     )
     tmp = dst + ".post.tmp.wav"
     try:
-        with FFMPEG_SLOTS:
+        with FFMPEG_AUDIO_SLOTS:
             result = subprocess.run(
                 ["ffmpeg", "-y", "-ss", f"{trim_s:.3f}", "-i", src,
                  "-filter:a", filters,
@@ -393,7 +393,8 @@ def postprocess_voice_clips(segments: list[dict], src_dir: str, dst_dir: str,
         if should_log:
             logger.info(f"  {msg}")
 
-    with ThreadPoolExecutor(max_workers=max_workers or _FFMPEG_WORKERS) as pool:
+    audio_workers = max_workers or min(16, max(4, (os.cpu_count() or 4) * 2))
+    with ThreadPoolExecutor(max_workers=audio_workers) as pool:
         list(pool.map(_tracked, segments))
     logger.info(f"  {tracker.summary()}")
     return dst_dir
