@@ -364,24 +364,24 @@ class ThumbnailStudioDialog(QDialog):
         soc_copy_row = QHBoxLayout()
         soc_copy_row.setSpacing(tokens.SP_1)
 
-        self.btn_copy_caption = PrimaryButton("📋 Sao chép Caption")
+        self.btn_copy_caption = PrimaryButton("Sao chép Caption")
         self.btn_copy_caption.setToolTip("Sao chép nội dung Caption vào Clipboard để đăng bài.")
         self.btn_copy_caption.clicked.connect(self._copy_caption_to_clipboard)
         soc_copy_row.addWidget(self.btn_copy_caption)
 
-        self.btn_copy_tags = GhostButton("🏷️ Sao chép Hashtag")
+        self.btn_copy_tags = GhostButton("Sao chép Hashtag")
         self.btn_copy_tags.setToolTip("Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard.")
         self.btn_copy_tags.clicked.connect(self._copy_tags_to_clipboard)
         soc_copy_row.addWidget(self.btn_copy_tags)
 
-        self.btn_copy_post_all = GhostButton("🚀 Sao chép Toàn bộ")
+        self.btn_copy_post_all = GhostButton("Sao chép Toàn bộ")
         self.btn_copy_post_all.setToolTip("Sao chép Tiêu đề, Caption và Hashtags vào Clipboard.")
         self.btn_copy_post_all.clicked.connect(self._copy_all_social_to_clipboard)
         soc_copy_row.addWidget(self.btn_copy_post_all)
 
         soc_layout.addLayout(soc_copy_row)
 
-        self.btn_caption_to_hook = GhostButton("✨ Dùng Caption làm chữ Thumbnail")
+        self.btn_caption_to_hook = GhostButton("Dùng Caption làm chữ Thumbnail")
         self.btn_caption_to_hook.setToolTip("Lấy câu mở đầu hoặc tiêu đề từ caption đưa lên chữ ảnh bìa.")
         self.btn_caption_to_hook.clicked.connect(self._apply_caption_to_thumbnail)
         soc_layout.addWidget(self.btn_caption_to_hook)
@@ -531,7 +531,7 @@ class ThumbnailStudioDialog(QDialog):
 
         parts = []
         if title:
-            parts.append(f"📌 {title}")
+            parts.append(title)
         if cap:
             parts.append(cap)
         if tags:

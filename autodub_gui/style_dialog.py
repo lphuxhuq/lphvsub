@@ -26,7 +26,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import (QColor, QFont, QImage, QPainter,
                            QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
     QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -89,13 +89,19 @@ class _FrameWorker(QThread):
         self._video = video_path
         self._out = out_png
         self._at = at_seconds
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
         try:
             path = extract_frame(self._video, self._out, self._at)
-            self.ready.emit(path)
+            if not self._cancelled:
+                self.ready.emit(path)
         except Exception as e:  # noqa: BLE001
-            self.failed.emit(str(e))
+            if not self._cancelled:
+                self.failed.emit(str(e))
 
 
 def subtitle_zone(center_ratio: float) -> str:
@@ -1492,7 +1498,7 @@ class StyleDialog(QDialog):
 
         # --- Bottom: actions ---
         actions = QHBoxLayout()
-        self.btn_save_checkpoint = QPushButton("💾 Lưu làm Checkpoint")
+        self.btn_save_checkpoint = QPushButton("Lưu làm Checkpoint")
         self.btn_save_checkpoint.setToolTip(
             "Lưu toàn bộ cài đặt Logo, Watermark, Kiểu chữ, Khung hình, Vùng che "
             "thành một bộ nhớ Checkpoint riêng."
@@ -1605,9 +1611,12 @@ class StyleDialog(QDialog):
 
         from autodub.media.hardsub_detector import detect_hardsub_regions
         self.btn_auto_detect.setEnabled(False)
-        self.btn_auto_detect.setText("Đang dò...")
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.processEvents()
+            except Exception:
+                pass
         try:
             regs = detect_hardsub_regions(self._video_path)
             if regs:
@@ -2147,25 +2156,38 @@ class StyleDialog(QDialog):
         m, s = divmod(sec, 60)
         return f"{m:02d}:{s:02d}"
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def _cleanup_workers(self) -> None:
         if hasattr(self, "_player") and self._player:
-            self._player.stop()
-        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
-            self._thumb_worker.quit()
+            try:
+                self._player.stop()
+            except Exception:
+                pass
+        if hasattr(self, "_thumb_worker") and self._thumb_worker:
+            try:
+                if self._thumb_worker.isRunning():
+                    self._thumb_worker.quit()
+                    self._thumb_worker.wait(300)
+            except Exception:
+                pass
+        if hasattr(self, "_frame_worker") and self._frame_worker:
+            try:
+                self._frame_worker.cancel()
+                if self._frame_worker.isRunning():
+                    self._frame_worker.quit()
+                    self._frame_worker.wait(500)
+            except Exception:
+                pass
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._cleanup_workers()
         super().closeEvent(event)
 
     def reject(self) -> None:
-        if hasattr(self, "_player") and self._player:
-            self._player.stop()
-        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
-            self._thumb_worker.quit()
+        self._cleanup_workers()
         super().reject()
 
     def accept(self) -> None:
-        if hasattr(self, "_player") and self._player:
-            self._player.stop()
-        if hasattr(self, "_thumb_worker") and self._thumb_worker and self._thumb_worker.isRunning():
-            self._thumb_worker.quit()
+        self._cleanup_workers()
         super().accept()
 
     def _save_current_as_checkpoint(self) -> None:

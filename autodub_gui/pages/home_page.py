@@ -64,8 +64,11 @@ class HomePage(BasePage):
     def _build(self) -> None:
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        clear_background(scroll)
+        clear_background(scroll.viewport())
         body = QWidget()
         clear_background(body)
         layout = QVBoxLayout(body)

@@ -11,7 +11,7 @@ import logging
 import os
 from dataclasses import replace
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QHBoxLayout, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -129,23 +129,37 @@ class NewProjectPage(BasePage):
         card = Card(padding=tokens.SP_4)
         self._left_title = card.add_header("Video sẽ được lồng tiếng")
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        clear_background(scroll)
+        clear_background(scroll.viewport())
+
+        content = QWidget()
+        clear_background(content)
+        box = QVBoxLayout(content)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(tokens.SP_3)
+
         # Phần xem trước: chỉ hiện trước khi bấm chạy.
         self.preview = EmptyState(
             "Chưa chọn video nào",
             "Chọn nguồn video ở bước 1. Khi bắt đầu chạy, chỗ này sẽ hiện "
             "tiến trình từng bước và nhật ký xử lý.",
             icon=icons.upload_cloud())
-        card.body.addWidget(self.preview, 1)
+        box.addWidget(self.preview, 1)
 
         self.steps = StepTracker()
         self.steps.setVisible(False)
-        card.body.addWidget(self.steps)
+        box.addWidget(self.steps)
         self.run_stats = RunStatsPanel()
         self.run_stats.setVisible(False)
-        card.body.addWidget(self.run_stats)
+        box.addWidget(self.run_stats)
         self.log = LogPanel()
         self.log.setVisible(False)
-        card.body.addWidget(self.log, 1)
+        box.addWidget(self.log, 1)
 
         self.pending_banner = Banner("warning", "Đang chờ bản dịch tiếng Việt")
         btn_gemini = GhostButton("Mở Gemini SRT Web")
@@ -158,7 +172,7 @@ class NewProjectPage(BasePage):
         self.btn_resume_after.clicked.connect(self._resume_after_translation)
         for button in (btn_gemini, btn_hint, btn_dir, self.btn_resume_after):
             self.pending_banner.add_button(button)
-        card.body.addWidget(self.pending_banner)
+        box.addWidget(self.pending_banner)
 
         self.done_banner = Banner("success", "Đã lồng tiếng xong")
         btn_video = GhostButton("Mở video")
@@ -169,7 +183,7 @@ class NewProjectPage(BasePage):
         btn_edit.clicked.connect(self._open_editor)
         for button in (btn_video, btn_folder, btn_edit):
             self.done_banner.add_button(button)
-        card.body.addWidget(self.done_banner)
+        box.addWidget(self.done_banner)
 
         # Thẻ Đăng bài & Metadata xuất video hoàn tất
         self.social_card = SocialMetadataCard(parent=self)
@@ -178,13 +192,15 @@ class NewProjectPage(BasePage):
         self.social_card.edit_requested.connect(self._open_editor)
         self.social_card.open_studio_requested.connect(self._open_thumbnail_studio_for_current_project)
         self.social_card.open_thumb_requested.connect(self._open_thumbnail_for_current_project)
-        card.body.addWidget(self.social_card)
+        box.addWidget(self.social_card)
 
-        self.btn_toggle_log = GhostButton("📜 Xem nhật ký xử lý")
+        self.btn_toggle_log = GhostButton("Xem nhật ký xử lý")
         self.btn_toggle_log.setVisible(False)
         self.btn_toggle_log.clicked.connect(self._toggle_log)
-        card.body.addWidget(self.btn_toggle_log)
+        box.addWidget(self.btn_toggle_log)
 
+        scroll.setWidget(content)
+        card.body.addWidget(scroll, 1)
         return card
 
     def _build_form(self) -> QWidget:
@@ -286,11 +302,33 @@ class NewProjectPage(BasePage):
                 self._go_to_step(1)
                 return
             url = urls[0] if urls else self.step_video.url.text().strip()
-            # File đã tải sẵn và chưa bị xóa thì chuyển ngay
+            # File đã tải sẵn trong VideoStep và chưa bị xóa thì chuyển ngay
+            prefetched_in_step = getattr(self.step_video, "_prefetched_paths", {}).get(url)
+            if prefetched_in_step and os.path.isfile(prefetched_in_step):
+                self._prefetched_path = prefetched_in_step
+                self.stepper.set_max_reached(0)
+                self._go_to_step(1)
+                return
+            # File đã tải sẵn trong NewProjectPage và chưa bị xóa thì chuyển ngay
             if self._prefetched_path and os.path.isfile(self._prefetched_path):
                 self.stepper.set_max_reached(0)
                 self._go_to_step(1)
                 return
+            # Kiểm tra xem URL này đã có dự án cũ có sẵn video chưa, nếu có thì dùng luôn
+            try:
+                from autodub.pipeline import find_existing_project_by_url, source_video_path
+                settings = self._settings_provider() if callable(getattr(self, "_settings_provider", None)) else None
+                out_dir = (settings.output_dir if settings else None) or "output"
+                existing = find_existing_project_by_url(out_dir, url)
+                if existing:
+                    src_v = source_video_path(existing)
+                    if src_v and os.path.isfile(src_v):
+                        self._prefetched_path = src_v
+                        self.stepper.set_max_reached(0)
+                        self._go_to_step(1)
+                        return
+            except Exception:
+                pass
             self._start_prefetch(url)
             return
         self.stepper.set_max_reached(index)
@@ -310,6 +348,20 @@ class NewProjectPage(BasePage):
             self._prefetch_worker.wait(1000)
             self._prefetch_worker = None
         self._prefetched_path = ""
+        # Nếu URL trùng với dự án cũ đã có sẵn video thì nhớ sẵn video đó
+        try:
+            urls = self.step_video.urls()
+            if len(urls) == 1:
+                from autodub.pipeline import find_existing_project_by_url, source_video_path
+                settings = self._settings_provider() if callable(getattr(self, "_settings_provider", None)) else None
+                out_dir = (settings.output_dir if settings else None) or "output"
+                existing = find_existing_project_by_url(out_dir, urls[0])
+                if existing:
+                    src_v = source_video_path(existing)
+                    if src_v and os.path.isfile(src_v):
+                        self._prefetched_path = src_v
+        except Exception:
+            pass
         self._restore_next_button()
 
     def _prefetch_temp_dir(self) -> str:
@@ -319,24 +371,51 @@ class NewProjectPage(BasePage):
 
     def _start_prefetch(self, url: str) -> None:
         """Khởi động tải ngầm — block nút Tiếp tục, tự chuyển bước khi xong."""
+        # Kiểm tra nếu VideoStep đã có worker đang chạy cho URL này
+        if hasattr(self.step_video, "_prefetch_workers"):
+            for w in self.step_video._prefetch_workers:
+                if w.isRunning() and getattr(w, "_url", None) == url:
+                    self.btn_next.setEnabled(False)
+                    self.btn_next.setText("Đang tải…")
+                    w.progress.connect(self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection)
+                    w.finished_ok.connect(self._on_prefetch_done, Qt.ConnectionType.QueuedConnection)
+                    w.failed.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
+                    self._prefetch_worker = w
+                    return
+
         if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
             return
         self.btn_next.setEnabled(False)
         self.btn_next.setText("Đang tải…")
-        worker = PrefetchWorker(url, self._prefetch_temp_dir(), self)
-        worker.finished_ok.connect(self._on_prefetch_done)
-        worker.failed.connect(self._on_prefetch_failed)
+        worker = PrefetchWorker(url, self._prefetch_temp_dir())
+        worker.progress.connect(self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection)
+        worker.finished_ok.connect(self._on_prefetch_done, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(worker.deleteLater)
         self._prefetch_worker = worker
         worker.start()
 
+    @Slot(float, str)
+    def _on_prefetch_progress(self, pct: float, msg: str) -> None:
+        pct_val = int(max(0.0, min(1.0, pct)) * 100)
+        self.btn_next.setText(f"Đang tải {pct_val}%…")
+        if hasattr(self.step_video, "download_progress"):
+            self.step_video.download_progress.set_progress(pct, msg)
+
+    @Slot(str)
     def _on_prefetch_done(self, path: str) -> None:
         self._prefetched_path = path
+        if hasattr(self.step_video, "download_progress"):
+            self.step_video.download_progress.set_progress(1.0, "Đã tải xong video!")
         self._restore_next_button()
         self.stepper.set_max_reached(0)
         self._go_to_step(1)
 
+    @Slot(str)
     def _on_prefetch_failed(self, message: str) -> None:
         self._restore_next_button()
+        if hasattr(self.step_video, "download_progress"):
+            self.step_video.download_progress.lbl_status.setText(f"Lỗi tải: {message[:60]}")
         TOASTS.warn(f"Tải video thất bại: {message[:120]}")
 
     def _next_label(self) -> str:
@@ -780,6 +859,14 @@ class NewProjectPage(BasePage):
             return self._prefetched_path
         work_dir = data["resume_dir"] or (
             self._result.work_dir if self._result else "")
+        if not work_dir and data.get("url"):
+            try:
+                from autodub.pipeline import find_existing_project_by_url
+                settings = self._settings_provider() if callable(getattr(self, "_settings_provider", None)) else None
+                out_dir = (settings.output_dir if settings else None) or "output"
+                work_dir = find_existing_project_by_url(out_dir, data["url"]) or ""
+            except Exception:
+                pass
         if work_dir and os.path.isdir(work_dir):
             from autodub.pipeline import source_video_path
             return source_video_path(work_dir) or ""
@@ -804,6 +891,16 @@ class NewProjectPage(BasePage):
                          and os.path.isfile(self._prefetched_path)
                       else None)
 
+        resume_target = data["resume_dir"] if source == "resume" else None
+        if source == "url" and not resume_target and data.get("url"):
+            try:
+                from autodub.pipeline import find_existing_project_by_url
+                settings = self._settings_provider() if callable(getattr(self, "_settings_provider", None)) else None
+                out_dir = (settings.output_dir if settings else None) or "output"
+                resume_target = find_existing_project_by_url(out_dir, data["url"])
+            except Exception:
+                pass
+
         return DubRequest(
             url=data["url"] if source == "url" else None,
             file_path=(prefetched if prefetched
@@ -814,7 +911,7 @@ class NewProjectPage(BasePage):
             bg_mode=data["bg_mode"],
             bg_duck_db=data["bg_duck_db"],
             skip_video=data["skip_video"],
-            resume_dir=data["resume_dir"] if source == "resume" else None,
+            resume_dir=resume_target,
             subtitle_mode=data["subtitle_mode"],
             blur_regions=list(self._blur_regions),
             subtitle_style=(self._subtitle_style
@@ -1348,7 +1445,7 @@ class NewProjectPage(BasePage):
     def _toggle_log(self) -> None:
         new_vis = self.log.isHidden()
         self.log.setVisible(new_vis)
-        self.btn_toggle_log.setText("Ẩn nhật ký xử lý" if new_vis else "📜 Xem nhật ký xử lý")
+        self.btn_toggle_log.setText("Ẩn nhật ký xử lý" if new_vis else "Xem nhật ký xử lý")
 
     def _set_running(self, running: bool) -> None:
         is_completed = hasattr(self, "social_card") and not self.social_card.isHidden()
@@ -1359,7 +1456,7 @@ class NewProjectPage(BasePage):
             self.log.setVisible(False)
             if hasattr(self, "btn_toggle_log"):
                 self.btn_toggle_log.setVisible(True)
-                self.btn_toggle_log.setText("📜 Xem nhật ký xử lý")
+                self.btn_toggle_log.setText("Xem nhật ký xử lý")
             if hasattr(self, "_left_title") and self._left_title.count() > 0:
                 self._left_title.itemAt(0).widget().setText("Kết quả lồng tiếng & Đăng bài")
         else:
@@ -1474,7 +1571,7 @@ class NewProjectPage(BasePage):
         self.log.setVisible(False)
         if hasattr(self, "btn_toggle_log"):
             self.btn_toggle_log.setVisible(True)
-            self.btn_toggle_log.setText("📜 Xem nhật ký xử lý")
+            self.btn_toggle_log.setText("Xem nhật ký xử lý")
         if hasattr(self, "_left_title") and self._left_title.count() > 0:
             self._left_title.itemAt(0).widget().setText("Kết quả lồng tiếng & Đăng bài")
 

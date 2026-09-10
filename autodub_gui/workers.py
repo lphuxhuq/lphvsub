@@ -68,7 +68,7 @@ class DubWorker(QThread):
     cancelled = Signal()
 
     def __init__(self, settings: Settings, request: DubRequest, parent=None):
-        super().__init__(parent)
+        super().__init__(None)
         self._settings = settings
         self._request = request
         self._cancel_event = threading.Event()
@@ -367,7 +367,7 @@ class BatchWorker(QThread):
     def __init__(self, settings: Settings, req_template: DubRequest,
                  items: list, retry_done: bool = False, reuse_tts: bool = True,
                  concurrency: int = 1, export_dir: str | None = None, parent=None):
-        super().__init__(parent)
+        super().__init__(None)
         self._settings = settings
         self._template = req_template
         self._items = items          # list[BatchItem] (or pasted text lines)
@@ -623,7 +623,7 @@ class DownloadWorker(QThread):
                  cookies_from_browser: str | None = None,
                  cookies_file: str | None = None,
                  max_workers: int | None = None, parent=None):
-        super().__init__(parent)
+        super().__init__(None)
         self._urls = urls
         self._output_dir = output_dir
         self._cookies_browser = cookies_from_browser or None
@@ -655,9 +655,15 @@ class DownloadWorker(QThread):
                         self.cancelled.emit()
                         return
                     self.item_status.emit(i, total, url, "start", "")
+
+                    def _dl_cb(pct: float, msg: str, _idx=i, _u=url) -> None:
+                        if not self._cancel_event.is_set():
+                            self.item_status.emit(_idx, total, _u, "start", msg)
+
                     try:
                         entry = download_one(url, self._output_dir,
-                                             self._cookies_browser, self._cookies_file)
+                                             self._cookies_browser, self._cookies_file,
+                                             progress_cb=_dl_cb)
                         success += 1
                         self.item_status.emit(i, total, url, "success", entry["filepath"])
                     except Exception as e:  # noqa: BLE001 — per-item failure
@@ -675,10 +681,16 @@ class DownloadWorker(QThread):
                     if self._cancel_event.is_set():
                         return "cancelled"
                     self.item_status.emit(i, total, url, "start", "")
+
+                    def _dl_cb(pct: float, msg: str, _idx=i, _u=url) -> None:
+                        if not self._cancel_event.is_set():
+                            self.item_status.emit(_idx, total, _u, "start", msg)
+
                     try:
                         entry = download_one_isolated(
                             url, self._output_dir,
-                            self._cookies_browser, self._cookies_file)
+                            self._cookies_browser, self._cookies_file,
+                            progress_cb=_dl_cb)
                     except Exception as e:  # noqa: BLE001 — per-item failure
                         self.item_status.emit(i, total, url, "failed",
                                               str(e)[:200])
@@ -849,11 +861,17 @@ class PrefetchWorker(QThread):
     để xem trước ngay, không phải đợi pipeline chạy.
     """
 
-    finished_ok = Signal(str)   # đường dẫn file vừa tải về
-    failed = Signal(str)        # lý do thất bại
+    progress = Signal(float, str)        # (pct 0.0-1.0, message)
+    finished_ok = Signal(str)            # (file_path,)
+    failed = Signal(str)                 # (error_message,)
+
+    progress_url = Signal(str, float, str)  # (url, pct, message)
+    finished_ok_url = Signal(str, str)      # (url, file_path)
+    failed_url = Signal(str, str)           # (url, error_message)
 
     def __init__(self, url: str, output_dir: str, parent=None):
-        super().__init__(parent)
+        # Tránh gán QWidget làm parent của QThread để tuân thủ Qt thread affinity
+        super().__init__(None)
         self._url = url
         self._output_dir = output_dir
         self._cancel_event = threading.Event()
@@ -862,17 +880,29 @@ class PrefetchWorker(QThread):
         self._cancel_event.set()
 
     def run(self) -> None:
-        from autodub.media.downloader import download_video
-        from autodub.utils import ensure_dir
+        def _on_progress(pct: float, msg: str):
+            if not self._cancel_event.is_set():
+                self.progress.emit(pct, msg)
+                self.progress_url.emit(self._url, pct, msg)
 
         try:
+            from autodub.media.downloader import download_video
+            from autodub.utils import ensure_dir
+
             ensure_dir(self._output_dir)
-            path = download_video(self._url, self._output_dir)
+            path = download_video(self._url, self._output_dir, progress_cb=_on_progress)
             if not self._cancel_event.is_set():
                 self.finished_ok.emit(path)
+                self.finished_ok_url.emit(self._url, path)
         except Exception as e:  # noqa: BLE001
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
+                self.failed_url.emit(self._url, str(e))
+        except BaseException as be:
+            if not self._cancel_event.is_set():
+                err_msg = f"Lỗi hệ thống khi tải: {be}"
+                self.failed.emit(err_msg)
+                self.failed_url.emit(self._url, err_msg)
 
 
 class ExportSubsFileWorker(QThread):

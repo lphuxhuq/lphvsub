@@ -164,9 +164,11 @@ def test_merge_video_ffmpeg_progress(tmp_path, caplog):
     mock_proc.stderr = []
     mock_proc.returncode = 0
     mock_proc.wait.return_value = 0
+    mock_proc.communicate.return_value = ("", "")
 
     with patch("autodub.media.video.probe_duration_s", return_value=10.0), \
-         patch("subprocess.Popen", return_value=mock_proc):
+         patch("autodub.media.video.video_encoder_name", return_value="CPU (libx264)"), \
+         patch("autodub.media.video.subprocess.Popen", return_value=mock_proc):
         merge_video(video_path, audio_path, output_path, progress_cb=on_progress, randomize_metadata=False)
 
     log_text = "\n".join([rec.message for rec in caplog.records if rec.name == "autodub.video_merger"])

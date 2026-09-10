@@ -5,10 +5,12 @@ import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QPlainTextEdit, QVBoxLayout, QWidget,
+    QApplication, QHBoxLayout, QLabel, QPlainTextEdit, QScrollArea,
+    QVBoxLayout, QWidget,
 )
 
 from autodub_gui import icons, tokens
+from autodub_gui.ui.style import clear_background
 from autodub_gui.pages import BasePage
 from autodub_gui.run_state import REGISTRY, ActiveJob
 from autodub_gui.system_open import open_file, open_folder, reveal_file
@@ -73,12 +75,22 @@ class DownloadPage(BasePage):
 
     # -- Dựng giao diện ------------------------------------------------
     def _build(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_2,
-                                _PAGE_MARGIN, tokens.SP_5)
-        root.setSpacing(tokens.SP_4)
-        root.addWidget(self._build_input_card())
-        root.addLayout(self._build_actions())
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        clear_background(scroll)
+        clear_background(scroll.viewport())
+
+        body = QWidget()
+        clear_background(body)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(_PAGE_MARGIN, tokens.SP_2,
+                                  _PAGE_MARGIN, tokens.SP_5)
+        layout.setSpacing(tokens.SP_4)
+        layout.addWidget(self._build_input_card())
+        layout.addLayout(self._build_actions())
 
         self.table = DataTable(
             [Column("Liên kết", stretch=True),
@@ -87,11 +99,17 @@ class DownloadPage(BasePage):
             empty_title="Chưa tải liên kết nào",
             empty_description="Dán liên kết vào ô phía trên rồi bấm Tải xuống. "
                               "Kết quả từng liên kết sẽ hiện ở đây.")
-        root.addWidget(self.table, 1)
+        self.table.setMinimumHeight(220)
+        layout.addWidget(self.table, 1)
 
         self.log = LogPanel()
-        self.log.setMaximumHeight(110)
-        root.addWidget(self.log)
+        self.log.setMaximumHeight(140)
+        layout.addWidget(self.log)
+
+        scroll.setWidget(body)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(scroll)
 
     def _build_input_card(self) -> QWidget:
         card = Card(padding=tokens.SP_4)

@@ -42,3 +42,15 @@ def test_pipeline_save_transcript_is_module_level():
     assert callable(p.save_transcript)
 
 
+def test_pipeline_run_impl_does_not_shadow_save_transcript():
+    from autodub.pipeline import DubPipeline
+    code = DubPipeline._run_impl.__code__
+    assert "save_transcript" not in code.co_varnames, (
+        "save_transcript must not be a local variable in _run_impl to avoid UnboundLocalError on resume"
+    )
+    assert "save_transcript" in code.co_names, (
+        "save_transcript must be resolved via module globals in _run_impl"
+    )
+
+
+

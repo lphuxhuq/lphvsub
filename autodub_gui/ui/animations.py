@@ -36,12 +36,19 @@ def fade_in(widget: QWidget, duration: int = tokens.ANIM_MID,
     Tạo QGraphicsOpacityEffect nếu chưa có. Widget giữ effect sau khi
     animation kết thúc — gọi lại để fade in lần sau vẫn đúng.
     """
+    old_anim = getattr(widget, "_active_fade_anim", None)
+    if old_anim is not None:
+        try:
+            old_anim.stop()
+        except Exception:
+            pass
     effect = _ensure_opacity_effect(widget)
     anim = QPropertyAnimation(effect, b"opacity", widget)
     anim.setDuration(duration)
     anim.setStartValue(from_opacity)
     anim.setEndValue(1.0)
     anim.setEasingCurve(_EASE_OUT_CUBIC)
+    widget._active_fade_anim = anim
     anim.start()
     return anim
 
@@ -49,6 +56,12 @@ def fade_in(widget: QWidget, duration: int = tokens.ANIM_MID,
 def fade_out(widget: QWidget, duration: int = tokens.ANIM_MID,
              on_finished: object = None) -> QPropertyAnimation:
     """Fade out một widget → transparent. Tùy chọn callback khi xong."""
+    old_anim = getattr(widget, "_active_fade_anim", None)
+    if old_anim is not None:
+        try:
+            old_anim.stop()
+        except Exception:
+            pass
     effect = _ensure_opacity_effect(widget)
     anim = QPropertyAnimation(effect, b"opacity", widget)
     anim.setDuration(duration)
@@ -57,6 +70,7 @@ def fade_out(widget: QWidget, duration: int = tokens.ANIM_MID,
     anim.setEasingCurve(_EASE_OUT_CUBIC)
     if on_finished:
         anim.finished.connect(on_finished)
+    widget._active_fade_anim = anim
     anim.start()
     return anim
 

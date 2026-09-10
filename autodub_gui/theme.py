@@ -88,6 +88,57 @@ _ARROW_UP_S = _triangle_asset("arrow_up_s", 8, 5, _t.TEXT_SECONDARY, up=True)
 _ARROW_DOWN_S = _triangle_asset("arrow_down_s", 8, 5, _t.TEXT_SECONDARY)
 
 
+def _check_asset(name: str, w: int, h: int, color: str) -> str:
+    """Vẽ dấu tích checkmark ra tệp PNG rồi trả về đường dẫn dùng trong QSS."""
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
+
+    folder = _os.path.join(_os.path.expanduser("~"), ".voxdub_cache", "ui")
+    _os.makedirs(folder, exist_ok=True)
+    path = _os.path.join(folder, f"{name}.png")
+    image = QImage(w, h, QImage.Format.Format_ARGB32)
+    image.fill(0)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color), 1.8)
+    pen.setCapStyle(_Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(_Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(_Qt.BrushStyle.NoBrush)
+    path_obj = QPainterPath()
+    path_obj.moveTo(w * 0.18, h * 0.52)
+    path_obj.lineTo(w * 0.42, h * 0.82)
+    path_obj.lineTo(w * 0.84, h * 0.22)
+    painter.drawPath(path_obj)
+    painter.end()
+    image.save(path)
+    return path.replace("\\", "/")
+
+
+def _dot_asset(name: str, size: int, color: str) -> str:
+    """Vẽ chấm tròn ra tệp PNG cho radio button checked."""
+    from PySide6.QtCore import QPointF, Qt as _Qt
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    folder = _os.path.join(_os.path.expanduser("~"), ".voxdub_cache", "ui")
+    _os.makedirs(folder, exist_ok=True)
+    path = _os.path.join(folder, f"{name}.png")
+    image = QImage(size, size, QImage.Format.Format_ARGB32)
+    image.fill(0)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(_Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(color))
+    painter.drawEllipse(QPointF(size / 2, size / 2), size * 0.35, size * 0.35)
+    painter.end()
+    image.save(path)
+    return path.replace("\\", "/")
+
+
+_CHECK_ICON = _check_asset("checkbox_checked", 12, 12, _t.TEXT_ON_ACCENT)
+_RADIO_DOT = _dot_asset("radio_checked", 12, _t.TEXT_ON_ACCENT)
+
+
 # ---------------------------------------------------------------------------
 # STYLESHEET — Bảng kiểu QSS chuẩn hóa cho toàn ứng dụng NovaSub
 #
@@ -171,6 +222,11 @@ QFrame#sidebarCard {{
     border: 1px solid {_t.BORDER_SUBTLE};
     border-top: 1px solid {_t.GLASS_BORDER};
     border-radius: {_t.RADIUS_MD}px;
+}}
+QFrame#sidebarCard:hover {{
+    background: {_t.BG_PANEL_HOVER};
+    border-color: {_t.BORDER_DEFAULT};
+    border-top-color: {_t.GLASS_HIGHLIGHT};
 }}
 QFrame#banner {{
     background: {_t.BG_PANEL};
@@ -313,9 +369,15 @@ QCheckBox::indicator, QRadioButton::indicator {{
 QRadioButton::indicator {{
     border-radius: 9px;
 }}
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+QCheckBox::indicator:checked {{
     background: {_t.PRIMARY};
     border-color: {_t.PRIMARY};
+    image: url("{_CHECK_ICON}");
+}}
+QRadioButton::indicator:checked {{
+    background: {_t.PRIMARY};
+    border-color: {_t.PRIMARY};
+    image: url("{_RADIO_DOT}");
 }}
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
     border-color: {_t.BORDER_ACTIVE};

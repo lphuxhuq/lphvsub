@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
     QSizePolicy, QVBoxLayout, QWidget,
@@ -127,33 +127,57 @@ class VideoPreviewLoaderDialog(QDialog):
         from autodub.config import cache_dir
         from autodub_gui.workers import PrefetchWorker
         out_dir = os.path.join(cache_dir(), "preview_videos")
-        self._worker = PrefetchWorker(self._url, out_dir, self)
-        self._worker.finished_ok.connect(self._on_finished)
-        self._worker.failed.connect(self._on_failed)
+        self._worker = PrefetchWorker(self._url, out_dir)
+        self._worker.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
+        self._worker.finished_ok.connect(self._on_finished, Qt.ConnectionType.QueuedConnection)
+        self._worker.failed.connect(self._on_failed, Qt.ConnectionType.QueuedConnection)
+        self._worker.finished.connect(self._worker.deleteLater)
         self._worker.start()
 
-    def _on_finished(self, path: str):
+    @Slot(str, float, str)
+    @Slot(float, str)
+    def _on_progress(self, *args):
+        pct = args[1] if len(args) == 3 else args[0]
+        msg = args[2] if len(args) == 3 else args[1]
+        self.pbar.setRange(0, 100)
+        self.pbar.setValue(int(max(0.0, min(1.0, pct)) * 100))
+        if msg:
+            self.pbar.setToolTip(msg)
+
+    @Slot(str, str)
+    @Slot(str)
+    def _on_finished(self, *args):
+        path = args[1] if len(args) == 2 else args[0]
         self.video_path = path
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(500)
         self.accept()
 
-    def _on_failed(self, _err: str):
+    @Slot(str, str)
+    @Slot(str)
+    def _on_failed(self, *args):
         self.video_path = None
+        if self._worker and self._worker.isRunning():
+            self._worker.wait(500)
         self.accept()
 
     def _skip_waiting(self):
         if self._worker:
             self._worker.cancel()
+            self._worker.wait(500)
         self.video_path = None
         self.accept()
 
     def _cancel(self):
         if self._worker:
             self._worker.cancel()
+            self._worker.wait(500)
         self.reject()
 
     def closeEvent(self, event):
         if self._worker:
             self._worker.cancel()
+            self._worker.wait(500)
         super().closeEvent(event)
 
 
@@ -188,6 +212,10 @@ class VideoStep(_StepPanel):
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
             f"background: transparent;")
         self.body.addWidget(self.url_badge)
+
+        from autodub_gui.ui.progress import DownloadProgressBar
+        self.download_progress = DownloadProgressBar(self)
+        self.body.addWidget(self.download_progress)
 
         self.concurrency_slider = LabeledSlider(
             "Số luồng xử lý song song", 1.0, 4.0, 1.0,
@@ -256,6 +284,9 @@ class VideoStep(_StepPanel):
     def _on_source(self, key: str) -> None:
         self.url.setVisible(key == "url")
         self.url_badge.setVisible(key == "url")
+        self.download_progress.setVisible(key == "url" and self.download_progress.bar.value() > 0)
+        if key != "url":
+            self.download_progress.reset()
         has_multi = key == "url" and len(self.urls()) > 1
         self.concurrency_slider.setVisible(has_multi)
         self.setup_section.setVisible(has_multi)
@@ -265,28 +296,78 @@ class VideoStep(_StepPanel):
         self.resume_row.setVisible(key == "resume")
         self.changed.emit()
 
+    def _cleanup_finished_workers(self) -> None:
+        self._prefetch_workers = [w for w in self._prefetch_workers if w.isRunning()]
+
     def _auto_prefetch_urls(self) -> None:
         """Tự động tải video ngầm từ các link vừa nhập để người dùng mở xem trước ngay không cần chờ."""
         if self.source.current_key() != "url":
+            self.download_progress.reset()
             return
         from autodub.config import cache_dir
         from autodub_gui.workers import PrefetchWorker
 
         urls = self.urls()
-        if len(urls) <= 1:
-            return  # Single URL is prefetched by NewProjectPage when clicking Next
+        if not urls:
+            self.download_progress.reset()
+            return
 
         out_dir = os.path.join(cache_dir(), "preview_videos")
+
+        # Hủy các worker cũ và loại bỏ worker đã xong khỏi danh sách
+        for w in self._prefetch_workers:
+            if w.isRunning():
+                w.cancel()
+        self._cleanup_finished_workers()
+
         for u in urls:
             if u and u.startswith(("http://", "https://")):
-                if u not in self._prefetched_paths or not os.path.isfile(self._prefetched_paths[u]):
-                    worker = PrefetchWorker(u, out_dir, self)
-                    worker.finished_ok.connect(lambda p, url=u: self._on_prefetch_done(url, p))
-                    self._prefetch_workers.append(worker)
-                    worker.start()
+                if u in self._prefetched_paths and os.path.isfile(self._prefetched_paths[u]):
+                    if len(urls) == 1:
+                        self.download_progress.set_progress(1.0, "Đã có sẵn video!")
+                        self.url_badge.setText("Đã tải sẵn video — Bạn có thể tiếp tục ngay!")
+                        self.url_badge.setStyleSheet(
+                            f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; font-weight: bold;"
+                        )
+                    continue
 
+                if len(urls) == 1:
+                    self.download_progress.set_progress(0.01, "Đang kết nối tải video...")
+
+                worker = PrefetchWorker(u, out_dir)
+                worker.progress_url.connect(self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection)
+                worker.finished_ok_url.connect(self._on_prefetch_done, Qt.ConnectionType.QueuedConnection)
+                worker.failed_url.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
+                worker.finished.connect(worker.deleteLater)
+                self._prefetch_workers.append(worker)
+                worker.start()
+
+    @Slot(str, float, str)
+    def _on_prefetch_progress(self, url: str, pct: float, msg: str) -> None:
+        urls = self.urls()
+        if len(urls) == 1 and urls[0] == url:
+            self.download_progress.set_progress(pct, msg)
+
+    @Slot(str, str)
+    def _on_prefetch_failed(self, url: str, err: str) -> None:
+        urls = self.urls()
+        if len(urls) == 1 and urls[0] == url:
+            self.download_progress.lbl_status.setText(f"Lỗi tải: {err[:60]}")
+            self.url_badge.setText(f"Tải video thất bại: {err[:60]}")
+            self.url_badge.setStyleSheet(
+                f"color: {tokens.DANGER}; font-size: {tokens.FS_META}px;"
+            )
+
+    @Slot(str, str)
     def _on_prefetch_done(self, url: str, path: str) -> None:
         self._prefetched_paths[url] = path
+        urls = self.urls()
+        if len(urls) == 1 and urls[0] == url:
+            self.download_progress.set_progress(1.0, "Đã tải xong video!")
+            self.url_badge.setText("Đã tải sẵn video — Bạn có thể tiếp tục ngay!")
+            self.url_badge.setStyleSheet(
+                f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; font-weight: bold;"
+            )
         self._refresh_setup_table()
 
     def _on_url_changed(self) -> None:
@@ -294,15 +375,42 @@ class VideoStep(_StepPanel):
         n = len(urls)
         if n == 0:
             self.url_badge.setText("")
+            self.download_progress.reset()
             self.concurrency_slider.setVisible(False)
             self.setup_section.setVisible(False)
         elif n == 1:
-            self.url_badge.setText("1 liên kết video (đang tự động tải ngầm...)")
+            u = urls[0]
+            existing = None
+            try:
+                from autodub.pipeline import find_existing_project_by_url
+                from autodub.config import Settings
+                s = Settings.load()
+                out_dir = getattr(s, "output_dir", None) or "output"
+                existing = find_existing_project_by_url(out_dir, u)
+            except Exception:
+                pass
+
+            if existing:
+                f_name = os.path.basename(os.path.normpath(existing))
+                self.url_badge.setText(
+                    f"Đã có dự án trước đó: {f_name} (sẽ tự động tiếp tục các bước đã xong)"
+                )
+                self.url_badge.setStyleSheet(
+                    f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; font-weight: bold;"
+                )
+            else:
+                self.url_badge.setText("1 liên kết video (đang tự động tải ngầm...)")
+                self.url_badge.setStyleSheet(
+                    f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px;"
+                )
             self.concurrency_slider.setVisible(False)
             self.setup_section.setVisible(False)
         else:
             self.url_badge.setText(
                 f"Đã nhập {n} liên kết video (Chế độ xử lý đa luồng — đang tự động tải ngầm...)")
+            self.url_badge.setStyleSheet(
+                f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px;"
+            )
             is_url = self.source.current_key() == "url"
             self.concurrency_slider.setVisible(is_url)
             self.setup_section.setVisible(is_url)
@@ -1177,7 +1285,7 @@ class VoiceStep(_StepPanel):
         ckpt_layout.setContentsMargins(10, 6, 10, 6)
         ckpt_layout.setSpacing(8)
 
-        lbl_ckpt = QLabel("🔖 Checkpoint:")
+        lbl_ckpt = QLabel("Checkpoint:")
         lbl_ckpt.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-weight: 600; font-size: {tokens.FS_BODY}px;"
         )
@@ -1189,17 +1297,17 @@ class VoiceStep(_StepPanel):
         polish_combo(self.cb_checkpoints)
         ckpt_layout.addWidget(self.cb_checkpoints, 1)
 
-        self.btn_load_ckpt = GhostButton("⚡ Nạp")
+        self.btn_load_ckpt = GhostButton("Nạp")
         self.btn_load_ckpt.setToolTip("Nạp toàn bộ thiết lập từ Checkpoint đang chọn")
         self.btn_load_ckpt.clicked.connect(self._on_load_checkpoint_clicked)
         ckpt_layout.addWidget(self.btn_load_ckpt)
 
-        self.btn_save_ckpt = PrimaryButton("💾 Lưu")
+        self.btn_save_ckpt = PrimaryButton("Lưu")
         self.btn_save_ckpt.setToolTip("Lưu toàn bộ thiết lập hiện tại thành Checkpoint (theo tên kênh)")
         self.btn_save_ckpt.clicked.connect(self._on_save_checkpoint_clicked)
         ckpt_layout.addWidget(self.btn_save_ckpt)
 
-        self.btn_del_ckpt = GhostButton("🗑️")
+        self.btn_del_ckpt = GhostButton("Xóa")
         self.btn_del_ckpt.setToolTip("Xóa Checkpoint đang chọn")
         self.btn_del_ckpt.clicked.connect(self._on_delete_checkpoint_clicked)
         ckpt_layout.addWidget(self.btn_del_ckpt)

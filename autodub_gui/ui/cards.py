@@ -112,9 +112,12 @@ class ThumbnailLabel(QLabel):
         if self._show_play:
             overlay = QColor(0, 0, 0, _PLAY_ALPHA)
             painter.fillRect(rect, overlay)
-            play = icons.play(tokens.TEXT_ON_ACCENT).pixmap(30, 30)
-            painter.drawPixmap((self.width() - 30) // 2,
-                               (self.height() - 30) // 2, play)
+            cx, cy = self.width() // 2, self.height() // 2
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 160))
+            painter.drawEllipse(cx - 22, cy - 22, 44, 44)
+            play = icons.play(tokens.TEXT_ON_ACCENT).pixmap(24, 24)
+            painter.drawPixmap(cx - 12, cy - 12, play)
 
         if self._duration > 0:
             text = format_duration(self._duration)

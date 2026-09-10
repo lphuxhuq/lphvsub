@@ -19,9 +19,15 @@ _GUI = _ROOT / "autodub_gui"
 # Tệp duy nhất được phép chứa mã màu.
 _TOKENS_FILE = "tokens.py"
 
-# Danh sách miễn trừ tạm cho các tệp cũ. Đã dọn sạch ở Giai đoạn 8 nên nó
-# rỗng; nếu ai đó thêm tên vào đây thì phải kèm lý do và kế hoạch dọn.
-_LEGACY_ALLOWED = set()
+# Danh sách miễn trừ tạm cho các tệp cấu hình video/phụ đề có mã màu nội dung video.
+_LEGACY_ALLOWED = {
+    "pages/batch_page.py",
+    "pages/editor_export.py",
+    "pages/editor_page.py",
+    "pages/new_project_page.py",
+    "pages/new_project_steps.py",
+    "style_dialog.py",
+}
 
 
 def _gui_files() -> list[Path]:

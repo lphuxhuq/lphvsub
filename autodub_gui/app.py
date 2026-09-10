@@ -29,7 +29,7 @@ from autodub_gui.ui.toast import TOASTS
 
 APP_NAME = "NovaSub"
 APP_TAGLINE = "Lồng tiếng AI · Phụ đề chuyên nghiệp"
-APP_VERSION = "3.0.0"
+from autodub import __version__ as APP_VERSION
 
 # -- Danh mục trang ----------------------------------------------------
 ROW_HOME, ROW_NEW, ROW_PROJECTS, ROW_BATCH, ROW_DOWNLOAD = 0, 1, 2, 3, 4
@@ -123,6 +123,8 @@ class MainWindow(QMainWindow):
     """Cửa sổ chính: thanh bên, thanh tiêu đề và vùng nội dung."""
 
     breakpoint_changed = Signal(str)
+    model_preload_step = Signal(str, str)
+    model_preload_done = Signal(dict)
 
     def __init__(self) -> None:
         super().__init__()
@@ -134,6 +136,9 @@ class MainWindow(QMainWindow):
         self._force_close = False
         self._breakpoint = ""
         self._page_widgets: dict[int, QWidget] = {}
+
+        self.model_preload_step.connect(self._on_model_preload_step)
+        self.model_preload_done.connect(self._on_model_preload_done)
 
         central = QWidget()
         panel_background(central, tokens.BG_APP)
@@ -181,8 +186,8 @@ class MainWindow(QMainWindow):
             settings = self._fresh_settings()
             preload_models_async(
                 settings,
-                on_step=self._on_model_preload_step,
-                on_done=self._on_model_preload_done,
+                on_step=self.model_preload_step.emit,
+                on_done=self.model_preload_done.emit,
             )
         except Exception:
             pass
@@ -197,10 +202,10 @@ class MainWindow(QMainWindow):
         }
         name = labels.get(key, key)
         if status == "ready":
-            self.statusBar().showMessage(f"⚡ Model AI: {name} đã sẵn sàng", 3000)
+            self.statusBar().showMessage(f"Model AI: {name} đã sẵn sàng", 3000)
 
     def _on_model_preload_done(self, final_status: dict[str, str]) -> None:
-        self.statusBar().showMessage("⚡ Toàn bộ Model AI đã sẵn sàng (Không còn độ trễ chờ nạp)", 8000)
+        self.statusBar().showMessage("Toàn bộ Model AI đã sẵn sàng (Không còn độ trễ chờ nạp)", 8000)
 
     def _prewarm_next(self) -> None:
         while self._prewarm_queue:
@@ -370,6 +375,8 @@ class MainWindow(QMainWindow):
             self.sidebar.select_row(self._row_of(current))
             return
         page = self._ensure_page(row)
+        if current is page:
+            return
         self.pages.setCurrentWidget(page)
         self.sidebar.select_row(row)
         self._apply_header(row)
@@ -377,12 +384,11 @@ class MainWindow(QMainWindow):
             page.on_shown()
         if self._breakpoint and hasattr(page, "on_breakpoint"):
             page.on_breakpoint(self._breakpoint)
-        # Fade in trang mới — motivated: state transition, user cần biết
-        # đang ở trang mới. Chỉ fade page mới, không fade-out cũ.
+        # Fade in trang mới — motivated: state transition mượt mà, không chớp nháy
         try:
             from autodub_gui.ui.animations import fade_in
             from autodub_gui import tokens as _tk
-            fade_in(page, duration=_tk.ANIM_SLOW, from_opacity=0.0)
+            fade_in(page, duration=_tk.ANIM_MID, from_opacity=0.2)
         except Exception:  # noqa: BLE001 — animation không critical
             pass
 
@@ -416,11 +422,12 @@ class MainWindow(QMainWindow):
         """Các nút riêng của từng trang trên thanh tiêu đề (dựng mới mỗi lần)."""
         if row != ROW_HOME:
             return []
+        from autodub_gui import icons, tokens
         from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 
-        btn_import = GhostButton("Nhập video")
+        btn_import = GhostButton("Nhập video", icon=icons.folder(tokens.TEXT_SECONDARY))
         btn_import.clicked.connect(self._browse_home_video)
-        btn_new = PrimaryButton("+ Tạo dự án mới")
+        btn_new = PrimaryButton("Tạo dự án mới", icon=icons.file_plus(tokens.TEXT_ON_ACCENT))
         btn_new.clicked.connect(lambda: self._start_new_project())
         return [btn_import, btn_new]
 

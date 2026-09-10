@@ -422,3 +422,44 @@ def test_checked_json_raises_on_nonzero_ret():
     with pytest.raises(CapCutAPIError) as excinfo:
         _checked_json_response(_Resp(), "create_tts_task")
     assert "shark block" in str(excinfo.value).lower()
+
+
+def test_query_tts_task_rate_limit_3100_retries_and_succeeds(monkeypatch):
+    from autodub.speech.tts.capcut_api.client import CapCutClient
+    from autodub.speech.tts.capcut_api.exceptions import CapCutAPIError
+
+    client = CapCutClient(device={"device_id": "1234567890123456789"})
+    monkeypatch.setattr(client, "create_tts_task", lambda *a, **k: {
+        "data": {"tasks": [{"id": "task_1", "token": "tok_1"}]}
+    })
+
+    attempts = 0
+
+    def mock_query(task_id, token, bind_id=""):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise CapCutAPIError("query_tts_task ret=3100: task rate limit", status_code=200)
+        return {
+            "data": {
+                "tasks": [{
+                    "status": "success",
+                    "speech_url": "https://example.invalid/done.mp3"
+                }]
+            }
+        }
+
+    monkeypatch.setattr(client, "query_tts_task", mock_query)
+    import time
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    task = client.generate_speech("câu kiểm tra", wait=True)
+    assert task["speech_url"] == "https://example.invalid/done.mp3"
+    assert attempts == 3
+
+
+def test_is_rate_limited_matches_3100():
+    from autodub.speech.tts.capcut_vi import _is_rate_limited
+    e = Exception("query_tts_task ret=3100: task rate limit")
+    assert _is_rate_limited(e) is True
+

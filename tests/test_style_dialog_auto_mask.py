@@ -44,6 +44,7 @@ def test_style_dialog_auto_detect_button(qapp, tmp_path, monkeypatch):
         hardsub_detector, "detect_hardsub_regions",
         lambda p: [{"x": 0.15, "y": 0.82, "w": 0.70, "h": 0.10}]
     )
+    monkeypatch.setattr("autodub_gui.style_dialog.extract_frame", lambda *a, **k: "")
 
     dialog = StyleDialog(video_path, Settings().subtitle_style())
     dialog.btn_auto_detect.click()

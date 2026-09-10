@@ -113,8 +113,11 @@ class ProjectsPage(BasePage):
     def _build_grid_page(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        clear_background(scroll)
+        clear_background(scroll.viewport())
         holder = QWidget()
         clear_background(holder)
         layout = QVBoxLayout(holder)

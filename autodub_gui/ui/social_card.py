@@ -61,7 +61,7 @@ class SocialMetadataCard(QFrame):
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
 
-        self.lbl_status = QLabel("🎉 Đã xuất video hoàn tất & tạo nội dung đăng bài")
+        self.lbl_status = QLabel("Đã xuất video hoàn tất & tạo nội dung đăng bài")
         self.lbl_status.setStyleSheet(
             f"color: {tokens.SUCCESS}; font-size: {tokens.FS_BODY}px; font-weight: 600;"
         )
@@ -98,7 +98,7 @@ class SocialMetadataCard(QFrame):
         self.lbl_thumb_preview.mousePressEvent = lambda _e: self.open_thumb_requested.emit()
         thumb_layout.addWidget(self.lbl_thumb_preview)
 
-        self.btn_studio = GhostButton("🎨 Sửa ảnh bìa")
+        self.btn_studio = GhostButton("Sửa ảnh bìa")
         self.btn_studio.setToolTip("Mở Studio thiết kế ảnh bìa 3D High-CTR")
         self.btn_studio.clicked.connect(self.open_studio_requested.emit)
         thumb_layout.addWidget(self.btn_studio)
@@ -116,7 +116,7 @@ class SocialMetadataCard(QFrame):
 
         # 2.1 Tiêu đề
         title_header = QHBoxLayout()
-        lbl_title_tag = QLabel("📌 Tiêu đề video")
+        lbl_title_tag = QLabel("Tiêu đề video")
         lbl_title_tag.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; font-weight: 600;"
         )
@@ -142,7 +142,7 @@ class SocialMetadataCard(QFrame):
 
         # 2.2 Caption / Mô tả
         caption_header = QHBoxLayout()
-        lbl_caption_tag = QLabel("💬 Caption / Mô tả")
+        lbl_caption_tag = QLabel("Caption / Mô tả")
         lbl_caption_tag.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; font-weight: 600;"
         )
@@ -168,7 +168,7 @@ class SocialMetadataCard(QFrame):
 
         # 2.3 Hashtags
         tags_header = QHBoxLayout()
-        lbl_tags_tag = QLabel("🏷️ Hashtags")
+        lbl_tags_tag = QLabel("Hashtags")
         lbl_tags_tag.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; font-weight: 600;"
         )
@@ -197,22 +197,22 @@ class SocialMetadataCard(QFrame):
         actions_row = QHBoxLayout()
         actions_row.setSpacing(tokens.SP_2)
 
-        self.btn_copy_all = PrimaryButton("📄 Chép Toàn bộ")
+        self.btn_copy_all = PrimaryButton("Chép Toàn bộ")
         self.btn_copy_all.setToolTip("Sao chép Tiêu đề, Caption và Hashtags vào Clipboard để đăng bài ngay")
         self.btn_copy_all.clicked.connect(self._copy_all)
         actions_row.addWidget(self.btn_copy_all)
 
-        self.btn_open_video = GhostButton("🎬 Mở video")
+        self.btn_open_video = GhostButton("Mở video")
         self.btn_open_video.setToolTip("Mở xem video kết quả bằng trình phát mặc định")
         self.btn_open_video.clicked.connect(self._on_open_video)
         actions_row.addWidget(self.btn_open_video)
 
-        self.btn_open_folder = GhostButton("📁 Mở thư mục")
+        self.btn_open_folder = GhostButton("Mở thư mục")
         self.btn_open_folder.setToolTip("Mở thư mục chứa video và chọn sẵn tệp video trong File Explorer")
         self.btn_open_folder.clicked.connect(self._on_open_folder)
         actions_row.addWidget(self.btn_open_folder)
 
-        self.btn_edit = GhostButton("✏️ Chỉnh sửa dự án")
+        self.btn_edit = GhostButton("Chỉnh sửa dự án")
         self.btn_edit.setToolTip("Chuyển sang Trình chỉnh sửa Studio để tinh chỉnh phụ đề / âm thanh")
         self.btn_edit.clicked.connect(self.edit_requested.emit)
         actions_row.addWidget(self.btn_edit)
@@ -240,7 +240,7 @@ class SocialMetadataCard(QFrame):
         # Tên tệp
         name = video_name or (os.path.basename(video_path) if video_path else "")
         if name:
-            detail = f"🎬 {name}"
+            detail = f"{name}"
             if segments_count > 0:
                 detail += f" ({segments_count} câu)"
             self.lbl_video_filename.setText(detail)
@@ -377,7 +377,7 @@ class SocialMetadataCard(QFrame):
 
         # Phản hồi thị giác tức thì
         orig_text = button.text()
-        button.setText("✓ Đã chép!")
+        button.setText("Đã chép!")
         button.setEnabled(False)
 
         def _restore():

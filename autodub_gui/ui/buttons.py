@@ -37,6 +37,11 @@ class _BaseButton(QPushButton):
             self._idle_text = text
         super().setText(text)
 
+    def setIcon(self, icon: QIcon) -> None:  # noqa: N802 — theo quy ước của Qt
+        super().setIcon(icon)
+        if not icon.isNull():
+            self.setIconSize(QSize(18, 18))
+
     def is_loading(self) -> bool:
         """Nút có đang ở trạng thái chờ tác vụ nền không."""
         return self._loading
