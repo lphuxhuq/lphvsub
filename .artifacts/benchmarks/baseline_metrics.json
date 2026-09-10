@@ -1,0 +1,104 @@
+{
+  "dataset_10": {
+    "total_segments": 10,
+    "cold_run": {
+      "total_segments": 10,
+      "cache_hits": 0,
+      "cache_misses": 10,
+      "model_load_time": 1.2646,
+      "asr_time": 2.4744,
+      "acoustic_time": 0.0055,
+      "mapping_time": 0.0,
+      "cache_load_time": 0.0,
+      "cache_write_time": 0.0634,
+      "total_time": 2.1865,
+      "ok_count": 3,
+      "est_count": 7,
+      "segments_per_sec": 4.57
+    },
+    "warm_run": {
+      "total_segments": 10,
+      "cache_hits": 3,
+      "cache_misses": 7,
+      "model_load_time": 0.0,
+      "asr_time": 1.6809,
+      "acoustic_time": 0.0009,
+      "mapping_time": 0.0,
+      "cache_load_time": 0.0299,
+      "cache_write_time": 0.0,
+      "total_time": 0.5191,
+      "ok_count": 3,
+      "est_count": 7,
+      "segments_per_sec": 19.26
+    },
+    "cache_speedup": 4.21
+  },
+  "dataset_50": {
+    "total_segments": 50,
+    "cold_run": {
+      "total_segments": 50,
+      "cache_hits": 15,
+      "cache_misses": 35,
+      "model_load_time": 0.0,
+      "asr_time": 8.172,
+      "acoustic_time": 0.0036,
+      "mapping_time": 0.0001,
+      "cache_load_time": 0.0,
+      "cache_write_time": 0.0,
+      "total_time": 3.0363,
+      "ok_count": 15,
+      "est_count": 35,
+      "segments_per_sec": 16.47
+    },
+    "warm_run": {
+      "total_segments": 50,
+      "cache_hits": 15,
+      "cache_misses": 35,
+      "model_load_time": 0.0,
+      "asr_time": 8.2725,
+      "acoustic_time": 0.0166,
+      "mapping_time": 0.0001,
+      "cache_load_time": 0.0,
+      "cache_write_time": 0.0,
+      "total_time": 2.1322,
+      "ok_count": 15,
+      "est_count": 35,
+      "segments_per_sec": 23.45
+    },
+    "cache_speedup": 1.42
+  },
+  "dataset_100": {
+    "total_segments": 100,
+    "cold_run": {
+      "total_segments": 100,
+      "cache_hits": 30,
+      "cache_misses": 70,
+      "model_load_time": 0.0,
+      "asr_time": 16.6114,
+      "acoustic_time": 0.0174,
+      "mapping_time": 0.0001,
+      "cache_load_time": 0.0,
+      "cache_write_time": 0.0,
+      "total_time": 6.1568,
+      "ok_count": 30,
+      "est_count": 70,
+      "segments_per_sec": 16.24
+    },
+    "warm_run": {
+      "total_segments": 100,
+      "cache_hits": 30,
+      "cache_misses": 70,
+      "model_load_time": 0.0,
+      "asr_time": 15.6938,
+      "acoustic_time": 0.0203,
+      "mapping_time": 0.0001,
+      "cache_load_time": 0.0,
+      "cache_write_time": 0.0,
+      "total_time": 4.0168,
+      "ok_count": 30,
+      "est_count": 70,
+      "segments_per_sec": 24.9
+    },
+    "cache_speedup": 1.53
+  }
+}
