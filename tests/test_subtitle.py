@@ -110,7 +110,11 @@ def test_multiple_regions_chain_sequentially():
     graph = build_filter_complex(
         [FULL_WIDTH_BAND, {"x": 0.0, "y": 0.0, "w": 0.3, "h": 0.1}], W, H)
     assert graph.count("boxblur") == 2
-    assert "[v1]split[b1][b1c]" in graph      # second region consumes the first's output
+    # Tối ưu batch: 1 split=n+1 duy nhất thay vì N chuỗi split lồng nhau
+    # — mọi region crop từ bản copy riêng rồi overlay tuần tự lên nhánh chính.
+    assert "split=3[bmain][br0] [br1]" in graph
+    assert "[bmain][bl0]overlay=0:918[vov0]" in graph   # region 1 lên nhánh chính
+    assert "[vov0][bl1]overlay=0:0[vov1]" in graph    # region 2 nối tiếp
     assert graph.endswith("[vout]")
 
 

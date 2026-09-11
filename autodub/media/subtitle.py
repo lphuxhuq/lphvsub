@@ -526,25 +526,40 @@ def build_filter_complex(
 
         video_w, video_h = target_w, target_h
 
-    for i, region in enumerate(regions):
-        x, y, w, h = _to_pixels(region, video_w, video_h)
+    # ---- Che/làm mờ các vùng phụ đề cũ (blur_regions) ----
+    # Tối ưu: 1 split duy nhất cho mọi region blur (thay vì N chuỗi
+    # split→crop→blur→overlay lồng nhau copy full-frame N lần). Các region
+    # delogo có timing vẫn nằm trên nhánh chính vì delogo là filter in-place.
+    blur_like = []
+    for region in regions:
         reg_method = region.get("method") or mask_method
-        nxt = f"v{i + 1}"
+        x, y, w, h = _to_pixels(region, video_w, video_h)
         t_start, t_end = region.get("t_start"), region.get("t_end")
         timing = f":enable='between(t,{float(t_start)},{float(t_end)})'" if (t_start is not None and t_end is not None) else ""
+        blur_like.append((x, y, w, h, timing, reg_method))
 
-        if reg_method == "delogo":
-            parts.append(f"[{current}]delogo=x={x}:y={y}:w={w}:h={h}:show=0{timing}[{nxt}]")
-            current = nxt
-        else:
-            base, blurred = f"b{i}", f"bl{i}"
-            parts.append(f"[{current}]split[{base}][{base}c]")
-            parts.append(
-                f"[{base}c]crop={w}:{h}:{x}:{y},{blur_filter(w, h)}[{blurred}]"
-            )
-            overlay = f"overlay={x}:{y}{timing}"
-            parts.append(f"[{base}][{blurred}]{overlay}[{nxt}]")
-            current = nxt
+    inline_regions = [r for r in blur_like if r[5] == "delogo"]
+    overlay_regions = [r for r in blur_like if r[5] != "delogo"]
+
+    for x, y, w, h, timing, _method in inline_regions:
+        nxt = f"vdelogo{len(parts)}"
+        parts.append(f"[{current}]delogo=x={x}:y={y}:w={w}:h={h}:show=0{timing}[{nxt}]")
+        current = nxt
+
+    if overlay_regions:
+        n = len(overlay_regions)
+        # split=1+N: 1 nhánh chính + N nhánh crop riêng
+        main_tag = "bmain"
+        region_tags = [f"br{i}" for i in range(n)]
+        parts.append(f"[{current}]split={n + 1}[{main_tag}][{'] ['.join(region_tags)}]")
+        for i, (x, y, w, h, timing, _m) in enumerate(overlay_regions):
+            parts.append(f"[{region_tags[i]}]crop={w}:{h}:{x}:{y},{blur_filter(w, h)}[bl{i}]")
+        cur = main_tag
+        for i, (x, y, w, h, timing, _m) in enumerate(overlay_regions):
+            out_tag = f"vov{i}"
+            parts.append(f"[{cur}][bl{i}]overlay={x}:{y}{timing}[{out_tag}]")
+            cur = out_tag
+        current = cur
 
     if has_logo:
         clean_logo = str(logo_path).strip()

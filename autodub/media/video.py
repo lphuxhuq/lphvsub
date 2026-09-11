@@ -376,8 +376,12 @@ def merge_video(
     # test), có duration, và env không tắt tính năng.
     parallel_enabled = os.environ.get("VOXDUB_PARALLEL_EXPORT", "1") != "0"
     dur_probe = probe_duration_s(video_path) if parallel_enabled and filter_complex else 0.0
+    try:
+        from autodub.media.parallel_export import _MIN_SPLIT_DURATION_S as _PSEND
+    except ImportError:
+        _PSEND = 45.0
     if (parallel_enabled and filter_complex and dur_probe
-            and dur_probe >= 120.0
+            and dur_probe >= _PSEND
             and subprocess.run is _REAL_SUBPROCESS_RUN):
         try:
             from autodub.media.parallel_export import parallel_chunked_export

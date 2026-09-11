@@ -61,7 +61,7 @@ class TestPlanChunkBoundaries:
 class TestDefaultWorkerCount:
     def test_nvenc_capped(self):
         n = _default_worker_count("NVIDIA NVENC")
-        assert 2 <= n <= 4
+        assert 2 <= n <= 5
 
     def test_cpu_scaled(self):
         n = _default_worker_count("CPU (libx264)")

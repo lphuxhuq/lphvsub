@@ -30,9 +30,13 @@ from autodub.utils import setup_logging
 logger = setup_logging("autodub.parallel_export")
 
 #: Số NVENC session tối đa an toàn trên GPU consumer (gặp lỗi sẽ tự hạ).
-_MAX_NVENC_SESSIONS = 4
+_MAX_NVENC_SESSIONS = 5
+#: Thời lượng video tối thiểu để bật chia chunk song song.
+#: Dưới ngưỡng này overhead (khởi động FFmpeg + quét keyframe ~2-4% dur)
+#: lớn hơn lợi ích song song hóa.
+_MIN_SPLIT_DURATION_S = 45.0
 #: Thời lượng chunk tối thiểu — chunk quá ngắn tốn overhead khởi động FFmpeg.
-_MIN_CHUNK_S = 12.0
+_MIN_CHUNK_S = 10.0
 #: Frame rate dự phòng khi ffprobe không đọc được fps (để tính timeout).
 _FALLBACK_FPS = 30.0
 

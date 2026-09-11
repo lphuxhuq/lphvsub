@@ -67,13 +67,21 @@ def main() -> None:
                     f"S,,0,0,0,,Câu thử nghiệm số {i}\n")
 
     escaped = sub_file.replace("\\", "/").replace(":", "\\:")
+    # Filter graph mô phỏng: 9:16 blur reframe + 2 vùng che phụ đề + burn sub
     filter_complex = (
         "[0:v]split[asp_bg][asp_fg];"
-        "[asp_bg]scale=720:1280:force_original_aspect_ratio=increase,"
-        "crop=720:1280,boxblur=6:2,eq=brightness=-0.08:saturation=1.15[asp_bgb];"
+        "[asp_bg]scale=120:213:force_original_aspect_ratio=increase,"
+        "crop=120:213,boxblur=4:1,"
+        "scale=720:1280:flags=bilinear,"
+        "eq=brightness=-0.08:saturation=1.15[asp_bgb];"
         "[asp_fg]scale=720:1280:force_original_aspect_ratio=decrease[asp_fg_s];"
         "[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2[vasp];"
-        f"[vasp]subtitles='{escaped}'[vout]"
+        "[vasp]split=3[bmain][br0] [br1];"
+        "[br0]crop=720:100:0:1150,boxblur=8:2[bl0];"
+        "[br1]crop=300:90:100:80,boxblur=6:2[bl1];"
+        "[bmain][bl0]overlay=0:1150[vov0];"
+        "[vov0][bl1]overlay=100:80[vov1];"
+        f"[vov1]subtitles='{escaped}'[vout]"
     )
 
     codec_args = video_codec_args()
