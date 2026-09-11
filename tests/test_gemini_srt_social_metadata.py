@@ -1,8 +1,17 @@
 """Kiểm thử tính năng trích xuất và trả về social_metadata trong Gemini SRT UI."""
+
 import json
 import os
+
 import pytest
-from autodub.tools.gemini_srt_ui.app import app, jobs, batch_queues, get_social_metadata_safe, OUTPUT_FOLDER
+
+from autodub.tools.gemini_srt_ui.app import (
+    OUTPUT_FOLDER,
+    app,
+    batch_queues,
+    get_social_metadata_safe,
+    jobs,
+)
 
 
 @pytest.fixture
@@ -19,11 +28,11 @@ def test_get_social_metadata_safe_with_saved_file(tmp_path):
     meta_path = os.path.join(OUTPUT_FOLDER, f"meta_{job_id}.json")
     if os.path.exists(meta_path):
         os.remove(meta_path)
-    
+
     data = {
         "title": "Tóm Tắt Phim Cực Cuốn 2026",
         "description": "Nội dung phim kịch tính hồi hộp...",
-        "hashtags": ["#reviewphim", "#shorts", "trending"]
+        "hashtags": ["#reviewphim", "#shorts", "trending"],
     }
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)

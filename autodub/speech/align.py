@@ -17,6 +17,7 @@ Mỗi clip độc lập — một clip khớp hỏng chỉ mất alignment của
 (caller tự rơi về ước lượng). Kết quả cache JSON trong work_dir nên resume
 và rebuild không phải nghe lại.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -24,9 +25,9 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from typing import Callable
+from dataclasses import dataclass
 
 from autodub.utils import save_json_atomic, seg_wav_path, setup_logging
 
@@ -39,6 +40,7 @@ _CACHE_LOCK = threading.Lock()
 @dataclass
 class AlignmentStats:
     """Bảng ghi nhận số liệu profiling và hiệu năng canh phụ đề."""
+
     total_segments: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
@@ -95,6 +97,7 @@ def build_cache_key(
     """
     try:
         from autodub.pipeline_cache import compute_media_fingerprint
+
         audio_fp = compute_media_fingerprint(wav_path)[:16]
     except Exception:
         try:
@@ -108,7 +111,9 @@ def build_cache_key(
     return f"v{version}_{digest}"
 
 
-def compute_align_workers_and_threads(device: str = "cpu", cpu_count: int | None = None) -> tuple[int, int]:
+def compute_align_workers_and_threads(
+    device: str = "cpu", cpu_count: int | None = None
+) -> tuple[int, int]:
     """Tính số worker song song và số threads CTranslate2 tránh oversubscription.
 
     Trả về (n_workers, cpu_threads).
@@ -123,14 +128,14 @@ def compute_align_workers_and_threads(device: str = "cpu", cpu_count: int | None
             try:
                 return max(1, int(env_workers)), 1
             except ValueError:
-                pass
+                logger.debug("Bỏ qua lỗi ValueError trong align.py", exc_info=True)
         return 4, 1
 
     if env_workers is not None and env_threads is not None:
         try:
             return max(1, int(env_workers)), max(1, int(env_threads))
         except ValueError:
-            pass
+            logger.debug("Bỏ qua lỗi ValueError trong align.py", exc_info=True)
 
     if cpu_count <= 2:
         workers = 1
@@ -149,13 +154,13 @@ def compute_align_workers_and_threads(device: str = "cpu", cpu_count: int | None
         try:
             workers = max(1, int(env_workers))
         except ValueError:
-            pass
+            logger.debug("Bỏ qua lỗi ValueError trong align.py", exc_info=True)
 
     if env_threads is not None:
         try:
             threads = max(1, int(env_threads))
         except ValueError:
-            pass
+            logger.debug("Bỏ qua lỗi ValueError trong align.py", exc_info=True)
 
     return workers, threads
 
@@ -169,21 +174,23 @@ def _create_whisper_align_model():
 
     from autodub.resources import GPU_LOCK
     from autodub.speech.transcriber import _enable_cuda_dlls
+
     if _enable_cuda_dlls():
         workers, _ = compute_align_workers_and_threads("cuda")
         with GPU_LOCK:
             for compute in ("float16", "int8_float16", "int8"):
                 try:
-                    model = WhisperModel(ALIGN_MODEL, device="cuda",
-                                         compute_type=compute,
-                                         num_workers=workers)
+                    model = WhisperModel(
+                        ALIGN_MODEL, device="cuda", compute_type=compute, num_workers=workers
+                    )
                     return model, "cuda", workers
                 except Exception as e:
                     logger.debug(f"Alignment GPU {compute} không chạy ({e})")
         logger.info("Alignment dùng CPU")
     workers, threads = compute_align_workers_and_threads("cpu")
-    model = WhisperModel(ALIGN_MODEL, device="cpu", compute_type="int8",
-                         cpu_threads=threads, num_workers=workers)
+    model = WhisperModel(
+        ALIGN_MODEL, device="cpu", compute_type="int8", cpu_threads=threads, num_workers=workers
+    )
     return model, "cpu", workers
 
 
@@ -195,10 +202,11 @@ def _load_align_model():
 
     try:
         from autodub.model_preloader import get_global_align_model
+
         _CACHED_ALIGN_MODEL = get_global_align_model()
         return _CACHED_ALIGN_MODEL
     except Exception:
-        pass
+        logger.debug("Bỏ qua lỗi Exception trong align.py", exc_info=True)
 
     _CACHED_ALIGN_MODEL = _create_whisper_align_model()
     return _CACHED_ALIGN_MODEL
@@ -210,13 +218,14 @@ def unload_align_model():
     _CACHED_ALIGN_MODEL = None
     try:
         from autodub.model_preloader import get_global_model_pool
+
         pool = get_global_model_pool()
         with pool._lock:
             pool._align_model = None
             if "align" in pool._status:
                 pool._status["align"] = "idle"
     except Exception:
-        pass
+        logger.debug("Bỏ qua lỗi Exception trong align.py", exc_info=True)
 
 
 # Beam size cho ASR alignment: 1 (greedy) nhanh gấp đôi, 2 (beam search) khi cần
@@ -376,10 +385,11 @@ def align_segments(
 
     # UPC: Tra cứu thêm từ AlignGlobalCache cho các câu đã canh nhịp trước đó
     global_hits: dict = {}
-    use_upc = os.environ.get("LPHVSub_DISABLE_CACHE", "0") != "1"
+    use_upc = os.environ.get("LPHVSub_DISABLE_CACHE", "0") != "1"  # noqa: SIM112 — giữ tên env cũ
     if use_upc:
         try:
             from autodub.pipeline_cache import get_align_cache
+
             candidate_keys = []
             for s in segments:
                 w_path = seg_wav_path(merge_dir, s["id"])
@@ -404,13 +414,14 @@ def align_segments(
         dur = wav_duration_s(wav)
         if not dur or dur < _MIN_CLIP_S:
             continue
-        key = build_cache_key(wav, text, model_name=ALIGN_MODEL, language="vi", version=ALIGN_CACHE_VERSION)
+        key = build_cache_key(
+            wav, text, model_name=ALIGN_MODEL, language="vi", version=ALIGN_CACHE_VERSION
+        )
         hit = cache.get(key) or global_hits.get(key)
         if hit:
             stats.cache_hits += 1
             base = float(seg["start"])
-            out[sid] = [(w, round(base + t0, 3), round(base + t1, 3))
-                        for w, t0, t1 in hit]
+            out[sid] = [(w, round(base + t0, 3), round(base + t1, 3)) for w, t0, t1 in hit]
             continue
         stats.cache_misses += 1
         todo.append((seg, wav, dur, key))
@@ -418,7 +429,9 @@ def align_segments(
     if not todo:
         stats.total_time = time.perf_counter() - t0_total
         stats.ok_count = len(out)
-        stats.segments_per_sec = stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+        stats.segments_per_sec = (
+            stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+        )
         return out
 
     total = len(todo)
@@ -432,7 +445,7 @@ def align_segments(
         try:
             progress_cb(0.0, f"Khởi động mô hình canh nhịp phụ đề ({total} câu)...")
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong align.py", exc_info=True)
 
     t0_model = time.perf_counter()
     try:
@@ -441,11 +454,12 @@ def align_segments(
     except Exception as e:
         stats.model_load_time += time.perf_counter() - t0_model
         logger.warning(
-            f"Không canh được phụ đề theo giọng đọc ({e}) — "
-            "chữ sẽ chia đều theo thời lượng câu"
+            f"Không canh được phụ đề theo giọng đọc ({e}) — chữ sẽ chia đều theo thời lượng câu"
         )
         stats.total_time = time.perf_counter() - t0_total
-        stats.segments_per_sec = stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+        stats.segments_per_sec = (
+            stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+        )
         return out
 
     dev_name = str(device).upper()
@@ -468,10 +482,24 @@ def align_segments(
             try:
                 t0_ac = time.perf_counter()
                 from autodub.speech.acoustic_align import analyze_acoustic_alignment
+
                 ac_res = analyze_acoustic_alignment(text, wav, float(seg["start"]), dur)
                 t_acoustic = time.perf_counter() - t0_ac
-                if ac_res.confidence >= 0.70 and validate_alignment(ac_res.words, text_words, float(seg["start"]), dur):
-                    return sid, key, float(seg["start"]), ac_res.words, "acoustic", len(ac_res.words), text, 0.0, 0.0, t_acoustic
+                if ac_res.confidence >= 0.70 and validate_alignment(
+                    ac_res.words, text_words, float(seg["start"]), dur
+                ):
+                    return (
+                        sid,
+                        key,
+                        float(seg["start"]),
+                        ac_res.words,
+                        "acoustic",
+                        len(ac_res.words),
+                        text,
+                        0.0,
+                        0.0,
+                        t_acoustic,
+                    )
             except Exception as e:
                 logger.debug(f"Acoustic fast-path câu {sid} bỏ qua ({e})")
 
@@ -479,27 +507,64 @@ def align_segments(
         try:
             t0_a = time.perf_counter()
             try:
-                asr = _asr_words(model, wav, beam_size=ALIGN_BEAM_SIZE, expected_word_count=len(text_words))
+                asr = _asr_words(
+                    model, wav, beam_size=ALIGN_BEAM_SIZE, expected_word_count=len(text_words)
+                )
             except TypeError:
                 asr = _asr_words(model, wav)
             t_asr = time.perf_counter() - t0_a
         except Exception as e:
             logger.debug(f"ASR alignment câu {sid} lỗi ({e}) — ước lượng")
-            return sid, key, float(seg["start"]), None, "error", str(e), text, t_asr, 0.0, t_acoustic
+            return (
+                sid,
+                key,
+                float(seg["start"]),
+                None,
+                "error",
+                str(e),
+                text,
+                t_asr,
+                0.0,
+                t_acoustic,
+            )
 
         t0_m = time.perf_counter()
         mapped = _map_words(text_words, asr, float(seg["start"]), dur)
         t_map = time.perf_counter() - t0_m
 
-        if mapped is not None and not validate_alignment(mapped, text_words, float(seg["start"]), dur):
+        if mapped is not None and not validate_alignment(
+            mapped, text_words, float(seg["start"]), dur
+        ):
             logger.debug(f"Mốc timing câu {sid} không vượt qua validator — fallback")
             mapped = None
 
         if mapped is None:
             n_asr = len(asr) if asr is not None else 0
-            return sid, key, float(seg["start"]), None, "sparse", f"{n_asr}/{len(text_words)} từ", text, t_asr, t_map, t_acoustic
+            return (
+                sid,
+                key,
+                float(seg["start"]),
+                None,
+                "sparse",
+                f"{n_asr}/{len(text_words)} từ",
+                text,
+                t_asr,
+                t_map,
+                t_acoustic,
+            )
 
-        return sid, key, float(seg["start"]), mapped, "ok", len(mapped), text, t_asr, t_map, t_acoustic
+        return (
+            sid,
+            key,
+            float(seg["start"]),
+            mapped,
+            "ok",
+            len(mapped),
+            text,
+            t_asr,
+            t_map,
+            t_acoustic,
+        )
 
     start_time = time.perf_counter()
     last_log_time = start_time
@@ -530,6 +595,7 @@ def align_segments(
         if use_upc:
             try:
                 from autodub.pipeline_cache import get_align_cache
+
                 get_align_cache().store_batch(list(to_save.items()))
             except Exception as ex:
                 logger.debug(f"AlignGlobalCache incremental store error: {ex}")
@@ -547,7 +613,7 @@ def align_segments(
                     merged_cache = {**disk_cache, **cache, **new_cache_entries}
                     save_json_atomic(merged_cache, cache_path)
             except OSError:
-                pass
+                logger.debug("Bỏ qua lỗi OSError trong align.py", exc_info=True)
             stats.cache_write_time += time.perf_counter() - t0_w
 
     actual_workers = min(n_workers, max(1, total))
@@ -564,10 +630,7 @@ def align_segments(
             if mapped is not None:
                 ok_cnt += 1
                 out[sid] = mapped
-                entry = [
-                    [w, round(t0 - base, 3), round(t1 - base, 3)]
-                    for w, t0, t1 in mapped
-                ]
+                entry = [[w, round(t0 - base, 3), round(t1 - base, 3)] for w, t0, t1 in mapped]
                 new_cache_entries[key] = entry
                 pending_flush_entries[key] = entry
             else:
@@ -593,13 +656,21 @@ def align_segments(
                 eta = (total - done_cnt) / speed if speed > 0 else 0.0
                 eta_str = f"{eta:.0f}s" if eta < 60 else f"{int(eta // 60)}m{int(eta % 60):02d}s"
                 preview = text[:32] + ("..." if len(text) > 32 else "")
-                tag = f"OK ({detail} từ)" if status == "ok" else (f"Acoustic ({detail} từ)" if status == "acoustic" else f"ước lượng ({detail})")
+                tag = (
+                    f"OK ({detail} từ)"
+                    if status == "ok"
+                    else (
+                        f"Acoustic ({detail} từ)"
+                        if status == "acoustic"
+                        else f"ước lượng ({detail})"
+                    )
+                )
 
                 logger.info(
                     f"Canh nhịp: {done_cnt}/{total} câu ({pct:.1f}%) | "
                     f"Khớp: {ok_cnt} | Ước lượng: {est_cnt} | "
                     f"Tốc độ: {speed:.1f} câu/s (còn ~{eta_str}) | "
-                    f"Câu {sid}: \"{preview}\" → {tag}"
+                    f'Câu {sid}: "{preview}" → {tag}'
                 )
                 if progress_cb:
                     try:
@@ -608,7 +679,7 @@ def align_segments(
                             f"Canh nhịp phụ đề: {done_cnt}/{total} ({pct:.0f}%)",
                         )
                     except Exception:
-                        pass
+                        logger.debug("Bỏ qua lỗi Exception trong align.py", exc_info=True)
 
     # Flush nốt các câu còn lại trong buffer
     _flush_cache_incremental()
@@ -627,10 +698,12 @@ def align_segments(
         try:
             progress_cb(1.0, f"Canh nhịp xong ({ok_cnt}/{total} câu chuẩn)")
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong align.py", exc_info=True)
 
     stats.total_time = time.perf_counter() - t0_total
     stats.ok_count = ok_cnt + n_cached
     stats.est_count = est_cnt
-    stats.segments_per_sec = stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+    stats.segments_per_sec = (
+        stats.total_segments / stats.total_time if stats.total_time > 0 else 0.0
+    )
     return out

@@ -1,4 +1,5 @@
 """Tests for Vietnamese number normalization (autodub.text.vi_numbers)."""
+
 from autodub.text.vi_numbers import normalize_vi_text, number_to_words
 
 
@@ -18,8 +19,7 @@ def test_millions():
 
 
 def test_grouped_thousands_collapse():
-    assert "một triệu hai trăm chín mươi chín nghìn" in normalize_vi_text(
-        "giá 1.299.000 đồng")
+    assert "một triệu hai trăm chín mươi chín nghìn" in normalize_vi_text("giá 1.299.000 đồng")
 
 
 def test_product_code_read_digit_by_digit():

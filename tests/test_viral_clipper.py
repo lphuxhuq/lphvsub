@@ -1,21 +1,63 @@
-import pytest
 from unittest.mock import MagicMock
+
 from autodub.content.viral_clipper import (
-    snap_to_segment_boundaries,
-    heuristic_viral_analysis,
     analyze_viral_highlights,
+    heuristic_viral_analysis,
+    snap_to_segment_boundaries,
 )
 
 
 def _mock_segments():
     return [
-        {"id": 1, "start": 0.0, "end": 5.0, "text": "Xin chào các bạn đã quay trở lại với kênh.", "speaker": "SPEAKER_00"},
-        {"id": 2, "start": 5.2, "end": 12.0, "text": "Hôm nay chúng ta sẽ khám phá một bí mật kinh hoàng.", "speaker": "SPEAKER_00"},
-        {"id": 3, "start": 12.5, "end": 22.0, "text": "Kẻ đứng sau toàn bộ âm mưu này chính là người bạn thân nhất.", "speaker": "SPEAKER_01"},
-        {"id": 4, "start": 22.5, "end": 35.0, "text": "Không ai có thể ngờ được một cú lật mặt sốc và bất ngờ đến thế.", "speaker": "SPEAKER_01"},
-        {"id": 5, "start": 35.5, "end": 48.0, "text": "Hắn ta đã lấy hết số tiền và bỏ trốn trong sự tuyệt vọng của mọi người.", "speaker": "SPEAKER_00"},
-        {"id": 6, "start": 48.5, "end": 60.0, "text": "Liệu công lý có được thực thi hay kẻ ác sẽ thoát tội?", "speaker": "SPEAKER_00"},
-        {"id": 7, "start": 60.5, "end": 75.0, "text": "Hãy theo dõi diễn biến tiếp theo trong video này nhé.", "speaker": "SPEAKER_00"},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 5.0,
+            "text": "Xin chào các bạn đã quay trở lại với kênh.",
+            "speaker": "SPEAKER_00",
+        },
+        {
+            "id": 2,
+            "start": 5.2,
+            "end": 12.0,
+            "text": "Hôm nay chúng ta sẽ khám phá một bí mật kinh hoàng.",
+            "speaker": "SPEAKER_00",
+        },
+        {
+            "id": 3,
+            "start": 12.5,
+            "end": 22.0,
+            "text": "Kẻ đứng sau toàn bộ âm mưu này chính là người bạn thân nhất.",
+            "speaker": "SPEAKER_01",
+        },
+        {
+            "id": 4,
+            "start": 22.5,
+            "end": 35.0,
+            "text": "Không ai có thể ngờ được một cú lật mặt sốc và bất ngờ đến thế.",
+            "speaker": "SPEAKER_01",
+        },
+        {
+            "id": 5,
+            "start": 35.5,
+            "end": 48.0,
+            "text": "Hắn ta đã lấy hết số tiền và bỏ trốn trong sự tuyệt vọng của mọi người.",
+            "speaker": "SPEAKER_00",
+        },
+        {
+            "id": 6,
+            "start": 48.5,
+            "end": 60.0,
+            "text": "Liệu công lý có được thực thi hay kẻ ác sẽ thoát tội?",
+            "speaker": "SPEAKER_00",
+        },
+        {
+            "id": 7,
+            "start": 60.5,
+            "end": 75.0,
+            "text": "Hãy theo dõi diễn biến tiếp theo trong video này nhé.",
+            "speaker": "SPEAKER_00",
+        },
     ]
 
 
@@ -78,11 +120,12 @@ def test_analyze_viral_highlights_with_mock_ai(monkeypatch):
         pass
 
     monkeypatch.setattr(
-        "autodub.text.translate_direct.get_direct_client",
-        lambda settings: (mock_client, "gemini")
+        "autodub.text.translate_direct.get_direct_client", lambda settings: (mock_client, "gemini")
     )
 
-    clips = analyze_viral_highlights(segments, settings=MockSettings(), video_title="Review Phim Hay", max_clips=2)
+    clips = analyze_viral_highlights(
+        segments, settings=MockSettings(), video_title="Review Phim Hay", max_clips=2
+    )
     assert len(clips) >= 1
     assert clips[0]["viral_score"] == 95
     assert "Cú lật mặt" in clips[0]["title"]

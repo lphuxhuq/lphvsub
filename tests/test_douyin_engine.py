@@ -1,19 +1,27 @@
 """Tests for DouyinDownloader engine."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from autodub.media.download.contract import DownloadRequest, DownloadResult
+from autodub.media.download.contract import DownloadRequest
 from autodub.media.download.douyin_engine import DouyinDownloader
 from autodub.media.download.validator import ValidationResult
 
 
 def test_douyin_extract_video_id():
-    assert DouyinDownloader.extract_video_id("https://www.douyin.com/video/7123456789012345678") == "7123456789012345678"
-    assert DouyinDownloader.extract_video_id("https://www.douyin.com/note/7987654321098765432") == "7987654321098765432"
-    assert DouyinDownloader.extract_video_id("https://www.douyin.com/user/MS4w?modal_id=7111222333444555666") == "7111222333444555666"
+    assert (
+        DouyinDownloader.extract_video_id("https://www.douyin.com/video/7123456789012345678")
+        == "7123456789012345678"
+    )
+    assert (
+        DouyinDownloader.extract_video_id("https://www.douyin.com/note/7987654321098765432")
+        == "7987654321098765432"
+    )
+    assert (
+        DouyinDownloader.extract_video_id(
+            "https://www.douyin.com/user/MS4w?modal_id=7111222333444555666"
+        )
+        == "7111222333444555666"
+    )
 
 
 def test_douyin_download_direct_api_success(tmp_path):
@@ -33,12 +41,14 @@ def test_douyin_download_direct_api_success(tmp_path):
 
     downloader = DouyinDownloader(validator=mock_val)
 
-    downloader.fetch_direct_api_info = MagicMock(return_value={
-        "play_url": "https://aweme.snssdk.com/play/video.mp4",
-        "uri": "v0200fg10000abc",
-        "title": "Test Douyin Video",
-        "duration": 15.0,
-    })
+    downloader.fetch_direct_api_info = MagicMock(
+        return_value={
+            "play_url": "https://aweme.snssdk.com/play/video.mp4",
+            "uri": "v0200fg10000abc",
+            "title": "Test Douyin Video",
+            "duration": 15.0,
+        }
+    )
 
     downloader.partial_mgr.download_progressive_stream = MagicMock()
 
@@ -74,12 +84,14 @@ def test_douyin_download_fallback_to_browser_pool(tmp_path):
 
     downloader.fetch_direct_api_info = MagicMock(return_value=None)
 
-    downloader.extract_via_browser_pool = MagicMock(return_value={
-        "mode": "progressive",
-        "video_url": "https://v3-dy-y.douyinvod.com/stream.mp4",
-        "title": "Captured Video",
-        "video_id": "7123456789012345678",
-    })
+    downloader.extract_via_browser_pool = MagicMock(
+        return_value={
+            "mode": "progressive",
+            "video_url": "https://v3-dy-y.douyinvod.com/stream.mp4",
+            "title": "Captured Video",
+            "video_id": "7123456789012345678",
+        }
+    )
     downloader.partial_mgr.download_progressive_stream = MagicMock()
 
     req = DownloadRequest(

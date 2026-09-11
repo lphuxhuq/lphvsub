@@ -30,44 +30,48 @@ Chứa các dataclass bất biến (dataclasses) định nghĩa dữ liệu trun
 ```python
 @dataclass(frozen=True)
 class PitchStats:
-    pitch_median: float          # Hz trung vị
-    pitch_p10: float             # phân vị 10%
-    pitch_p90: float             # phân vị 90%
-    pitch_std: float             # độ lệch chuẩn cao độ
-    voiced_ratio: float          # tỷ lệ frame có tiếng / tổng frame (0..1)
-    confidence: float            # độ tin cậy của ước lượng F0 (0..1)
+    pitch_median: float  # Hz trung vị
+    pitch_p10: float  # phân vị 10%
+    pitch_p90: float  # phân vị 90%
+    pitch_std: float  # độ lệch chuẩn cao độ
+    voiced_ratio: float  # tỷ lệ frame có tiếng / tổng frame (0..1)
+    confidence: float  # độ tin cậy của ước lượng F0 (0..1)
+
 
 @dataclass
 class SpeakerProfile:
     speaker_id: int
-    gender: str                  # "male" | "female" | "unknown"
-    gender_confidence: float     # 0.0 .. 1.0
+    gender: str  # "male" | "female" | "unknown"
+    gender_confidence: float  # 0.0 .. 1.0
     pitch_stats: PitchStats
-    role: str                    # "narrator" | "character" | "unknown"
-    role_confidence: float       # 0.0 .. 1.0
+    role: str  # "narrator" | "character" | "unknown"
+    role_confidence: float  # 0.0 .. 1.0
     total_duration_s: float
     segment_count: int
-    timeline_coverage: float     # (last_end - first_start) / total_audio_dur
+    timeline_coverage: float  # (last_end - first_start) / total_audio_dur
     avg_segment_duration_s: float
+
 
 @dataclass(frozen=True)
 class VoiceProfile:
     voice_id: str
     name: str
-    provider: str                # "vieneu" | "capcut"
-    gender: str                  # "male" | "female" | ""
-    region: str                  # "bac" | "trung" | "nam" | ""
-    style: str                   # "tu_nhien" | "tin_tuc" | "doc_truyen"
+    provider: str  # "vieneu" | "capcut"
+    gender: str  # "male" | "female" | ""
+    region: str  # "bac" | "trung" | "nam" | ""
+    style: str  # "tu_nhien" | "tin_tuc" | "doc_truyen"
     narrator_suitability: float  # 0.0 .. 1.0
-    pitch_tag: str               # "deep_male" | "young_male" | "female" | "child_or_high" | ""
+    pitch_tag: str  # "deep_male" | "young_male" | "female" | "child_or_high" | ""
+
 
 @dataclass
 class VoiceAssignment:
     speaker_id: int
     voice_id: str
-    source: str                  # "auto" | "manual_override" | "fallback"
+    source: str  # "auto" | "manual_override" | "fallback"
     score: float
     reason: str
+
 
 @dataclass
 class CastingResult:
@@ -149,8 +153,12 @@ Engine chấm điểm và phân vai tự động:
    ```python
    if settings.auto_voice_director_enabled and len(spk_set) > 1:
        profiles = profile_speakers(audio_path, segments, settings)
-       casting = cast_voices(profiles, catalog, current_voice=req.voice,
-                             manual_overrides=render_opts.get("speaker_voices"))
+       casting = cast_voices(
+           profiles,
+           catalog,
+           current_voice=req.voice,
+           manual_overrides=render_opts.get("speaker_voices"),
+       )
        speaker_voices = {spk_id: va.voice_id for spk_id, va in casting.assignments.items()}
        render_opts["speaker_voices"] = speaker_voices
        render_opts["speaker_profiles"] = {k: asdict(v) for k, v in profiles.items()}

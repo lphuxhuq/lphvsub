@@ -8,7 +8,6 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 from autodub.media.download.validator import MediaValidator
 from autodub.pipeline_cache import cache_root
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DownloadCache:
     """Caches validated downloaded media files by platform and media_id."""
 
-    def __init__(self, db_path: Optional[Path | str] = None, validator: Optional[MediaValidator] = None):
+    def __init__(self, db_path: Path | str | None = None, validator: MediaValidator | None = None):
         if db_path is None:
             base_dir = cache_root().parent / "downloads"
             base_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +65,7 @@ class DownloadCache:
         media_id: str,
         quality: str = "default",
         require_audio: bool = False,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Looks up a previously downloaded media file and verifies it with MediaValidator."""
         key = self.make_key(platform, media_id, quality)
         with self._lock, self._get_connection() as conn:
@@ -85,9 +84,13 @@ class DownloadCache:
                 conn.commit()
                 return None
 
-            val_res = self.validator.validate(file_path, require_video=True, require_audio=require_audio)
+            val_res = self.validator.validate(
+                file_path, require_video=True, require_audio=require_audio
+            )
             if not val_res.valid:
-                logger.warning(f"Cache entry corrupted ({val_res.error_message}), evicting {file_path}")
+                logger.warning(
+                    f"Cache entry corrupted ({val_res.error_message}), evicting {file_path}"
+                )
                 cursor.execute("DELETE FROM download_cache WHERE cache_key = ?", (key,))
                 conn.commit()
                 return None
@@ -121,7 +124,7 @@ class DownloadCache:
             with self._lock, self._get_connection() as conn:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO download_cache 
+                    INSERT OR REPLACE INTO download_cache
                     (cache_key, platform, media_id, quality, file_path, file_size, duration, created_at, last_accessed)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,

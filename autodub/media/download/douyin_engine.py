@@ -4,21 +4,18 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import shutil
 import subprocess
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from autodub.media.download.browser_pool import BrowserPool, get_browser_pool
-from autodub.media.download.concurrency import AdaptiveConcurrencyController
 from autodub.media.download.contract import (
-    BandwidthMode,
     DownloadRequest,
     DownloadResult,
     ErrorType,
@@ -46,14 +43,20 @@ _IES_REFERER = "https://www.iesdouyin.com/"
 _ROUTER_DATA_RE = re.compile(r"window\s*\._ROUTER_DATA\s*=\s*(\{.*?\});", re.DOTALL)
 _SSR_DATA_RE = re.compile(r"window\s*\._SSR_DATA\s*=\s*(\{.*?\});", re.DOTALL)
 _RENDER_DATA_RE = re.compile(r'<script\s+id="RENDER_DATA"[^>]*>([^<]+)</script>')
-_UNIVERSAL_DATA_RE = re.compile(r"window\s*\[['\"]_UNIVERSAL_DATA_FOR_REHYDRATION_['\"]\]\s*=\s*(\{.*?\});", re.DOTALL)
+_UNIVERSAL_DATA_RE = re.compile(
+    r"window\s*\[['\"]_UNIVERSAL_DATA_FOR_REHYDRATION_['\"]\]\s*=\s*(\{.*?\});", re.DOTALL
+)
 
 _CDN_HOST_RE = re.compile(
     r"(?:douyinvod\.com|zjcdn\.com|douyincdn\.com|bytecdntp\.com|zijieapi\.com|pstatp\.com|bytegoofy\.com)",
     re.IGNORECASE,
 )
-_DASH_VIDEO_RE = re.compile(r"/video/(?:tos|tos-cn)/[^?]*\.(?:mp4|m4s)|mime_type=video_mp4", re.IGNORECASE)
-_DASH_AUDIO_RE = re.compile(r"/audio/(?:tos|tos-cn)/[^?]*\.(?:mp4|m4s|mp3)|mime_type=audio_mp4", re.IGNORECASE)
+_DASH_VIDEO_RE = re.compile(
+    r"/video/(?:tos|tos-cn)/[^?]*\.(?:mp4|m4s)|mime_type=video_mp4", re.IGNORECASE
+)
+_DASH_AUDIO_RE = re.compile(
+    r"/audio/(?:tos|tos-cn)/[^?]*\.(?:mp4|m4s|mp3)|mime_type=audio_mp4", re.IGNORECASE
+)
 _VIDEO_MIME_RE = re.compile(r"mime_type=video_mp4", re.IGNORECASE)
 
 
@@ -62,10 +65,10 @@ class DouyinDownloader:
 
     def __init__(
         self,
-        session_manager: Optional[CookieSessionManager] = None,
-        partial_manager: Optional[PartialDownloadManager] = None,
-        validator: Optional[MediaValidator] = None,
-        browser_pool: Optional[BrowserPool] = None,
+        session_manager: CookieSessionManager | None = None,
+        partial_manager: PartialDownloadManager | None = None,
+        validator: MediaValidator | None = None,
+        browser_pool: BrowserPool | None = None,
     ):
         self.session_mgr = session_manager or CookieSessionManager()
         self.partial_mgr = partial_manager or PartialDownloadManager()
@@ -74,7 +77,7 @@ class DouyinDownloader:
         self.retry_policy = SmartRetryPolicy(max_retries=3)
 
     @staticmethod
-    def extract_video_id(url: str) -> Optional[str]:
+    def extract_video_id(url: str) -> str | None:
         for pattern in (r"/video/(\d+)", r"/note/(\d+)", r"modal_id=(\d+)"):
             m = re.search(pattern, url)
             if m:
@@ -103,13 +106,19 @@ class DouyinDownloader:
                 logger.debug(f"Short URL resolution attempt failed: {e}")
         return url
 
-    def fetch_direct_api_info(self, video_id: str, session: requests.Session) -> Optional[Dict[str, Any]]:
+    def fetch_direct_api_info(
+        self, video_id: str, session: requests.Session
+    ) -> dict[str, Any] | None:
         """Extracts direct no-watermark video play URL via mobile API and embedded JSON."""
         api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
         try:
             resp = session.get(
                 api_url,
-                headers={"User-Agent": _MOBILE_UA, "Referer": _IES_REFERER, "Accept": "application/json"},
+                headers={
+                    "User-Agent": _MOBILE_UA,
+                    "Referer": _IES_REFERER,
+                    "Accept": "application/json",
+                },
                 timeout=10,
             )
             if resp.status_code == 200 and resp.text.strip():
@@ -166,7 +175,9 @@ class DouyinDownloader:
                                 item = items[0]
                                 video_obj = item.get("video", {})
                                 url_list = video_obj.get("play_addr", {}).get("url_list", [])
-                                clean_url = url_list[0].replace("playwm", "play") if url_list else ""
+                                clean_url = (
+                                    url_list[0].replace("playwm", "play") if url_list else ""
+                                )
                                 uri = video_obj.get("play_addr", {}).get("uri", "")
                                 title = (item.get("desc") or "").strip()
                                 duration = (video_obj.get("duration") or 0) / 1000.0
@@ -178,13 +189,13 @@ class DouyinDownloader:
                                         "duration": duration,
                                     }
                     except Exception:
-                        pass
+                        logger.debug("Bỏ qua lỗi Exception trong douyin_engine.py", exc_info=True)
         except Exception as e:
             logger.debug(f"Douyin share page extraction failed for {video_id}: {e}")
 
         return None
 
-    def extract_via_browser_pool(self, url: str, wait_seconds: float = 15.0) -> Dict[str, Any]:
+    def extract_via_browser_pool(self, url: str, wait_seconds: float = 15.0) -> dict[str, Any]:
         """Sniffs direct CDN URLs using pooled Chromium page."""
         captured = {"dash_video": [], "dash_audio": [], "progressive": []}
         title = ""
@@ -216,7 +227,9 @@ class DouyinDownloader:
                         # 1. Bit rates (sorted highest first)
                         bit_rates = vid_obj.get("bit_rate") or []
                         if bit_rates:
-                            sorted_br = sorted(bit_rates, key=lambda b: b.get("bit_rate", 0), reverse=True)
+                            sorted_br = sorted(
+                                bit_rates, key=lambda b: b.get("bit_rate", 0), reverse=True
+                            )
                             for br in sorted_br:
                                 for play_u in br.get("play_addr", {}).get("url_list", []):
                                     if play_u and play_u not in captured["progressive"]:
@@ -266,11 +279,15 @@ class DouyinDownloader:
                         }
                         return '';
                     }""")
-                    if dom_src and _CDN_HOST_RE.search(dom_src) and dom_src not in captured["progressive"]:
+                    if (
+                        dom_src
+                        and _CDN_HOST_RE.search(dom_src)
+                        and dom_src not in captured["progressive"]
+                    ):
                         captured["progressive"].append(dom_src)
                         break
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong douyin_engine.py", exc_info=True)
                 page.wait_for_timeout(400)
 
             if not title:
@@ -303,11 +320,16 @@ class DouyinDownloader:
         """Muxes DASH video and audio streams using FFmpeg stream copy."""
         ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         cmd = [
-            ffmpeg_bin, "-y",
-            "-i", str(video_path),
-            "-i", str(audio_path),
-            "-c", "copy",
-            "-movflags", "+faststart",
+            ffmpeg_bin,
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(audio_path),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
             str(output_path),
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
@@ -338,12 +360,20 @@ class DouyinDownloader:
             if direct_info.get("play_url"):
                 play_urls.append(direct_info["play_url"])
             if direct_info.get("uri"):
-                play_urls.append(f"https://aweme.snssdk.com/aweme/v1/play/?video_id={direct_info['uri']}&ratio=1080p&line=0")
-                play_urls.append(f"https://www.iesdouyin.com/aweme/v1/play/?video_id={direct_info['uri']}&ratio=1080p&line=0")
+                play_urls.append(
+                    f"https://aweme.snssdk.com/aweme/v1/play/?video_id={direct_info['uri']}&ratio=1080p&line=0"
+                )
+                play_urls.append(
+                    f"https://www.iesdouyin.com/aweme/v1/play/?video_id={direct_info['uri']}&ratio=1080p&line=0"
+                )
 
             for p_url in play_urls:
                 if request.is_cancelled():
-                    return DownloadResult(success=False, error_type=ErrorType.CANCELLED, error_message="Cancelled by user")
+                    return DownloadResult(
+                        success=False,
+                        error_type=ErrorType.CANCELLED,
+                        error_message="Cancelled by user",
+                    )
                 try:
                     self.partial_mgr.download_progressive_stream(
                         url=p_url,
@@ -353,7 +383,9 @@ class DouyinDownloader:
                         progress_callback=request.progress_callback,
                         is_cancelled=request.is_cancelled,
                     )
-                    val = self.validator.validate(target_path, require_video=True, require_audio=not request.audio_only)
+                    val = self.validator.validate(
+                        target_path, require_video=True, require_audio=not request.audio_only
+                    )
                     if val.valid:
                         elapsed = time.time() - start_time
                         avg_speed = val.file_size / elapsed if elapsed > 0 else 0.0
@@ -440,7 +472,9 @@ class DouyinDownloader:
                             is_cancelled=request.is_cancelled,
                         )
 
-                    val = self.validator.validate(target_path, require_video=True, require_audio=not request.audio_only)
+                    val = self.validator.validate(
+                        target_path, require_video=True, require_audio=not request.audio_only
+                    )
                     elapsed = time.time() - start_time
                     avg_speed = val.file_size / elapsed if elapsed > 0 else 0.0
 

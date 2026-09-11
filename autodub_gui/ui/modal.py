@@ -4,17 +4,26 @@ Mọi thao tác phá hủy (xóa dự án, xóa câu thoại, khôi phục mặc
 đi qua `ConfirmDialog`. Nguyên văn lỗi kỹ thuật luôn nằm sau nút "Chi tiết",
 không bao giờ hiện thẳng ở dòng chính.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QVBoxLayout,
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QVBoxLayout,
     QWidget,
 )
 
 from autodub_gui import icons, tokens
 from autodub_gui.ui.buttons import (
-    DangerButton, GhostButton, PrimaryButton, SecondaryButton,
+    DangerButton,
+    GhostButton,
+    PrimaryButton,
+    SecondaryButton,
 )
 
 _MIN_W = 480
@@ -35,11 +44,19 @@ _KINDS = {
 class ConfirmDialog(QDialog):
     """Hộp thoại xác nhận: tiêu đề, thông điệp, ô tích tùy chọn và chi tiết."""
 
-    def __init__(self, parent: QWidget | None, title: str, message: str, *,
-                 kind: str = "warning", confirm_label: str = "Đồng ý",
-                 cancel_label: str = "Hủy", detail: str = "",
-                 checkbox_label: str | None = None,
-                 checkbox_checked: bool = True):
+    def __init__(
+        self,
+        parent: QWidget | None,
+        title: str,
+        message: str,
+        *,
+        kind: str = "warning",
+        confirm_label: str = "Đồng ý",
+        cancel_label: str = "Hủy",
+        detail: str = "",
+        checkbox_label: str | None = None,
+        checkbox_checked: bool = True,
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -50,8 +67,7 @@ class ConfirmDialog(QDialog):
 
         icon_fn, color = _KINDS.get(kind, _KINDS["warning"])
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_6, tokens.SP_5,
-                                tokens.SP_6, tokens.SP_5)
+        root.setContentsMargins(tokens.SP_6, tokens.SP_5, tokens.SP_6, tokens.SP_5)
         root.setSpacing(tokens.SP_4)
 
         head = QHBoxLayout()
@@ -67,14 +83,15 @@ class ConfirmDialog(QDialog):
         title_label.setWordWrap(True)
         title_label.setStyleSheet(
             f"color: {color}; font-size: {tokens.FS_CARD_TITLE}px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         message_label = QLabel(message)
         message_label.setWordWrap(True)
-        message_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse)
+        message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         message_label.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         texts.addWidget(title_label)
         texts.addWidget(message_label)
         head.addLayout(texts, 1)
@@ -95,7 +112,8 @@ class ConfirmDialog(QDialog):
                 f"color: {tokens.TEXT_MUTED}; font-family: {tokens.FONT_MONO}; "
                 f"font-size: {tokens.FS_META}px; "
                 f"border: 1px solid {tokens.BORDER_SUBTLE}; "
-                f"border-radius: 8px; }}")
+                f"border-radius: 8px; }}"
+            )
             root.addWidget(self._detail_box)
 
         buttons = QHBoxLayout()
@@ -127,33 +145,56 @@ class ConfirmDialog(QDialog):
         return bool(self._checkbox and self._checkbox.isChecked())
 
     @staticmethod
-    def ask(parent: QWidget | None, title: str, message: str, *,
-            kind: str = "warning", confirm_label: str = "Đồng ý",
-            cancel_label: str = "Hủy", detail: str = "",
-            checkbox_label: str | None = None,
-            checkbox_checked: bool = True) -> tuple[bool, bool]:
+    def ask(
+        parent: QWidget | None,
+        title: str,
+        message: str,
+        *,
+        kind: str = "warning",
+        confirm_label: str = "Đồng ý",
+        cancel_label: str = "Hủy",
+        detail: str = "",
+        checkbox_label: str | None = None,
+        checkbox_checked: bool = True,
+    ) -> tuple[bool, bool]:
         """Trả về cặp (người dùng đã đồng ý, trạng thái ô tích)."""
         dialog = ConfirmDialog(
-            parent, title, message, kind=kind, confirm_label=confirm_label,
-            cancel_label=cancel_label, detail=detail,
-            checkbox_label=checkbox_label, checkbox_checked=checkbox_checked)
+            parent,
+            title,
+            message,
+            kind=kind,
+            confirm_label=confirm_label,
+            cancel_label=cancel_label,
+            detail=detail,
+            checkbox_label=checkbox_label,
+            checkbox_checked=checkbox_checked,
+        )
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         return accepted, dialog.checkbox_checked()
 
     @staticmethod
-    def show_error(parent: QWidget | None, title: str, message: str,
-                   detail: str = "") -> None:
+    def show_error(parent: QWidget | None, title: str, message: str, detail: str = "") -> None:
         """Báo lỗi một chiều: chuyện gì xảy ra, vì sao, làm gì bây giờ."""
-        ConfirmDialog.ask(parent, title, message, kind="error",
-                          confirm_label="Đã hiểu", cancel_label="",
-                          detail=detail)
+        ConfirmDialog.ask(
+            parent,
+            title,
+            message,
+            kind="error",
+            confirm_label="Đã hiểu",
+            cancel_label="",
+            detail=detail,
+        )
 
 
 def confirm_discard(parent: QWidget | None, what: str) -> bool:
     """Hỏi trước khi bỏ những thay đổi chưa lưu."""
     accepted, _ = ConfirmDialog.ask(
-        parent, "Còn thay đổi chưa lưu",
+        parent,
+        "Còn thay đổi chưa lưu",
         f"{what} đang có thay đổi chưa lưu. Nếu rời đi bây giờ, "
         f"những thay đổi đó sẽ mất. Bạn vẫn muốn rời đi?",
-        kind="warning", confirm_label="Rời đi", cancel_label="Ở lại")
+        kind="warning",
+        confirm_label="Rời đi",
+        cancel_label="Ở lại",
+    )
     return accepted

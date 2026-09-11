@@ -16,6 +16,7 @@ Hai điều đáng chú ý so với bản cũ:
   giãn cách tăng dần. Nhờ ``job_id`` idempotency, gửi lại không tốn thêm Vox —
   nên đây là cách đúng để một cú chớp mạng không giết cả lượt chạy.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -61,8 +62,12 @@ class _RateLimiter:
     cũ nhất rời cửa sổ.
     """
 
-    def __init__(self, limit: int = _RATE_LIMIT, window_s: float = _RATE_WINDOW_S,
-                 min_interval_s: float = 0.0):
+    def __init__(
+        self,
+        limit: int = _RATE_LIMIT,
+        window_s: float = _RATE_WINDOW_S,
+        min_interval_s: float = 0.0,
+    ):
         self.limit = limit
         self.window_s = window_s
         self.min_interval_s = min_interval_s
@@ -78,7 +83,11 @@ class _RateLimiter:
                     self._hits.popleft()
 
                 time_since_last = current - self._last_hit
-                wait_min = max(0.0, self.min_interval_s - time_since_last) if self.min_interval_s > 0 else 0.0
+                wait_min = (
+                    max(0.0, self.min_interval_s - time_since_last)
+                    if self.min_interval_s > 0
+                    else 0.0
+                )
 
                 if len(self._hits) < self.limit and wait_min <= 0:
                     self._hits.append(current)
@@ -97,10 +106,14 @@ RATE_LIMITER = _RateLimiter(min_interval_s=0.5)
 
 
 #: Lỗi cấu hình / model — gửi lại cũng hỏng y như vậy.
-_FATAL_CODES = frozenset({
-    "NO_PROVIDER", "PROVIDER_MISCONFIGURED", "PROVIDER_REJECTED",
-    "EMPTY_RESPONSE",
-})
+_FATAL_CODES = frozenset(
+    {
+        "NO_PROVIDER",
+        "PROVIDER_MISCONFIGURED",
+        "PROVIDER_REJECTED",
+        "EMPTY_RESPONSE",
+    }
+)
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -109,11 +122,10 @@ def _is_retryable(exc: BaseException) -> bool:
     Hết Vox, thiết bị bị khóa, bảo trì, cấu hình AI sai và 4xx khác đều là
     lỗi cố định: gửi lại chỉ tốn thời gian và chắc chắn nhận đúng câu đó.
     """
-    if isinstance(exc, (InsufficientCreditError, DeviceBlockedError,
-                        MaintenanceError)):
+    if isinstance(exc, (InsufficientCreditError, DeviceBlockedError, MaintenanceError)):
         return False
     if isinstance(exc, OfflineError):
-        return True   # mất mạng, timeout kết nối/đọc
+        return True  # mất mạng, timeout kết nối/đọc
     if isinstance(exc, SaasError):
         if exc.code in _FATAL_CODES:
             return False
@@ -121,8 +133,9 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
-def _sleep_cancellable(delay_s: float, reporter: ProgressReporter | None,
-                       stop: threading.Event) -> None:
+def _sleep_cancellable(
+    delay_s: float, reporter: ProgressReporter | None, stop: threading.Event
+) -> None:
     """Chờ ``delay_s`` nhưng vẫn nghe lệnh hủy (cắt lát 0.5 giây).
 
     ``time.sleep(15)`` làm người dùng bấm Hủy phải đợi hết 15 giây mới thấy
@@ -136,7 +149,7 @@ def _sleep_cancellable(delay_s: float, reporter: ProgressReporter | None,
         if remaining <= 0:
             return
         if stop.wait(min(0.5, remaining)):
-            return   # lô khác đã hết Vox — khỏi chờ nữa
+            return  # lô khác đã hết Vox — khỏi chờ nữa
 
 
 def _batch_job_id(run_id: str, batch: list[dict]) -> str:
@@ -205,15 +218,16 @@ def _context_from_settings(settings) -> dict:
     return out
 
 
-def _prev_context(all_segments: list[dict], batch_start: int,
-                  target: TargetLang, n: int = 3) -> list[dict]:
+def _prev_context(
+    all_segments: list[dict], batch_start: int, target: TargetLang, n: int = 3
+) -> list[dict]:
     """``n`` câu ngay trước một lô, làm ngữ cảnh chỉ-đọc.
 
     Các lô được dịch độc lập, không có phần này thì mạch hội thoại đứt ở mỗi
     ranh giới lô (xưng hô và thuật ngữ trôi dạt).
     """
     ctx = []
-    for seg in all_segments[max(0, batch_start - n):batch_start]:
+    for seg in all_segments[max(0, batch_start - n) : batch_start]:
         item = {"id": seg.get("id"), "text": str(seg.get("text", ""))[:300]}
         if seg.get(target.text_field):
             item[target.text_field] = str(seg[target.text_field])[:300]
@@ -222,7 +236,10 @@ def _prev_context(all_segments: list[dict], batch_start: int,
 
 
 def translate_segments(
-    segments: list[dict], target: TargetLang, source_lang: str, settings,
+    segments: list[dict],
+    target: TargetLang,
+    source_lang: str,
+    settings,
     reporter: ProgressReporter | None = None,
     checkpoint_path: str | None = None,
 ) -> list[dict]:
@@ -243,13 +260,14 @@ def translate_segments(
     run_id = run_id_for(segments, target)
 
     batch_size = max(1, min(100, int(getattr(settings, "translate_batch_size", 40))))
-    batches = [segments[i:i + batch_size] for i in range(0, len(segments), batch_size)]
+    batches = [segments[i : i + batch_size] for i in range(0, len(segments), batch_size)]
     checkpoint = TranslateCheckpoint(checkpoint_path, target.text_field)
-    workers = min(max(1, int(getattr(settings, "parallel_workers", 4))),
-                  len(batches), _WORKERS_CAP)
+    workers = min(max(1, int(getattr(settings, "parallel_workers", 4))), len(batches), _WORKERS_CAP)
 
-    logger.info(f"Đang dịch {len(segments)} câu qua VoxDub Cloud "
-                f"(mỗi lượt {batch_size} câu, {workers} lượt song song)")
+    logger.info(
+        f"Đang dịch {len(segments)} câu qua VoxDub Cloud "
+        f"(mỗi lượt {batch_size} câu, {workers} lượt song song)"
+    )
 
     # Hết Vox thì mọi lô còn lại chắc chắn cũng hỏng — dựng cờ để các luồng
     # khác dừng ngay thay vì đâm đầu vào cùng một bức tường.
@@ -296,16 +314,18 @@ def translate_segments(
                 delay = max(delay, float(getattr(e, "retry_after", 0.0) or 0.0))
                 logger.warning(
                     f"  Lô {index + 1} lỗi tạm thời ({e}) — thử lại lần "
-                    f"{attempt}/{_MAX_ATTEMPTS - 1} sau {delay:.0f}s")
+                    f"{attempt}/{_MAX_ATTEMPTS - 1} sau {delay:.0f}s"
+                )
                 _sleep_cancellable(delay, reporter, stop)
                 if stop.is_set():
-                    raise out_of_credit[0]
+                    raise out_of_credit[0]  # noqa: B904 — re-raise chính exception
 
         merged = _merge(batch, data.get("segments") or [], target.text_field)
         checkpoint.put(merged)
         return merged
 
     from concurrent.futures import ThreadPoolExecutor
+
     from autodub.utils import ProgressTracker
 
     tracker = ProgressTracker(len(segments), "Dịch lời thoại (VoxDub Cloud)", unit="câu")
@@ -320,17 +340,20 @@ def translate_segments(
             results.append(batch_res)
             preview = ""
             if batch_res:
-                txt = str(batch_res[0].get(target.text_field, "") or batch_res[0].get("text", "")).strip()
+                txt = str(
+                    batch_res[0].get(target.text_field, "") or batch_res[0].get("text", "")
+                ).strip()
                 preview = (txt[:28] + "...") if len(txt) > 28 else txt
-            first_id = batches[i][0].get('id', '?') if batches[i] else '?'
-            last_id = batches[i][-1].get('id', '?') if batches[i] else '?'
-            detail = f"Lô {i+1}/{len(batches)} (câu #{first_id}-#{last_id}): \"{preview}\""
+            first_id = batches[i][0].get("id", "?") if batches[i] else "?"
+            last_id = batches[i][-1].get("id", "?") if batches[i] else "?"
+            detail = f'Lô {i + 1}/{len(batches)} (câu #{first_id}-#{last_id}): "{preview}"'
             should_log, msg = tracker.step(len(batches[i]), detail=detail)
             if should_log:
                 logger.info(f"  {msg}")
             if reporter is not None:
-                reporter.emit("translate", "progress",
-                              current=int(tracker.done), total=len(segments))
+                reporter.emit(
+                    "translate", "progress", current=int(tracker.done), total=len(segments)
+                )
         logger.info(f"  {tracker.summary()}")
     except BaseException:
         # Hủy hoặc lỗi: không chờ các lô đang bay — trả điều khiển về ngay.
@@ -343,7 +366,8 @@ def translate_segments(
         logger.error(
             f"Sổ dịch tạm ghi lỗi {checkpoint.write_errors} lần — nếu lượt "
             "này bị ngắt, chạy lại sẽ phải dịch lại (máy chủ vẫn trả kết quả "
-            "đã tính phí theo job_id nên không tốn Vox thêm, chỉ chậm)")
+            "đã tính phí theo job_id nên không tốn Vox thêm, chỉ chậm)"
+        )
     checkpoint.discard()
     return [seg for batch in results for seg in batch]
 
@@ -381,15 +405,21 @@ def _merge(batch: list[dict], returned: list[dict], text_field: str) -> list[dic
         logger.warning(
             f"Bản dịch thiếu {len(missing)} câu (id: {missing[:10]}"
             f"{'...' if len(missing) > 10 else ''}) — giữ nguyên bản gốc, "
-            "lượt rà soát sẽ xử lý")
+            "lượt rà soát sẽ xử lý"
+        )
     return merged
 
 
 # --------------------------------------------------- phân tích và rà soát --
 
-def analyze_transcript(segments: list[dict], source_lang: str,
-                       video_title: str = "", cache_path: str | None = None,
-                       max_lines: int = 240) -> dict | None:
+
+def analyze_transcript(
+    segments: list[dict],
+    source_lang: str,
+    video_title: str = "",
+    cache_path: str | None = None,
+    max_lines: int = 240,
+) -> dict | None:
     """Lượt 0 "hiểu video" — tóm tắt, xưng hô, thuật ngữ.
 
     Kết quả lưu lại trong thư mục dự án nên chạy tiếp không tốn thêm Vox.
@@ -404,7 +434,7 @@ def analyze_transcript(segments: list[dict], source_lang: str,
             cached = securestore.read_json_secure(cache_path, HOLD.key)
             logger.info("Dùng lại phân tích ngữ cảnh video từ lần chạy trước")
             return cached
-        except Exception:  # noqa: BLE001 — cache hỏng/sai khóa thì phân tích lại
+        except Exception:
             pass
 
     texts = [str(s.get("text", "")).strip() for s in segments]
@@ -416,16 +446,23 @@ def analyze_transcript(segments: list[dict], source_lang: str,
     if len(texts) > max_lines:
         third = max_lines // 3
         mid = len(texts) // 2
-        texts = (texts[:third] + ["..."]
-                 + texts[mid - third // 2:mid + third // 2] + ["..."]
-                 + texts[-third:])
+        texts = [
+            *texts[:third],
+            "...",
+            *texts[mid - third // 2 : mid + third // 2],
+            "...",
+            *texts[-third:],
+        ]
 
     try:
         RATE_LIMITER.acquire()
         analysis = get_client().analyze(
-            texts, job_id=f"an-{run_id_for(segments, _DUMMY_TARGET)}",
-            source_lang=source_lang, video_title=video_title,
-            hold_id=HOLD.hold_id)
+            texts,
+            job_id=f"an-{run_id_for(segments, _DUMMY_TARGET)}",
+            source_lang=source_lang,
+            video_title=video_title,
+            hold_id=HOLD.hold_id,
+        )
     except InsufficientCreditError:
         raise
     except SaasError as e:
@@ -439,7 +476,7 @@ def analyze_transcript(segments: list[dict], source_lang: str,
         try:
             securestore.write_json_secure(analysis, cache_path, HOLD.key)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong translate_saas.py", exc_info=True)
     return analysis
 
 
@@ -472,11 +509,14 @@ def apply_analysis(settings, analysis: dict | None):
         items = analysis["glossary"]
         if isinstance(items, list):
             updates["translate_glossary"] = "\n".join(
-                str(x).strip() for x in items[:15] if str(x).strip())
+                str(x).strip() for x in items[:15] if str(x).strip()
+            )
     if not settings.translate_style_notes and analysis.get("style_notes"):
         updates["translate_style_notes"] = str(analysis["style_notes"]).strip()
     if not updates:
         return settings
-    logger.info("Bơm ngữ cảnh tự phân tích vào prompt dịch: "
-                + ", ".join(k.replace("translate_", "") for k in updates))
+    logger.info(
+        "Bơm ngữ cảnh tự phân tích vào prompt dịch: "
+        + ", ".join(k.replace("translate_", "") for k in updates)
+    )
     return dataclasses.replace(settings, **updates)

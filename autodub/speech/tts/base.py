@@ -1,7 +1,8 @@
 """Shared TTS types: result dataclass and synthesizer protocol."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Protocol
 
 
@@ -16,8 +17,9 @@ class TTSResult:
         return asdict(self)
 
 
-def write_silence(output_path: str, duration_s: float = 0.05,
-                  sample_rate: int = 24000) -> TTSResult:
+def write_silence(
+    output_path: str, duration_s: float = 0.05, sample_rate: int = 24000
+) -> TTSResult:
     """Write a short silent WAV — the safe render for an empty text line.
 
     Hand-edited transcripts can contain blank/punctuation-only lines; feeding
@@ -49,5 +51,4 @@ class Synthesizer(Protocol):
         text: str,
         output_path: str,
         target_duration: float | None = None,
-    ) -> TTSResult:
-        ...
+    ) -> TTSResult: ...

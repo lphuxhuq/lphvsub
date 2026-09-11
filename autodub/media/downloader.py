@@ -1,16 +1,16 @@
 """Video download via yt-dlp, with Douyin routed through Playwright."""
+
 import os
 import re
 import shutil
 import time
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-
-from typing import Any, Callable
+from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
 import yt_dlp
 
-from autodub.utils import setup_logging, ensure_dir, save_json_atomic
+from autodub.utils import ensure_dir, save_json_atomic, setup_logging
 
 logger = setup_logging("autodub.downloader")
 
@@ -21,9 +21,18 @@ _UA = (
 _BILIBILI_REFERER = "https://www.bilibili.com/"
 
 _BILIBILI_TRACKING_PARAMS = {
-    "spm_id_from", "vd_source", "share_source", "from_spmid",
-    "share_medium", "share_plat", "share_session_id", "share_tag",
-    "bbid", "ts", "buvid", "mid",
+    "spm_id_from",
+    "vd_source",
+    "share_source",
+    "from_spmid",
+    "share_medium",
+    "share_plat",
+    "share_session_id",
+    "share_tag",
+    "bbid",
+    "ts",
+    "buvid",
+    "mid",
 }
 
 
@@ -39,9 +48,11 @@ def _save_meta(output_dir: str, title: str, uploader: str = "") -> None:
         return
     try:
         from autodub.workdir import data_path
-        save_json_atomic({"title": title, "uploader": (uploader or "").strip()},
-                         data_path(output_dir, "video_meta.json",
-                                   create_dir=True))
+
+        save_json_atomic(
+            {"title": title, "uploader": (uploader or "").strip()},
+            data_path(output_dir, "video_meta.json", create_dir=True),
+        )
     except OSError as e:
         logger.warning(f"Không lưu được video_meta.json: {e}")
 
@@ -67,6 +78,7 @@ def normalize_url(url: str) -> str:
     if not url:
         return ""
     from autodub.media.douyin import extract_clean_url
+
     url = extract_clean_url(str(url).strip())
     if not url:
         return ""
@@ -88,7 +100,9 @@ def normalize_url(url: str) -> str:
         qs = parse_qs(parsed.query)
         cleaned_qs = {k: v for k, v in qs.items() if k.lower() not in _BILIBILI_TRACKING_PARAMS}
         new_query = urlencode(cleaned_qs, doseq=True)
-        url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+        url = urlunparse(
+            (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment)
+        )
         parsed = urlparse(url)
         host = parsed.netloc.lower()
 
@@ -124,14 +138,12 @@ def _clean_broken_partials(directory: str) -> None:
                     if (now - os.path.getmtime(meta_path)) < 86400:
                         continue
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong downloader.py", exc_info=True)
         if lower.endswith((".temp", ".ytdl")) or lower.endswith(".aria2"):
             try:
                 os.remove(full_path)
             except OSError as e:
                 logger.debug(f"Không xóa được file tạm {fname}: {e}")
-            except OSError:
-                pass
 
 
 def _make_ydl_progress_hook(progress_cb):
@@ -148,12 +160,13 @@ def _make_ydl_progress_hook(progress_cb):
             down_mb = downloaded / (1024 * 1024)
             tot_mb = total / (1024 * 1024) if total > 0 else 0.0
             if total > 0:
-                msg = f"Đang tải: {down_mb:.1f}MB / {tot_mb:.1f}MB ({int(pct*100)}%) - {speed_mb:.1f} MB/s"
+                msg = f"Đang tải: {down_mb:.1f}MB / {tot_mb:.1f}MB ({int(pct * 100)}%) - {speed_mb:.1f} MB/s"
             else:
                 msg = f"Đang tải: {down_mb:.1f}MB - {speed_mb:.1f} MB/s"
             progress_cb(min(0.95, max(0.0, pct)), msg)
         elif status == "finished":
             progress_cb(0.96, "Đang xử lý tệp video...")
+
     return _ydl_hook
 
 
@@ -229,12 +242,15 @@ def update_ytdlp() -> bool:
     """Tự động cập nhật yt-dlp lên phiên bản mới nhất qua pip."""
     import subprocess
     import sys
+
     logger.info("Đang kiểm tra và nâng cấp yt-dlp lên phiên bản mới nhất...")
     try:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         res = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
             creationflags=flags,
         )
         if res.returncode == 0:
@@ -268,7 +284,9 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
             mb_t = status_dict.get("total_bytes", 0) / (1024 * 1024)
             speed = status_dict.get("speed_mb", 0.0)
             if mb_t > 0:
-                msg = f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+                msg = (
+                    f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct * 100)}%) - {speed:.1f} MB/s"
+                )
             else:
                 msg = f"Đang tải: {mb_d:.1f}MB - {speed:.1f} MB/s"
         progress_cb(min(1.0, max(0.0, pct)), msg)
@@ -291,14 +309,19 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
             if progress_cb:
                 progress_cb(1.0, "Tải video hoàn tất!")
             return res.path
-        logger.info(f"Smart Download Engine returned unsuccessful ({res.error_message}), trying fallback...")
+        logger.info(
+            f"Smart Download Engine returned unsuccessful ({res.error_message}), trying fallback..."
+        )
     except Exception as e:
-        logger.warning(f"Smart Download Engine encountered error ({e}), falling back to standard path...")
+        logger.warning(
+            f"Smart Download Engine encountered error ({e}), falling back to standard path..."
+        )
 
     # Douyin's yt-dlp extractor is broken upstream (requires `a_bogus`
     # signature). Route Douyin URLs (including v.douyin.com short links)
     # through the Playwright-based fallback.
-    from autodub.media.douyin import is_douyin_url, download_douyin, extract_clean_url
+    from autodub.media.douyin import download_douyin, extract_clean_url, is_douyin_url
+
     clean_url = extract_clean_url(url)
     if is_douyin_url(clean_url):
         logger.info(f"Routing to Douyin extractor: {clean_url}")
@@ -324,8 +347,9 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
         try:
             if attempt > 1:
                 _clean_broken_partials(output_dir)
-                logger.info(f"Lần thử {attempt}/{_MAX_OUTER_RETRIES}: "
-                            f"Lấy link tải mới từ server...")
+                logger.info(
+                    f"Lần thử {attempt}/{_MAX_OUTER_RETRIES}: Lấy link tải mới từ server..."
+                )
             ydl_opts = _get_optimized_opts(
                 output_dir,
                 outtmpl=os.path.join(output_dir, "%(id)s.%(ext)s"),
@@ -343,7 +367,6 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
                 # Thử tự cập nhật yt-dlp trước lượt thử cuối cùng nếu lỗi do extractor cũ
                 update_ytdlp()
 
-
     if last_error is not None:
         raise RuntimeError(
             f"Tải video thất bại sau {_MAX_OUTER_RETRIES} lần thử: {last_error}"
@@ -356,8 +379,7 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
 
     video_id = info.get("id", "video") if info else "video"
     ext = info.get("ext", "mp4") if info else "mp4"
-    filepath = (_ydl_reported_path(info)
-                or os.path.join(output_dir, f"{video_id}.{ext}"))
+    filepath = _ydl_reported_path(info) or os.path.join(output_dir, f"{video_id}.{ext}")
 
     if not os.path.exists(filepath):
         base_id = video_id.split("_p")[0] if "_p" in video_id else video_id
@@ -424,7 +446,7 @@ def _resolve_filepath(info: dict, output_dir: str) -> str:
     if reported:
         return reported
 
-    if "entries" in info and info["entries"]:
+    if info.get("entries"):
         entries = [e for e in info["entries"] if e]
         if entries:
             info = entries[0]
@@ -445,7 +467,9 @@ def _resolve_filepath(info: dict, output_dir: str) -> str:
     for f in sorted(os.listdir(output_dir)):
         f_lower = f.lower()
         if not _is_partial_name(f):
-            if f_lower.startswith(prefix) or (base_id and f_lower.startswith(f"{extractor.lower()}_{base_id}")):
+            if f_lower.startswith(prefix) or (
+                base_id and f_lower.startswith(f"{extractor.lower()}_{base_id}")
+            ):
                 return os.path.join(output_dir, f)
 
     for f in sorted(os.listdir(output_dir)):
@@ -484,7 +508,9 @@ def download_one(
             mb_t = status_dict.get("total_bytes", 0) / (1024 * 1024)
             speed = status_dict.get("speed_mb", 0.0)
             if mb_t > 0:
-                msg = f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+                msg = (
+                    f"Đang tải: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct * 100)}%) - {speed:.1f} MB/s"
+                )
             else:
                 msg = f"Đang tải: {mb_d:.1f}MB - {speed:.1f} MB/s"
         progress_cb(min(1.0, max(0.0, pct)), msg)
@@ -517,11 +543,14 @@ def download_one(
                 "duration": res.duration,
                 "filepath": res.path,
             }
-        logger.info(f"Smart Download Engine download_one returned unsuccessful ({res.error_message}), falling back...")
+        logger.info(
+            f"Smart Download Engine download_one returned unsuccessful ({res.error_message}), falling back..."
+        )
     except Exception as e:
         logger.warning(f"Smart Download Engine download_one error ({e}), falling back...")
 
-    from autodub.media.douyin import is_douyin_url, download_douyin, extract_clean_url
+    from autodub.media.douyin import download_douyin, extract_clean_url, is_douyin_url
+
     clean_url = extract_clean_url(url)
     if is_douyin_url(clean_url):
         logger.info(f"Routing to Douyin extractor: {clean_url}")
@@ -539,8 +568,9 @@ def download_one(
         try:
             if attempt > 1:
                 _clean_broken_partials(output_dir)
-                logger.info(f"Lần thử {attempt}/{_MAX_OUTER_RETRIES}: "
-                            f"Lấy link tải mới từ server...")
+                logger.info(
+                    f"Lần thử {attempt}/{_MAX_OUTER_RETRIES}: Lấy link tải mới từ server..."
+                )
             ydl_opts = build_ydl_opts(
                 output_dir,
                 cookies_from_browser=cookies_from_browser,
@@ -605,26 +635,24 @@ def download_one_isolated(
     kwargs = {}
     if progress_cb is not None:
         kwargs["progress_cb"] = progress_cb
-    entry = download_one(url, tmp_dir,
-                         cookies_from_browser=cookies_from_browser,
-                         cookies_file=cookies_file,
-                         **kwargs)
+    entry = download_one(
+        url, tmp_dir, cookies_from_browser=cookies_from_browser, cookies_file=cookies_file, **kwargs
+    )
     try:
         src = entry["filepath"]
         dst = os.path.join(output_dir, os.path.basename(src))
         if os.path.abspath(src) != os.path.abspath(dst):
             if os.path.exists(dst):
                 base, ext = os.path.splitext(os.path.basename(src))
-                dst = os.path.join(output_dir,
-                                   f"{base}_{int(time.time())}{ext}")
+                dst = os.path.join(output_dir, f"{base}_{int(time.time())}{ext}")
             shutil.move(src, dst)
             entry["filepath"] = dst
         # video_meta.json (title/uploader) theo video về chỗ cũ của nó.
         meta_src = os.path.join(tmp_dir, "data", "video_meta.json")
         if os.path.isfile(meta_src):
             from autodub.workdir import data_path
-            meta_dst = data_path(output_dir, "video_meta.json",
-                                 create_dir=True)
+
+            meta_dst = data_path(output_dir, "video_meta.json", create_dir=True)
             try:
                 if os.path.exists(meta_dst):
                     os.remove(meta_dst)

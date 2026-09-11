@@ -1,8 +1,9 @@
 """Output profile và chuẩn hóa resolution cho video export trong LPHVSub."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ DEFAULT_MAX_PIXELS = 2_073_600
 @dataclass(frozen=True)
 class OutputProfile:
     """Hồ sơ định dạng và kích thước khung hình xuất video."""
+
     aspect_preset: str
     target_w: int
     target_h: int

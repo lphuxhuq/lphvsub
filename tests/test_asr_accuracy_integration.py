@@ -1,7 +1,6 @@
-import json
 import os
 from unittest.mock import MagicMock, patch
-import pytest
+
 from autodub.config import Settings
 from autodub.pipeline import DubPipeline, DubRequest
 
@@ -47,11 +46,12 @@ def test_asr_accuracy_end_to_end_integration(tmp_path):
         bg_mode="demucs",
     )
 
-    with patch("subprocess.run") as mock_subproc, \
-         patch("autodub.speech.transcriber.transcribe", return_value=mock_asr_segments), \
-         patch("autodub.media.ocr.detect_hardsub", return_value=True), \
-         patch("autodub.media.ocr.run_selective_ocr", return_value=mock_ocr_segments):
-
+    with (
+        patch("subprocess.run") as mock_subproc,
+        patch("autodub.speech.transcriber.transcribe", return_value=mock_asr_segments),
+        patch("autodub.media.ocr.detect_hardsub", return_value=True),
+        patch("autodub.media.ocr.run_selective_ocr", return_value=mock_ocr_segments),
+    ):
         mock_subproc.return_value = MagicMock(returncode=0)
 
         # 1. Test ASR source selection
@@ -61,6 +61,7 @@ def test_asr_accuracy_end_to_end_integration(tmp_path):
         # 2. Test Step 3 Fusion Flow
         meta = {"empty_chunks": [{"start": 3.0, "end": 5.0}]}
         from autodub.speech.transcriber import transcribe
+
         segments = transcribe(asr_src, "zh-CN", settings, meta=meta)
 
         from autodub.media.ocr import detect_hardsub, run_selective_ocr

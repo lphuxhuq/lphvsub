@@ -1,16 +1,12 @@
 import pytest
+
 from autodub.text.fusion import (
-    fuse,
-    align_texts,
-    W_ASR,
-    W_OCR,
     W_ALIGN,
-    W_TEMPORAL,
+    W_ASR,
     W_COMPLETENESS,
-    FUSION_OVERRIDE_MIN,
-    ALIGN_MERGE_THRESHOLD,
-    ALIGN_HIGH_THRESHOLD,
-    ALIGN_LOW_THRESHOLD,
+    W_OCR,
+    W_TEMPORAL,
+    fuse,
 )
 
 
@@ -66,9 +62,7 @@ def test_fusion_case_4_ocr_standalone_empty_asr():
         {"id": 1, "start": 0.5, "end": 2.0, "text": "第一句话"},
         {"id": 2, "start": 6.0, "end": 8.0, "text": "第二句话"},
     ]
-    ocr = [
-        {"text": "这是一段被遗漏的语音", "start_time": 3.0, "end_time": 5.0, "confidence": 0.92}
-    ]
+    ocr = [{"text": "这是一段被遗漏的语音", "start_time": 3.0, "end_time": 5.0, "confidence": 0.92}]
 
     fused, report = fuse(asr, ocr)
     assert len(fused) == 3

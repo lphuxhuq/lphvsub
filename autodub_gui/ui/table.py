@@ -3,19 +3,25 @@
 Cột nội dung co giãn theo cửa sổ; cột số và cột nút vừa khít nội dung. Ô chữ
 dài được rút gọn kèm chú giải giữ nguyên văn.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QHeaderView, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QWidget,
+    QAbstractItemView,
+    QHBoxLayout,
+    QHeaderView,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
 )
 
 from autodub_gui import tokens
-from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.empty import EmptyState, ErrorState, LoadingState
+from autodub_gui.ui.style import clear_background
 
 _ROW_H = 56
 
@@ -28,7 +34,8 @@ class Column:
     stretch: bool = False
     width: int = 0
     align: Qt.AlignmentFlag = field(
-        default=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        default=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
 
 
 class DataTable(QStackedWidget):
@@ -36,10 +43,15 @@ class DataTable(QStackedWidget):
 
     row_activated = Signal(int)
 
-    def __init__(self, columns: list[Column], parent: QWidget | None = None, *,
-                 empty_title: str = "Chưa có mục nào",
-                 empty_description: str = "",
-                 empty_action: str = ""):
+    def __init__(
+        self,
+        columns: list[Column],
+        parent: QWidget | None = None,
+        *,
+        empty_title: str = "Chưa có mục nào",
+        empty_description: str = "",
+        empty_action: str = "",
+    ):
         super().__init__(parent)
         self._columns = list(columns)
 
@@ -48,16 +60,12 @@ class DataTable(QStackedWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(False)
-        self.table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.table.verticalHeader().setDefaultSectionSize(_ROW_H)
-        self.table.cellDoubleClicked.connect(
-            lambda row, _c: self.row_activated.emit(row))
+        self.table.cellDoubleClicked.connect(lambda row, _c: self.row_activated.emit(row))
 
         header = self.table.horizontalHeader()
         header.setHighlightSections(False)
@@ -68,8 +76,7 @@ class DataTable(QStackedWidget):
                 header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
                 self.table.setColumnWidth(i, column.width)
             else:
-                header.setSectionResizeMode(
-                    i, QHeaderView.ResizeMode.ResizeToContents)
+                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
         self.empty = EmptyState(empty_title, empty_description, empty_action)
         self.loading = LoadingState("Đang tải danh sách")
@@ -107,8 +114,7 @@ class DataTable(QStackedWidget):
         self.table.insertRow(row)
         return row
 
-    def set_text(self, row: int, col: int, text: str,
-                 tooltip: str = "") -> QTableWidgetItem:
+    def set_text(self, row: int, col: int, text: str, tooltip: str = "") -> QTableWidgetItem:
         """Đặt chữ vào ô, mặc định lấy luôn chữ đó làm chú giải."""
         item = QTableWidgetItem(text)
         item.setToolTip(tooltip or text)
@@ -116,8 +122,9 @@ class DataTable(QStackedWidget):
         self.table.setItem(row, col, item)
         return item
 
-    def set_widget(self, row: int, col: int, widget: QWidget, *,
-                   margin: int = tokens.SP_2) -> QWidget:
+    def set_widget(
+        self, row: int, col: int, widget: QWidget, *, margin: int = tokens.SP_2
+    ) -> QWidget:
         """Đặt một widget vào ô, có lề nhỏ để không dính sát viền."""
         holder = QWidget()
         clear_background(holder)
@@ -128,8 +135,9 @@ class DataTable(QStackedWidget):
         self.table.setCellWidget(row, col, holder)
         return holder
 
-    def set_widgets(self, row: int, col: int, widgets: list[QWidget], *,
-                    margin: int = tokens.SP_2) -> QWidget:
+    def set_widgets(
+        self, row: int, col: int, widgets: list[QWidget], *, margin: int = tokens.SP_2
+    ) -> QWidget:
         """Đặt nhiều widget nằm ngang trong cùng một ô."""
         holder = QWidget()
         clear_background(holder)

@@ -1,11 +1,9 @@
-﻿"""Unit test cho fit_voice_to_slot / _decide_tempo (voice-sync TASK-2)."""
-import os
+"""Unit test cho fit_voice_to_slot / _decide_tempo (voice-sync TASK-2)."""
+
 import wave
 
 import numpy as np
-import pytest
 
-import autodub.media.voice_timing as vt
 from autodub.media.voice_timing import _decide_tempo, fit_voice_to_slot
 
 
@@ -20,6 +18,7 @@ def _write_wav(path, dur_s=1.0, sr=16000):
 
 
 # --- _decide_tempo: thuần toán, mọi nhánh ---------------------------------
+
 
 def test_tts_shorter_than_slot_natural():
     assert _decide_tempo(1.6, 2.0) == 1.0
@@ -52,6 +51,7 @@ def test_never_stretches():
 
 # --- fit_voice_to_slot: render + cache ------------------------------------
 
+
 def test_fit_natural_no_ffmpeg(tmp_path):
     src = tmp_path / "s.wav"
     _write_wav(src, dur_s=1.6)
@@ -68,6 +68,7 @@ def test_fit_renders_atempo_and_measures(tmp_path):
     assert res.rendered is True
     assert abs(res.tempo_factor - 1.1) < 0.001
     from autodub.media.audio import wav_duration_s
+
     got = wav_duration_s(res.out_path)
     assert abs(got - 2.0) < 0.05
 
@@ -75,10 +76,10 @@ def test_fit_renders_atempo_and_measures(tmp_path):
 def test_fit_caps_at_max_speed(tmp_path):
     src = tmp_path / "s.wav"
     _write_wav(src, dur_s=3.0)
-    res = fit_voice_to_slot(str(src), 2.0, str(tmp_path / "out"),
-                            max_speed=1.15)
+    res = fit_voice_to_slot(str(src), 2.0, str(tmp_path / "out"), max_speed=1.15)
     assert res.tempo_factor == 1.15
     from autodub.media.audio import wav_duration_s
+
     got = wav_duration_s(res.out_path)
     assert abs(got - 3.0 / 1.15) < 0.05
 
@@ -92,6 +93,7 @@ def test_fit_cache_hit_no_second_render(tmp_path, monkeypatch):
 
     calls = {"n": 0}
     import autodub.media.audio as audio_mod
+
     real = audio_mod.apply_atempo
 
     def _counting(*a, **k):
@@ -106,6 +108,7 @@ def test_fit_cache_hit_no_second_render(tmp_path, monkeypatch):
 
 # --- stretch (VOICE_FIT_STRETCH) — opt-in ----------------------------------
 
+
 def test_stretch_disabled_by_default():
     """Mặc định vẫn KHÔNG kéo dài kể cả khi slot dài gấp nhiều lần."""
     assert _decide_tempo(1.0, 10.0, min_speed=0.5) == 1.0
@@ -113,14 +116,12 @@ def test_stretch_disabled_by_default():
 
 def test_stretch_enabled_floors_at_min_speed():
     """1.6s vào slot 2.0s: muốn 0.8 nhưng chặn tại min_speed 0.90."""
-    assert abs(_decide_tempo(1.6, 2.0, min_speed=0.90,
-                             allow_stretch=True) - 0.90) < 0.001
+    assert abs(_decide_tempo(1.6, 2.0, min_speed=0.90, allow_stretch=True) - 0.90) < 0.001
 
 
 def test_stretch_within_floor_uses_exact_ratio():
     """2.0s vào slot 2.1s: want 0.952 ≥ 0.90 → kéo đúng 0.952."""
-    assert abs(_decide_tempo(2.0, 2.1, min_speed=0.90,
-                             allow_stretch=True) - 2.0 / 2.1) < 0.001
+    assert abs(_decide_tempo(2.0, 2.1, min_speed=0.90, allow_stretch=True) - 2.0 / 2.1) < 0.001
 
 
 def test_stretch_skips_tiny_difference():

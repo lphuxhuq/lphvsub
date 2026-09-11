@@ -1,7 +1,11 @@
 """Kiểm thử cho component SocialMetadataCard và tích hợp hiển thị metadata trên NewProjectPage."""
+
+import contextlib
 import os
+
 import pytest
 from PySide6.QtWidgets import QApplication
+
 from autodub.pipeline import DubResult
 from autodub_gui.ui.social_card import SocialMetadataCard
 
@@ -58,10 +62,8 @@ def test_social_card_copy_actions(qapp, monkeypatch):
 
     def mock_set_text(text: str):
         copied_texts.append(text)
-        try:
+        with contextlib.suppress(Exception):
             original_set_text(text)
-        except Exception:
-            pass
 
     monkeypatch.setattr(card, "_set_clipboard_text", mock_set_text)
 
@@ -89,8 +91,16 @@ def test_social_card_flow_layout_wrapping(qapp):
     card = SocialMetadataCard()
     card.setFixedWidth(450)
     tags = [
-        "#KienTrucCoDai", "#NhaVanNam", "#ThietKe", "#XayDung", "#LichSu",
-        "#KhamPha", "#BiMat", "#VanHoa", "#KienTruc", "#DocLa"
+        "#KienTrucCoDai",
+        "#NhaVanNam",
+        "#ThietKe",
+        "#XayDung",
+        "#LichSu",
+        "#KhamPha",
+        "#BiMat",
+        "#VanHoa",
+        "#KienTruc",
+        "#DocLa",
     ]
     meta = {
         "title": "Bí mật xây nhà cổ đại chống trộm, chống ẩm ở Vân Nam: Kiến trúc",
@@ -119,9 +129,9 @@ def test_social_card_flow_layout_wrapping(qapp):
 
 
 def test_new_project_page_shows_social_card_on_complete(qapp, tmp_path):
-    from autodub_gui.pages.new_project_page import NewProjectPage
     from autodub.config import Settings
     from autodub.workdir import save_social_metadata
+    from autodub_gui.pages.new_project_page import NewProjectPage
 
     # Tạo mock work_dir có metadata
     work_dir = str(tmp_path / "test_proj")
@@ -130,11 +140,14 @@ def test_new_project_page_shows_social_card_on_complete(qapp, tmp_path):
     with open(video_out, "w") as f:
         f.write("mock video")
 
-    save_social_metadata(work_dir, {
-        "title": "Video Dự Án Test",
-        "caption": "Caption test hoàn chỉnh",
-        "hashtags": ["#test", "#viral"],
-    })
+    save_social_metadata(
+        work_dir,
+        {
+            "title": "Video Dự Án Test",
+            "caption": "Caption test hoàn chỉnh",
+            "hashtags": ["#test", "#viral"],
+        },
+    )
 
     page = NewProjectPage(lambda: Settings(), None)
     assert hasattr(page, "social_card")

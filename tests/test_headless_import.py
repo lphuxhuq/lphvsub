@@ -3,8 +3,8 @@
 Phase 2 fix: checkpoint_store.py used to import from autodub_gui.env_store,
 which requires PySide6. Now it imports from autodub.env_io (core).
 """
+
 import importlib
-import sys
 
 
 def test_headless_import_autodub():
@@ -40,6 +40,7 @@ def test_checkpoint_store_no_gui_import():
     """Verify checkpoint_store does not import autodub_gui at module level."""
     import ast
     import inspect
+
     import autodub.checkpoint_store as cs
 
     source = inspect.getsource(cs)

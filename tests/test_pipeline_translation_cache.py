@@ -1,11 +1,9 @@
 import os
-from unittest import mock
-import pytest
 
+import autodub.pipeline_cache as pc
 from autodub.config import Settings
 from autodub.languages import get_target
-from autodub.pipeline import DubPipeline, DubRequest
-import autodub.pipeline_cache as pc
+from autodub.pipeline import DubPipeline
 
 
 def test_pipeline_translation_global_cache_hit_and_store(tmp_path):
@@ -108,4 +106,3 @@ def test_alternate_transcript_path_detected(tmp_path):
 
     assert os.path.exists(transcript_dub_path)
     assert transcript_dub_path == alt_file
-

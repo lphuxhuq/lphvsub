@@ -1,6 +1,6 @@
 import wave
+
 import numpy as np
-import pytest
 
 from autodub.config import Settings
 from autodub.speech.speaker_profiler import profile_speakers
@@ -32,8 +32,20 @@ def test_voice_director_full_integration(tmp_path):
         w.writeframes(int16_audio.tobytes())
 
     segments = [
-        {"id": 1, "speaker_id": 0, "start": 0.0, "end": 5.0, "text": "Hôm nay chúng ta cùng tìm hiểu"},
-        {"id": 2, "speaker_id": 0, "start": 5.0, "end": 10.0, "text": "về thế giới động vật hoang dã"},
+        {
+            "id": 1,
+            "speaker_id": 0,
+            "start": 0.0,
+            "end": 5.0,
+            "text": "Hôm nay chúng ta cùng tìm hiểu",
+        },
+        {
+            "id": 2,
+            "speaker_id": 0,
+            "start": 5.0,
+            "end": 10.0,
+            "text": "về thế giới động vật hoang dã",
+        },
         {"id": 3, "speaker_id": 1, "start": 10.0, "end": 15.0, "text": "Tuyệt vời quá anh ơi!"},
     ]
 
@@ -65,7 +77,9 @@ def test_voice_director_full_integration(tmp_path):
 
     # 3. Kiểm tra tính năng Manual Override
     manual = {1: "Tùy chỉnh Nữ Đặc biệt"}
-    casting_manual = cast_voices(profiles, catalog, current_voice="Trần Hải", manual_overrides=manual, auto_enabled=True)
+    casting_manual = cast_voices(
+        profiles, catalog, current_voice="Trần Hải", manual_overrides=manual, auto_enabled=True
+    )
     assert casting_manual.assignments[1].voice_id == "Tùy chỉnh Nữ Đặc biệt"
     assert casting_manual.assignments[1].source == "manual_override"
 

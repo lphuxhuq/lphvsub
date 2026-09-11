@@ -7,6 +7,7 @@ Covers:
 - Group 4: Shortcuts & EditorPage (autodub_gui/shortcuts.py, autodub_gui/pages/editor_page.py)
 - Group 5: Headless & GUI Integration (autodub_gui/video/timeline.py, autodub_gui/pages/editor_page.py)
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
 
@@ -27,26 +28,24 @@ from autodub_gui import waveform
 from autodub_gui.pages.editor_page import EditorPage
 from autodub_gui.shortcuts import (
     EDITOR_SHORTCUTS,
-    Shortcut,
     install_editor_shortcuts,
     typing_in_text_field,
 )
 from autodub_gui.video.timeline import (
     BAND_H,
-    LABEL_W,
     MAX_ZOOM,
     MIN_ZOOM,
     RULER_H,
     THUMB_H,
-    TRACK_H,
     Timeline,
     TimelineCanvas,
     _snap,
 )
 
 
-def _write_pcm_wav(path, seconds=1.0, rate=8000, channels=1, width=2,
-                   amplitude=0.5, silent_tail=0.0):
+def _write_pcm_wav(
+    path, seconds=1.0, rate=8000, channels=1, width=2, amplitude=0.5, silent_tail=0.0
+):
     """Helper creating synthetic PCM WAV file."""
     frames = int(rate * seconds)
     time = np.arange(frames) / rate
@@ -98,8 +97,22 @@ def mock_editor_project(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 0.0, "end": 4.0, "duration": 4.0, "text": "seg1", "text_vi": "Câu thoại một"},
-        {"id": 2, "start": 5.0, "end": 8.0, "duration": 3.0, "text": "seg2", "text_vi": "Câu thoại hai"},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 4.0,
+            "duration": 4.0,
+            "text": "seg1",
+            "text_vi": "Câu thoại một",
+        },
+        {
+            "id": 2,
+            "start": 5.0,
+            "end": 8.0,
+            "duration": 3.0,
+            "text": "seg2",
+            "text_vi": "Câu thoại hai",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -117,22 +130,28 @@ def editor_page(qapp, mock_editor_project):
     yield page
     page.cleanup()
 
+
 # ========================================================================
 # Group 1: Waveform Peak Extraction & Caching
 # =======================================================================
+
 
 class TestWaveformExtractionAndCaching:
     """Unit tests for audio peak extraction and caching logic in autodub_gui/waveform.py."""
 
     def test_waveform_pcm16_extraction(self, tmp_path) -> None:
-        path = _write_pcm_wav(tmp_path / "pcm16.wav", seconds=2.0, rate=8000, channels=1, width=2, amplitude=0.6)
+        path = _write_pcm_wav(
+            tmp_path / "pcm16.wav", seconds=2.0, rate=8000, channels=1, width=2, amplitude=0.6
+        )
         res = waveform.peaks(path, buckets=100)
         assert len(res) == 100
         assert all(0.0 <= v <= 1.0 for v in res)
         assert 0.58 <= max(res) <= 0.62
 
     def test_waveform_pcm32_extraction(self, tmp_path) -> None:
-        path = _write_pcm_wav(tmp_path / "pcm32.wav", seconds=1.0, rate=16000, channels=1, width=4, amplitude=0.8)
+        path = _write_pcm_wav(
+            tmp_path / "pcm32.wav", seconds=1.0, rate=16000, channels=1, width=4, amplitude=0.8
+        )
         res = waveform.peaks(path, buckets=50)
         assert len(res) == 50
         assert 0.78 <= max(res) <= 0.82
@@ -192,7 +211,10 @@ class TestWaveformExtractionAndCaching:
     def test_waveform_multi_track_sources_and_cache_naming(self, tmp_path) -> None:
         assert waveform.cache_name_for("audio_vi_full.wav") == "waveform_peaks.json"
         assert waveform.cache_name_for("original_audio.wav") == "waveform_peaks_original_audio.json"
-        assert waveform.cache_name_for("slowed_background.wav") == "waveform_peaks_slowed_background.json"
+        assert (
+            waveform.cache_name_for("slowed_background.wav")
+            == "waveform_peaks_slowed_background.json"
+        )
 
         work = tmp_path / "proj"
         data = work / "data"
@@ -237,9 +259,11 @@ class TestWaveformExtractionAndCaching:
         res = waveform.peaks(valid, buckets=64)
         assert len(res) == 64
 
+
 # ========================================================================
 # Group 2: Timeline Coordinate & Math
 # =========================================================================
+
 
 class TestTimelineCoordinateAndMath:
     """Tests for coordinate transformation, zooming, offset clamping, and snapping."""
@@ -318,7 +342,9 @@ class TestTimelineCoordinateAndMath:
         timeline_canvas.set_position(18.0)
         assert abs(timeline_canvas._offset - 13.0) < 1e-5
 
-    def test_timeline_multitrack_height_and_visibility_toggle(self, tmp_path, timeline_canvas) -> None:
+    def test_timeline_multitrack_height_and_visibility_toggle(
+        self, tmp_path, timeline_canvas
+    ) -> None:
         assert timeline_canvas._band_kinds() == ["default"]
         assert timeline_canvas.wave_height() == BAND_H
 
@@ -333,9 +359,11 @@ class TestTimelineCoordinateAndMath:
         timeline_canvas.toggle_track_visible("voice")
         assert timeline_canvas.wave_height() == BAND_H * 2 + THUMB_H
 
+
 # ========================================================================
 # Group 3: Subtitle Block Drag & Interaction
 # ========================================================================
+
 
 class TestSubtitleBlockDragAndInteraction:
     """Tests for mouse interactions, hit testing, drag modes, and boundary collisions."""
@@ -354,7 +382,9 @@ class TestSubtitleBlockDragAndInteraction:
         assert timeline_canvas._drag["mode"] == "move"
         assert timeline_canvas._segment_at(50, y_track) is None
 
-    def test_drag_move_mode_shifts_position_with_snap(self, timeline_canvas, sample_segments) -> None:
+    def test_drag_move_mode_shifts_position_with_snap(
+        self, timeline_canvas, sample_segments
+    ) -> None:
         timeline_canvas.set_segments(sample_segments)
         timeline_canvas._drag = {"mode": "move", "id": 1, "start": 1.0, "end": 3.0, "grab": 2.0}
         timeline_canvas._apply_drag(2.53)
@@ -400,36 +430,67 @@ class TestSubtitleBlockDragAndInteraction:
         s, e = timeline_canvas._limit_to_neighbours(3, 9.0, 11.0)
         assert abs(e - 10.0) < 1e-4
 
-    def test_drag_mouse_release_emits_segment_moved_signal(self, timeline_canvas, sample_segments, qtbot) -> None:
+    def test_drag_mouse_release_emits_segment_moved_signal(
+        self, timeline_canvas, sample_segments, qtbot
+    ) -> None:
         timeline_canvas.set_segments(sample_segments)
         emitted = []
         timeline_canvas.segment_moved.connect(lambda sid, s, e: emitted.append((sid, s, e)))
         y_track = int(RULER_H + BAND_H + 10)
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(248, y_track))
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(248, y_track),
+        )
         QTest.mouseMove(timeline_canvas, QPoint(288, y_track))
-        QTest.mouseRelease(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(288, y_track))
+        QTest.mouseRelease(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(288, y_track),
+        )
         assert len(emitted) == 1
         assert emitted[0][0] == 1
         assert abs(emitted[0][1] - 1.5) < 1e-3
         assert abs(emitted[0][2] - 3.5) < 1e-3
 
-    def test_drag_zero_movement_does_not_emit_signal(self, timeline_canvas, sample_segments, qtbot) -> None:
+    def test_drag_zero_movement_does_not_emit_signal(
+        self, timeline_canvas, sample_segments, qtbot
+    ) -> None:
         timeline_canvas.set_segments(sample_segments)
         emitted = []
         timeline_canvas.segment_moved.connect(lambda *a: emitted.append(a))
         y_track = int(RULER_H + BAND_H + 10)
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(248, y_track))
-        QTest.mouseRelease(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(248, y_track))
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(248, y_track),
+        )
+        QTest.mouseRelease(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(248, y_track),
+        )
         assert len(emitted) == 0
 
-    def test_scissors_mode_split_requested_signal(self, timeline_canvas, sample_segments, qtbot) -> None:
+    def test_scissors_mode_split_requested_signal(
+        self, timeline_canvas, sample_segments, qtbot
+    ) -> None:
         timeline_canvas.set_segments(sample_segments)
         timeline_canvas.set_scissors(True)
         emitted = []
         timeline_canvas.split_requested.connect(lambda sid, t: emitted.append((sid, t)))
         y_track = int(RULER_H + BAND_H + 10)
         x = int(timeline_canvas._to_x(2.5))
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(x, y_track))
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(x, y_track),
+        )
         assert len(emitted) == 1
         assert emitted[0][0] == 1
         assert abs(emitted[0][1] - 2.5) < 1e-3
@@ -439,9 +500,19 @@ class TestSubtitleBlockDragAndInteraction:
         timeline_canvas.selection_changed.connect(lambda s, e: emitted.append((s, e)))
         x_start = int(timeline_canvas._to_x(2.0))
         x_end = int(timeline_canvas._to_x(5.0))
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, QPoint(x_start, 10))
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.ShiftModifier,
+            QPoint(x_start, 10),
+        )
         QTest.mouseMove(timeline_canvas, QPoint(x_end, 10))
-        QTest.mouseRelease(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, QPoint(x_end, 10))
+        QTest.mouseRelease(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.ShiftModifier,
+            QPoint(x_end, 10),
+        )
         sel = timeline_canvas.get_selection()
         assert sel is not None
         assert abs(sel[0] - 2.0) < 1e-3
@@ -450,9 +521,11 @@ class TestSubtitleBlockDragAndInteraction:
         timeline_canvas.clear_selection()
         assert timeline_canvas.get_selection() is None
 
+
 # ========================================================================
 # Group 4: Shortcuts & EditorPage Integration
 # =======================================================================
+
 
 class TestShortcutsAndEditorPage:
     """Tests for Ctrl+B, Ctrl+J shortcut registration, execution, and QUndoStack integration."""
@@ -558,14 +631,18 @@ class TestShortcutsAndEditorPage:
         assert typing_in_text_field() is False
         window.deleteLater()
 
+
 # ========================================================================
 # Group 5: Headless & GUI Integration
 # =========================================================================
 
+
 class TestHeadlessAndGUIIntegration:
     """Tests for QPainter headless rendering, composite widget toolbar controls, and clean shutdown."""
 
-    def test_timeline_paint_event_headless_rendering(self, timeline_canvas, sample_segments) -> None:
+    def test_timeline_paint_event_headless_rendering(
+        self, timeline_canvas, sample_segments
+    ) -> None:
         timeline_canvas.set_segments(sample_segments)
         timeline_canvas.set_peaks([0.1, 0.5, 0.8, 0.3] * 25)
         timeline_canvas.set_position(2.5)
@@ -594,4 +671,3 @@ class TestHeadlessAndGUIIntegration:
         editor_page.cleanup()
         assert editor_page._thumb_worker is None
         assert not editor_page.is_running()
-

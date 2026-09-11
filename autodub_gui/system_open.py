@@ -3,6 +3,7 @@
 Gom về một chỗ để mọi trang báo lỗi theo cùng một cách, thay vì mỗi nơi tự
 gọi rồi im lặng khi thất bại.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,8 +20,7 @@ def open_folder(path: str) -> tuple[bool, str]:
         return False, "Chưa có thư mục nào để mở."
     target = path if os.path.isdir(path) else os.path.dirname(path)
     if not os.path.isdir(target):
-        return False, ("Không tìm thấy thư mục này nữa. Có thể nó đã bị đổi "
-                       "tên hoặc xóa khỏi máy.")
+        return False, ("Không tìm thấy thư mục này nữa. Có thể nó đã bị đổi tên hoặc xóa khỏi máy.")
     return _launch(target)
 
 
@@ -29,8 +29,7 @@ def open_file(path: str) -> tuple[bool, str]:
     if not path:
         return False, "Chưa có tệp nào để mở."
     if not os.path.isfile(path):
-        return False, ("Không tìm thấy tệp này nữa. Có thể nó đã bị di chuyển "
-                       "hoặc xóa khỏi máy.")
+        return False, ("Không tìm thấy tệp này nữa. Có thể nó đã bị di chuyển hoặc xóa khỏi máy.")
     return _launch(path)
 
 
@@ -63,7 +62,7 @@ def _launch(target: str) -> tuple[bool, str]:
     """Gọi lệnh mở của từng hệ điều hành."""
     try:
         if os.name == "nt":
-            os.startfile(target)  # noqa: S606 — đường dẫn do chính ứng dụng tạo
+            os.startfile(target)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", target])
         else:

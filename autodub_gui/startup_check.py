@@ -17,6 +17,7 @@ tay.
 Đăng ký thiết bị (bước cuối) hỏng thì KHÔNG chặn: máy chủ sống là đủ điều
 kiện vào; số dư sẽ tự đồng bộ ở lần gọi sau.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -44,7 +45,7 @@ class StartupResult:
 
 
 def _version_tuple(text: str) -> tuple[int, ...]:
-    """"3.0.1" → (3, 0, 1, 0). Phần không phải số bị bỏ qua (vd "3.1-beta").
+    """ "3.0.1" → (3, 0, 1, 0). Phần không phải số bị bỏ qua (vd "3.1-beta").
 
     Đệm số 0 cho đủ 4 phần để "3.0" không bị coi là CŨ HƠN "3.0.0"
     ((3, 0) < (3, 0, 0) theo luật so tuple của Python).
@@ -70,8 +71,7 @@ def check_startup(app_version: str) -> StartupResult:
 
     if not is_configured():
         # Chạy thuần trên máy: không có máy chủ để hỏi, và cũng không cần.
-        return StartupResult(local_only=True,
-                             config={"creditEnabled": False})
+        return StartupResult(local_only=True, config={"creditEnabled": False})
 
     client = get_client()
     try:
@@ -88,13 +88,13 @@ def check_startup(app_version: str) -> StartupResult:
             allowed=False,
             message=str(config.get("maintenanceMessage") or "").strip()
             or "Hệ thống đang bảo trì. Vui lòng quay lại sau ít phút.",
-            config=config)
+            config=config,
+        )
 
     current = _version_tuple(app_version)
     minimum = str(config.get("minAppVersion") or "")
     forced = str(config.get("forceUpdateVersion") or "")
-    required = max((_version_tuple(v) for v in (minimum, forced) if v),
-                   default=(0,))
+    required = max((_version_tuple(v) for v in (minimum, forced) if v), default=(0,))
     if current < required:
         return StartupResult(
             allowed=False,
@@ -102,8 +102,10 @@ def check_startup(app_version: str) -> StartupResult:
             message=(
                 f"Phiên bản {app_version} đã quá cũ và không còn kết nối được "
                 f"máy chủ.\n\nHãy tải bản {minimum or forced} trở lên rồi mở "
-                "lại ứng dụng."),
-            config=config)
+                "lại ứng dụng."
+            ),
+            config=config,
+        )
 
     device: dict = {}
     offline = False

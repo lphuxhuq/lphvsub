@@ -16,6 +16,7 @@ Works without a video too (URL mode before download): the canvas falls back to
 a placeholder frame so styling is still possible; only region picking needs a
 real frame.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,14 +24,28 @@ import subprocess
 import tempfile
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, QUrl, Signal
-from PySide6.QtGui import (QColor, QFont, QImage, QPainter,
-                           QPainterPath, QPen, QPixmap)
-from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QRadioButton,
-    QScrollArea, QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
-)
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoFrame, QVideoSink
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from autodub_gui import tokens
 from autodub_gui.ui.inputs import polish_combo
@@ -47,13 +62,14 @@ _POSITIONS = [("Dưới", "bottom"), ("Giữa", "middle"), ("Trên", "top")]
 
 _BOXES = [("Không", "none"), ("Khối nền sau chữ", "box")]
 
-_DISPLAYS = [("Cả câu", "sentence"),
-             ("Cụm chữ theo giọng đọc", "karaoke")]
+_DISPLAYS = [("Cả câu", "sentence"), ("Cụm chữ theo giọng đọc", "karaoke")]
 
-_EFFECTS = [("Nảy nhẹ", "pop"),
-            ("Mờ dần", "fade"),
-            ("Đổi màu theo lời", "karaoke"),
-            ("Không", "none")]
+_EFFECTS = [
+    ("Nảy nhẹ", "pop"),
+    ("Mờ dần", "fade"),
+    ("Đổi màu theo lời", "karaoke"),
+    ("Không", "none"),
+]
 
 
 def extract_frame(video_path: str, out_png: str, at_seconds: float = 1.0) -> str:
@@ -63,9 +79,17 @@ def extract_frame(video_path: str, out_png: str, at_seconds: float = 1.0) -> str
     UI thread because a corrupt/long video can make ffmpeg block for 30s.
     """
     cmd = [
-        "ffmpeg", "-v", "error",
-        "-ss", str(at_seconds), "-i", video_path,
-        "-frames:v", "1", "-y", out_png,
+        "ffmpeg",
+        "-v",
+        "error",
+        "-ss",
+        str(at_seconds),
+        "-i",
+        video_path,
+        "-frames:v",
+        "1",
+        "-y",
+        out_png,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0 or not os.path.exists(out_png):
@@ -80,11 +104,10 @@ def extract_frame(video_path: str, out_png: str, at_seconds: float = 1.0) -> str
 class _FrameWorker(QThread):
     """Chạy ffmpeg trong luồng nền để không chặn UI thread."""
 
-    ready = Signal(str)   # đường dẫn tệp PNG khi thành công
+    ready = Signal(str)  # đường dẫn tệp PNG khi thành công
     failed = Signal(str)  # thông báo lỗi
 
-    def __init__(self, video_path: str, out_png: str,
-                 at_seconds: float = 1.0, parent=None):
+    def __init__(self, video_path: str, out_png: str, at_seconds: float = 1.0, parent=None):
         super().__init__(parent)
         self._video = video_path
         self._out = out_png
@@ -99,7 +122,7 @@ class _FrameWorker(QThread):
             path = extract_frame(self._video, self._out, self._at)
             if not self._cancelled:
                 self.ready.emit(path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancelled:
                 self.failed.emit(str(e))
 
@@ -120,9 +143,10 @@ class _AutoDetectWorker(QThread):
     def run(self) -> None:
         try:
             from autodub.media.hardsub_detector import detect_hardsub_regions
+
             regs = detect_hardsub_regions(self._video) or []
             self.ready.emit(regs)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.failed.emit(str(e))
 
 
@@ -138,8 +162,7 @@ def subtitle_zone(center_ratio: float) -> str:
 class _FrameCanvas(QWidget):
     """Frame + blur rectangles + logo + watermark + draggable live subtitle preview."""
 
-    def __init__(self, pixmap: QPixmap, style: dict,
-                 allow_regions: bool = True, parent=None):
+    def __init__(self, pixmap: QPixmap, style: dict, allow_regions: bool = True, parent=None):
         super().__init__(parent)
         self._source = pixmap
         self._scaled = pixmap
@@ -154,8 +177,8 @@ class _FrameCanvas(QWidget):
         self._drag_current: QRect | None = None
         self._dragging_text = False
         self._text_rect = QRectF()
-        self.on_style_dragged = None      # callback(position: str, margin_v: int)
-        self.on_regions_changed = None    # callback(regions: list[dict])
+        self.on_style_dragged = None  # callback(position: str, margin_v: int)
+        self.on_regions_changed = None  # callback(regions: list[dict])
         self.setMinimumSize(480, 270)
         self.setMouseTracking(True)
 
@@ -172,8 +195,7 @@ class _FrameCanvas(QWidget):
         return max(self._scaled.height(), 1) / ASS_PLAY_RES_Y
 
     def resizeEvent(self, event):
-        self._scaled = self._source.scaled(
-            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._scaled = self._source.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         super().resizeEvent(event)
         self.update()
 
@@ -181,8 +203,7 @@ class _FrameCanvas(QWidget):
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         self._source = pixmap
-        self._scaled = self._source.scaled(
-            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._scaled = self._source.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.update()
 
     def set_image(self, img: QImage) -> None:
@@ -208,10 +229,12 @@ class _FrameCanvas(QWidget):
         """Restore previously picked regions onto the current canvas."""
         pr = self._pixmap_rect()
         self._rects = [
-            QRect(int(pr.x() + r["x"] * pr.width()),
-                  int(pr.y() + r["y"] * pr.height()),
-                  int(r["w"] * pr.width()),
-                  int(r["h"] * pr.height()))
+            QRect(
+                int(pr.x() + r["x"] * pr.width()),
+                int(pr.y() + r["y"] * pr.height()),
+                int(r["w"] * pr.width()),
+                int(r["h"] * pr.height()),
+            )
             for r in regions
         ]
         self._selected_index = len(self._rects) - 1 if self._rects else None
@@ -236,8 +259,7 @@ class _FrameCanvas(QWidget):
         if self._dragging_text:
             self._apply_text_drag(pos.y())
         elif self._drag_origin is not None:
-            self._drag_current = QRect(
-                self._drag_origin, pos.toPoint()).normalized()
+            self._drag_current = QRect(self._drag_origin, pos.toPoint()).normalized()
             self.update()
         else:
             inside = self._text_rect.adjusted(-8, -8, 8, 8).contains(pos)
@@ -310,7 +332,9 @@ class _FrameCanvas(QWidget):
 
     def select_region(self, index: int | None) -> None:
         """Đánh dấu chọn một vùng để làm nổi bật trên canvas."""
-        self._selected_index = index if (index is not None and 0 <= index < len(self._rects)) else None
+        self._selected_index = (
+            index if (index is not None and 0 <= index < len(self._rects)) else None
+        )
         self.update()
 
     def add_preset_region(self, preset_type: str) -> None:
@@ -333,10 +357,12 @@ class _FrameCanvas(QWidget):
         pr = self._pixmap_rect()
         if pr.width() <= 0 or pr.height() <= 0:
             return
-        new_r = QRect(int(pr.x() + reg["x"] * pr.width()),
-                      int(pr.y() + reg["y"] * pr.height()),
-                      int(reg["w"] * pr.width()),
-                      int(reg["h"] * pr.height()))
+        new_r = QRect(
+            int(pr.x() + reg["x"] * pr.width()),
+            int(pr.y() + reg["y"] * pr.height()),
+            int(reg["w"] * pr.width()),
+            int(reg["h"] * pr.height()),
+        )
         self._rects.append(new_r)
         self._selected_index = len(self._rects) - 1
         self.update()
@@ -350,12 +376,14 @@ class _FrameCanvas(QWidget):
             return []
         out = []
         for r in self._rects:
-            out.append({
-                "x": round((r.x() - pr.x()) / pr.width(), 4),
-                "y": round((r.y() - pr.y()) / pr.height(), 4),
-                "w": round(r.width() / pr.width(), 4),
-                "h": round(r.height() / pr.height(), 4),
-            })
+            out.append(
+                {
+                    "x": round((r.x() - pr.x()) / pr.width(), 4),
+                    "y": round((r.y() - pr.y()) / pr.height(), 4),
+                    "w": round(r.width() / pr.width(), 4),
+                    "h": round(r.height() / pr.height(), 4),
+                }
+            )
         return out
 
     # --------------------------------------------------------- paint ------ #
@@ -379,7 +407,7 @@ class _FrameCanvas(QWidget):
         painter.setFont(badge_font)
 
         for i, r in enumerate(self._rects):
-            is_sel = (i == self._selected_index)
+            is_sel = i == self._selected_index
             painter.setPen(selected_pen if is_sel else default_pen)
             painter.fillRect(r, selected_fill if is_sel else default_fill)
             painter.drawRect(r)
@@ -408,7 +436,11 @@ class _FrameCanvas(QWidget):
         bg_col = QColor(bg_color_hex) if QColor.isValidColor(bg_color_hex) else QColor("#000000")
 
         # Chiều cao mỗi dải banner theo tỷ lệ người dùng chọn (mặc định 16%)
-        height_ratio = float(self._banner_opts.get("frame_banner_height_ratio") or self._banner_opts.get("height_ratio") or 0.16)
+        height_ratio = float(
+            self._banner_opts.get("frame_banner_height_ratio")
+            or self._banner_opts.get("height_ratio")
+            or 0.16
+        )
         banner_h = max(20, int(pr.height() * height_ratio))
 
         top_rect = QRect(pr.x(), pr.y(), pr.width(), banner_h)
@@ -427,26 +459,50 @@ class _FrameCanvas(QWidget):
         scale = self._ass_scale()
 
         # Vẽ Header Text
-        header_text = str(self._banner_opts.get("frame_header_text") or self._banner_opts.get("header_text") or "").strip()
+        header_text = str(
+            self._banner_opts.get("frame_header_text") or self._banner_opts.get("header_text") or ""
+        ).strip()
         if header_text:
-            h_fs = int(self._banner_opts.get("frame_header_font_size") or self._banner_opts.get("header_font_size") or 32)
+            h_fs = int(
+                self._banner_opts.get("frame_header_font_size")
+                or self._banner_opts.get("header_font_size")
+                or 32
+            )
             fs = max(10, int(h_fs * scale * 0.75))
-            c_hex = str(self._banner_opts.get("frame_header_color") or self._banner_opts.get("header_color") or "#FFFFFF").strip()
+            c_hex = str(
+                self._banner_opts.get("frame_header_color")
+                or self._banner_opts.get("header_color")
+                or "#FFFFFF"
+            ).strip()
             text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFFFFF")
             painter.setFont(QFont("Arial", fs, QFont.Bold))
             painter.setPen(text_col)
-            painter.drawText(top_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, header_text)
+            painter.drawText(
+                top_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, header_text
+            )
 
         # Vẽ Footer Text
-        footer_text = str(self._banner_opts.get("frame_footer_text") or self._banner_opts.get("footer_text") or "").strip()
+        footer_text = str(
+            self._banner_opts.get("frame_footer_text") or self._banner_opts.get("footer_text") or ""
+        ).strip()
         if footer_text:
-            f_fs = int(self._banner_opts.get("frame_footer_font_size") or self._banner_opts.get("footer_font_size") or 24)
+            f_fs = int(
+                self._banner_opts.get("frame_footer_font_size")
+                or self._banner_opts.get("footer_font_size")
+                or 24
+            )
             fs = max(9, int(f_fs * scale * 0.75))
-            c_hex = str(self._banner_opts.get("frame_footer_color") or self._banner_opts.get("footer_color") or "#FFD54A").strip()
+            c_hex = str(
+                self._banner_opts.get("frame_footer_color")
+                or self._banner_opts.get("footer_color")
+                or "#FFD54A"
+            ).strip()
             text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFD54A")
             painter.setFont(QFont("Arial", fs, QFont.Bold))
             painter.setPen(text_col)
-            painter.drawText(bot_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, footer_text)
+            painter.drawText(
+                bot_rect.adjusted(12, 4, -12, -4), Qt.AlignCenter | Qt.TextWordWrap, footer_text
+            )
 
         painter.restore()
 
@@ -549,8 +605,7 @@ class _FrameCanvas(QWidget):
         font.setPixelSize(max(6, round(int(s.get("font_size", 22)) * scale)))
         font.setBold(bool(s.get("bold", True)))
 
-        preview = (PREVIEW_TEXT_KARAOKE
-                   if s.get("display") == "karaoke" else PREVIEW_TEXT)
+        preview = PREVIEW_TEXT_KARAOKE if s.get("display") == "karaoke" else PREVIEW_TEXT
         if s.get("all_caps"):
             preview = preview.upper()
         path = QPainterPath()
@@ -593,9 +648,15 @@ class _FrameCanvas(QWidget):
 
         outline_px = int(s.get("outline", 2)) * scale * 2
         if outline_px > 0 and s.get("box") != "box":
-            painter.setPen(QPen(QColor(s.get("outline_color", tokens.SUBTITLE_OUTLINE_DEFAULT)),
-                                outline_px, Qt.SolidLine, Qt.RoundCap,
-                                Qt.RoundJoin))
+            painter.setPen(
+                QPen(
+                    QColor(s.get("outline_color", tokens.SUBTITLE_OUTLINE_DEFAULT)),
+                    outline_px,
+                    Qt.SolidLine,
+                    Qt.RoundCap,
+                    Qt.RoundJoin,
+                )
+            )
             painter.drawPath(path)
         painter.setPen(Qt.NoPen)
         painter.fillPath(path, QColor(s.get("color", tokens.SUBTITLE_TEXT_DEFAULT)))
@@ -607,7 +668,9 @@ class _FrameCanvas(QWidget):
             hi = QPainterPath()
             hi.addText(0, 0, font, preview.split()[0])
             hi.translate(dx, dy)
-            painter.fillPath(hi, QColor(s.get("highlight_color", tokens.SUBTITLE_HIGHLIGHT_DEFAULT)))
+            painter.fillPath(
+                hi, QColor(s.get("highlight_color", tokens.SUBTITLE_HIGHLIGHT_DEFAULT))
+            )
 
 
 def _placeholder_frame() -> QPixmap:
@@ -619,14 +682,14 @@ def _placeholder_frame() -> QPixmap:
     f = QFont("Arial")
     f.setPixelSize(40)
     painter.setFont(f)
-    painter.drawText(pm.rect(), Qt.AlignCenter,
-                     "(Chưa có video — xem trước phụ đề trên nền mẫu)")
+    painter.drawText(pm.rect(), Qt.AlignCenter, "(Chưa có video — xem trước phụ đề trên nền mẫu)")
     painter.end()
     return pm
 
 
 class ThumbnailWorker(QThread):
     """Tải nhanh ảnh bìa / thumbnail của video URL ngầm mà không làm đơ giao diện."""
+
     loaded = Signal(QImage)
 
     def __init__(self, url: str, parent=None):
@@ -637,8 +700,10 @@ class ThumbnailWorker(QThread):
         try:
             import hashlib
             import urllib.request
-            from autodub.config import cache_dir
+
             import yt_dlp
+
+            from autodub.config import cache_dir
 
             url_hash = hashlib.md5(self._url.encode("utf-8")).hexdigest()[:10]
             out_img = os.path.join(cache_dir(), f"thumb_{url_hash}.jpg")
@@ -658,10 +723,11 @@ class ThumbnailWorker(QThread):
                 info = ydl.extract_info(self._url, download=False)
                 thumb_url = info.get("thumbnail") if isinstance(info, dict) else None
                 if thumb_url:
-                    req = urllib.request.Request(
-                        thumb_url, headers={"User-Agent": "Mozilla/5.0"}
-                    )
-                    with urllib.request.urlopen(req, timeout=5) as response, open(out_img, "wb") as f:
+                    req = urllib.request.Request(thumb_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with (
+                        urllib.request.urlopen(req, timeout=5) as response,
+                        open(out_img, "wb") as f,
+                    ):
                         f.write(response.read())
                     if os.path.isfile(out_img) and os.path.getsize(out_img) > 1000:
                         img = QImage(out_img)
@@ -674,16 +740,21 @@ class ThumbnailWorker(QThread):
 class StyleDialog(QDialog):
     """Style the subtitles, blur regions, logo and dynamic watermark in one place."""
 
-    def __init__(self, video_path: str | None, style: dict,
-                 regions: list[dict] | None = None, parent=None,
-                 preview_text: str = "",
-                 logo_options: dict | None = None,
-                 watermark_options: dict | None = None,
-                 reframe_options: dict | None = None,
-                 sfx_options: dict | None = None,
-                 mask_options: dict | None = None,
-                 banner_options: dict | None = None,
-                 video_url: str = ""):
+    def __init__(
+        self,
+        video_path: str | None,
+        style: dict,
+        regions: list[dict] | None = None,
+        parent=None,
+        preview_text: str = "",
+        logo_options: dict | None = None,
+        watermark_options: dict | None = None,
+        reframe_options: dict | None = None,
+        sfx_options: dict | None = None,
+        mask_options: dict | None = None,
+        banner_options: dict | None = None,
+        video_url: str = "",
+    ):
         super().__init__(parent)
         self.setWindowTitle("Phụ đề & hiệu ứng video")
         self.resize(1180, 720)
@@ -708,9 +779,8 @@ class StyleDialog(QDialog):
         self._thumb_worker = None
         self._auto_detect_worker = None
 
-
         if preview_text:
-            global PREVIEW_TEXT, PREVIEW_TEXT_KARAOKE  # noqa: PLW0603
+            global PREVIEW_TEXT, PREVIEW_TEXT_KARAOKE
             PREVIEW_TEXT = preview_text
             words = preview_text.split()
             PREVIEW_TEXT_KARAOKE = " ".join(words[:3]) if len(words) >= 3 else preview_text
@@ -749,7 +819,9 @@ class StyleDialog(QDialog):
         self.lbl_time = QLabel("00:00 / 00:00")
         self.lbl_time.setMinimumWidth(85)
         self.btn_pick_bg = QPushButton("Chọn ảnh/video mẫu…")
-        self.btn_pick_bg.setToolTip("Tải ảnh chụp màn hình hoặc video từ máy để làm nền căn chỉnh chính xác")
+        self.btn_pick_bg.setToolTip(
+            "Tải ảnh chụp màn hình hoặc video từ máy để làm nền căn chỉnh chính xác"
+        )
         self.btn_pick_bg.clicked.connect(self._pick_backdrop)
         controls_row.addWidget(self.btn_play)
         controls_row.addWidget(self.slider_pos, 1)
@@ -757,7 +829,9 @@ class StyleDialog(QDialog):
         controls_row.addWidget(self.btn_pick_bg)
         left.addLayout(controls_row)
 
-        is_image = has_video and str(video_path).lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+        is_image = has_video and str(video_path).lower().endswith(
+            (".jpg", ".jpeg", ".png", ".webp")
+        )
         if has_video and os.path.isfile(str(video_path)):
             if is_image:
                 loaded_img = QImage(str(video_path))
@@ -782,7 +856,11 @@ class StyleDialog(QDialog):
             self.slider_pos.setEnabled(False)
 
         # Khởi chạy tải ảnh bìa ngầm nếu là URL
-        target_url = video_url or (video_path if (video_path and str(video_path).startswith(("http://", "https://"))) else "")
+        target_url = video_url or (
+            video_path
+            if (video_path and str(video_path).startswith(("http://", "https://")))
+            else ""
+        )
         if target_url:
             self._thumb_worker = ThumbnailWorker(target_url, self)
             self._thumb_worker.loaded.connect(self._on_thumbnail_loaded)
@@ -791,8 +869,12 @@ class StyleDialog(QDialog):
         self.hint = QLabel(
             "Kéo dòng phụ đề để đặt vị trí. "
             "Kéo chuột trên hình để khoanh vùng che chữ (làm mờ suốt video)."
-            + ("" if (has_video and os.path.isfile(str(video_path))) else
-               " Đang tải ảnh từ link hoặc bạn có thể bấm «Chọn ảnh/video mẫu…»."))
+            + (
+                ""
+                if (has_video and os.path.isfile(str(video_path)))
+                else " Đang tải ảnh từ link hoặc bạn có thể bấm «Chọn ảnh/video mẫu…»."
+            )
+        )
         self.hint.setObjectName("hint")
         self.hint.setWordWrap(True)
         left.addWidget(self.hint)
@@ -835,7 +917,8 @@ class StyleDialog(QDialog):
         self.cb_font = QComboBox()
         self._populate_fonts()
         self.cb_font.setToolTip(
-            "Font trong nhóm 'Font của app' hiển thị đúng trên video ở mọi máy.")
+            "Font trong nhóm 'Font của app' hiển thị đúng trên video ở mọi máy."
+        )
         self.btn_fonts_dir = QPushButton("+")
         self.btn_fonts_dir.setFixedWidth(28)
         self.btn_fonts_dir.setToolTip("Thêm font: mở thư mục font của app.")
@@ -939,7 +1022,8 @@ class StyleDialog(QDialog):
         polish_combo(self.cb_display)
         self.cb_display.setToolTip(
             "Cả câu: hiện trọn câu một lần (kiểu chuẩn).\n"
-            "Cụm chữ theo giọng đọc: chữ nhảy theo từng cụm ngắn khớp nhịp nói.")
+            "Cụm chữ theo giọng đọc: chữ nhảy theo từng cụm ngắn khớp nhịp nói."
+        )
 
         self.sp_line_words = QSpinBox()
         self.sp_line_words.setRange(1, 20)
@@ -1010,9 +1094,13 @@ class StyleDialog(QDialog):
         method_layout.setSpacing(8)
 
         self.rb_mask_blur = QRadioButton("Làm mờ Boxblur (Mặc định — Nhanh, nhẹ)")
-        self.rb_mask_blur.setToolTip("Làm mờ vùng phụ đề bằng FFmpeg trong 1 pass encode (nhanh, nhẹ, tương thích mọi máy)")
+        self.rb_mask_blur.setToolTip(
+            "Làm mờ vùng phụ đề bằng FFmpeg trong 1 pass encode (nhanh, nhẹ, tương thích mọi máy)"
+        )
         self.rb_mask_ai = QRadioButton("Xóa sạch AI Inpainting (Chất lượng cao)")
-        self.rb_mask_ai.setToolTip("Sử dụng AI Inpaint (LaMa ONNX / VSR) tái tạo nền video tự nhiên, xóa sạch chữ không để lại vết mờ")
+        self.rb_mask_ai.setToolTip(
+            "Sử dụng AI Inpaint (LaMa ONNX / VSR) tái tạo nền video tự nhiên, xóa sạch chữ không để lại vết mờ"
+        )
 
         method_layout.addWidget(self.rb_mask_blur)
         method_layout.addWidget(self.rb_mask_ai)
@@ -1066,7 +1154,9 @@ class StyleDialog(QDialog):
         blur_l.addLayout(p_row1)
 
         self.lbl_regions_count = QLabel("Danh sách vùng làm mờ / xóa chữ (0 vùng):")
-        self.lbl_regions_count.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;")
+        self.lbl_regions_count.setStyleSheet(
+            f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;"
+        )
         blur_l.addWidget(self.lbl_regions_count)
 
         self.list_regions = QListWidget()
@@ -1100,7 +1190,6 @@ class StyleDialog(QDialog):
         blur_l.addStretch()
         tab_blur_scroll.setWidget(tab_blur_w)
         self.tabs.addTab(tab_blur_scroll, "Vùng che / Xóa chữ")
-
 
         # ================================= TAB 3: LOGO & WATERMARK ================================= #
         tab_lw_scroll = QScrollArea()
@@ -1274,7 +1363,9 @@ class StyleDialog(QDialog):
         fx_l.addLayout(f_banner)
 
         self.chk_banner_enabled = QCheckBox("Bật khung viền dải trên & dưới (Banner)")
-        self.chk_banner_enabled.setToolTip("Khung viền trên & dưới chuẩn phong cách video viral TikTok/Shorts/Facebook")
+        self.chk_banner_enabled.setToolTip(
+            "Khung viền trên & dưới chuẩn phong cách video viral TikTok/Shorts/Facebook"
+        )
         f_banner.addRow("", self.chk_banner_enabled)
 
         row_bg_c = QHBoxLayout()
@@ -1313,7 +1404,9 @@ class StyleDialog(QDialog):
         self.slider_banner_height = QSlider(Qt.Horizontal)
         self.slider_banner_height.setRange(8, 35)
         self.slider_banner_height.setValue(16)
-        self.slider_banner_height.setToolTip("Kéo để điều chỉnh độ dày / chiều cao của dải viền trên và dưới")
+        self.slider_banner_height.setToolTip(
+            "Kéo để điều chỉnh độ dày / chiều cao của dải viền trên và dưới"
+        )
 
         self.sp_banner_height = QSpinBox()
         self.sp_banner_height.setRange(8, 35)
@@ -1495,7 +1588,9 @@ class StyleDialog(QDialog):
         fx_l.addLayout(f_sfx)
 
         self.chk_auto_sfx = QCheckBox("Bật âm thanh chuyển cảnh tự động")
-        self.chk_auto_sfx.setToolTip("Tự động chèn hiệu ứng âm thanh nhỏ khi video chuyển cảnh (Scene Cut)")
+        self.chk_auto_sfx.setToolTip(
+            "Tự động chèn hiệu ứng âm thanh nhỏ khi video chuyển cảnh (Scene Cut)"
+        )
         f_sfx.addRow("", self.chk_auto_sfx)
 
         self.cb_sfx_preset = QComboBox()
@@ -1510,7 +1605,9 @@ class StyleDialog(QDialog):
         self.sp_sfx_volume.setRange(-30, 0)
         self.sp_sfx_volume.setValue(-14)
         self.sp_sfx_volume.setSuffix(" dB")
-        self.sp_sfx_volume.setToolTip("Âm lượng âm thanh chuyển cảnh (-14 dB là mức êm dịu, không át tiếng nói)")
+        self.sp_sfx_volume.setToolTip(
+            "Âm lượng âm thanh chuyển cảnh (-14 dB là mức êm dịu, không át tiếng nói)"
+        )
         f_sfx.addRow("Âm lượng SFX:", self.sp_sfx_volume)
 
         fx_l.addStretch()
@@ -1543,8 +1640,8 @@ class StyleDialog(QDialog):
         if regions:
             # Defer until the canvas has its final size, then restore rects.
             from PySide6.QtCore import QTimer
-            QTimer.singleShot(
-                0, lambda: self.canvas.set_rects_from_normalized(regions))
+
+            QTimer.singleShot(0, lambda: self.canvas.set_rects_from_normalized(regions))
 
         # Bắt đầu trích xuất frame video trong luồng nền NGAY SAU KHI
         # dialog đã dựng xong — người dùng thấy dialog lập tức với placeholder,
@@ -1568,16 +1665,16 @@ class StyleDialog(QDialog):
             return
         self.canvas._source = pixmap
         self.canvas._scaled = pixmap.scaled(
-            self.canvas.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation)
+            self.canvas.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
         self.canvas.update()
         # Khôi phục vùng blur lên frame thật nếu có
         if self._regions_pending:
             from PySide6.QtCore import QTimer
+
             QTimer.singleShot(
-                0, lambda: self.canvas.set_rects_from_normalized(
-                    self._regions_pending))
+                0, lambda: self.canvas.set_rects_from_normalized(self._regions_pending)
+            )
 
     def _sync_regions_list(self, regions: list[dict]) -> None:
         """Đồng bộ danh sách các vùng làm mờ vào QListWidget."""
@@ -1586,10 +1683,14 @@ class StyleDialog(QDialog):
         count = len(regions)
         if count == 0:
             self.lbl_regions_count.setText("Danh sách vùng làm mờ (0 vùng):")
-            self.lbl_regions_count.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;")
+            self.lbl_regions_count.setStyleSheet(
+                f"color: {tokens.TEXT_MUTED}; font-size: 12px; margin-top: 4px;"
+            )
         else:
             self.lbl_regions_count.setText(f"Danh sách vùng làm mờ ({count} vùng):")
-            self.lbl_regions_count.setStyleSheet(f"color: {tokens.WARNING}; font-weight: bold; font-size: 12px; margin-top: 4px;")
+            self.lbl_regions_count.setStyleSheet(
+                f"color: {tokens.WARNING}; font-weight: bold; font-size: 12px; margin-top: 4px;"
+            )
 
         for i, r in enumerate(regions):
             x_pct = int(round(float(r.get("x", 0)) * 100))
@@ -1620,6 +1721,7 @@ class StyleDialog(QDialog):
     def _on_frame_failed(self, message: str) -> None:
         """Hiện cảnh báo nhẹ; không đóng dialog — phụ đề vẫn chỉnh được."""
         from autodub_gui.ui.toast import TOASTS
+
         TOASTS.warn(f"Không lấy được frame video: {message}")
 
     def _on_auto_detect_clicked(self) -> None:
@@ -1631,9 +1733,11 @@ class StyleDialog(QDialog):
         """
         if not self._video_path or not os.path.exists(self._video_path):
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.information(
-                self, "Tự động dò phụ đề",
-                "Cần có tệp video nguồn trên máy để thực hiện quét tự động."
+                self,
+                "Tự động dò phụ đề",
+                "Cần có tệp video nguồn trên máy để thực hiện quét tự động.",
             )
             return
 
@@ -1656,25 +1760,27 @@ class StyleDialog(QDialog):
         if regs:
             self.canvas.set_rects_from_normalized(regs)
             from autodub_gui.ui.toast import TOASTS
+
             TOASTS.info(f"Đã phát hiện {len(regs)} vùng phụ đề cứng.")
         else:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.information(
-                self, "Tự động dò phụ đề",
-                "Không phát hiện thấy dải phụ đề cứng cố định nào trong video."
+                self,
+                "Tự động dò phụ đề",
+                "Không phát hiện thấy dải phụ đề cứng cố định nào trong video.",
             )
 
     def _on_auto_detect_failed(self, message: str) -> None:
         self._auto_detect_worker = None
         self._reset_auto_detect_button()
         from autodub_gui.ui.toast import TOASTS
+
         TOASTS.warn(f"Lỗi khi quét phụ đề: {message}")
 
     def _reset_auto_detect_button(self) -> None:
         self.btn_auto_detect.setEnabled(True)
         self.btn_auto_detect.setText("Dò tự động")
-
-
 
     # ------------------------------------------------------- controls ----- #
 
@@ -1688,8 +1794,9 @@ class StyleDialog(QDialog):
         e_idx = self.cb_effect.findData(s.get("effect", "pop"))
         self.cb_effect.setCurrentIndex(e_idx if e_idx >= 0 else 0)
         self.sp_words.setValue(int(s.get("words_per_cue", 3)))
-        self._paint_color_button(self.btn_highlight,
-                                 s.get("highlight_color", tokens.SUBTITLE_HIGHLIGHT_DEFAULT))
+        self._paint_color_button(
+            self.btn_highlight, s.get("highlight_color", tokens.SUBTITLE_HIGHLIGHT_DEFAULT)
+        )
         idx = self.cb_pos.findData(s.get("position", "bottom"))
         self.cb_pos.setCurrentIndex(idx if idx >= 0 else 0)
         self._select_font(s.get("font", "Arial"))
@@ -1701,40 +1808,64 @@ class StyleDialog(QDialog):
         b_idx = self.cb_box.findData(s.get("box", "none"))
         self.cb_box.setCurrentIndex(b_idx if b_idx >= 0 else 0)
         self.sp_box_opacity.setValue(int(s.get("box_opacity", 60)))
-        self._paint_color_button(self.btn_box_color,
-                                 s.get("box_color", tokens.SUBTITLE_BOXFILL_DEFAULT))
+        self._paint_color_button(
+            self.btn_box_color, s.get("box_color", tokens.SUBTITLE_BOXFILL_DEFAULT)
+        )
         self._paint_color_button(self.btn_color, s.get("color", tokens.SUBTITLE_TEXT_DEFAULT))
-        self._paint_color_button(self.btn_outline_color,
-                                 s.get("outline_color", tokens.SUBTITLE_OUTLINE_DEFAULT))
+        self._paint_color_button(
+            self.btn_outline_color, s.get("outline_color", tokens.SUBTITLE_OUTLINE_DEFAULT)
+        )
         self._update_karaoke_enabled()
         self._update_box_enabled()
 
         # Logo controls
-        logo_path = str(self._logo_opts.get("logo_path") or self._logo_opts.get("path") or "").strip()
+        logo_path = str(
+            self._logo_opts.get("logo_path") or self._logo_opts.get("path") or ""
+        ).strip()
         self.txt_logo_path.setText(logo_path)
         self.chk_logo_enabled.setChecked(bool(logo_path or self._logo_opts.get("enabled", False)))
         l_pos = self._logo_opts.get("logo_position") or self._logo_opts.get("position", "top_right")
         l_pos_idx = self.cb_logo_pos.findData(l_pos)
         self.cb_logo_pos.setCurrentIndex(l_pos_idx if l_pos_idx >= 0 else 0)
-        l_scale = int(round(float(self._logo_opts.get("logo_scale", self._logo_opts.get("scale", 0.12))) * 100))
+        l_scale = int(
+            round(
+                float(self._logo_opts.get("logo_scale", self._logo_opts.get("scale", 0.12))) * 100
+            )
+        )
         self.sp_logo_scale.setValue(max(4, min(50, l_scale)))
-        l_op = int(round(float(self._logo_opts.get("logo_opacity", self._logo_opts.get("opacity", 0.85))) * 100))
+        l_op = int(
+            round(
+                float(self._logo_opts.get("logo_opacity", self._logo_opts.get("opacity", 0.85)))
+                * 100
+            )
+        )
         self.sp_logo_opacity.setValue(max(10, min(100, l_op)))
         l_motion = self._logo_opts.get("logo_motion") or self._logo_opts.get("motion", "static")
         l_mot_idx = self.cb_logo_motion.findData(l_motion)
         self.cb_logo_motion.setCurrentIndex(l_mot_idx if l_mot_idx >= 0 else 0)
 
         # Watermark controls
-        wm_text = str(self._wm_opts.get("watermark_text") or self._wm_opts.get("text") or "").strip()
+        wm_text = str(
+            self._wm_opts.get("watermark_text") or self._wm_opts.get("text") or ""
+        ).strip()
         self.txt_wm_text.setText(wm_text)
         self.chk_wm_enabled.setChecked(bool(wm_text or self._wm_opts.get("enabled", False)))
         wm_mot = self._wm_opts.get("watermark_motion") or self._wm_opts.get("motion", "bounce")
         wm_mot_idx = self.cb_wm_motion.findData(wm_mot)
         self.cb_wm_motion.setCurrentIndex(wm_mot_idx if wm_mot_idx >= 0 else 0)
-        wm_op = int(round(float(self._wm_opts.get("watermark_opacity", self._wm_opts.get("opacity", 0.28))) * 100))
+        wm_op = int(
+            round(
+                float(self._wm_opts.get("watermark_opacity", self._wm_opts.get("opacity", 0.28)))
+                * 100
+            )
+        )
         self.sp_wm_opacity.setValue(max(5, min(80, wm_op)))
-        self.sp_wm_font_size.setValue(int(self._wm_opts.get("watermark_font_size", self._wm_opts.get("font_size", 26))))
-        self.sp_wm_speed.setValue(int(self._wm_opts.get("watermark_speed", self._wm_opts.get("speed", 40))))
+        self.sp_wm_font_size.setValue(
+            int(self._wm_opts.get("watermark_font_size", self._wm_opts.get("font_size", 26)))
+        )
+        self.sp_wm_speed.setValue(
+            int(self._wm_opts.get("watermark_speed", self._wm_opts.get("speed", 40)))
+        )
 
         # Reframe & SFX controls
         asp = self._reframe_opts.get("aspect_preset", "original")
@@ -1769,18 +1900,26 @@ class StyleDialog(QDialog):
 
         # Banner controls
         opts = dict(self._banner_opts)
-        self.chk_banner_enabled.setChecked(bool(opts.get("frame_banner_enabled", opts.get("enabled", False))))
+        self.chk_banner_enabled.setChecked(
+            bool(opts.get("frame_banner_enabled", opts.get("enabled", False)))
+        )
         self._banner_bg_color = str(opts.get("frame_banner_color", opts.get("color", "#000000")))
-        height_ratio = float(opts.get("frame_banner_height_ratio") or opts.get("height_ratio") or 0.16)
+        height_ratio = float(
+            opts.get("frame_banner_height_ratio") or opts.get("height_ratio") or 0.16
+        )
         pct = max(8, min(35, int(round(height_ratio * 100))))
 
         hdr_text = str(opts.get("frame_header_text", opts.get("header_text", "")))
         h_sz = int(opts.get("frame_header_font_size", opts.get("header_font_size", 32)))
-        self._header_text_color = str(opts.get("frame_header_color", opts.get("header_color", "#FFFFFF")))
+        self._header_text_color = str(
+            opts.get("frame_header_color", opts.get("header_color", "#FFFFFF"))
+        )
 
         ftr_text = str(opts.get("frame_footer_text", opts.get("footer_text", "")))
         f_sz = int(opts.get("frame_footer_font_size", opts.get("footer_font_size", 24)))
-        self._footer_text_color = str(opts.get("frame_footer_color", opts.get("footer_color", "#FFD54A")))
+        self._footer_text_color = str(
+            opts.get("frame_footer_color", opts.get("footer_color", "#FFD54A"))
+        )
 
         self.sp_banner_height.setValue(pct)
         self.slider_banner_height.setValue(pct)
@@ -1799,8 +1938,12 @@ class StyleDialog(QDialog):
         self._sync_logo_wm_from_controls()
 
     def _connect_controls(self) -> None:
-        self.rb_mask_blur.toggled.connect(lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked()))
-        self.rb_mask_ai.toggled.connect(lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked()))
+        self.rb_mask_blur.toggled.connect(
+            lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked())
+        )
+        self.rb_mask_ai.toggled.connect(
+            lambda: self.ai_opts_container.setVisible(self.rb_mask_ai.isChecked())
+        )
 
         self.cb_display.currentIndexChanged.connect(self._sync_from_controls)
 
@@ -1841,8 +1984,11 @@ class StyleDialog(QDialog):
 
     def _browse_logo_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn hình ảnh Logo / Watermark", "",
-            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)")
+            self,
+            "Chọn hình ảnh Logo / Watermark",
+            "",
+            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)",
+        )
         if path:
             self.txt_logo_path.setText(path)
             self.chk_logo_enabled.setChecked(True)
@@ -1916,6 +2062,7 @@ class StyleDialog(QDialog):
 
     def _pick_banner_color(self, target: str) -> None:
         from PySide6.QtWidgets import QColorDialog
+
         if target == "banner_bg":
             curr = self._banner_bg_color
         elif target == "header_color":
@@ -1947,8 +2094,7 @@ class StyleDialog(QDialog):
         # "Chữ mỗi hàng" là của chế độ CẢ CÂU — karaoke tự chia cụm riêng.
         self.sp_line_words.setEnabled(not karaoke)
         self.sp_max_lines.setEnabled(not karaoke)
-        self.btn_highlight.setEnabled(
-            karaoke and self.cb_effect.currentData() == "karaoke")
+        self.btn_highlight.setEnabled(karaoke and self.cb_effect.currentData() == "karaoke")
 
     def _update_box_enabled(self) -> None:
         """Nền chữ bật thì màu nền/độ đục dùng được; viền + bóng thì không
@@ -1962,23 +2108,25 @@ class StyleDialog(QDialog):
 
     def _sync_from_controls(self, *_args) -> None:
         font = self.cb_font.currentData()
-        self._style.update({
-            "display": self.cb_display.currentData(),
-            "line_words": self.sp_line_words.value(),
-            "max_lines": self.sp_max_lines.value(),
-            "all_caps": self.chk_all_caps.isChecked(),
-            "effect": self.cb_effect.currentData(),
-            "words_per_cue": self.sp_words.value(),
-            "position": self.cb_pos.currentData(),
-            **({"font": font} if font else {}),   # header không có data
-            "font_size": self.sp_size.value(),
-            "margin_v": self.sp_margin.value(),
-            "outline": self.sp_outline.value(),
-            "shadow": self.sp_shadow.value(),
-            "bold": self.chk_bold.isChecked(),
-            "box": self.cb_box.currentData(),
-            "box_opacity": self.sp_box_opacity.value(),
-        })
+        self._style.update(
+            {
+                "display": self.cb_display.currentData(),
+                "line_words": self.sp_line_words.value(),
+                "max_lines": self.sp_max_lines.value(),
+                "all_caps": self.chk_all_caps.isChecked(),
+                "effect": self.cb_effect.currentData(),
+                "words_per_cue": self.sp_words.value(),
+                "position": self.cb_pos.currentData(),
+                **({"font": font} if font else {}),  # header không có data
+                "font_size": self.sp_size.value(),
+                "margin_v": self.sp_margin.value(),
+                "outline": self.sp_outline.value(),
+                "shadow": self.sp_shadow.value(),
+                "bold": self.chk_bold.isChecked(),
+                "box": self.cb_box.currentData(),
+                "box_opacity": self.sp_box_opacity.value(),
+            }
+        )
         self.sp_margin.setEnabled(self._style["position"] != "middle")
         self._update_karaoke_enabled()
         self._update_box_enabled()
@@ -2024,11 +2172,9 @@ class StyleDialog(QDialog):
         self.cb_font.clear()
         for label, family in font_choices():
             self.cb_font.addItem(label, family)
-            self.cb_font.setItemData(
-                self.cb_font.count() - 1, QFont(family), Qt.FontRole)
+            self.cb_font.setItemData(self.cb_font.count() - 1, QFont(family), Qt.FontRole)
         if self.cb_font.count() == 0:
-            self.cb_font.addItem(
-                "Thư mục phông chữ đang trống — hãy thả tệp .ttf vào đó", "")
+            self.cb_font.addItem("Thư mục phông chữ đang trống — hãy thả tệp .ttf vào đó", "")
             self.cb_font.setEnabled(False)
         polish_combo(self.cb_font)
 
@@ -2044,12 +2190,16 @@ class StyleDialog(QDialog):
         if idx >= 0:
             self.cb_font.setCurrentIndex(idx)
 
-    def changeEvent(self, event) -> None:  # noqa: N802 — Qt API
+    def changeEvent(self, event) -> None:
         # Quay lại dialog sau khi thả font vào thư mục (Explorer) → đổ lại
         # danh sách để font mới hiện ngay, không phải mở lại app.
         from PySide6.QtCore import QEvent
-        if (event.type() == QEvent.ActivationChange and self.isActiveWindow()
-                and hasattr(self, "cb_font")):
+
+        if (
+            event.type() == QEvent.ActivationChange
+            and self.isActiveWindow()
+            and hasattr(self, "cb_font")
+        ):
             current = self.cb_font.currentData()
             self.cb_font.blockSignals(True)
             self._populate_fonts()
@@ -2060,6 +2210,7 @@ class StyleDialog(QDialog):
     def _open_fonts_dir(self) -> None:
         """Mở (tạo nếu chưa có) thư mục fonts/ cạnh app trong Explorer."""
         from autodub.utils import fonts_dir
+
         d = fonts_dir()
         os.makedirs(d, exist_ok=True)
         # README để người mở thư mục lần đầu biết phải làm gì.
@@ -2081,27 +2232,33 @@ class StyleDialog(QDialog):
                         "Gợi ý font hợp kiểu chữ video: Be Vietnam Pro, "
                         "Montserrat, Lexend, Baloo 2.\n"
                         "Font Google Fonts dùng giấy phép mở (OFL) — đóng "
-                        "gói kèm app thoải mái.\n")
+                        "gói kèm app thoải mái.\n"
+                    )
             except OSError:
                 pass
-        os.startfile(d)  # noqa: S606
+        os.startfile(d)
 
     def _pick_color(self, key: str) -> None:
         from PySide6.QtWidgets import QColorDialog
-        defaults = {"color": tokens.SUBTITLE_TEXT_DEFAULT,
-                    "outline_color": tokens.SUBTITLE_OUTLINE_DEFAULT,
-                    "box_color": tokens.SUBTITLE_BOXFILL_DEFAULT,
-                    "highlight_color": tokens.SUBTITLE_HIGHLIGHT_DEFAULT}
+
+        defaults = {
+            "color": tokens.SUBTITLE_TEXT_DEFAULT,
+            "outline_color": tokens.SUBTITLE_OUTLINE_DEFAULT,
+            "box_color": tokens.SUBTITLE_BOXFILL_DEFAULT,
+            "highlight_color": tokens.SUBTITLE_HIGHLIGHT_DEFAULT,
+        }
         current = self._style.get(key, defaults.get(key, tokens.SUBTITLE_TEXT_DEFAULT))
         color = QColorDialog.getColor(QColor(current), self, "Chọn màu")
         if not color.isValid():
             return
         hex_color = color.name().upper()
         self._style[key] = hex_color
-        btn = {"color": self.btn_color,
-               "outline_color": self.btn_outline_color,
-               "box_color": self.btn_box_color,
-               "highlight_color": self.btn_highlight}[key]
+        btn = {
+            "color": self.btn_color,
+            "outline_color": self.btn_outline_color,
+            "box_color": self.btn_box_color,
+            "highlight_color": self.btn_highlight,
+        }[key]
         self._paint_color_button(btn, hex_color)
         self.canvas.set_style(self._style)
 
@@ -2112,13 +2269,17 @@ class StyleDialog(QDialog):
             if hasattr(self, "hint") and self.hint:
                 self.hint.setText(
                     "Đã tải xong ảnh xem trước từ link video! Kéo dòng phụ đề để đặt vị trí, "
-                    "kéo chuột trên hình để khoanh vùng che chữ.")
+                    "kéo chuột trên hình để khoanh vùng che chữ."
+                )
 
     def _pick_backdrop(self) -> None:
         """Cho phép người dùng chọn bất kỳ ảnh hoặc video nào từ máy để làm nền xem trước."""
         from PySide6.QtWidgets import QFileDialog
+
         filters = "Tệp hình ảnh hoặc video (*.mp4 *.mkv *.mov *.webm *.avi *.jpg *.jpeg *.png *.webp);;Tất cả tệp (*.*)"
-        path, _ = QFileDialog.getOpenFileName(self, "Chọn video hoặc hình ảnh mẫu làm nền", "", filters)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Chọn video hoặc hình ảnh mẫu làm nền", "", filters
+        )
         if not path or not os.path.isfile(path):
             return
         if path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
@@ -2235,7 +2396,7 @@ class StyleDialog(QDialog):
             except Exception:
                 pass
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None:
         self._cleanup_workers()
         super().closeEvent(event)
 
@@ -2250,15 +2411,19 @@ class StyleDialog(QDialog):
     def _save_current_as_checkpoint(self) -> None:
         """Hỏi tên và lưu bộ thiết lập hiện tại thành Checkpoint."""
         from PySide6.QtWidgets import QInputDialog
+
         from autodub.checkpoint_store import (
-            bundle_checkpoint_data, save_checkpoint,
-            set_active_checkpoint_name, get_active_checkpoint_name,
+            bundle_checkpoint_data,
+            get_active_checkpoint_name,
+            save_checkpoint,
+            set_active_checkpoint_name,
         )
         from autodub_gui.ui.toast import TOASTS
 
         default_name = get_active_checkpoint_name() or "Kênh chính"
         name, ok = QInputDialog.getText(
-            self, "Lưu Checkpoint",
+            self,
+            "Lưu Checkpoint",
             "Nhập tên Checkpoint cần lưu (VD: Kênh Review, TikTok Shorts):",
             text=default_name,
         )
@@ -2295,7 +2460,9 @@ class StyleDialog(QDialog):
     def logo_options(self) -> dict:
         """Thông số cấu hình logo thương hiệu."""
         return {
-            "logo_path": self.txt_logo_path.text().strip() if self.chk_logo_enabled.isChecked() else "",
+            "logo_path": self.txt_logo_path.text().strip()
+            if self.chk_logo_enabled.isChecked()
+            else "",
             "logo_position": self.cb_logo_pos.currentData() or "top_right",
             "logo_scale": self.sp_logo_scale.value() / 100.0,
             "logo_opacity": self.sp_logo_opacity.value() / 100.0,
@@ -2305,7 +2472,9 @@ class StyleDialog(QDialog):
     def watermark_options(self) -> dict:
         """Thông số cấu hình watermark chữ chìm."""
         return {
-            "watermark_text": self.txt_wm_text.text().strip() if self.chk_wm_enabled.isChecked() else "",
+            "watermark_text": self.txt_wm_text.text().strip()
+            if self.chk_wm_enabled.isChecked()
+            else "",
             "watermark_motion": self.cb_wm_motion.currentData() or "bounce",
             "watermark_opacity": self.sp_wm_opacity.value() / 100.0,
             "watermark_font_size": self.sp_wm_font_size.value(),
@@ -2314,7 +2483,11 @@ class StyleDialog(QDialog):
 
     def banner_options(self) -> dict:
         """Thông số cấu hình khung viền dải trên & dưới (Top/Bottom Banner)."""
-        height_ratio = float(self.sp_banner_height.value() / 100.0) if hasattr(self, "sp_banner_height") else 0.16
+        height_ratio = (
+            float(self.sp_banner_height.value() / 100.0)
+            if hasattr(self, "sp_banner_height")
+            else 0.16
+        )
         return {
             "frame_banner_enabled": self.chk_banner_enabled.isChecked(),
             "frame_banner_color": self._banner_bg_color,
@@ -2352,5 +2525,3 @@ class StyleDialog(QDialog):
             "inpaint_engine": self.cb_inpaint_engine.currentData() or "lama_onnx",
             "inpaint_device": self.cb_inpaint_device.currentData() or "auto",
         }
-
-

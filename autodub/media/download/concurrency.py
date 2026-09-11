@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import List, Optional
 
 from autodub.media.download.contract import BandwidthMode, ErrorType
 
@@ -18,7 +17,7 @@ class AdaptiveConcurrencyController:
     def __init__(
         self,
         bandwidth_mode: BandwidthMode = BandwidthMode.AUTO,
-        initial_concurrency: Optional[int] = None,
+        initial_concurrency: int | None = None,
         min_concurrency: int = 1,
         max_concurrency: int = 8,
         cooldown_seconds: float = 3.0,
@@ -37,12 +36,14 @@ class AdaptiveConcurrencyController:
         elif bandwidth_mode == BandwidthMode.FAST:
             self.max_concurrency = max(4, max_concurrency)
             default_init = 6
-        else: # AUTO
+        else:  # AUTO
             self.max_concurrency = max_concurrency
             default_init = 4
 
         self.current_concurrency = initial_concurrency or default_init
-        self.current_concurrency = min(self.max_concurrency, max(self.min_concurrency, self.current_concurrency))
+        self.current_concurrency = min(
+            self.max_concurrency, max(self.min_concurrency, self.current_concurrency)
+        )
 
         self.cooldown_seconds = cooldown_seconds
         self.success_streak_threshold = success_streak_threshold
@@ -77,17 +78,19 @@ class AdaptiveConcurrencyController:
                     # Only scale up if throughput didn't severely degrade
                     if self._last_throughput == 0.0 or throughput >= (self._last_throughput * 0.75):
                         old_val = self.current_concurrency
-                        self.current_concurrency = min(self.max_concurrency, self.current_concurrency + 1)
+                        self.current_concurrency = min(
+                            self.max_concurrency, self.current_concurrency + 1
+                        )
                         logger.debug(
                             f"AdaptiveConcurrency scaled UP: {old_val} -> {self.current_concurrency} "
-                            f"(throughput: {throughput / (1024*1024):.2f} MB/s)"
+                            f"(throughput: {throughput / (1024 * 1024):.2f} MB/s)"
                         )
                 self._success_streak = 0
 
             self._last_throughput = throughput
             return self.current_concurrency
 
-    def record_error(self, error_type: ErrorType, status_code: Optional[int] = None) -> int:
+    def record_error(self, error_type: ErrorType, status_code: int | None = None) -> int:
         """Records a network or rate-limiting error and scales concurrency down (multiplicative decrease)."""
         severe_errors = {
             ErrorType.RATE_LIMITED,
@@ -110,10 +113,12 @@ class AdaptiveConcurrencyController:
                 )
             return self.current_concurrency
 
-    def reset(self, initial: Optional[int] = None) -> None:
+    def reset(self, initial: int | None = None) -> None:
         with self._lock:
             if initial is not None:
-                self.current_concurrency = min(self.max_concurrency, max(self.min_concurrency, initial))
+                self.current_concurrency = min(
+                    self.max_concurrency, max(self.min_concurrency, initial)
+                )
             self._success_streak = 0
             self._last_decrease_time = 0.0
             self._last_throughput = 0.0

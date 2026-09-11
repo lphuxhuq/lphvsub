@@ -1,10 +1,6 @@
-import pytest
-from autodub.media.output_profile import OutputProfile
-from autodub.media.blur_strategy import BlurStrategy, BlurMode
-from autodub.media.encoder_profile import EncoderProfile, QualityMode
+from autodub.media.blur_strategy import BlurMode
 from autodub.media.render_plan import RenderPlan
-from autodub.media.render_profiler import RenderProfiler
-from autodub.media.subtitle import build_filter_complex, build_aspect_ratio_filter
+from autodub.media.subtitle import build_filter_complex
 
 
 def test_full_pipeline_render_plan_9_16():

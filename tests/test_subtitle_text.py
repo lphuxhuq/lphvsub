@@ -4,6 +4,7 @@
 hình không được kéo theo việc phải đọc lại giọng, và chữ đã sửa phải đi thẳng
 vào tệp phụ đề dùng để ghi vào video.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,21 +12,31 @@ import os
 
 import pytest
 
-from autodub.editor import (EditorError, save_segment_texts,
-                            save_subtitle_texts)
-from autodub.text.srt import (SUBTITLE_FIELD, generate_srt,
-                              has_subtitle_override, split_for_display,
-                              subtitle_text)
+from autodub.editor import EditorError, save_segment_texts, save_subtitle_texts
+from autodub.text.srt import (
+    SUBTITLE_FIELD,
+    generate_srt,
+    has_subtitle_override,
+    split_for_display,
+    subtitle_text,
+)
 
 
 def seg(**kw) -> dict:
-    base = {"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0,
-            "text": "原文", "text_vi": "Lời đọc."}
+    base = {
+        "id": 1,
+        "start": 0.0,
+        "end": 2.0,
+        "duration": 2.0,
+        "text": "原文",
+        "text_vi": "Lời đọc.",
+    }
     base.update(kw)
     return base
 
 
 # ------------------------------------------------------------ chọn chữ --- #
+
 
 def test_falls_back_to_the_spoken_line():
     assert subtitle_text(seg()) == "Lời đọc."
@@ -57,18 +68,17 @@ def test_all_caps_applies_to_the_displayed_text():
 def test_line_words_controls_wrapping():
     long = seg(text_vi="một hai ba bốn năm sáu bảy tám", end=8.0, duration=8.0)
     cues = split_for_display(long, "text_vi", line_words=2, max_lines=2)
-    assert all(len(line.split()) <= 2
-               for cue in cues for line in cue["text"].splitlines())
+    assert all(len(line.split()) <= 2 for cue in cues for line in cue["text"].splitlines())
 
 
 def test_generated_srt_contains_the_override(tmp_path):
     out = str(tmp_path / "a.srt")
-    generate_srt([seg(**{SUBTITLE_FIELD: "Chữ riêng."})], out,
-                 text_field="text_vi")
+    generate_srt([seg(**{SUBTITLE_FIELD: "Chữ riêng."})], out, text_field="text_vi")
     assert "Chữ riêng." in open(out, encoding="utf-8").read()
 
 
 # --------------------------------------------------------------- lưu ---- #
+
 
 @pytest.fixture
 def work_dir(tmp_path):
@@ -77,8 +87,7 @@ def work_dir(tmp_path):
     path = data_path(str(tmp_path), "transcript_vi.json", create_dir=True)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump([seg(id=1), seg(id=2, text_vi="Câu hai.")], f,
-                  ensure_ascii=False)
+        json.dump([seg(id=1), seg(id=2, text_vi="Câu hai.")], f, ensure_ascii=False)
     return str(tmp_path), path
 
 
@@ -93,7 +102,7 @@ def test_saving_a_subtitle_leaves_the_spoken_line_alone(work_dir):
     assert changed == [1]
     rows = read(path)
     assert rows[0][SUBTITLE_FIELD] == "Chữ riêng."
-    assert rows[0]["text_vi"] == "Lời đọc."      # giọng đọc không đổi
+    assert rows[0]["text_vi"] == "Lời đọc."  # giọng đọc không đổi
 
 
 def test_subtitle_equal_to_the_spoken_line_is_dropped(work_dir):

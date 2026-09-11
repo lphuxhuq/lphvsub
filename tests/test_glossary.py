@@ -1,5 +1,5 @@
 import os
-import pytest
+
 from autodub.text.glossary import (
     apply_glossary,
     apply_glossary_to_segments,

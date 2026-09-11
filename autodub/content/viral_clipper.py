@@ -8,8 +8,6 @@ khớp chính xác với ranh giới câu thoại và điểm chuyển cảnh.
 from __future__ import annotations
 
 import json
-import logging
-import re
 from typing import Any
 
 from autodub.utils import setup_logging
@@ -18,10 +16,35 @@ logger = setup_logging("autodub.viral_clipper")
 
 # Các từ khóa kích thích cảm xúc và tăng độ kịch tính trong tiếng Việt
 VIRAL_KEYWORDS_VI = [
-    "bất ngờ", "không ngờ", "sốc", "bí mật", "sự thật", "kinh hoàng", "nguy hiểm",
-    "cứu", "chết", "tiền", "phản bội", "lật mặt", "âm mưu", "kinh ngạc", "kỳ lạ",
-    "tại sao", "lý do", "cảnh báo", "sợ hãi", "bi kịch", "cảm động", "nước mắt",
-    "triệu đô", "đại gia", "nghèo khó", "trả giá", "hối hận", "sát thủ", "thảm kịch"
+    "bất ngờ",
+    "không ngờ",
+    "sốc",
+    "bí mật",
+    "sự thật",
+    "kinh hoàng",
+    "nguy hiểm",
+    "cứu",
+    "chết",
+    "tiền",
+    "phản bội",
+    "lật mặt",
+    "âm mưu",
+    "kinh ngạc",
+    "kỳ lạ",
+    "tại sao",
+    "lý do",
+    "cảnh báo",
+    "sợ hãi",
+    "bi kịch",
+    "cảm động",
+    "nước mắt",
+    "triệu đô",
+    "đại gia",
+    "nghèo khó",
+    "trả giá",
+    "hối hận",
+    "sát thủ",
+    "thảm kịch",
 ]
 
 
@@ -33,7 +56,7 @@ def snap_to_segment_boundaries(
     max_duration: float = 65.0,
 ) -> tuple[float, float, int, int]:
     """Căn chỉnh mốc thời gian bắt đầu và kết thúc vào ranh giới câu thoại gần nhất.
-    
+
     Đảm bảo không bao giờ cắt cụt câu nói ở giữa.
     Trả về: (start_time, end_time, start_segment_idx, end_segment_idx)
     """
@@ -89,7 +112,7 @@ def heuristic_viral_analysis(
     scene_cuts: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Phân tích tìm đoạn cao trào bằng thuật toán Heuristic khi Offline / không có AI API.
-    
+
     Dựa trên:
     - Mật độ từ cảm xúc / kịch tính.
     - Nhịp điệu thoại (Speech rate & Speaker transition).
@@ -135,20 +158,26 @@ def heuristic_viral_analysis(
                     first_sentence = accum_text[0].strip()
                     if len(first_sentence) > 60:
                         first_sentence = first_sentence[:57] + "..."
-                    title = f"Khoảnh khắc cao trào: {first_sentence}" if first_sentence else f"Đoạn kịch tính #{len(scored_windows)+1}"
+                    title = (
+                        f"Khoảnh khắc cao trào: {first_sentence}"
+                        if first_sentence
+                        else f"Đoạn kịch tính #{len(scored_windows) + 1}"
+                    )
 
-                    scored_windows.append({
-                        "id": len(scored_windows) + 1,
-                        "title": title,
-                        "hook_text": accum_text[0] if accum_text else "",
-                        "start": round(seg_start, 2),
-                        "end": round(seg_end, 2),
-                        "duration": round(dur, 2),
-                        "viral_score": min(98, score),
-                        "reason": f"Mật độ từ cảm xúc cao ({kw_matches} từ khóa), nhịp thoại dồn dập.",
-                        "start_segment_idx": i,
-                        "end_segment_idx": j,
-                    })
+                    scored_windows.append(
+                        {
+                            "id": len(scored_windows) + 1,
+                            "title": title,
+                            "hook_text": accum_text[0] if accum_text else "",
+                            "start": round(seg_start, 2),
+                            "end": round(seg_end, 2),
+                            "duration": round(dur, 2),
+                            "viral_score": min(98, score),
+                            "reason": f"Mật độ từ cảm xúc cao ({kw_matches} từ khóa), nhịp thoại dồn dập.",
+                            "start_segment_idx": i,
+                            "end_segment_idx": j,
+                        }
+                    )
                 break
 
     # Sắp xếp theo viral_score giảm dần và lọc các clip bị trùng lặp thời gian quá nhiều (>50%)
@@ -174,18 +203,20 @@ def heuristic_viral_analysis(
     if not selected and segments:
         s0 = segments[0].get("start", 0.0)
         e0 = segments[-1].get("end", 0.0)
-        selected.append({
-            "id": 1,
-            "title": video_title or "Clip nổi bật chính",
-            "hook_text": segments[0].get("text", "") or segments[0].get("vi", ""),
-            "start": round(s0, 2),
-            "end": round(e0, 2),
-            "duration": round(e0 - s0, 2),
-            "viral_score": 85,
-            "reason": "Phân đoạn chính trích xuất từ kịch bản.",
-            "start_segment_idx": 0,
-            "end_segment_idx": len(segments) - 1,
-        })
+        selected.append(
+            {
+                "id": 1,
+                "title": video_title or "Clip nổi bật chính",
+                "hook_text": segments[0].get("text", "") or segments[0].get("vi", ""),
+                "start": round(s0, 2),
+                "end": round(e0, 2),
+                "duration": round(e0 - s0, 2),
+                "viral_score": 85,
+                "reason": "Phân đoạn chính trích xuất từ kịch bản.",
+                "start_segment_idx": 0,
+                "end_segment_idx": len(segments) - 1,
+            }
+        )
 
     return selected
 
@@ -200,7 +231,7 @@ def analyze_viral_highlights(
     scene_cuts: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Phân tích các đoạn kịch bản tìm các mốc cao trào viral.
-    
+
     Ưu tiên sử dụng Direct AI Client (Gemini, OpenAI, DeepSeek, v.v.).
     Tự động fallback sang Heuristic Analyzer nếu không có API Key hoặc lỗi mạng.
     """
@@ -211,13 +242,13 @@ def analyze_viral_highlights(
     if settings is not None:
         try:
             from autodub.text.translate_direct import (
-                get_direct_client,
                 _slice_to_payload,
                 _strip_fences_and_citations,
+                get_direct_client,
             )
 
             client, provider_name = get_direct_client(settings)
-            
+
             # Chuẩn bị transcript có đánh số dòng và mốc thời gian
             script_lines = []
             for idx, seg in enumerate(segments):
@@ -242,7 +273,7 @@ def analyze_viral_highlights(
             )
 
             user_prompt = f"""Dưới đây là kịch bản video tiếng Việt:
-Tiêu đề tham khảo: {video_title or 'Video'}
+Tiêu đề tham khảo: {video_title or "Video"}
 
 Danh sách câu thoại và mốc thời gian:
 \"\"\"
@@ -276,24 +307,34 @@ Chỉ trả về JSON thuần túy, không giải thích thêm."""
                     )
                     score = int(item.get("viral_score", 90))
                     score = max(50, min(99, score))
-                    validated_clips.append({
-                        "id": len(validated_clips) + 1,
-                        "title": str(item.get("title", f"Short Clip #{len(validated_clips)+1}")).strip(),
-                        "hook_text": str(item.get("hook_text", "")).strip(),
-                        "start": snap_s,
-                        "end": snap_e,
-                        "duration": round(snap_e - snap_s, 2),
-                        "viral_score": score,
-                        "reason": str(item.get("reason", "Điểm cao trào được AI phát hiện.")).strip(),
-                        "start_segment_idx": s_idx,
-                        "end_segment_idx": e_idx,
-                    })
+                    validated_clips.append(
+                        {
+                            "id": len(validated_clips) + 1,
+                            "title": str(
+                                item.get("title", f"Short Clip #{len(validated_clips) + 1}")
+                            ).strip(),
+                            "hook_text": str(item.get("hook_text", "")).strip(),
+                            "start": snap_s,
+                            "end": snap_e,
+                            "duration": round(snap_e - snap_s, 2),
+                            "viral_score": score,
+                            "reason": str(
+                                item.get("reason", "Điểm cao trào được AI phát hiện.")
+                            ).strip(),
+                            "start_segment_idx": s_idx,
+                            "end_segment_idx": e_idx,
+                        }
+                    )
 
                 if validated_clips:
-                    logger.info(f"AI đã phân tích thành công {len(validated_clips)} đoạn Viral Shorts via {provider_name}")
+                    logger.info(
+                        f"AI đã phân tích thành công {len(validated_clips)} đoạn Viral Shorts via {provider_name}"
+                    )
                     return validated_clips
         except Exception as e:
-            logger.warning(f"Phân tích Viral Shorts bằng AI lỗi ({e}) — chuyển sang Heuristic Analyzer")
+            logger.warning(
+                f"Phân tích Viral Shorts bằng AI lỗi ({e}) — chuyển sang Heuristic Analyzer"
+            )
 
     # 2. Fallback sang Heuristic Analyzer
     return heuristic_viral_analysis(

@@ -7,6 +7,7 @@ a self-contained set of instructions: the user picks Path A (Claude Code) or
 Path B (web AI), produces the translated JSON, and runs ``--resume`` to
 continue.
 """
+
 import os
 
 from autodub.languages import TargetLang
@@ -40,8 +41,7 @@ def effective_cps(settings, video_slowdown_pending: bool = True) -> float:
     """
     if settings is None:
         return CHARS_PER_SECOND_BUDGET
-    cps = float(getattr(settings, "translate_cps_budget", 0)
-                or CHARS_PER_SECOND_BUDGET)
+    cps = float(getattr(settings, "translate_cps_budget", 0) or CHARS_PER_SECOND_BUDGET)
     cps *= float(getattr(settings, "voice_speed", 1.0) or 1.0)
     if video_slowdown_pending:
         video = float(getattr(settings, "video_speed", 1.0) or 1.0)
@@ -106,8 +106,9 @@ def payload_segment(seg: dict, cps_budget: float = CHARS_PER_SECOND_BUDGET) -> d
     return out
 
 
-def context_payload(all_segments: list[dict], batch_start_index: int,
-                    target: TargetLang | None = None, n: int = 3) -> list[dict]:
+def context_payload(
+    all_segments: list[dict], batch_start_index: int, target: TargetLang | None = None, n: int = 3
+) -> list[dict]:
     """The ``n`` segments right before a batch, as read-only context.
 
     Batches are translated independently, so without this the model loses the
@@ -117,7 +118,7 @@ def context_payload(all_segments: list[dict], batch_start_index: int,
     the model can also match the established wording.
     """
     ctx: list[dict] = []
-    for seg in all_segments[max(0, batch_start_index - n):batch_start_index]:
+    for seg in all_segments[max(0, batch_start_index - n) : batch_start_index]:
         item = {"id": seg.get("id"), "text": seg.get("text", "")}
         if target is not None and seg.get(target.text_field):
             item[target.text_field] = seg[target.text_field]
@@ -127,11 +128,13 @@ def context_payload(all_segments: list[dict], batch_start_index: int,
 
 def context_note(target: TargetLang) -> str:
     """User-prompt sentence explaining the read-only context block."""
-    return ('The "context" array holds the lines IMMEDIATELY BEFORE this '
-            'batch — use them ONLY to understand the flow and keep '
-            f'pronouns/terminology consistent (a "{target.text_field}" field '
-            'there shows wording already used). Do NOT translate them and do '
-            'NOT include them in the output.\n\n')
+    return (
+        'The "context" array holds the lines IMMEDIATELY BEFORE this '
+        "batch — use them ONLY to understand the flow and keep "
+        f'pronouns/terminology consistent (a "{target.text_field}" field '
+        "there shows wording already used). Do NOT translate them and do "
+        "NOT include them in the output.\n\n"
+    )
 
 
 def build_style_rules(target: TargetLang, domain: str = "general") -> str:
@@ -163,8 +166,9 @@ Since this text will be read aloud by a TTS voice, format all numbers as SPOKEN 
 ### MISCELLANEOUS & FORMATTING
 - **Sino-Vietnamese Words**: Use only extremely common everyday Sino-Vietnamese words (e.g., "kiểm sát viên" is fine, but prefer natural spoken terms over archaic ones).
 - **Chinese Particles**: Completely remove Chinese discourse/modal particles (啊, 呢, 嘛, 吧).
-- **Bleeped/Censored Segments**: If the text contains ONLY punctuation, symbols, or bleeps (e.g., "**", "..."): Translate it into a short Vietnamese spoken exclamation like "Hả.", "Ôi.", or "Chờ chút." 
+- **Bleeped/Censored Segments**: If the text contains ONLY punctuation, symbols, or bleeps (e.g., "**", "..."): Translate it into a short Vietnamese spoken exclamation like "Hả.", "Ôi.", or "Chờ chút."
   * CRITICAL: NEVER output an empty string, pure punctuation, or "..." (TTS engines will crash or reject pure punctuation)."""
+
 
 def _pace(target: TargetLang, cps_budget: float = CHARS_PER_SECOND_BUDGET) -> str:
     return f"Vietnamese: ~{cps_budget:g} chars/sec natural spoken pace"
@@ -191,28 +195,32 @@ def build_user_context_block(settings) -> str:
     if domain:
         lines.append(f"- **Video topic/domain**: {domain}")
     if context:
-        lines.append("- **Background provided by the channel owner** "
-                     "(use it to resolve ambiguous phrases, jargon and "
-                     "references):\n  " + context.replace("\n", "\n  "))
+        lines.append(
+            "- **Background provided by the channel owner** "
+            "(use it to resolve ambiguous phrases, jargon and "
+            "references):\n  " + context.replace("\n", "\n  ")
+        )
     if pronouns:
         lines.append(
             f"- **Pronoun convention (MANDATORY)**: {pronouns} — use EXACTLY "
             "this addressing style for speaker/audience in EVERY segment, "
             "consistently across the whole video. This OVERRIDES the default "
-            "pronoun rule below.")
+            "pronoun rule below."
+        )
     if glossary:
         lines.append(
             "- **Fixed terminology (MANDATORY)** — whenever the source term "
-            "appears, use exactly the given translation:\n  "
-            + glossary.replace("\n", "\n  "))
+            "appears, use exactly the given translation:\n  " + glossary.replace("\n", "\n  ")
+        )
     if style:
         lines.append(f"- **Extra style requirements**: {style}")
     if not lines:
         return ""
-    return ("### USER-PROVIDED VIDEO CONTEXT (HIGHEST PRIORITY)\n"
-            "The channel owner supplied this context about the video. It "
-            "overrides any conflicting generic rule below.\n"
-            + "\n".join(lines) + "\n\n")
+    return (
+        "### USER-PROVIDED VIDEO CONTEXT (HIGHEST PRIORITY)\n"
+        "The channel owner supplied this context about the video. It "
+        "overrides any conflicting generic rule below.\n" + "\n".join(lines) + "\n\n"
+    )
 
 
 def _output_format_block(target: TargetLang, compact: bool) -> str:
@@ -256,11 +264,14 @@ def _output_format_block(target: TargetLang, compact: bool) -> str:
 - Output strictly valid JSON ONLY — DO NOT use markdown code blocks, fences, or introductory/ending commentary."""
 
 
-def build_translation_prompt(target: TargetLang, source_lang: str,
-                             domain: str = "general",
-                             cps_budget: float = CHARS_PER_SECOND_BUDGET,
-                             settings=None,
-                             compact_output: bool = True) -> str:
+def build_translation_prompt(
+    target: TargetLang,
+    source_lang: str,
+    domain: str = "general",
+    cps_budget: float = CHARS_PER_SECOND_BUDGET,
+    settings=None,
+    compact_output: bool = True,
+) -> str:
     """The full translation instruction block (STRICT format + style + pacing + consistency).
     Shared across manual and automatic pipelines to ensure identical translation output quality.
 
@@ -272,9 +283,11 @@ def build_translation_prompt(target: TargetLang, source_lang: str,
     user_domain = getattr(settings, "translate_domain", "").strip() if settings else ""
     if user_domain:
         domain = user_domain
-    input_fields = ("`id`, `text`, `duration` (seconds) and usually `max_chars`"
-                    if compact_output else
-                    "`id`, `text`, `start`, `end`, and `duration` (in seconds)")
+    input_fields = (
+        "`id`, `text`, `duration` (seconds) and usually `max_chars`"
+        if compact_output
+        else "`id`, `text`, `start`, `end`, and `duration` (in seconds)"
+    )
     return f"""You are an expert translator specializing in ASR (Automatic Speech Recognition) transcripts for video dubbing.
 Your task is to translate an ASR transcript from {source_lang} to {target.name}.
 
@@ -320,8 +333,9 @@ If a segment fails any check, rewrite it into natural spoken Vietnamese before r
 """
 
 
-def write_hint(work_dir: str, target: TargetLang, source_lang: str,
-               settings=None, refund_note: str = "") -> str:
+def write_hint(
+    work_dir: str, target: TargetLang, source_lang: str, settings=None, refund_note: str = ""
+) -> str:
     """Create ``<work_dir>/TRANSLATE_PENDING.txt`` and return its path.
 
     Viết cho NGƯỜI DÙNG PHỔ THÔNG: tiếng Việt, 3 bước, không thuật ngữ dev.
@@ -355,26 +369,26 @@ def write_hint(work_dir: str, target: TargetLang, source_lang: str,
 
             analysis = securestore.read_json_secure(ctx_cache, HOLD.key or None)
             from autodub.text.translate_saas import apply_analysis
+
             settings = apply_analysis(settings, analysis)
-        except Exception as e:  # noqa: BLE001 — thiếu ngữ cảnh không được chặn hướng dẫn
+        except Exception as e:
             logger.warning(f"Không đọc được ngữ cảnh video cho dịch tay: {e}")
 
     # Tiêu đề video gốc (downloader lưu) — dịch tay nhận đúng ngữ cảnh như
     # dịch tự động.
-    if settings is not None and not getattr(settings,
-                                            "translate_video_title", ""):
+    if settings is not None and not getattr(settings, "translate_video_title", ""):
         from autodub.workdir import load_video_meta
+
         title = str(load_video_meta(work_dir).get("title", "")).strip()
         if title:
             import dataclasses
-            settings = dataclasses.replace(settings,
-                                           translate_video_title=title)
+
+            settings = dataclasses.replace(settings, translate_video_title=title)
 
     # Dịch tự động đang TẮT là lựa chọn của người dùng, không phải sự cố —
     # gộp hai chuyện vào một câu khiến người tắt tưởng app hỏng, còn người
     # gặp sự cố thì đi tìm cái công tắc họ chưa từng bật.
-    manual_by_choice = (settings is not None
-                        and not getattr(settings, "translate_enabled", True))
+    manual_by_choice = settings is not None and not getattr(settings, "translate_enabled", True)
     if manual_by_choice:
         why = """Bạn đang để "Dịch tự động" TẮT trong Cài đặt, nên app nghe xong
 lời thoại rồi dừng lại chờ bản dịch của bạn. Cách làm ở dưới, khoảng 2-3 phút.
@@ -400,7 +414,7 @@ BƯỚC 1 — COPY NỘI DUNG CẦN DỊCH
 --------------------------------
 Mở file này bằng Notepad rồi copy TOÀN BỘ nội dung:
 
-    {os.path.join(d_dir, 'transcript_original.json')}
+    {os.path.join(d_dir, "transcript_original.json")}
 
 (File nằm trong thư mục "data" cạnh file hướng dẫn này.)
 

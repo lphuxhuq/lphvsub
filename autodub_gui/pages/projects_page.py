@@ -1,14 +1,21 @@
 """Trang Dự án của tôi: tìm kiếm, lọc, sắp xếp và phân trang."""
+
 from __future__ import annotations
 
 import shutil
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QScrollArea, QStackedWidget, QVBoxLayout, QWidget,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
-from autodub_gui import icons, projects as projects_mod, tokens
+from autodub_gui import icons, tokens
+from autodub_gui import projects as projects_mod
 from autodub_gui.pages import BasePage
 from autodub_gui.run_state import REGISTRY
 from autodub_gui.system_open import open_file, open_folder
@@ -18,8 +25,8 @@ from autodub_gui.ui.grid import ProjectGrid
 from autodub_gui.ui.inputs import LabeledCombo, SearchBox
 from autodub_gui.ui.modal import ConfirmDialog
 from autodub_gui.ui.pagination import Pagination
-from autodub_gui.ui.toast import TOASTS
 from autodub_gui.ui.style import clear_background
+from autodub_gui.ui.toast import TOASTS
 
 PAGE_SIZE = 12
 _PAGE_MARGIN = 28
@@ -61,8 +68,7 @@ class ProjectsPage(BasePage):
     # -- Dựng giao diện ------------------------------------------------
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_2,
-                                _PAGE_MARGIN, tokens.SP_5)
+        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_2, _PAGE_MARGIN, tokens.SP_5)
         root.setSpacing(tokens.SP_4)
         root.addLayout(self._build_toolbar())
 
@@ -72,11 +78,10 @@ class ProjectsPage(BasePage):
         self.empty = EmptyState(
             "Chưa có dự án nào",
             "Lồng tiếng video đầu tiên của bạn — chỉ mất vài phút để bắt đầu.",
-            "Tạo dự án mới")
+            "Tạo dự án mới",
+        )
         self.empty.action_clicked.connect(self.create_requested.emit)
-        self.error = ErrorState(
-            "Không mở được thư mục lưu video",
-            action_label="Mở Cài đặt")
+        self.error = ErrorState("Không mở được thư mục lưu video", action_label="Mở Cài đặt")
         self.error.retry_clicked.connect(self.reload)
         self.error.action_clicked.connect(self.settings_requested.emit)
         for widget in (self.loading, self.empty, self.error):
@@ -94,18 +99,19 @@ class ProjectsPage(BasePage):
         self.search.search_changed.connect(lambda _t: self._apply_filters())
         row.addWidget(self.search, 1)
 
-        self.filter_status = LabeledCombo("", _STATUS_FILTERS,
-                                          "Chỉ hiện dự án ở trạng thái đã chọn")
+        self.filter_status = LabeledCombo(
+            "", _STATUS_FILTERS, "Chỉ hiện dự án ở trạng thái đã chọn"
+        )
         self.filter_status.changed.connect(self._apply_filters)
         row.addWidget(self.filter_status)
 
-        self.sort_by = LabeledCombo("", _SORT_OPTIONS,
-                                    "Thứ tự sắp xếp danh sách")
+        self.sort_by = LabeledCombo("", _SORT_OPTIONS, "Thứ tự sắp xếp danh sách")
         self.sort_by.changed.connect(self._apply_filters)
         row.addWidget(self.sort_by)
 
-        reload_button = IconButton(icons.reload(tokens.TEXT_SECONDARY),
-                                   "Quét lại thư mục lưu video")
+        reload_button = IconButton(
+            icons.reload(tokens.TEXT_SECONDARY), "Quét lại thư mục lưu video"
+        )
         reload_button.clicked.connect(self.reload)
         row.addWidget(reload_button)
         return row
@@ -114,8 +120,7 @@ class ProjectsPage(BasePage):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         clear_background(scroll)
         clear_background(scroll.viewport())
         holder = QWidget()
@@ -126,8 +131,8 @@ class ProjectsPage(BasePage):
 
         self.count_label = QLabel("")
         self.count_label.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(self.count_label)
 
         self.grid = ProjectGrid()
@@ -154,7 +159,7 @@ class ProjectsPage(BasePage):
             return
         try:
             output_dir = self._settings_provider().output_dir
-        except Exception as e:  # noqa: BLE001 — tệp cấu hình hỏng
+        except Exception as e:
             self._show_error(str(e))
             return
         self.stack.setCurrentWidget(self.loading)
@@ -174,14 +179,18 @@ class ProjectsPage(BasePage):
         self.error.set_message(
             "Không mở được thư mục lưu video",
             "Thư mục đã đặt trong Cài đặt hiện không tồn tại hoặc không có "
-            f"quyền đọc. Hãy chọn một thư mục khác rồi thử lại. ({message})")
+            f"quyền đọc. Hãy chọn một thư mục khác rồi thử lại. ({message})",
+        )
         self.stack.setCurrentWidget(self.error)
 
     def _apply_filters(self) -> None:
         visible = [p for p in self._all if p.key not in self._hidden]
         self._filtered = projects_mod.filter_projects(
-            visible, self.search.text(), self.filter_status.current_key(),
-            self.sort_by.current_key())
+            visible,
+            self.search.text(),
+            self.filter_status.current_key(),
+            self.sort_by.current_key(),
+        )
         total_pages = max(1, (len(self._filtered) + PAGE_SIZE - 1) // PAGE_SIZE)
         self._page = min(self._page, total_pages)
         self.pagination.set_range(self._page, total_pages)
@@ -192,11 +201,11 @@ class ProjectsPage(BasePage):
             self._render_empty()
             return
         start = (self._page - 1) * PAGE_SIZE
-        page_items = self._filtered[start:start + PAGE_SIZE]
+        page_items = self._filtered[start : start + PAGE_SIZE]
         self.grid.set_projects(page_items)
         self.count_label.setText(
-            f"{len(self._filtered)} dự án — đang xem "
-            f"{start + 1} đến {start + len(page_items)}")
+            f"{len(self._filtered)} dự án — đang xem {start + 1} đến {start + len(page_items)}"
+        )
         self.stack.setCurrentIndex(0)
         self.pagination.setVisible(len(self._filtered) > PAGE_SIZE)
 
@@ -208,8 +217,7 @@ class ProjectsPage(BasePage):
             self.count_label.setText("")
             self.grid.clear()
             self.stack.setCurrentIndex(0)
-            self.count_label.setText(
-                "Không có dự án nào khớp với bộ lọc hiện tại.")
+            self.count_label.setText("Không có dự án nào khớp với bộ lọc hiện tại.")
         else:
             self.stack.setCurrentWidget(self.empty)
         self.pagination.setVisible(False)
@@ -228,8 +236,9 @@ class ProjectsPage(BasePage):
             return
         target = project.output_path or project.video_path
         if not target:
-            TOASTS.warn("Dự án này chưa có video kết quả. Hãy mở Trình chỉnh "
-                        "sửa rồi bấm Xuất video.")
+            TOASTS.warn(
+                "Dự án này chưa có video kết quả. Hãy mở Trình chỉnh sửa rồi bấm Xuất video."
+            )
             return
         ok, message = open_file(target)
         if not ok:
@@ -249,13 +258,17 @@ class ProjectsPage(BasePage):
         if project is None:
             return
         confirmed, hide_only = ConfirmDialog.ask(
-            self, "Xóa dự án",
+            self,
+            "Xóa dự án",
             f"Bạn muốn bỏ dự án «{project.title}» khỏi danh sách?\n\n"
             "Nếu bỏ dấu tích bên dưới, toàn bộ thư mục dự án sẽ bị xóa khỏi "
             "máy và không thể lấy lại.",
-            kind="danger", confirm_label="Xóa", cancel_label="Giữ lại",
+            kind="danger",
+            confirm_label="Xóa",
+            cancel_label="Giữ lại",
             checkbox_label="Chỉ ẩn khỏi danh sách, giữ tệp trên máy",
-            checkbox_checked=True)
+            checkbox_checked=True,
+        )
         if not confirmed:
             return
         if hide_only:
@@ -269,7 +282,8 @@ class ProjectsPage(BasePage):
             TOASTS.error(
                 "Không xóa được thư mục dự án. Có thể một tệp trong đó đang "
                 "được chương trình khác mở — hãy đóng lại rồi thử lần nữa.",
-                detail=str(e))
+                detail=str(e),
+            )
             return
         self._all = [p for p in self._all if p.key != key]
         self._apply_filters()

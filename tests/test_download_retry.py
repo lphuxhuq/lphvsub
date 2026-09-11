@@ -16,9 +16,15 @@ def test_error_classifier_status_codes():
 
 def test_error_classifier_exceptions():
     assert ErrorClassifier.classify(TimeoutError("Connection timed out")) == ErrorType.TIMEOUT
-    assert ErrorClassifier.classify(ConnectionResetError("Connection reset by peer")) == ErrorType.CONNECTION_RESET
+    assert (
+        ErrorClassifier.classify(ConnectionResetError("Connection reset by peer"))
+        == ErrorType.CONNECTION_RESET
+    )
     assert ErrorClassifier.classify(RuntimeError("Task cancelled by user")) == ErrorType.CANCELLED
-    assert ErrorClassifier.classify(ValueError("Corrupt moov atom in container")) == ErrorType.INVALID_MEDIA
+    assert (
+        ErrorClassifier.classify(ValueError("Corrupt moov atom in container"))
+        == ErrorType.INVALID_MEDIA
+    )
     assert ErrorClassifier.classify(Exception("Random error")) == ErrorType.UNKNOWN
 
 

@@ -78,11 +78,7 @@ def build_timing_guide(
 ### Hàm 2: `save_timing_guide` trong `autodub/media/timing.py`
 
 ```python
-def save_timing_guide(
-    work_dir: str,
-    guide: dict,
-    filename: str = "timing_report.json"
-) -> str:
+def save_timing_guide(work_dir: str, guide: dict, filename: str = "timing_report.json") -> str:
     """Ghi timing guide ra file JSON trong thư mục data của dự án."""
 ```
 

@@ -3,6 +3,7 @@
 Hỗ trợ fake nhiều hồ sơ thiết bị phong phú (macOS, Windows, Android, iOS),
 chia luồng độc lập và tự động xoay vòng định danh khi gặp giới hạn tốc độ.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -12,10 +13,8 @@ import random
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
 
 from autodub.speech.tts.capcut_api.config import DEFAULT_DEVICE
-from autodub.speech.tts.capcut_api.models import DeviceConfig
 from autodub.utils import save_json_atomic, setup_logging
 
 logger = setup_logging("autodub.tts.capcut_pool")
@@ -157,14 +156,14 @@ DEVICE_TEMPLATES = [
 ]
 
 
-def generate_fake_device(seed: Optional[str] = None, template_idx: Optional[int] = None) -> dict:
+def generate_fake_device(seed: str | None = None, template_idx: int | None = None) -> dict:
     """Tạo một hồ sơ thiết bị fake hoàn chỉnh và hợp lệ cho CapCut API."""
     if seed is None:
         seed = uuid.uuid4().hex + uuid.uuid4().hex
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
     def _id(chunk: str) -> str:
-        return "7" + str(int(chunk, 16) % 10 ** 18).zfill(18)
+        return "7" + str(int(chunk, 16) % 10**18).zfill(18)
 
     if template_idx is None:
         idx = int(digest[:4], 16) % len(DEVICE_TEMPLATES)
@@ -187,9 +186,7 @@ def generate_fake_device(seed: Optional[str] = None, template_idx: Optional[int]
 
 def pool_file_path() -> str:
     """Đường dẫn file lưu danh sách Device Pool trên đĩa."""
-    return os.path.join(
-        os.path.expanduser("~"), ".voxdub_cache", "capcut_devices_pool.json"
-    )
+    return os.path.join(os.path.expanduser("~"), ".voxdub_cache", "capcut_devices_pool.json")
 
 
 class CapCutDevicePool:
@@ -197,23 +194,23 @@ class CapCutDevicePool:
 
     def __init__(self, size: int = 16):
         self.target_size = max(8, size)
-        self._devices: List[dict] = []
-        self._cooldowns: Dict[str, float] = {}  # device_id -> timestamp hết cooldown
+        self._devices: list[dict] = []
+        self._cooldowns: dict[str, float] = {}  # device_id -> timestamp hết cooldown
         self._lock = threading.Lock()
-        self._per_device_last_call: Dict[str, float] = {}
+        self._per_device_last_call: dict[str, float] = {}
         self._load_or_generate_pool()
 
     def _load_or_generate_pool(self) -> None:
         path = pool_file_path()
         try:
             if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     saved = json.load(f)
                 if isinstance(saved, list) and len(saved) >= 4:
                     self._devices = saved
                     return
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong capcut_device_pool.py", exc_info=True)
 
         # Tạo pool mới với sự kết hợp từ các template
         devices = []
@@ -229,20 +226,21 @@ class CapCutDevicePool:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             save_json_atomic(self._devices, path)
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong capcut_device_pool.py", exc_info=True)
 
-    def get_device(self, worker_index: Optional[int] = None) -> dict:
+    def get_device(self, worker_index: int | None = None) -> dict:
         """Lấy một hồ sơ thiết bị hoạt động tốt từ pool."""
         now = time.monotonic()
         with self._lock:
             # Lọc ra danh sách device đang active (hết cooldown)
             available = [
-                d for d in self._devices
-                if self._cooldowns.get(d["device_id"], 0.0) <= now
+                d for d in self._devices if self._cooldowns.get(d["device_id"], 0.0) <= now
             ]
             if not available:
                 # Nếu tất cả đều bị cooldown, sinh ngay một device mới
-                logger.info("Tất cả thiết bị trong pool đang cooldown — tự động cấp thiết bị mới...")
+                logger.info(
+                    "Tất cả thiết bị trong pool đang cooldown — tự động cấp thiết bị mới..."
+                )
                 new_dev = generate_fake_device()
                 self._devices.append(new_dev)
                 if len(self._devices) > 24:
@@ -259,8 +257,10 @@ class CapCutDevicePool:
         curr_id = current_device.get("device_id", "")
         with self._lock:
             available = [
-                d for d in self._devices
-                if d.get("device_id") != curr_id and self._cooldowns.get(d.get("device_id", ""), 0.0) <= now
+                d
+                for d in self._devices
+                if d.get("device_id") != curr_id
+                and self._cooldowns.get(d.get("device_id", ""), 0.0) <= now
             ]
             if available:
                 return random.choice(available)
@@ -301,7 +301,7 @@ class CapCutDevicePool:
             time.sleep(wait)
 
 
-_DEVICE_POOL: Optional[CapCutDevicePool] = None
+_DEVICE_POOL: CapCutDevicePool | None = None
 _POOL_LOCK = threading.Lock()
 
 

@@ -1,9 +1,7 @@
 """Tests for BilibiliDownloader engine."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from autodub.media.download.bilibili_engine import BilibiliDownloader
 from autodub.media.download.contract import DownloadRequest, DownloadResult
@@ -11,9 +9,18 @@ from autodub.media.download.validator import ValidationResult
 
 
 def test_bilibili_extract_bvid_and_page():
-    assert BilibiliDownloader.extract_bvid("https://www.bilibili.com/video/BV1xx411c7mD") == "BV1xx411c7mD"
-    assert BilibiliDownloader.extract_bvid("https://www.bilibili.com/video/BV1xx411c7mD?p=2") == "BV1xx411c7mD"
-    assert BilibiliDownloader.extract_page_index("https://www.bilibili.com/video/BV1xx411c7mD?p=3") == 3
+    assert (
+        BilibiliDownloader.extract_bvid("https://www.bilibili.com/video/BV1xx411c7mD")
+        == "BV1xx411c7mD"
+    )
+    assert (
+        BilibiliDownloader.extract_bvid("https://www.bilibili.com/video/BV1xx411c7mD?p=2")
+        == "BV1xx411c7mD"
+    )
+    assert (
+        BilibiliDownloader.extract_page_index("https://www.bilibili.com/video/BV1xx411c7mD?p=3")
+        == 3
+    )
     assert BilibiliDownloader.extract_page_index("https://www.bilibili.com/video/BV1xx411c7mD") == 1
 
 
@@ -34,22 +41,34 @@ def test_bilibili_download_dash_success(tmp_path):
 
     downloader = BilibiliDownloader(validator=mock_val)
 
-    downloader.fetch_video_view = MagicMock(return_value={
-        "cid": 99999,
-        "title": "Bilibili Test Video",
-        "pages": [{"cid": 99999, "page": 1}],
-    })
-
-    downloader.fetch_playurl = MagicMock(return_value={
-        "dash": {
-            "video": [
-                {"bandwidth": 5000000, "baseUrl": "https://upos-ali.bilivideo.com/v.m4s", "backupUrl": ["https://upos-cos.bilivideo.com/v.m4s"]},
-            ],
-            "audio": [
-                {"bandwidth": 320000, "baseUrl": "https://upos-ali.bilivideo.com/a.m4s", "backupUrl": []},
-            ]
+    downloader.fetch_video_view = MagicMock(
+        return_value={
+            "cid": 99999,
+            "title": "Bilibili Test Video",
+            "pages": [{"cid": 99999, "page": 1}],
         }
-    })
+    )
+
+    downloader.fetch_playurl = MagicMock(
+        return_value={
+            "dash": {
+                "video": [
+                    {
+                        "bandwidth": 5000000,
+                        "baseUrl": "https://upos-ali.bilivideo.com/v.m4s",
+                        "backupUrl": ["https://upos-cos.bilivideo.com/v.m4s"],
+                    },
+                ],
+                "audio": [
+                    {
+                        "bandwidth": 320000,
+                        "baseUrl": "https://upos-ali.bilivideo.com/a.m4s",
+                        "backupUrl": [],
+                    },
+                ],
+            }
+        }
+    )
 
     def fake_download_stream(url, target_path, **kwargs):
         p = Path(target_path)

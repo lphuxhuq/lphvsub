@@ -3,14 +3,24 @@
 Mọi ô đều có nhãn rõ ràng; ô nào khó hiểu đều kèm chú giải viết bằng lời
 thường, không dùng thuật ngữ kỹ thuật.
 """
+
 from __future__ import annotations
 
 import os
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
-    QSizePolicy, QSlider, QStyledItemDelegate, QVBoxLayout, QWidget,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QSizePolicy,
+    QSlider,
+    QStyledItemDelegate,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
@@ -46,7 +56,7 @@ def polish_combo(combo: QComboBox) -> None:
     combo.setItemDelegate(QStyledItemDelegate(combo))
     combo.setCursor(Qt.CursorShape.PointingHandCursor)
     view = combo.view()
-    view.setMouseTracking(True)      # cần cho trạng thái :hover của ::item
+    view.setMouseTracking(True)  # cần cho trạng thái :hover của ::item
     view.setStyleSheet(f"""
         QAbstractItemView {{
             background: {tokens.BG_ELEVATED};
@@ -78,14 +88,14 @@ def polish_combo(combo: QComboBox) -> None:
     view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
     container = view.window()
     if container is not None and container is not combo.window():
-        container.setAttribute(
-            Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         container.setStyleSheet(
-            f"background: {tokens.BG_PANEL}; "
-            f"border: 1px solid {tokens.BORDER_DEFAULT};")
+            f"background: {tokens.BG_PANEL}; border: 1px solid {tokens.BORDER_DEFAULT};"
+        )
     metrics = combo.fontMetrics()
-    widest = max((metrics.horizontalAdvance(combo.itemText(i))
-                  for i in range(combo.count())), default=0)
+    widest = max(
+        (metrics.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())), default=0
+    )
     view.setMinimumWidth(widest + tokens.SP_8)
 
     # 5. Ép mọi dòng cùng MỘT chiều cao thật.
@@ -108,8 +118,7 @@ def polish_combo(combo: QComboBox) -> None:
 class _Field(QWidget):
     """Khung dựng chung: nhãn ở trên, ô nhập ở dưới, dòng lỗi ẩn sẵn."""
 
-    def __init__(self, label: str, hint: str = "",
-                 parent: QWidget | None = None):
+    def __init__(self, label: str, hint: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self._root = QVBoxLayout(self)
         self._root.setContentsMargins(0, 0, 0, 0)
@@ -120,7 +129,8 @@ class _Field(QWidget):
             self._label.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; "
                 f"font-size: {tokens.FS_LABEL}px; font-weight: 500; "
-                f"background: transparent;")
+                f"background: transparent;"
+            )
             self._root.addWidget(self._label)
         if hint:
             self.setToolTip(hint)
@@ -128,8 +138,8 @@ class _Field(QWidget):
         self._error.setWordWrap(True)
         self._error.setVisible(False)
         self._error.setStyleSheet(
-            f"color: {tokens.DANGER}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.DANGER}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
 
     def _finish(self) -> None:
         self._root.addWidget(self._error)
@@ -149,20 +159,25 @@ class LabeledCombo(_Field):
     """
 
     changed = Signal()
-    _MIN_CHARS = 12      # bề ngang tối thiểu của ô đang đóng, tính theo chữ
+    _MIN_CHARS = 12  # bề ngang tối thiểu của ô đang đóng, tính theo chữ
 
-    def __init__(self, label: str, options: list[tuple[str, str]] | None = None,
-                 hint: str = "", parent: QWidget | None = None):
+    def __init__(
+        self,
+        label: str,
+        options: list[tuple[str, str]] | None = None,
+        hint: str = "",
+        parent: QWidget | None = None,
+    ):
         super().__init__(label, hint, parent)
         self.combo = QComboBox()
         self.combo.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
         self.combo.setMinimumContentsLength(self._MIN_CHARS)
-        self.combo.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                 QSizePolicy.Policy.Fixed)
+        self.combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         if hint:
             self.combo.setToolTip(hint)
-        for text, key in (options or []):
+        for text, key in options or []:
             self.combo.addItem(text, key)
         self.combo.currentIndexChanged.connect(lambda _i: self.changed.emit())
         polish_combo(self.combo)
@@ -198,8 +213,15 @@ class LabeledLineEdit(_Field):
 
     changed = Signal(str)
 
-    def __init__(self, label: str, placeholder: str = "", hint: str = "",
-                 parent: QWidget | None = None, *, password: bool = False):
+    def __init__(
+        self,
+        label: str,
+        placeholder: str = "",
+        hint: str = "",
+        parent: QWidget | None = None,
+        *,
+        password: bool = False,
+    ):
         super().__init__(label, hint, parent)
         self.edit = QLineEdit()
         self.edit.setPlaceholderText(placeholder)
@@ -224,10 +246,17 @@ class LabeledPlainTextEdit(_Field):
 
     changed = Signal(str)
 
-    def __init__(self, label: str, placeholder: str = "", hint: str = "",
-                 min_height: int = 80, parent: QWidget | None = None):
+    def __init__(
+        self,
+        label: str,
+        placeholder: str = "",
+        hint: str = "",
+        min_height: int = 80,
+        parent: QWidget | None = None,
+    ):
         super().__init__(label, hint, parent)
         from PySide6.QtWidgets import QPlainTextEdit
+
         self.edit = QPlainTextEdit()
         self.edit.setPlaceholderText(placeholder)
         self.edit.setMinimumHeight(min_height)
@@ -249,16 +278,24 @@ class LabeledSlider(_Field):
 
     changed = Signal(float)
 
-    def __init__(self, label: str, minimum: float, maximum: float,
-                 step: float = 0.05, hint: str = "", suffix: str = "",
-                 parent: QWidget | None = None, *, decimals: int = 2):
+    def __init__(
+        self,
+        label: str,
+        minimum: float,
+        maximum: float,
+        step: float = 0.05,
+        hint: str = "",
+        suffix: str = "",
+        parent: QWidget | None = None,
+        *,
+        decimals: int = 2,
+    ):
         super().__init__(label, hint, parent)
         self._min, self._max = minimum, maximum
         row = QHBoxLayout()
         row.setSpacing(tokens.SP_3)
         self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setRange(int(minimum * _SLIDER_SCALE),
-                             int(maximum * _SLIDER_SCALE))
+        self.slider.setRange(int(minimum * _SLIDER_SCALE), int(maximum * _SLIDER_SCALE))
         self.slider.setSingleStep(max(1, int(step * _SLIDER_SCALE)))
         self.slider.setPageStep(max(1, int(step * _SLIDER_SCALE * 2)))
         self.spin = QDoubleSpinBox()
@@ -266,8 +303,7 @@ class LabeledSlider(_Field):
         self.spin.setSingleStep(step)
         self.spin.setDecimals(decimals)
         self.spin.setSuffix(suffix)
-        self.spin.setSizePolicy(QSizePolicy.Policy.Minimum,
-                                QSizePolicy.Policy.Fixed)
+        self.spin.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         if hint:
             self.slider.setToolTip(hint)
             self.spin.setToolTip(hint)
@@ -306,8 +342,7 @@ class SearchBox(QWidget):
 
     search_changed = Signal(str)
 
-    def __init__(self, placeholder: str = "Tìm theo tên video",
-                 parent: QWidget | None = None):
+    def __init__(self, placeholder: str = "Tìm theo tên video", parent: QWidget | None = None):
         super().__init__(parent)
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
@@ -315,16 +350,15 @@ class SearchBox(QWidget):
         self.edit = QLineEdit()
         self.edit.setPlaceholderText(placeholder)
         self.edit.setClearButtonEnabled(True)
-        self.edit.addAction(icons.search(tokens.TEXT_MUTED),
-                            QLineEdit.ActionPosition.LeadingPosition)
-        self.edit.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                QSizePolicy.Policy.Fixed)
+        self.edit.addAction(
+            icons.search(tokens.TEXT_MUTED), QLineEdit.ActionPosition.LeadingPosition
+        )
+        self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         row.addWidget(self.edit)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(_SEARCH_DEBOUNCE_MS)
-        self._timer.timeout.connect(
-            lambda: self.search_changed.emit(self.text()))
+        self._timer.timeout.connect(lambda: self.search_changed.emit(self.text()))
         self.edit.textChanged.connect(lambda _t: self._timer.start())
 
     def text(self) -> str:
@@ -344,10 +378,16 @@ class FilePicker(_Field):
 
     changed = Signal(str)
 
-    def __init__(self, label: str, placeholder: str = "",
-                 hint: str = "", parent: QWidget | None = None, *,
-                 directory: bool = False,
-                 name_filter: str = "Tất cả tệp (*.*)"):
+    def __init__(
+        self,
+        label: str,
+        placeholder: str = "",
+        hint: str = "",
+        parent: QWidget | None = None,
+        *,
+        directory: bool = False,
+        name_filter: str = "Tất cả tệp (*.*)",
+    ):
         super().__init__(label, hint, parent)
         self._directory = directory
         self._filter = name_filter
@@ -356,8 +396,7 @@ class FilePicker(_Field):
         self.edit = QLineEdit()
         self.edit.setPlaceholderText(placeholder)
         self.edit.textChanged.connect(self._on_text)
-        self.edit.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                QSizePolicy.Policy.Fixed)
+        self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.button = GhostButton("Chọn…")
         self.button.clicked.connect(self._browse)
         row.addWidget(self.edit, 1)
@@ -372,11 +411,9 @@ class FilePicker(_Field):
     def _browse(self) -> None:
         start = self.edit.text().strip() or os.path.expanduser("~")
         if self._directory:
-            chosen = QFileDialog.getExistingDirectory(
-                self, "Chọn thư mục", start)
+            chosen = QFileDialog.getExistingDirectory(self, "Chọn thư mục", start)
         else:
-            chosen, _ = QFileDialog.getOpenFileName(
-                self, "Chọn tệp", start, self._filter)
+            chosen, _ = QFileDialog.getOpenFileName(self, "Chọn tệp", start, self._filter)
         if chosen:
             self.edit.setText(chosen)
 
@@ -390,12 +427,10 @@ class FilePicker(_Field):
 class LabeledWidget(_Field):
     """Bọc một widget bất kỳ vào khung nhãn chuẩn."""
 
-    def __init__(self, label: str, widget: QWidget, hint: str = "",
-                 parent: QWidget | None = None):
+    def __init__(self, label: str, widget: QWidget, hint: str = "", parent: QWidget | None = None):
         super().__init__(label, hint, parent)
         self.widget = widget
         if hint:
             widget.setToolTip(hint)
         self._root.addWidget(widget)
         self._finish()
-

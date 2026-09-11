@@ -1,22 +1,23 @@
-import pytest
 import os
 import re
 
-from autodub.text.srt import generate_srt
-from autodub.media.timing import plan_voice_placements, apply_soft_timing
 from autodub.config import Settings
+from autodub.media.timing import apply_soft_timing
+from autodub.text.srt import generate_srt
 
 
 def _parse_srt_cues(srt_content: str):
     pattern = re.compile(
-        r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\n|\Z)',
-        re.DOTALL
+        r"(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\n|\Z)",
+        re.DOTALL,
     )
     matches = pattern.findall(srt_content)
+
     def ts_to_sec(ts):
-        h, m, s = ts.split(':')
-        s, ms = s.split(',')
-        return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000.0
+        h, m, s = ts.split(":")
+        s, ms = s.split(",")
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
+
     return [(ts_to_sec(m[1]), ts_to_sec(m[2]), m[3].strip()) for m in matches]
 
 
@@ -30,7 +31,7 @@ def test_generate_srt_never_has_overlapping_cues(tmp_path):
     out_srt = str(tmp_path / "test_no_overlap.srt")
     generate_srt(segments, out_srt)
 
-    with open(out_srt, "r", encoding="utf-8") as f:
+    with open(out_srt, encoding="utf-8") as f:
         content = f.read()
 
     cues = _parse_srt_cues(content)
@@ -40,8 +41,8 @@ def test_generate_srt_never_has_overlapping_cues(tmp_path):
         cur_start, cur_end, cur_text = cues[i]
         nxt_start, nxt_end, nxt_text = cues[i + 1]
         assert cur_end <= nxt_start, (
-            f"Phụ đề bị chồng: Cue {i+1} kết thúc lúc {cur_end}s "
-            f"nhưng Cue {i+2} đã bắt đầu lúc {nxt_start}s"
+            f"Phụ đề bị chồng: Cue {i + 1} kết thúc lúc {cur_end}s "
+            f"nhưng Cue {i + 2} đã bắt đầu lúc {nxt_start}s"
         )
 
 
@@ -53,6 +54,7 @@ def test_apply_soft_timing_prevents_voice_and_sub_overlap(tmp_path):
     os.makedirs(src_dir, exist_ok=True)
 
     from tests.test_timing import _write_tone
+
     # Clip 1 dài 3.0s, Clip 2 dài 2.0s
     _write_tone(os.path.join(src_dir, "seg_00001.wav"), 3.0)
     _write_tone(os.path.join(src_dir, "seg_00002.wav"), 2.0)
@@ -60,8 +62,22 @@ def test_apply_soft_timing_prevents_voice_and_sub_overlap(tmp_path):
     # Segment 1 gốc từ 0.0 -> 2.0, Segment 2 gốc từ 2.2 -> 4.2
     # TTS của Seg 1 dài 3.0s (vượt quá slot 2.0s và khoảng cách 2.2s)
     segments = [
-        {"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0, "speech_start": 0.0, "speech_end": 2.0},
-        {"id": 2, "start": 2.2, "end": 4.2, "duration": 2.0, "speech_start": 2.2, "speech_end": 4.2},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 2.0,
+            "duration": 2.0,
+            "speech_start": 0.0,
+            "speech_end": 2.0,
+        },
+        {
+            "id": 2,
+            "start": 2.2,
+            "end": 4.2,
+            "duration": 2.0,
+            "speech_start": 2.2,
+            "speech_end": 4.2,
+        },
     ]
 
     settings = Settings()
@@ -109,7 +125,7 @@ def test_sanitize_srt_file(tmp_path):
     bad_srt.write_text(
         "1\n00:00:01,000 --> 00:00:03,500\nCâu 1 dài\n\n"
         "2\n00:00:03,000 --> 00:00:05,000\nCâu 2 bị đè lên câu 1 500ms\n\n",
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     fixed = sanitize_srt_file(str(bad_srt))
@@ -119,4 +135,3 @@ def test_sanitize_srt_file(tmp_path):
     cues = _parse_srt_cues(content)
     assert len(cues) == 2
     assert cues[0][1] <= cues[1][0]  # Cue 1 end <= Cue 2 start
-

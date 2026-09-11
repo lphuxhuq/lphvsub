@@ -3,6 +3,7 @@
 Chạy server trên luồng phụ an toàn (background daemon thread) sử dụng werkzeug make_server,
 tự động đồng bộ các cấu hình API Key và cài đặt từ VoxDub Studio (.env).
 """
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,6 @@ import socket
 import threading
 import time
 import webbrowser
-from typing import Optional
 
 from werkzeug.serving import make_server
 
@@ -28,7 +28,7 @@ def find_free_port(start_port: int = 5050, max_attempts: int = 50) -> int:
         return s.getsockname()[1]
 
 
-_GLOBAL_MANAGER: Optional[GeminiSrtServerManager] = None
+_GLOBAL_MANAGER: GeminiSrtServerManager | None = None
 
 
 def get_server_manager() -> GeminiSrtServerManager:
@@ -45,12 +45,12 @@ class GeminiSrtServerManager:
     def __init__(self, default_port: int = 5050, host: str = "127.0.0.1"):
         self.default_port = default_port
         self.host = host
-        self.port: Optional[int] = None
+        self.port: int | None = None
         self._server = None
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._url = ""
-        self.pending_file: Optional[dict] = None
+        self.pending_file: dict | None = None
 
     def is_running(self) -> bool:
         """Kiểm tra xem server có đang chạy không."""
@@ -67,6 +67,7 @@ class GeminiSrtServerManager:
         try:
             from PySide6.QtCore import QUrl
             from PySide6.QtGui import QDesktopServices
+
             if QDesktopServices.openUrl(QUrl(url)):
                 return
         except Exception:
@@ -76,7 +77,7 @@ class GeminiSrtServerManager:
         except Exception:
             pass
 
-    def start(self, port: Optional[int] = None, open_browser: bool = False) -> str:
+    def start(self, port: int | None = None, open_browser: bool = False) -> str:
         """Khởi động server trên background thread.
 
         Nếu port không được chỉ định hoặc bị chiếm, tự động tìm port trống.
@@ -116,7 +117,9 @@ class GeminiSrtServerManager:
         """Nạp trực tiếp file SRT từ dự án vào server và mở trình duyệt."""
         import shutil
         import uuid
+
         from werkzeug.utils import secure_filename
+
         from autodub.tools.gemini_srt_ui.app import UPLOAD_FOLDER, load_subtitles_safe
 
         url = self.start(open_browser=False)
@@ -182,6 +185,7 @@ class GeminiSrtServerManager:
 
         try:
             from autodub.config import Settings
+
             settings = Settings.load(override=True)
             if hasattr(settings, "gemini_api_keys") and settings.gemini_api_keys:
                 raw_keys_list = list(settings.gemini_api_keys)

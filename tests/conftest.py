@@ -1,6 +1,5 @@
 """Global pytest configuration for test isolation."""
-import os
-from pathlib import Path
+
 import pytest
 
 
@@ -11,6 +10,7 @@ def isolate_pipeline_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("LPHVSub_PIPELINE_CACHE", str(test_cache))
     try:
         import autodub.pipeline_cache as pc
+
         old_root = pc._ROOT
         pc._ROOT = test_cache
         yield

@@ -1,5 +1,5 @@
-import os
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from autodub.media.video import merge_video
@@ -21,7 +21,6 @@ def dummy_media(tmp_path):
 @patch("autodub.media.video.probe_dimensions", return_value=(1280, 720))
 @patch("autodub.media.video.probe_duration_s", return_value=10.0)
 @patch("autodub.media.subtitle.build_filter_complex")
-
 def test_merge_video_blur_mode(mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media):
     vid, aud, out = dummy_media
     mock_run.return_value = MagicMock(returncode=0, stderr="")
@@ -48,9 +47,10 @@ def test_merge_video_blur_mode(mock_build_filter, mock_dur, mock_dims, mock_run,
 @patch("autodub.media.video.probe_dimensions", return_value=(1280, 720))
 @patch("autodub.media.video.probe_duration_s", return_value=10.0)
 @patch("autodub.media.subtitle.build_filter_complex")
-
 @patch("autodub.media.inpaint.inpaint_video_with_cache")
-def test_merge_video_ai_inpaint_mode(mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media, tmp_path):
+def test_merge_video_ai_inpaint_mode(
+    mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media, tmp_path
+):
     vid, aud, out = dummy_media
     clean_vid = str(tmp_path / "clean_cached.mp4")
     with open(clean_vid, "wb") as f:
@@ -93,8 +93,9 @@ def test_merge_video_ai_inpaint_mode(mock_inpaint, mock_build_filter, mock_dur, 
 @patch("autodub.media.video.probe_duration_s", return_value=10.0)
 @patch("autodub.media.subtitle.build_filter_complex")
 @patch("autodub.media.inpaint.inpaint_video_with_cache")
-
-def test_merge_video_ai_inpaint_fallback_on_error(mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media):
+def test_merge_video_ai_inpaint_fallback_on_error(
+    mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media
+):
     vid, aud, out = dummy_media
     mock_inpaint.side_effect = RuntimeError("GPU out of memory")
     mock_run.return_value = MagicMock(returncode=0, stderr="")
@@ -122,7 +123,9 @@ def test_merge_video_ai_inpaint_fallback_on_error(mock_inpaint, mock_build_filte
 @patch("autodub.media.video.probe_duration_s", return_value=10.0)
 @patch("autodub.media.subtitle.build_filter_complex")
 @patch("autodub.media.inpaint.inpaint_video_with_cache")
-def test_merge_video_ai_inpaint_forwards_progress_and_cancel(mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media, tmp_path):
+def test_merge_video_ai_inpaint_forwards_progress_and_cancel(
+    mock_inpaint, mock_build_filter, mock_dur, mock_dims, mock_run, dummy_media, tmp_path
+):
     vid, aud, out = dummy_media
     clean_vid = str(tmp_path / "clean_cached.mp4")
     with open(clean_vid, "wb") as f:
@@ -133,6 +136,7 @@ def test_merge_video_ai_inpaint_forwards_progress_and_cancel(mock_inpaint, mock_
     mock_build_filter.return_value = None
 
     import threading
+
     cb = MagicMock()
     ev = threading.Event()
     regions = [{"x": 0.1, "y": 0.8, "w": 0.8, "h": 0.15}]
@@ -157,4 +161,3 @@ def test_merge_video_ai_inpaint_forwards_progress_and_cancel(mock_inpaint, mock_
         progress_cb=cb,
         cancel_event=ev,
     )
-

@@ -7,12 +7,12 @@ In the LPHVSub codebase, `blur_regions` is a list of dictionary objects represen
 ### Schema Fields:
 ```python
 {
-    "x": float,       # Tọa độ X góc trên-trái chuẩn hóa [0.0 .. 1.0]
-    "y": float,       # Tọa độ Y góc trên-trái chuẩn hóa [0.0 .. 1.0]
-    "w": float,       # Chiều rộng hình chữ nhật chuẩn hóa [0.0 .. 1.0]
-    "h": float,       # Chiều cao hình chữ nhật chuẩn hóa [0.0 .. 1.0]
-    "t_start": float, # (Tùy chọn) Thời điểm bắt đầu làm mờ (giây, float)
-    "t_end": float,   # (Tùy chọn) Thời điểm kết thúc làm mờ (giây, float)
+    "x": float,  # Tọa độ X góc trên-trái chuẩn hóa [0.0 .. 1.0]
+    "y": float,  # Tọa độ Y góc trên-trái chuẩn hóa [0.0 .. 1.0]
+    "w": float,  # Chiều rộng hình chữ nhật chuẩn hóa [0.0 .. 1.0]
+    "h": float,  # Chiều cao hình chữ nhật chuẩn hóa [0.0 .. 1.0]
+    "t_start": float,  # (Tùy chọn) Thời điểm bắt đầu làm mờ (giây, float)
+    "t_end": float,  # (Tùy chọn) Thời điểm kết thúc làm mờ (giây, float)
 }
 ```
 

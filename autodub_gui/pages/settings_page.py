@@ -5,6 +5,7 @@ thêm một mục mới chỉ cần khai báo một dòng là nó tự có mặt
 tự được lưu. Giọng đọc, Phụ đề và Dịch thuật đã tách ra thành trang Công cụ
 riêng trên thanh bên, xem `pages/tool_page_base.py`.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,16 +13,26 @@ import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QColorDialog, QHBoxLayout, QLabel, QScrollArea,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QCheckBox,
+    QColorDialog,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
-from autodub_gui.ui.style import clear_background
 from autodub_gui.env_store import (
-    bool_to_env, env_bool, env_to_multiline, multiline_to_env,
-    api_keys_to_multiline, multiline_to_api_keys,
-    read_env, write_env,
+    api_keys_to_multiline,
+    bool_to_env,
+    env_bool,
+    env_to_multiline,
+    multiline_to_api_keys,
+    multiline_to_env,
+    read_env,
+    write_env,
 )
 from autodub_gui.pages import BasePage
 from autodub_gui.pages import settings_fields as spec
@@ -29,10 +40,14 @@ from autodub_gui.pages.settings_panels import DiskUsagePanel, MaintenancePanel
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 from autodub_gui.ui.collapsible import CollapsibleSection
 from autodub_gui.ui.inputs import (
-    LabeledCombo, LabeledLineEdit, LabeledSlider, LabeledWidget,
+    LabeledCombo,
+    LabeledLineEdit,
+    LabeledSlider,
+    LabeledWidget,
 )
 from autodub_gui.ui.modal import ConfirmDialog
 from autodub_gui.ui.pill_tabs import PillTabBar
+from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.toast import TOASTS
 
 _PAGE_MARGIN = 24
@@ -72,8 +87,7 @@ class SettingsPage(BasePage):
     # -- Dựng giao diện ------------------------------------------------
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_2,
-                                _PAGE_MARGIN, tokens.SP_4)
+        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_2, _PAGE_MARGIN, tokens.SP_4)
         root.setSpacing(tokens.SP_3)
 
         tab_icons = {
@@ -86,8 +100,7 @@ class SettingsPage(BasePage):
         clear_background(self._stack)
         for name in spec.SETTINGS_TABS:
             make_icon = tab_icons.get(name)
-            self.tabbar.add_tab(
-                name, make_icon(tokens.TEXT_SECONDARY) if make_icon else None)
+            self.tabbar.add_tab(name, make_icon(tokens.TEXT_SECONDARY) if make_icon else None)
             self._stack.addWidget(self._build_tab(name))
         self.tabbar.changed.connect(self._stack.setCurrentIndex)
         self.tabbar.changed.connect(self._remember_tab)
@@ -102,14 +115,12 @@ class SettingsPage(BasePage):
         """Một thẻ: vùng cuộn chứa các nhóm mục."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         holder = QWidget()
         clear_background(holder)
         layout = QVBoxLayout(holder)
-        layout.setContentsMargins(tokens.SP_2, tokens.SP_3,
-                                  tokens.SP_4, tokens.SP_4)
+        layout.setContentsMargins(tokens.SP_2, tokens.SP_3, tokens.SP_4, tokens.SP_4)
         layout.setSpacing(tokens.SP_4)
 
         for group in spec.groups_of(tab):
@@ -161,7 +172,7 @@ class SettingsPage(BasePage):
         widget = LabeledCombo(item.label, font_choices(), item.hint)
         widget.changed.connect(self._mark_dirty)
         holder = QWidget()
-        clear_background(holder)     # ăn theo nền của nhóm chứa nó
+        clear_background(holder)  # ăn theo nền của nhóm chứa nó
         layout = QVBoxLayout(holder)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(tokens.SP_2)
@@ -177,16 +188,18 @@ class SettingsPage(BasePage):
         note = QLabel(
             "Thả tệp phông chữ đuôi .ttf vào thư mục này rồi mở lại cửa sổ — "
             "phông mới sẽ xuất hiện trong danh sách."
-            if has_app_fonts() else
-            "Thư mục phông chữ đang trống. Hãy thả ít nhất một tệp .ttf vào "
+            if has_app_fonts()
+            else "Thư mục phông chữ đang trống. Hãy thả ít nhất một tệp .ttf vào "
             "đó rồi mở lại cửa sổ, nếu không phụ đề sẽ không hiện đúng chữ "
-            "tiếng Việt trên máy khác.")
+            "tiếng Việt trên máy khác."
+        )
         note.setWordWrap(True)
         note.setStyleSheet(
             f"color: {tokens.TEXT_MUTED if has_app_fonts() else tokens.WARNING}; "
-            f"font-size: {tokens.FS_META}px; background: transparent;")
+            f"font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(note)
-        holder.field = widget      # để phần nạp và lưu tìm lại được ô chọn
+        holder.field = widget  # để phần nạp và lưu tìm lại được ô chọn
         return holder
 
     def _build_check(self, item: spec.Field) -> QWidget:
@@ -196,9 +209,15 @@ class SettingsPage(BasePage):
         return box
 
     def _build_slider(self, item: spec.Field) -> QWidget:
-        widget = LabeledSlider(item.label, item.minimum, item.maximum,
-                               item.step, item.hint, item.suffix,
-                               decimals=item.decimals)
+        widget = LabeledSlider(
+            item.label,
+            item.minimum,
+            item.maximum,
+            item.step,
+            item.hint,
+            item.suffix,
+            decimals=item.decimals,
+        )
         widget.changed.connect(self._mark_dirty)
         return widget
 
@@ -231,16 +250,19 @@ class SettingsPage(BasePage):
     def _build_folder(self, item: spec.Field) -> QWidget:
         from autodub_gui.ui.inputs import FilePicker
 
-        widget = FilePicker(item.label, item.placeholder, item.hint,
-                            directory=True)
+        widget = FilePicker(item.label, item.placeholder, item.hint, directory=True)
         widget.changed.connect(lambda _t: self._mark_dirty())
         return widget
 
     def _build_file(self, item: spec.Field) -> QWidget:
         from autodub_gui.ui.inputs import FilePicker
 
-        widget = FilePicker(item.label, item.placeholder, item.hint,
-                            name_filter="Âm thanh (*.wav *.mp3 *.m4a *.flac)")
+        widget = FilePicker(
+            item.label,
+            item.placeholder,
+            item.hint,
+            name_filter="Âm thanh (*.wav *.mp3 *.m4a *.flac)",
+        )
         widget.changed.connect(lambda _t: self._mark_dirty())
         return widget
 
@@ -330,8 +352,7 @@ class SettingsPage(BasePage):
         vẫn gom chúng ở đây thì `_get_value` trả về giá trị mặc định (vì
         không còn ô nhập nào) và bấm Lưu sẽ xóa sạch cấu hình bên kia.
         """
-        return [item for item in spec.FIELDS
-                if item.tab in spec.SETTINGS_TABS]
+        return [item for item in spec.FIELDS if item.tab in spec.SETTINGS_TABS]
 
     def reload(self) -> None:
         """Đọc lại toàn bộ giá trị từ tệp cấu hình."""
@@ -362,7 +383,7 @@ class SettingsPage(BasePage):
             with open(self._ui_state_path(), "w", encoding="utf-8") as f:
                 json.dump({"tab": index}, f)
         except OSError:
-            pass               # không ghi được thì thôi, không đáng báo lỗi
+            pass  # không ghi được thì thôi, không đáng báo lỗi
 
     def _collect(self) -> dict[str, str]:
         """Gom giá trị hiện tại của mọi mục trang này quản."""
@@ -385,10 +406,13 @@ class SettingsPage(BasePage):
             write_env(values)
         except OSError as e:
             ConfirmDialog.show_error(
-                self, "Không lưu được cài đặt",
+                self,
+                "Không lưu được cài đặt",
                 "Ứng dụng không ghi được vào tệp cấu hình. Có thể tệp đang bị "
                 "một chương trình khác mở, hoặc thư mục không cho ghi. Hãy "
-                "đóng chương trình đó rồi bấm Lưu lại.", detail=str(e))
+                "đóng chương trình đó rồi bấm Lưu lại.",
+                detail=str(e),
+            )
             return
         self._snapshot = self._collect()
         self._set_dirty(False)
@@ -398,10 +422,13 @@ class SettingsPage(BasePage):
         if not self._dirty:
             return
         confirmed, _ = ConfirmDialog.ask(
-            self, "Bỏ thay đổi",
-            "Mọi thay đổi bạn vừa chỉnh sẽ quay về giá trị đã lưu lần trước. "
-            "Bạn có chắc không?",
-            kind="warning", confirm_label="Bỏ thay đổi", cancel_label="Giữ lại")
+            self,
+            "Bỏ thay đổi",
+            "Mọi thay đổi bạn vừa chỉnh sẽ quay về giá trị đã lưu lần trước. Bạn có chắc không?",
+            kind="warning",
+            confirm_label="Bỏ thay đổi",
+            cancel_label="Giữ lại",
+        )
         if not confirmed:
             return
         for item in self._own_fields():
@@ -411,10 +438,13 @@ class SettingsPage(BasePage):
 
     def _restore_defaults(self) -> None:
         confirmed, _ = ConfirmDialog.ask(
-            self, "Khôi phục mặc định",
+            self,
+            "Khôi phục mặc định",
             "Toàn bộ cài đặt sẽ quay về giá trị ban đầu của ứng dụng. "
             "Thay đổi chỉ được ghi xuống khi bạn bấm Lưu cài đặt.",
-            kind="warning", confirm_label="Nạp giá trị mặc định")
+            kind="warning",
+            confirm_label="Nạp giá trị mặc định",
+        )
         if not confirmed:
             return
         for item in self._own_fields():
@@ -438,8 +468,7 @@ class SettingsPage(BasePage):
     def _pick_color(self, button) -> None:
         from PySide6.QtGui import QColor
 
-        current = QColor(button.text().strip()
-                         or tokens.SUBTITLE_TEXT_DEFAULT)
+        current = QColor(button.text().strip() or tokens.SUBTITLE_TEXT_DEFAULT)
         chosen = QColorDialog.getColor(current, self, "Chọn màu")
         if chosen.isValid():
             self._paint_color(button, chosen.name().upper())
@@ -452,12 +481,12 @@ class SettingsPage(BasePage):
 
         button.setText(hex_color)
         color = QColor(hex_color)
-        luminance = (0.299 * color.red() + 0.587 * color.green()
-                     + 0.114 * color.blue())
+        luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
         text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
         button.setStyleSheet(
             f"QPushButton#ghost {{ background: {hex_color}; "
-            f"color: {text_color}; font-weight: 600; }}")
+            f"color: {text_color}; font-weight: 600; }}"
+        )
 
     def _open_path(self, path: str) -> None:
         from autodub_gui.system_open import open_folder
@@ -484,7 +513,6 @@ class SettingsPage(BasePage):
             panel = getattr(self, name, None)
             if panel is not None and hasattr(panel, "cleanup"):
                 panel.cleanup()
-
 
 
 def _to_float(raw: str, default: str) -> float:

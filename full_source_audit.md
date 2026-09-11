@@ -496,8 +496,9 @@ def acquire(self, key: str) -> None:
     with self._lock:
         ...
         if wait > 0:
-            time.sleep(wait)       # ← SLEEP TRONG LOCK!
+            time.sleep(wait)  # ← SLEEP TRONG LOCK!
         self._last_hits[key] = time.monotonic()
+
 
 # NÊN SỬA:
 def acquire(self, key: str) -> None:
@@ -507,7 +508,7 @@ def acquire(self, key: str) -> None:
         wait = self.min_interval_s - (now - last)
         self._last_hits[key] = now + max(0, wait)
     if wait > 0:
-        time.sleep(wait)           # ← SLEEP NGOÀI LOCK
+        time.sleep(wait)  # ← SLEEP NGOÀI LOCK
 ```
 
 ---

@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
 import shutil
 import subprocess
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from autodub.media.download.cdn_racer import CdnRacingEngine
-from autodub.media.download.concurrency import AdaptiveConcurrencyController
 from autodub.media.download.contract import (
-    BandwidthMode,
     DownloadRequest,
     DownloadResult,
-    ErrorType,
     Platform,
 )
 from autodub.media.download.partial_manager import PartialDownloadManager
@@ -47,11 +42,11 @@ class BilibiliDownloader:
 
     def __init__(
         self,
-        session_manager: Optional[CookieSessionManager] = None,
-        partial_manager: Optional[PartialDownloadManager] = None,
-        cdn_racer: Optional[CdnRacingEngine] = None,
-        validator: Optional[MediaValidator] = None,
-        perf_store: Optional[PerformanceStore] = None,
+        session_manager: CookieSessionManager | None = None,
+        partial_manager: PartialDownloadManager | None = None,
+        cdn_racer: CdnRacingEngine | None = None,
+        validator: MediaValidator | None = None,
+        perf_store: PerformanceStore | None = None,
     ):
         self.session_mgr = session_manager or CookieSessionManager()
         self.partial_mgr = partial_manager or PartialDownloadManager()
@@ -61,7 +56,7 @@ class BilibiliDownloader:
         self.retry_policy = SmartRetryPolicy(max_retries=3)
 
     @staticmethod
-    def extract_bvid(url: str) -> Optional[str]:
+    def extract_bvid(url: str) -> str | None:
         m = re.search(r"(BV[a-zA-Z0-9]{10})", url, re.IGNORECASE)
         if m:
             return m.group(1)
@@ -76,35 +71,44 @@ class BilibiliDownloader:
         except Exception:
             return 1
 
-    def fetch_video_view(self, bvid: str, session: requests.Session) -> Dict[str, Any]:
+    def fetch_video_view(self, bvid: str, session: requests.Session) -> dict[str, Any]:
         """Fetches video metadata, title and cid list from Bilibili API."""
         api_url = f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}"
         resp = session.get(api_url, headers=_BILI_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"Bilibili API error: {data.get('message', 'unknown code')} (code: {data.get('code')})")
+            raise RuntimeError(
+                f"Bilibili API error: {data.get('message', 'unknown code')} (code: {data.get('code')})"
+            )
         return data.get("data", {})
 
-    def fetch_playurl(self, bvid: str, cid: int, session: requests.Session) -> Dict[str, Any]:
+    def fetch_playurl(self, bvid: str, cid: int, session: requests.Session) -> dict[str, Any]:
         """Fetches DASH and progressive stream URLs."""
         api_url = f"https://api.bilibili.com/x/player/playurl?bvid={bvid}&cid={cid}&qn=80&fnval=4048&fourk=1"
         resp = session.get(api_url, headers=_BILI_HEADERS, timeout=12)
         resp.raise_for_status()
         data = resp.json()
         if data.get("code") != 0:
-            raise RuntimeError(f"Bilibili playurl API error: {data.get('message')} (code: {data.get('code')})")
+            raise RuntimeError(
+                f"Bilibili playurl API error: {data.get('message')} (code: {data.get('code')})"
+            )
         return data.get("data", {})
 
     def mux_dash(self, video_path: Path, audio_path: Path, output_path: Path) -> Path:
         """Muxes separate video and audio m4s/mp4 streams using FFmpeg copy."""
         ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         cmd = [
-            ffmpeg_bin, "-y",
-            "-i", str(video_path),
-            "-i", str(audio_path),
-            "-c", "copy",
-            "-movflags", "+faststart",
+            ffmpeg_bin,
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(audio_path),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
             str(output_path),
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
@@ -123,7 +127,7 @@ class BilibiliDownloader:
         start_time = time.time()
         logger.info(f"Bilibili: using yt-dlp fallback for {request.url}")
 
-        ydl_opts: Dict[str, Any] = {
+        ydl_opts: dict[str, Any] = {
             "outtmpl": str(target_path.parent / f"{target_path.stem}.%(ext)s"),
             "format": "bestvideo+bestaudio/best" if not request.audio_only else "bestaudio/best",
             "merge_output_format": "mp4",
@@ -145,23 +149,43 @@ class BilibiliDownloader:
                     pct = min(0.95, downloaded / total)
                     mb_d = downloaded / (1024 * 1024)
                     mb_t = total / (1024 * 1024)
-                    msg = f"Đang tải Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+                    msg = f"Đang tải Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct * 100)}%) - {speed:.1f} MB/s"
                 else:
                     pct = 0.5
                     mb_d = downloaded / (1024 * 1024)
                     msg = f"Đang tải Bilibili: {mb_d:.1f}MB - {speed:.1f} MB/s"
-                request.progress_callback({"progress": pct, "percent": pct * 100.0, "message": msg, "status": "downloading"})
+                request.progress_callback(
+                    {
+                        "progress": pct,
+                        "percent": pct * 100.0,
+                        "message": msg,
+                        "status": "downloading",
+                    }
+                )
             elif d.get("status") == "finished":
-                request.progress_callback({"progress": 0.98, "percent": 98.0, "message": "Đang xử lý video Bilibili...", "status": "processing"})
+                request.progress_callback(
+                    {
+                        "progress": 0.98,
+                        "percent": 98.0,
+                        "message": "Đang xử lý video Bilibili...",
+                        "status": "processing",
+                    }
+                )
 
         ydl_opts["progress_hooks"] = [_ytdlp_hook]
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(request.url, download=True)
             candidates = list(target_path.parent.glob(f"{target_path.stem}.*"))
-            final_file = target_path if target_path.exists() else (candidates[0] if candidates else target_path)
+            final_file = (
+                target_path
+                if target_path.exists()
+                else (candidates[0] if candidates else target_path)
+            )
 
-        val = self.validator.validate(final_file, require_video=not request.audio_only, require_audio=True)
+        val = self.validator.validate(
+            final_file, require_video=not request.audio_only, require_audio=True
+        )
         elapsed = time.time() - start_time
         avg_speed = val.file_size / elapsed if elapsed > 0 else 0.0
 
@@ -192,12 +216,16 @@ class BilibiliDownloader:
 
         bvid = self.extract_bvid(request.url)
         if not bvid:
-            return self._download_via_ytdlp_fallback(request, out_dir / (request.custom_filename or "bilibili_out.mp4"))
+            return self._download_via_ytdlp_fallback(
+                request, out_dir / (request.custom_filename or "bilibili_out.mp4")
+            )
 
         target_name = request.custom_filename or f"bilibili_{bvid}.mp4"
         target_path = out_dir / target_name
 
-        session = self.session_mgr.create_session(Platform.BILIBILI, cookie_file=request.cookie_file)
+        session = self.session_mgr.create_session(
+            Platform.BILIBILI, cookie_file=request.cookie_file
+        )
         retries_count = 0
         cdn_used = "default"
 
@@ -223,17 +251,25 @@ class BilibiliDownloader:
                 best_video = max(v_streams, key=lambda s: s.get("bandwidth", 0))
                 best_audio = max(a_streams, key=lambda s: s.get("bandwidth", 0))
 
-                v_candidates = [best_video.get("baseUrl") or best_video.get("base_url")] + (best_video.get("backupUrl") or best_video.get("backup_url") or [])
+                v_candidates = [best_video.get("baseUrl") or best_video.get("base_url")] + (
+                    best_video.get("backupUrl") or best_video.get("backup_url") or []
+                )
                 v_candidates = [c for c in v_candidates if c]
 
-                a_candidates = [best_audio.get("baseUrl") or best_audio.get("base_url")] + (best_audio.get("backupUrl") or best_audio.get("backup_url") or [])
+                a_candidates = [best_audio.get("baseUrl") or best_audio.get("base_url")] + (
+                    best_audio.get("backupUrl") or best_audio.get("backup_url") or []
+                )
                 a_candidates = [c for c in a_candidates if c]
 
-                v_ranked = self.cdn_racer.race_candidates(v_candidates, session, headers=_BILI_HEADERS)
+                v_ranked = self.cdn_racer.race_candidates(
+                    v_candidates, session, headers=_BILI_HEADERS
+                )
                 chosen_v_url = v_ranked[0].url if v_ranked else v_candidates[0]
                 cdn_used = self.cdn_racer.extract_host(chosen_v_url)
 
-                a_ranked = self.cdn_racer.race_candidates(a_candidates, session, headers=_BILI_HEADERS)
+                a_ranked = self.cdn_racer.race_candidates(
+                    a_candidates, session, headers=_BILI_HEADERS
+                )
                 chosen_a_url = a_ranked[0].url if a_ranked else a_candidates[0]
 
                 v_tmp = out_dir / f"temp_{bvid}_v.m4s"
@@ -245,13 +281,19 @@ class BilibiliDownloader:
                         mb_d = d.get("bytes_downloaded", 0) / (1024 * 1024)
                         mb_t = d.get("total_bytes", 0) / (1024 * 1024)
                         speed = d.get("speed_mb", 0.0)
-                        msg = f"Đang tải video Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s" if mb_t > 0 else f"Đang tải video Bilibili: {mb_d:.1f}MB - {speed:.1f} MB/s"
-                        request.progress_callback({
-                            **d,
-                            "progress": pct,
-                            "percent": pct * 100.0,
-                            "message": msg,
-                        })
+                        msg = (
+                            f"Đang tải video Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct * 100)}%) - {speed:.1f} MB/s"
+                            if mb_t > 0
+                            else f"Đang tải video Bilibili: {mb_d:.1f}MB - {speed:.1f} MB/s"
+                        )
+                        request.progress_callback(
+                            {
+                                **d,
+                                "progress": pct,
+                                "percent": pct * 100.0,
+                                "message": msg,
+                            }
+                        )
 
                 def _a_cb(d: dict):
                     if request.progress_callback and isinstance(d, dict):
@@ -259,13 +301,19 @@ class BilibiliDownloader:
                         mb_d = d.get("bytes_downloaded", 0) / (1024 * 1024)
                         mb_t = d.get("total_bytes", 0) / (1024 * 1024)
                         speed = d.get("speed_mb", 0.0)
-                        msg = f"Đang tải âm thanh Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB - {speed:.1f} MB/s" if mb_t > 0 else "Đang tải âm thanh Bilibili..."
-                        request.progress_callback({
-                            **d,
-                            "progress": pct,
-                            "percent": pct * 100.0,
-                            "message": msg,
-                        })
+                        msg = (
+                            f"Đang tải âm thanh Bilibili: {mb_d:.1f}MB / {mb_t:.1f}MB - {speed:.1f} MB/s"
+                            if mb_t > 0
+                            else "Đang tải âm thanh Bilibili..."
+                        )
+                        request.progress_callback(
+                            {
+                                **d,
+                                "progress": pct,
+                                "percent": pct * 100.0,
+                                "message": msg,
+                            }
+                        )
 
                 v_start = time.perf_counter()
                 self.partial_mgr.download_progressive_stream(
@@ -277,7 +325,9 @@ class BilibiliDownloader:
                     is_cancelled=request.is_cancelled,
                 )
                 v_elapsed = max(0.01, time.perf_counter() - v_start)
-                self.perf_store.record_metric("bilibili", cdn_used, v_tmp.stat().st_size, v_elapsed, success=True)
+                self.perf_store.record_metric(
+                    "bilibili", cdn_used, v_tmp.stat().st_size, v_elapsed, success=True
+                )
 
                 self.partial_mgr.download_progressive_stream(
                     url=chosen_a_url,
@@ -289,12 +339,24 @@ class BilibiliDownloader:
                 )
 
                 if request.progress_callback:
-                    request.progress_callback({"progress": 0.96, "percent": 96.0, "message": "Đang ghép tệp âm thanh và hình ảnh Bilibili..."})
+                    request.progress_callback(
+                        {
+                            "progress": 0.96,
+                            "percent": 96.0,
+                            "message": "Đang ghép tệp âm thanh và hình ảnh Bilibili...",
+                        }
+                    )
 
                 self.mux_dash(v_tmp, a_tmp, target_path)
 
                 if request.progress_callback:
-                    request.progress_callback({"progress": 1.0, "percent": 100.0, "message": "Tải video Bilibili hoàn tất!"})
+                    request.progress_callback(
+                        {
+                            "progress": 1.0,
+                            "percent": 100.0,
+                            "message": "Tải video Bilibili hoàn tất!",
+                        }
+                    )
 
                 v_tmp.unlink(missing_ok=True)
                 a_tmp.unlink(missing_ok=True)
@@ -320,12 +382,18 @@ class BilibiliDownloader:
                     is_cancelled=request.is_cancelled,
                 )
                 t_elapsed = max(0.01, time.perf_counter() - t_start)
-                self.perf_store.record_metric("bilibili", cdn_used, target_path.stat().st_size, t_elapsed, success=True)
+                self.perf_store.record_metric(
+                    "bilibili", cdn_used, target_path.stat().st_size, t_elapsed, success=True
+                )
 
             else:
-                raise RuntimeError("No suitable DASH or progressive streams returned by Bilibili API")
+                raise RuntimeError(
+                    "No suitable DASH or progressive streams returned by Bilibili API"
+                )
 
-            val = self.validator.validate(target_path, require_video=True, require_audio=not request.audio_only)
+            val = self.validator.validate(
+                target_path, require_video=True, require_audio=not request.audio_only
+            )
             elapsed = time.time() - start_time
             avg_speed = val.file_size / elapsed if elapsed > 0 else 0.0
 

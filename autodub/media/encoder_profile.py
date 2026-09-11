@@ -1,4 +1,5 @@
 """Hồ sơ mã hóa phần cứng và phần mềm (Encoder Profile) cho LPHVSub."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,11 +37,44 @@ class EncoderProfile:
         enc = str(encoder_name).strip()
         if "NVIDIA" in enc or "nvenc" in enc.lower():
             if m == QualityMode.FAST:
-                return ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "23", "-b:v", "0", "-multipass", "0"]
+                return [
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    "p1",
+                    "-cq",
+                    "23",
+                    "-b:v",
+                    "0",
+                    "-multipass",
+                    "0",
+                ]
             elif m == QualityMode.BALANCED:
-                return ["-c:v", "h264_nvenc", "-preset", "p2", "-cq", "22", "-b:v", "0", "-multipass", "0"]
+                return [
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    "p2",
+                    "-cq",
+                    "22",
+                    "-b:v",
+                    "0",
+                    "-multipass",
+                    "0",
+                ]
             else:  # QUALITY
-                return ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", "-b:v", "0", "-multipass", "1"]
+                return [
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    "p4",
+                    "-cq",
+                    "20",
+                    "-b:v",
+                    "0",
+                    "-multipass",
+                    "1",
+                ]
 
         elif "Intel" in enc or "qsv" in enc.lower():
             if m == QualityMode.FAST:
@@ -68,12 +102,44 @@ class EncoderProfile:
 
         elif "AMD" in enc or "amf" in enc.lower():
             if m == QualityMode.FAST:
-                return ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "23", "-qp_p", "23"]
+                return [
+                    "-c:v",
+                    "h264_amf",
+                    "-quality",
+                    "speed",
+                    "-rc",
+                    "cqp",
+                    "-qp_i",
+                    "23",
+                    "-qp_p",
+                    "23",
+                ]
             elif m == QualityMode.BALANCED:
-                return ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "22", "-qp_p", "22"]
+                return [
+                    "-c:v",
+                    "h264_amf",
+                    "-quality",
+                    "balanced",
+                    "-rc",
+                    "cqp",
+                    "-qp_i",
+                    "22",
+                    "-qp_p",
+                    "22",
+                ]
             else:
-                return ["-c:v", "h264_amf", "-quality", "quality", "-rc", "cqp", "-qp_i", "20", "-qp_p", "20"]
-
+                return [
+                    "-c:v",
+                    "h264_amf",
+                    "-quality",
+                    "quality",
+                    "-rc",
+                    "cqp",
+                    "-qp_i",
+                    "20",
+                    "-qp_p",
+                    "20",
+                ]
 
         else:  # CPU libx264
             if m == QualityMode.FAST:

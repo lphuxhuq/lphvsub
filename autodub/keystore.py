@@ -8,6 +8,7 @@ Gói ``keyring`` là TÙY CHỌN: không có thì mọi hàm ở đây nói "kh�
 được" và token chỉ sống trong phiên chạy — mỗi lần mở app đăng ký lại thiết
 bị, ví Vox vẫn nguyên vì nó gắn với mã máy chứ không gắn với token.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,7 +44,7 @@ def get_secret(key: str) -> str:
         return ""
     try:
         return ring.get_password(_SERVICE, key) or ""
-    except Exception:  # noqa: BLE001 — kho khóa hỏng thì coi như không có
+    except Exception:
         logger.warning("Không đọc được %s từ kho khóa hệ điều hành", key)
         return ""
 
@@ -59,7 +60,7 @@ def set_secret(key: str, value: str) -> bool:
         else:
             delete_secret(key)
         return True
-    except Exception:  # noqa: BLE001 — không cất được thì để .env giữ như cũ
+    except Exception:
         logger.warning("Không ghi được %s vào kho khóa hệ điều hành", key)
         return False
 
@@ -71,7 +72,7 @@ def delete_secret(key: str) -> None:
         return
     try:
         ring.delete_password(_SERVICE, key)
-    except Exception:  # noqa: BLE001 — chưa có sẵn thì không cần xóa
+    except Exception:
         pass
 
 

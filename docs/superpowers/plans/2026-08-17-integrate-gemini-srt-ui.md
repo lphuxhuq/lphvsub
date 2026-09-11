@@ -41,15 +41,19 @@
 # tests/test_gemini_srt_module.py
 import pytest
 
+
 def test_gemini_srt_module_importable():
     from autodub.tools.gemini_srt_ui import create_app
+
     app = create_app()
     assert app is not None
     assert app.name == "autodub.tools.gemini_srt_ui.app" or "gemini" in app.name
 
+
 def test_gemini_srt_static_index_exists():
     from autodub.tools.gemini_srt_ui import get_static_folder
     import os
+
     static_dir = get_static_folder()
     assert os.path.isdir(static_dir)
     assert os.path.isfile(os.path.join(static_dir, "index.html"))
@@ -114,19 +118,20 @@ import time
 import requests
 from autodub.tools.gemini_srt_ui.server_manager import GeminiSrtServerManager
 
+
 def test_server_manager_lifecycle():
     manager = GeminiSrtServerManager()
     assert not manager.is_running()
-    
+
     url = manager.start(port=5999, open_browser=False)
     assert manager.is_running()
     assert "5999" in url
-    
+
     time.sleep(1)
     # Ping server root
     resp = requests.get(url, timeout=3)
     assert resp.status_code == 200
-    
+
     manager.stop()
     assert not manager.is_running()
 ```
@@ -177,12 +182,14 @@ from PySide6.QtWidgets import QApplication
 from autodub_gui.pages.gemini_srt_page import GeminiSrtPage
 from autodub.config import Settings
 
+
 @pytest.fixture(scope="session")
 def qapp():
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
     return app
+
 
 def test_gemini_srt_page_construct(qapp):
     page = GeminiSrtPage(Settings.load)
@@ -207,9 +214,16 @@ Expected: FAIL with "No module named 'autodub_gui.pages.gemini_srt_page'"
    - Quản lý `shutdown()` và `cleanup()` dừng `server_manager`.
 2. Khai báo `ROW_GEMINI_SRT = 14` (cập nhật `PAGE_COUNT = 15`) và thêm vào `PAGES` trong `autodub_gui/app.py`:
    ```python
-   (ROW_GEMINI_SRT, "Dịch SRT Gemini", "Dịch SRT Gemini Pro",
-    "Công cụ web dịch phụ đề chuyên sâu với Multi-key & CJK Fix",
-    icons.globe, "tools"),
+   (
+       (
+           ROW_GEMINI_SRT,
+           "Dịch SRT Gemini",
+           "Dịch SRT Gemini Pro",
+           "Công cụ web dịch phụ đề chuyên sâu với Multi-key & CJK Fix",
+           icons.globe,
+           "tools",
+       ),
+   )
    ```
 3. Cập nhật `_create_page` trong `autodub_gui/app.py` để dựng `GeminiSrtPage`.
 
@@ -245,9 +259,13 @@ git commit -m "feat: integrate Gemini SRT tool page into VoxDub GUI"
 import subprocess
 import sys
 
+
 def test_gemini_srt_cli_help():
-    res = subprocess.run([sys.executable, "-m", "autodub.tools.gemini_srt_ui", "--help"],
-                         capture_output=True, text=True)
+    res = subprocess.run(
+        [sys.executable, "-m", "autodub.tools.gemini_srt_ui", "--help"],
+        capture_output=True,
+        text=True,
+    )
     assert res.returncode == 0
     assert "Gemini SRT" in res.stdout or "port" in res.stdout
 ```

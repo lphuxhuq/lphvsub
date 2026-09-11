@@ -3,6 +3,7 @@
 Giúp Voice Sync scheduler không để câu thoại của nhân vật này tràn qua
 phân cảnh quay của nhân vật khác (Scene Drift Guard).
 """
+
 from __future__ import annotations
 
 import re
@@ -29,17 +30,24 @@ def parse_scene_cut_timestamps(output_text: str) -> list[float]:
     return cuts
 
 
-def detect_scene_cuts(video_path: str, threshold: float = 0.35,
-                       timeout_s: float = 60.0) -> list[float]:
+def detect_scene_cuts(
+    video_path: str, threshold: float = 0.35, timeout_s: float = 60.0
+) -> list[float]:
     """Chạy FFmpeg scan điểm chuyển cảnh nhanh (không encode, chỉ đọc frame header)."""
     if not video_path:
         return []
 
     cmd = [
-        "ffmpeg", "-hide_banner", "-nostats",
-        "-i", video_path,
-        "-filter:v", f"select='gt(scene,{threshold:.2f})',showinfo",
-        "-f", "null", "-",
+        "ffmpeg",
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        video_path,
+        "-filter:v",
+        f"select='gt(scene,{threshold:.2f})',showinfo",
+        "-f",
+        "null",
+        "-",
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
@@ -132,12 +140,12 @@ def load_or_detect_scene_cuts(
         cache_file = os.path.join(work_dir, "data", "scene_cuts.json")
         if os.path.isfile(cache_file):
             try:
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, encoding="utf-8") as f:
                     cached = json.load(f)
                 if isinstance(cached, list):
                     return [float(x) for x in cached]
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong scene_detector.py", exc_info=True)
 
     cuts = detect_scene_cuts(video_path, threshold=threshold, timeout_s=timeout_s)
 
@@ -147,7 +155,6 @@ def load_or_detect_scene_cuts(
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(cuts, f)
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong scene_detector.py", exc_info=True)
 
     return cuts
-

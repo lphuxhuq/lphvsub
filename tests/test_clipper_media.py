@@ -1,8 +1,6 @@
-import os
-import pytest
 from autodub.media.clipper import (
-    slice_ass_subtitles,
     build_short_export_command,
+    slice_ass_subtitles,
 )
 
 

@@ -4,9 +4,8 @@ env_store là lớp cơ sở mà toàn bộ trang Cài đặt và trang Công c�
 lưu giá trị — nếu nó đọc/ghi sai thì người dùng mất cấu hình hay thấy giá
 trị cũ sau khi bấm Lưu. Kiểm thử dưới đây khóa các hành vi then chốt lại.
 """
-from __future__ import annotations
 
-import os
+from __future__ import annotations
 
 import pytest
 
@@ -27,6 +26,7 @@ def env_file(tmp_path):
 
 
 # ------------------------------------------------------ read_env / write_env #
+
 
 def test_roundtrip_simple(env_file):
     write_env({"KEY_A": "hello", "KEY_B": "world"}, env_file)
@@ -73,12 +73,24 @@ def test_write_empty_value(env_file):
 
 # ---------------------------------------------------------------- env_bool -- #
 
-@pytest.mark.parametrize("raw,expected", [
-    ("true", True), ("True", True), ("TRUE", True),
-    ("1", True), ("yes", True), ("on", True),
-    ("false", False), ("0", False), ("no", False), ("off", False),
-    ("", False), ("garbage", False),
-])
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("true", True),
+        ("True", True),
+        ("TRUE", True),
+        ("1", True),
+        ("yes", True),
+        ("on", True),
+        ("false", False),
+        ("0", False),
+        ("no", False),
+        ("off", False),
+        ("", False),
+        ("garbage", False),
+    ],
+)
 def test_env_bool_parsing(raw, expected):
     assert env_bool(raw) is expected
 
@@ -90,6 +102,7 @@ def test_env_bool_default_is_used_on_empty():
 
 # --------------------------------------------------------------- bool_to_env #
 
+
 def test_bool_to_env_true():
     assert bool_to_env(True) == "true"
 
@@ -100,10 +113,11 @@ def test_bool_to_env_false():
 
 # -------------------------------------------- multiline round-trip ---------- #
 
+
 def test_multiline_roundtrip():
     original = "line one\nline two\nline three"
     encoded = multiline_to_env(original)
-    assert "\n" not in encoded   # phải nằm trên 1 dòng trong .env
+    assert "\n" not in encoded  # phải nằm trên 1 dòng trong .env
     assert env_to_multiline(encoded) == original
 
 

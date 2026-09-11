@@ -1,18 +1,16 @@
 import numpy as np
-import pytest
 
 from autodub.media.hardsub_detector import (
     detect_text_candidates_in_frame,
     spatial_merge_candidates,
-    track_temporal_regions,
-    detect_hardsub_regions,
-    FrameSample,
 )
 
 
-def _generate_synthetic_frame(w: int = 640, h: int = 360, has_sub: bool = True, sub_pos: str = "bottom") -> np.ndarray:
+def _generate_synthetic_frame(
+    w: int = 640, h: int = 360, has_sub: bool = True, sub_pos: str = "bottom"
+) -> np.ndarray:
     """Tạo frame ảnh xám giả lập có phụ đề ở đáy hoặc đỉnh."""
-    img = np.full((h, w), 40, dtype=np.uint8) # Nền tối
+    img = np.full((h, w), 40, dtype=np.uint8)  # Nền tối
     if has_sub:
         if sub_pos == "bottom":
             y_start, y_end = int(h * 0.82), int(h * 0.91)
@@ -24,7 +22,7 @@ def _generate_synthetic_frame(w: int = 640, h: int = 360, has_sub: bool = True, 
         x_start, x_end = int(w * 0.20), int(w * 0.80)
         # Các nét chữ tương phản cao xen kẽ
         for x in range(x_start, x_end, 5):
-            img[y_start:y_end, x:x+3] = 245
+            img[y_start:y_end, x : x + 3] = 245
     return img
 
 

@@ -4,6 +4,7 @@
 tính điểm tương thích (Compatibility Score) với kho giọng (UnifiedVoiceCatalog),
 áp dụng phạt trùng lặp (Uniqueness Penalty) và tôn trọng lựa chọn thủ công (Manual Overrides).
 """
+
 from __future__ import annotations
 
 from autodub.speech.voice_catalog import UnifiedVoiceCatalog
@@ -51,9 +52,11 @@ class VoiceDirector:
         s_pitch = 0.50
         if voice.pitch_tag:
             if speaker.gender == "male":
-                if speaker.pitch_stats.pitch_median < 135.0 and voice.pitch_tag == "deep_male":
-                    s_pitch = 1.0
-                elif speaker.pitch_stats.pitch_median >= 135.0 and voice.pitch_tag == "young_male":
+                if (
+                    speaker.pitch_stats.pitch_median < 135.0 and voice.pitch_tag == "deep_male"
+                ) or (
+                    speaker.pitch_stats.pitch_median >= 135.0 and voice.pitch_tag == "young_male"
+                ):
                     s_pitch = 1.0
                 elif voice.gender == "male":
                     s_pitch = 0.80
@@ -122,7 +125,9 @@ class VoiceDirector:
         if not all_voices:
             # Nếu không có giọng nào khả dụng -> fallback
             assignments = {
-                spk_id: VoiceAssignment(speaker_id=spk_id, voice_id=default_voice, source="fallback", score=1.0)
+                spk_id: VoiceAssignment(
+                    speaker_id=spk_id, voice_id=default_voice, source="fallback", score=1.0
+                )
                 for spk_id in profiles
             }
             return CastingResult(assignments=assignments, profiles=profiles, director_enabled=True)
@@ -147,7 +152,10 @@ class VoiceDirector:
 
         # 2. Phân vai tự động cho các speaker còn lại (ưu tiên speaker thời lượng dài trước)
         unassigned_spks = [
-            spk_id for spk_id in sorted(profiles.keys(), key=lambda k: profiles[k].total_duration_s, reverse=True)
+            spk_id
+            for spk_id in sorted(
+                profiles.keys(), key=lambda k: profiles[k].total_duration_s, reverse=True
+            )
             if spk_id not in assigned
         ]
 

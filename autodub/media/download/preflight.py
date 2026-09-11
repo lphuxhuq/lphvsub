@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-import urllib.parse
-from typing import Optional
 
 import requests
 
@@ -22,7 +20,9 @@ _DOUYIN_PATTERN = re.compile(r"(?:douyin\.com|iesdouyin\.com)", re.IGNORECASE)
 _DOUYIN_VID_PATTERN = re.compile(r"(?:video|note)/(\d+)|modal_id=(\d+)", re.IGNORECASE)
 
 _YOUTUBE_PATTERN = re.compile(r"(?:youtube\.com|youtu\.be)", re.IGNORECASE)
-_YT_VID_PATTERN = re.compile(r"(?:v=|/embed/|/shorts/|youtu\.be/)([a-zA-Z0-9_-]{11})", re.IGNORECASE)
+_YT_VID_PATTERN = re.compile(
+    r"(?:v=|/embed/|/shorts/|youtu\.be/)([a-zA-Z0-9_-]{11})", re.IGNORECASE
+)
 
 
 class PlatformDetector:
@@ -40,7 +40,7 @@ class PlatformDetector:
         return Platform.GENERIC
 
     @staticmethod
-    def extract_media_id(url: str, platform: Optional[Platform] = None) -> str:
+    def extract_media_id(url: str, platform: Platform | None = None) -> str:
         clean_url = str(url).strip()
         plat = platform or PlatformDetector.detect(clean_url)
 
@@ -72,7 +72,7 @@ class PreflightAnalyzer:
     def __init__(self):
         self.detector = PlatformDetector()
 
-    def analyze(self, url: str, session: Optional[requests.Session] = None) -> PreflightResult:
+    def analyze(self, url: str, session: requests.Session | None = None) -> PreflightResult:
         """Inspects URL metadata, platform, and recommends optimal download strategy."""
         platform = self.detector.detect(url)
         media_id = self.detector.extract_media_id(url, platform)

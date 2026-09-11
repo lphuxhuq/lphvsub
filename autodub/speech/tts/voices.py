@@ -13,6 +13,7 @@ Không còn giọng builtin hardcoded — catalog rỗng khi chưa tải voices.
 Module này KHÔNG nạp model và không phụ thuộc venv riêng của VieNeu, nên
 giao diện gọi thoải mái.
 """
+
 from __future__ import annotations
 
 import json
@@ -67,10 +68,10 @@ class Voice:
     """Một giọng đọc: tên là định danh, phần còn lại chỉ để lọc và hiển thị."""
 
     name: str
-    gender: str = ""          # "male" | "female" | ""
-    region: str = ""          # "bac" | "trung" | "nam" | ""
-    country: str = "vn"       # khóa trong COUNTRIES
-    style: str = "tu_nhien"   # khóa trong STYLES
+    gender: str = ""  # "male" | "female" | ""
+    region: str = ""  # "bac" | "trung" | "nam" | ""
+    country: str = "vn"  # khóa trong COUNTRIES
+    style: str = "tu_nhien"  # khóa trong STYLES
     description: str = ""
     #: "builtin" (đóng kèm model) | "library" (thư mục voices/) | "custom"
     #: (bạn tự học từ một đoạn ghi âm) | "capcut" (bộ giọng CapCut, chỉ có
@@ -97,12 +98,17 @@ class Voice:
             _STYLE_LABEL.get(self.style, ""),
         ]
         detail = " · ".join(p for p in parts if p)
-        prefix = ("CapCut · " if self.is_capcut
-                  else "Giọng bạn thêm · " if self.custom else "")
+        prefix = "CapCut · " if self.is_capcut else "Giọng bạn thêm · " if self.custom else ""
         return f"{self.name} — {prefix}{detail}" if detail else self.name
 
-    def matches(self, gender: str = "", region: str = "",
-                country: str = "", style: str = "", query: str = "") -> bool:
+    def matches(
+        self,
+        gender: str = "",
+        region: str = "",
+        country: str = "",
+        style: str = "",
+        query: str = "",
+    ) -> bool:
         """Giọng này có lọt qua bộ lọc đang chọn không (ô rỗng = không lọc)."""
         if gender and self.gender != gender:
             return False
@@ -130,6 +136,7 @@ def source_group(voice: Voice) -> str:
     """
     return "capcut" if voice.is_capcut else "offline"
 
+
 #: Giọng fallback khi catalog trống (ví dụ chưa tải voices).
 # Tên này sẽ trùng với một giọng trong thư viện sau khi tải.
 DEFAULT_VOICE = "Trần Hải"
@@ -138,8 +145,9 @@ DEFAULT_VOICE = "Trần Hải"
 def _from_label(name: str, label: str) -> Voice:
     """Dựng một giọng từ nhãn kiểu «Nam · Bắc · Phong cách tin tức»."""
     text = (label or "").lower()
-    gender = "female" if "nữ" in text else ("male" if "nam ·" in text
-                                            or text.startswith("nam") else "")
+    gender = (
+        "female" if "nữ" in text else ("male" if "nam ·" in text or text.startswith("nam") else "")
+    )
     region = ""
     for word, key in _REGION_FROM_TEXT.items():
         # Vùng miền là mảnh GIỮA hai dấu chấm giữa, tránh nhầm với giới tính.
@@ -181,15 +189,17 @@ def _custom_voices(custom_path: str) -> list[Voice]:
         # qua preset cũ để nó không chắn mất giọng API.
         if source == "capcut":
             continue
-        voices.append(Voice(
-            name=str(name),
-            gender=str(entry.get("gender", "")),
-            region=str(entry.get("region", "")),
-            country=str(entry.get("country", "") or "vn"),
-            style=str(entry.get("style", "") or "tu_nhien"),
-            description=str(entry.get("description", "")),
-            source=source,
-        ))
+        voices.append(
+            Voice(
+                name=str(name),
+                gender=str(entry.get("gender", "")),
+                region=str(entry.get("region", "")),
+                country=str(entry.get("country", "") or "vn"),
+                style=str(entry.get("style", "") or "tu_nhien"),
+                description=str(entry.get("description", "")),
+                source=source,
+            )
+        )
     return voices
 
 
@@ -197,10 +207,18 @@ def _capcut_voices() -> list[Voice]:
     """Giọng CapCut gọi qua API — chỉ đọc JSON tĩnh trong gói, không mạng."""
     from autodub.speech.tts import capcut_catalog
 
-    return [Voice(name=e["name"], gender=e["gender"], region="",
-                  country="vn", style="tu_nhien",
-                  description=e["description"], source="capcut")
-            for e in capcut_catalog.entries()]
+    return [
+        Voice(
+            name=e["name"],
+            gender=e["gender"],
+            region="",
+            country="vn",
+            style="tu_nhien",
+            description=e["description"],
+            source="capcut",
+        )
+        for e in capcut_catalog.entries()
+    ]
 
 
 def is_capcut_voice(name: str) -> bool:

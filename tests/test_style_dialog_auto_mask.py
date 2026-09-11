@@ -1,6 +1,6 @@
 import os
+
 import pytest
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from autodub.config import Settings
@@ -24,9 +24,11 @@ def test_auto_detect_hardsub_regions_in_editor(tmp_path, monkeypatch):
         f.write(b"video content")
 
     from autodub.media import hardsub_detector
+
     monkeypatch.setattr(
-        hardsub_detector, "detect_hardsub_regions",
-        lambda p: [{"x": 0.1, "y": 0.8, "w": 0.8, "h": 0.1}]
+        hardsub_detector,
+        "detect_hardsub_regions",
+        lambda p: [{"x": 0.1, "y": 0.8, "w": 0.8, "h": 0.1}],
     )
 
     regions = auto_detect_hardsub_regions(work_dir)
@@ -40,9 +42,11 @@ def test_style_dialog_auto_detect_button(qapp, qtbot, tmp_path, monkeypatch):
         f.write(b"video content")
 
     from autodub.media import hardsub_detector
+
     monkeypatch.setattr(
-        hardsub_detector, "detect_hardsub_regions",
-        lambda p: [{"x": 0.15, "y": 0.82, "w": 0.70, "h": 0.10}]
+        hardsub_detector,
+        "detect_hardsub_regions",
+        lambda p: [{"x": 0.15, "y": 0.82, "w": 0.70, "h": 0.10}],
     )
     monkeypatch.setattr("autodub_gui.style_dialog.extract_frame", lambda *a, **k: "")
 

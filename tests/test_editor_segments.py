@@ -4,6 +4,7 @@
 phải liền mạch từ 1 tới N và tệp giọng đọc phải được đổi tên theo. Nếu sai,
 lần xuất video sau sẽ ghép giọng của câu này vào chỗ của câu khác.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,7 +13,11 @@ import os
 import pytest
 
 from autodub.editor import (
-    EditorError, add_segment, delete_segment, merge_segments, set_segment_time,
+    EditorError,
+    add_segment,
+    delete_segment,
+    merge_segments,
+    set_segment_time,
     split_segment,
 )
 from autodub.workdir import data_path
@@ -25,14 +30,16 @@ def _segments(count: int = 3) -> list[dict]:
     out = []
     for i in range(1, count + 1):
         start = 1.0 + (i - 1) * 3.0
-        out.append({
-            "id": i,
-            "start": start,
-            "end": start + 2.0,
-            "duration": 2.0,
-            "text": f"nguyen ban cau {i}",
-            _TEXT_FIELD: f"Câu thoại số {i} bằng tiếng Việt",
-        })
+        out.append(
+            {
+                "id": i,
+                "start": start,
+                "end": start + 2.0,
+                "duration": 2.0,
+                "text": f"nguyen ban cau {i}",
+                _TEXT_FIELD: f"Câu thoại số {i} bằng tiếng Việt",
+            }
+        )
     return out
 
 
@@ -44,7 +51,8 @@ def work_dir(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     (data / "transcript_vi.json").write_text(
-        json.dumps(_segments(), ensure_ascii=False), encoding="utf-8")
+        json.dumps(_segments(), ensure_ascii=False), encoding="utf-8"
+    )
     for i in range(1, 4):
         (seg_dir / f"seg_{i:05d}.wav").write_bytes(f"giong cau {i}".encode())
     (data / "audio_vi_full.wav").write_bytes(b"ban ghep cu")
@@ -70,6 +78,7 @@ def _wav_text(work: str, seg_id: int) -> str:
 
 
 # -- Thêm câu ----------------------------------------------------------
+
 
 def test_add_segment_inserts_after_given_id(work_dir) -> None:
     new_id = add_segment(work_dir, 1, 3.2, 3.8, "Câu mới chèn vào")
@@ -97,8 +106,7 @@ def test_add_segment_shifts_audio_files_correctly(work_dir) -> None:
     assert _wav_text(work_dir, 1) == "giong cau 1"
     assert _wav_text(work_dir, 3) == "giong cau 2"
     assert _wav_text(work_dir, 4) == "giong cau 3"
-    assert not os.path.exists(
-        os.path.join(data_path(work_dir, "segments"), "seg_00002.wav"))
+    assert not os.path.exists(os.path.join(data_path(work_dir, "segments"), "seg_00002.wav"))
 
 
 def test_add_segment_rejects_unknown_id(work_dir) -> None:
@@ -118,6 +126,7 @@ def test_add_segment_rejects_overlap(work_dir) -> None:
 
 
 # -- Xóa câu -----------------------------------------------------------
+
 
 def test_delete_segment_removes_entry(work_dir) -> None:
     delete_segment(work_dir, 2)
@@ -143,12 +152,14 @@ def test_delete_last_remaining_segment_is_refused(tmp_path) -> None:
     work = tmp_path / "solo_vi"
     (work / "data").mkdir(parents=True)
     (work / "data" / "transcript_vi.json").write_text(
-        json.dumps(_segments(1), ensure_ascii=False), encoding="utf-8")
+        json.dumps(_segments(1), ensure_ascii=False), encoding="utf-8"
+    )
     with pytest.raises(EditorError, match="ít nhất một câu"):
         delete_segment(str(work), 1)
 
 
 # -- Tách câu ----------------------------------------------------------
+
 
 def test_split_segment_creates_two_parts(work_dir) -> None:
     left, right = split_segment(work_dir, 2, 5.0)
@@ -167,7 +178,8 @@ def test_split_segment_divides_text_at_word_boundary(work_dir) -> None:
     right_text = segments[2][_TEXT_FIELD]
     assert left_text and right_text
     assert " ".join((left_text, right_text)).split() == (
-        "Câu thoại số 2 bằng tiếng Việt".split())
+        ["Câu", "thoại", "số", "2", "bằng", "tiếng", "Việt"]
+    )
 
 
 def test_split_segment_renumbers_and_moves_audio(work_dir) -> None:
@@ -175,10 +187,8 @@ def test_split_segment_renumbers_and_moves_audio(work_dir) -> None:
     assert [s["id"] for s in _read(work_dir)] == [1, 2, 3, 4]
     # Câu 3 cũ dời thành câu 4, giọng đi theo; hai nửa vừa tách chưa có giọng.
     assert _wav_text(work_dir, 4) == "giong cau 3"
-    assert not os.path.exists(
-        os.path.join(data_path(work_dir, "segments"), "seg_00002.wav"))
-    assert not os.path.exists(
-        os.path.join(data_path(work_dir, "segments"), "seg_00003.wav"))
+    assert not os.path.exists(os.path.join(data_path(work_dir, "segments"), "seg_00002.wav"))
+    assert not os.path.exists(os.path.join(data_path(work_dir, "segments"), "seg_00003.wav"))
 
 
 def test_split_segment_rejects_time_outside_segment(work_dir) -> None:
@@ -198,6 +208,7 @@ def test_split_segment_rejects_unknown_id(work_dir) -> None:
 
 # -- Gộp câu -----------------------------------------------------------
 
+
 def test_merge_segments_joins_range(work_dir) -> None:
     kept = merge_segments(work_dir, [1, 2])
     segments = _read(work_dir)
@@ -210,16 +221,14 @@ def test_merge_segments_joins_range(work_dir) -> None:
 def test_merge_segments_concatenates_text(work_dir) -> None:
     merge_segments(work_dir, [1, 2])
     merged = _read(work_dir)[0]
-    assert merged[_TEXT_FIELD] == (
-        "Câu thoại số 1 bằng tiếng Việt Câu thoại số 2 bằng tiếng Việt")
+    assert merged[_TEXT_FIELD] == ("Câu thoại số 1 bằng tiếng Việt Câu thoại số 2 bằng tiếng Việt")
 
 
 def test_merge_segments_renumbers_and_drops_old_audio(work_dir) -> None:
     merge_segments(work_dir, [1, 2])
     assert [s["id"] for s in _read(work_dir)] == [1, 2]
     # Câu gộp phải được đọc lại nên không còn giọng cũ ở vị trí 1.
-    assert not os.path.exists(
-        os.path.join(data_path(work_dir, "segments"), "seg_00001.wav"))
+    assert not os.path.exists(os.path.join(data_path(work_dir, "segments"), "seg_00001.wav"))
     assert _wav_text(work_dir, 2) == "giong cau 3"
 
 
@@ -239,6 +248,7 @@ def test_merge_segments_rejects_unknown_id(work_dir) -> None:
 
 
 # -- Đổi mốc thời gian -------------------------------------------------
+
 
 def test_set_segment_time_updates_span(work_dir) -> None:
     set_segment_time(work_dir, 2, 3.5, 4.5)
@@ -277,13 +287,17 @@ def test_set_segment_time_rejects_negative_start(work_dir) -> None:
 
 # -- Dọn tệp dẫn xuất --------------------------------------------------
 
-@pytest.mark.parametrize("action", [
-    lambda w: add_segment(w, 1, 3.2, 3.8, "x"),
-    lambda w: delete_segment(w, 2),
-    lambda w: split_segment(w, 2, 5.0),
-    lambda w: merge_segments(w, [1, 2]),
-    lambda w: set_segment_time(w, 2, 3.5, 4.5),
-])
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        lambda w: add_segment(w, 1, 3.2, 3.8, "x"),
+        lambda w: delete_segment(w, 2),
+        lambda w: split_segment(w, 2, 5.0),
+        lambda w: merge_segments(w, [1, 2]),
+        lambda w: set_segment_time(w, 2, 3.5, 4.5),
+    ],
+)
 def test_every_structural_change_invalidates_derived_files(work_dir, action) -> None:
     """Bản ghép và video cũ phải bị xóa, nếu không sẽ ghép nhầm giọng."""
     action(work_dir)
@@ -297,6 +311,7 @@ def test_structural_change_removes_processed_segment_dirs(work_dir) -> None:
 
 
 # -- Tính toàn vẹn của tệp --------------------------------------------
+
 
 def test_transcript_stays_valid_after_a_rejected_operation(work_dir) -> None:
     """Thao tác bị từ chối không được làm hỏng tệp bản dịch."""

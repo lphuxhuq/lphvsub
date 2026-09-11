@@ -19,6 +19,7 @@ Timestamp emit: mutate ``start/end`` = dub (một nguồn sự thật cho SRT/
 merge) + gán field ``dub_*``, ``tempo_factor``, ``timing_adjustment``;
 ``duration`` giữ nguyên = thời lượng câu GỐC cho report/timing_guide.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from autodub.utils import ensure_dir, seg_wav_path, setup_logging, ProgressTracker
+from autodub.utils import ProgressTracker, ensure_dir, seg_wav_path, setup_logging
 
 logger = setup_logging("autodub.timing")
 
@@ -43,12 +44,13 @@ MIN_SLOT_S = 0.3
 @dataclass
 class TimingReport:
     """Kết quả đặt timeline — nguồn cho quality_report.json."""
+
     segments_total: int = 0
-    segments_shifted: int = 0        # câu bị dồn trễ > 50 ms
+    segments_shifted: int = 0  # câu bị dồn trễ > 50 ms
     max_shift_s: float = 0.0
-    segments_compressed: int = 0     # câu phải nén atempo (bất khả kháng)
-    segments_stretched: int = 0      # câu được kéo dài atempo (VOICE_FIT_STRETCH)
-    segments_overlapped: int = 0     # câu vẫn còn chồng sau mọi biện pháp
+    segments_compressed: int = 0  # câu phải nén atempo (bất khả kháng)
+    segments_stretched: int = 0  # câu được kéo dài atempo (VOICE_FIT_STRETCH)
+    segments_overlapped: int = 0  # câu vẫn còn chồng sau mọi biện pháp
     total_overlap_s: float = 0.0
     details: list[dict] = field(default_factory=list)  # per-segment issues
 
@@ -104,10 +106,12 @@ def plan_voice_placements(
     ``scene_cuts`` danh sách điểm chuyển cảnh để chặn tràn giọng sang cảnh khác.
     Render nằm ở :func:`apply_soft_timing`.
     """
+    from autodub.media.scene_detector import (
+        find_next_scene_boundary,
+        find_prev_scene_boundary,
+        snap_to_scene_boundaries,
+    )
     from autodub.media.voice_timing import _decide_tempo
-    from autodub.media.scene_detector import (find_next_scene_boundary,
-                                              find_prev_scene_boundary,
-                                              snap_to_scene_boundaries)
 
     rep = TimingReport(segments_total=len(segments))
     placements: list[dict] = []
@@ -148,13 +152,11 @@ def plan_voice_placements(
         min_slot_floor = min(slot, MIN_SLOT_S) if slot is not None else MIN_SLOT_S
         min_slot_floor = max(0.05, min_slot_floor)
 
-        next_natural = _natural(segments[i + 1]) if i + 1 < len(segments) \
-            else None
+        next_natural = _natural(segments[i + 1]) if i + 1 < len(segments) else None
         if next_natural is not None:
             usable_end = next_natural - min_gap_s
         else:
-            usable_end = t + (slot if slot else max(dur, TAIL_SILENCE_S)) \
-                + TAIL_SILENCE_S
+            usable_end = t + (slot if slot else max(dur, TAIL_SILENCE_S)) + TAIL_SILENCE_S
 
         # Giới hạn bởi điểm chuyển cảnh video kế tiếp (Scene Drift Guard)
         # BẢO ĐẢM: không cắt cụt câu nói xuống dưới ngưỡng khả dụng tối thiểu.
@@ -168,7 +170,7 @@ def plan_voice_placements(
         # BẤT BIẾN (INVARIANT): usable_end LUÔN LUÔN > t (usable_start).
         # Không có bất kỳ hoàn cảnh nào usable_end <= t.
         usable_end = max(usable_end, t + min_slot_floor)
-        available = max(min_slot_floor, usable_end - t) if slot is not None else max(min_slot_floor, usable_end - t)
+        available = max(min_slot_floor, usable_end - t)
 
         # 3) Per-segment tempo. Clip TRÀN slot → nén theo ``available``
         #    (mượn khoảng lặng trước câu kế). Clip NGẮN hơn slot → chỉ
@@ -179,14 +181,13 @@ def plan_voice_placements(
         reason = ""
         if slot is not None and available is not None and dur > 0:
             if dur > available:
-                tempo = _decide_tempo(dur, available, min_speed, max_speed,
-                                      _MIN_WORTHWHILE_ATEMPO)
+                tempo = _decide_tempo(dur, available, min_speed, max_speed, _MIN_WORTHWHILE_ATEMPO)
             elif allow_stretch and slot > dur:
                 # Stretch chỉ hướng tới SLOT (không lấn khoảng lặng trước
                 # câu kế) và chỉ khi VOICE_FIT_STRETCH bật.
-                tempo = _decide_tempo(dur, slot, min_speed, max_speed,
-                                      _MIN_WORTHWHILE_ATEMPO,
-                                      allow_stretch=True)
+                tempo = _decide_tempo(
+                    dur, slot, min_speed, max_speed, _MIN_WORTHWHILE_ATEMPO, allow_stretch=True
+                )
             else:
                 tempo = 1.0
             final = dur / tempo if tempo != 1.0 else dur
@@ -203,9 +204,11 @@ def plan_voice_placements(
                     adjustment = "tempo"
             else:
                 # tempo 1.0 mà vẫn tràn → lấp đầy bằng silence thôi.
-                adjustment = "silence" if residual <= 0 else (
-                    "overlap" if residual <= ALLOWED_RESIDUAL_S
-                    else "silence+overlap")
+                adjustment = (
+                    "silence"
+                    if residual <= 0
+                    else ("overlap" if residual <= ALLOWED_RESIDUAL_S else "silence+overlap")
+                )
                 if residual > ALLOWED_RESIDUAL_S:
                     reason = "needs_compaction"
         if tempo > 1.0:
@@ -231,16 +234,18 @@ def plan_voice_placements(
             issue["id"] = seg.get("id")
             rep.details.append(issue)
 
-        placements.append({
-            "start": round(t, 3),
-            "atempo": round(tempo, 4),
-            "drift": round(drift, 3),
-            "adjustment": adjustment,
-            "reason": reason,
-            "slot": round(slot, 3) if slot is not None else None,
-            "available": round(available, 3) if available is not None else None,
-            "usable_end": round(usable_end, 3),
-        })
+        placements.append(
+            {
+                "start": round(t, 3),
+                "atempo": round(tempo, 4),
+                "drift": round(drift, 3),
+                "adjustment": adjustment,
+                "reason": reason,
+                "slot": round(slot, 3) if slot is not None else None,
+                "available": round(available, 3) if available is not None else None,
+                "usable_end": round(usable_end, 3),
+            }
+        )
         if dur > 0:
             prev_end = max(prev_end, t + final_dur)
 
@@ -276,10 +281,10 @@ def apply_soft_timing(
             if os.path.exists(wav_file):
                 trim_tts_silence(wav_file, wav_file)
 
-    durations = [wav_duration_s(seg_wav_path(src_dir, s["id"]))
-                 for s in segments]
+    durations = [wav_duration_s(seg_wav_path(src_dir, s["id"])) for s in segments]
     placements, report = plan_voice_placements(
-        segments, durations,
+        segments,
+        durations,
         max_start_drift_s=settings.timing_max_start_drift_s,
         min_gap_s=settings.timing_min_gap_s,
         min_speed=settings.voice_fit_min_speed,
@@ -303,8 +308,11 @@ def apply_soft_timing(
             atempo = placements[i]["atempo"]
             # Resume-safe: đầu ra còn mới hơn nguồn VÀ đúng thời lượng kỳ
             # vọng (hệ số nén có thể đổi giữa hai lần chạy) thì bỏ qua.
-            if (os.path.exists(dst) and os.path.getsize(dst) > 0
-                    and os.path.getmtime(dst) >= os.path.getmtime(src)):
+            if (
+                os.path.exists(dst)
+                and os.path.getsize(dst) > 0
+                and os.path.getmtime(dst) >= os.path.getmtime(src)
+            ):
                 want = (durations[i] or 0.0) / atempo
                 have = wav_duration_s(dst) or -1.0
                 if abs(have - want) < 0.05:
@@ -321,7 +329,7 @@ def apply_soft_timing(
             _one(i)
             seg = segments[i]
             atempo = placements[i]["atempo"]
-            detail = f"Câu #{seg.get('id', i+1)} [tốc độ {atempo:.2f}x]"
+            detail = f"Câu #{seg.get('id', i + 1)} [tốc độ {atempo:.2f}x]"
             should_log, msg = tracker.step(1, detail=detail)
             if should_log:
                 logger.info(f"  {msg}")
@@ -335,6 +343,7 @@ def apply_soft_timing(
     # total_duration cùng nhìn một sự thật. GIỮ NGUYÊN seg["duration"] (thời
     # lượng câu GỐC) — report/timing_guide vẫn so được dub với nguồn.
     from autodub.media.audio import wav_duration_s as _dur
+
     total = len(segments)
     log_every = 1 if total <= 60 else max(10, total // 100)
     prev_actual_end = float("-inf")
@@ -344,8 +353,11 @@ def apply_soft_timing(
     for i, seg in enumerate(segments):
         p = placements[i]
         t = p["start"]
-        final = _dur(seg_wav_path(out_dir, seg["id"])) or durations[i] or \
-            float(seg.get("duration", 0) or 0)
+        final = (
+            _dur(seg_wav_path(out_dir, seg["id"]))
+            or durations[i]
+            or float(seg.get("duration", 0) or 0)
+        )
 
         # Chống chồng tiếng / chồng sub (Voice & Subtitle Anti-Collision Invariant):
         # Không bao giờ để câu sau bắt đầu trước khi câu trước kết thúc nói
@@ -362,44 +374,50 @@ def apply_soft_timing(
         seg["tempo_factor"] = p["atempo"]
         seg["timing_adjustment"] = p["adjustment"]
         seg["timing_reason"] = p["reason"]
-        natural = float(seg.get("speech_start",
-                                seg.get("vad_start", t)) or t)
-        if (i % log_every == 0 or p["atempo"] != 1.0
-                or p["adjustment"] == "overlap"):
+        natural = float(seg.get("speech_start", seg.get("vad_start", t)) or t)
+        if i % log_every == 0 or p["atempo"] != 1.0 or p["adjustment"] == "overlap":
             logger.info(
                 "[VOICE-SYNC] segment=%s source: %.3f→%.3f (d=%.3f) "
                 "tts: natural=%.3f available=%s tempo=%.3f final: "
                 "%.3f→%.3f adjustment=%s drift=%.3f%s",
-                seg.get("id"), natural,
+                seg.get("id"),
+                natural,
                 float(seg.get("speech_end", seg.get("vad_end", t)) or t),
-                float(seg.get("speech_duration",
-                              seg.get("duration", 0)) or 0),
+                float(seg.get("speech_duration", seg.get("duration", 0)) or 0),
                 durations[i] or 0.0,
-                f"{p['available']:.3f}" if p["available"] is not None
-                else "n/a",
-                p["atempo"], t, t + final, p["adjustment"], p["drift"],
-                f" ({p['reason']})" if p["reason"] else "")
+                f"{p['available']:.3f}" if p["available"] is not None else "n/a",
+                p["atempo"],
+                t,
+                t + final,
+                p["adjustment"],
+                p["drift"],
+                f" ({p['reason']})" if p["reason"] else "",
+            )
 
-    if report.segments_shifted or report.segments_compressed \
-            or report.segments_stretched or report.segments_overlapped:
+    if (
+        report.segments_shifted
+        or report.segments_compressed
+        or report.segments_stretched
+        or report.segments_overlapped
+    ):
         parts = []
         if report.segments_shifted:
-            parts.append(f"{report.segments_shifted} câu được lùi nhẹ vào "
-                         f"khoảng lặng (nhiều nhất {report.max_shift_s:.1f} "
-                         "giây)")
+            parts.append(
+                f"{report.segments_shifted} câu được lùi nhẹ vào "
+                f"khoảng lặng (nhiều nhất {report.max_shift_s:.1f} "
+                "giây)"
+            )
         if report.segments_compressed:
-            parts.append(f"{report.segments_compressed} câu đọc nhanh hơn "
-                         "một chút cho vừa chỗ")
+            parts.append(f"{report.segments_compressed} câu đọc nhanh hơn một chút cho vừa chỗ")
         if report.segments_stretched:
-            parts.append(f"{report.segments_stretched} câu đọc chậm nhẹ để "
-                         "lấp bớt khoảng lặng cuối câu")
+            parts.append(
+                f"{report.segments_stretched} câu đọc chậm nhẹ để lấp bớt khoảng lặng cuối câu"
+            )
         if report.segments_overlapped:
-            parts.append(f"{report.segments_overlapped} câu vẫn còn chồng "
-                         "tiếng nhẹ")
+            parts.append(f"{report.segments_overlapped} câu vẫn còn chồng tiếng nhẹ")
         logger.info("Sắp xếp thời gian các câu: " + ", ".join(parts) + ".")
     else:
-        logger.info("Sắp xếp thời gian các câu: mọi câu đều vừa khít, "
-                    "không phải chỉnh gì")
+        logger.info("Sắp xếp thời gian các câu: mọi câu đều vừa khít, không phải chỉnh gì")
     return out_dir, report
 
 
@@ -444,18 +462,20 @@ def build_timing_guide(
             need_edit += 1
             edit_hint = f"Ngắn hơn {abs(diff):.1f}s"
 
-        seg_items.append({
-            "id": seg.get("id", i + 1),
-            "text_original": str(seg.get("text", "")),
-            "text_target": str(seg.get(target_field, seg.get("text", ""))),
-            "start": round(float(seg.get("start", 0.0)), 2),
-            "end": round(float(seg.get("end", 0.0)), 2),
-            "original_duration": orig_dur,
-            "tts_duration": actual_dur,
-            "diff_seconds": diff,
-            "status": status,
-            "edit_hint": edit_hint,
-        })
+        seg_items.append(
+            {
+                "id": seg.get("id", i + 1),
+                "text_original": str(seg.get("text", "")),
+                "text_target": str(seg.get(target_field, seg.get("text", ""))),
+                "start": round(float(seg.get("start", 0.0)), 2),
+                "end": round(float(seg.get("end", 0.0)), 2),
+                "original_duration": orig_dur,
+                "tts_duration": actual_dur,
+                "diff_seconds": diff,
+                "status": status,
+                "edit_hint": edit_hint,
+            }
+        )
 
     total_original = round(total_original, 2)
     total_tts = round(total_tts, 2)
@@ -483,13 +503,17 @@ def save_timing_guide(
 ) -> str:
     """Ghi timing guide ra file JSON trong thư mục data của dự án."""
     import json
+
     from autodub.workdir import data_path
 
     out_path = data_path(work_dir, filename)
     ensure_dir(os.path.dirname(out_path))
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(guide, f, ensure_ascii=False, indent=2)
-    logger.info("Timing report exported: %s (%d/%d OK)",
-                out_path, guide["summary"]["segments_ok"], guide["summary"]["total_segments"])
+    logger.info(
+        "Timing report exported: %s (%d/%d OK)",
+        out_path,
+        guide["summary"]["segments_ok"],
+        guide["summary"]["total_segments"],
+    )
     return out_path
-

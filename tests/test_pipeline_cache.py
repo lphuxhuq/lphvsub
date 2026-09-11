@@ -1,4 +1,3 @@
-import json
 import os
 import threading
 from pathlib import Path
@@ -7,7 +6,6 @@ import pytest
 
 import autodub.pipeline_cache as pc
 from autodub.pipeline_cache import (
-    CACHE_VERSION,
     AsrGlobalCache,
     DemucsGlobalCache,
     _valid_wav,
@@ -28,7 +26,9 @@ def create_dummy_wav(path: Path, content: bytes = b"testdata") -> Path:
         f.write(b"RIFF")
         total_size = len(content) + 44
         f.write((total_size - 8).to_bytes(4, "little"))
-        f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data")
+        f.write(
+            b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data"
+        )
         f.write(len(content).to_bytes(4, "little"))
         f.write(content)
     return path
@@ -62,7 +62,7 @@ def test_fingerprint_detects_middle_content_changes(tmp_path):
     data2 = bytearray(b"0" * size)
     # Modify in the middle (50% mark)
     mid = size // 2
-    data2[mid:mid + 100] = b"1" * 100
+    data2[mid : mid + 100] = b"1" * 100
 
     path1.write_bytes(data1)
     path2.write_bytes(data2)
@@ -125,7 +125,9 @@ def test_cache_invalidation_on_config_change(tmp_path):
     assert hit is not None
 
     # Different model -> MISS (invalidation)
-    miss_model = cache.lookup_and_restore(str(audio), str(tmp_path / "out2"), "htdemucs_ft", 44100, 2)
+    miss_model = cache.lookup_and_restore(
+        str(audio), str(tmp_path / "out2"), "htdemucs_ft", 44100, 2
+    )
     assert miss_model is None
 
     # Different sample rate -> MISS (invalidation)

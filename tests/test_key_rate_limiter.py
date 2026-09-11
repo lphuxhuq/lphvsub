@@ -6,12 +6,11 @@ Proves that:
 3. Same-key contention serialises correctly.
 4. Many workers × many keys scale.
 """
+
 from __future__ import annotations
 
 import threading
 import time
-
-import pytest
 
 from autodub.text.translate_direct import _KeyRateLimiter
 

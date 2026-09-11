@@ -10,6 +10,7 @@ Ba lớp (theo design asr-accuracy-boost):
 
 Module thuần stdlib, không mutate input — mọi thay đổi trả về bản copy.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -21,13 +22,13 @@ from autodub.utils import setup_logging
 logger = setup_logging("autodub.fusion")
 
 # --- Hằng số heuristic — named để chỉnh không đụng logic ------------------
-CHAR_RATE_MIN_RATIO = 0.4      # chậm hơn 0.4× median → text nghi thiếu
-CHAR_RATE_MAX_RATIO = 3.0      # nhanh hơn 3× median → duration nghi sai
-CHAR_RATE_MIN_SAMPLES = 5      # dưới ngưỡng này median chưa đáng tin
+CHAR_RATE_MIN_RATIO = 0.4  # chậm hơn 0.4× median → text nghi thiếu
+CHAR_RATE_MAX_RATIO = 3.0  # nhanh hơn 3× median → duration nghi sai
+CHAR_RATE_MIN_SAMPLES = 5  # dưới ngưỡng này median chưa đáng tin
 CHAR_RATE_MIN_DURATION_S = 0.5  # câu quá ngắn không tính vào median
-GAP_ANOMALY_MIN_S = 1.5        # khoảng lặng tối thiểu để coi là bất thường
+GAP_ANOMALY_MIN_S = 1.5  # khoảng lặng tối thiểu để coi là bất thường
 GAP_ANOMALY_MEDIAN_MULT = 3.0  # ... hoặc 3× gap trung vị (adaptive)
-OCR_MATCH_MAX_DIST_S = 3.0     # OCR lệch bao xa thì còn "gần" một câu ASR
+OCR_MATCH_MAX_DIST_S = 3.0  # OCR lệch bao xa thì còn "gần" một câu ASR
 EMPTY_CHUNK_COVER_RATIO = 0.5  # empty chunk bị ASR segment phủ ≥50% → OK
 
 REASON_EMPTY_CHUNK = "empty_speech_chunk"
@@ -49,15 +50,13 @@ ALIGN_LOW_THRESHOLD = 0.60
 OCR_SCORE_MIN_EMPTY = 0.60
 
 
-
 def _normalize_for_align(text: str) -> str:
     """Chuẩn hoá để so khớp: bỏ punctuation/khoảng trắng, giữ CJK + alnum.
     (Riêng với align — normalize_ocr_text của OCR là chuẩn hoá xuất khẩu.)"""
     out = []
     for ch in str(text or ""):
         code = ord(ch)
-        if 0xFF10 <= code <= 0xFF19 or 0xFF21 <= code <= 0xFF3A \
-                or 0xFF41 <= code <= 0xFF5A:
+        if 0xFF10 <= code <= 0xFF19 or 0xFF21 <= code <= 0xFF3A or 0xFF41 <= code <= 0xFF5A:
             ch = chr(code - 0xFEE0)
         if "\u4e00" <= ch <= "\u9fff" or ch.isalnum():
             out.append(ch)
@@ -67,10 +66,11 @@ def _normalize_for_align(text: str) -> str:
 @dataclass
 class Alignment:
     """Kết quả so khớp text ASR ↔ OCR mức ký tự (đã normalize)."""
-    similarity: float = 0.0          # SequenceMatcher.ratio() trên normalized
-    merged: str = ""                 # text merge an toàn (không duplicate)
-    added_prefix: str = ""           # phần OCR có mà ASR thiếu (đầu câu)
-    added_suffix: str = ""           # phần OCR có mà ASR thiếu (cuối câu)
+
+    similarity: float = 0.0  # SequenceMatcher.ratio() trên normalized
+    merged: str = ""  # text merge an toàn (không duplicate)
+    added_prefix: str = ""  # phần OCR có mà ASR thiếu (đầu câu)
+    added_suffix: str = ""  # phần OCR có mà ASR thiếu (cuối câu)
 
 
 def align_texts(asr_text: str, ocr_text: str) -> Alignment:
@@ -95,15 +95,15 @@ def align_texts(asr_text: str, ocr_text: str) -> Alignment:
         return Alignment(similarity=similarity, merged=a)
     if a in o:
         i = o.index(a)
-        return Alignment(similarity=similarity, merged=o,
-                         added_prefix=o[:i], added_suffix=o[i + len(a):])
+        return Alignment(
+            similarity=similarity, merged=o, added_prefix=o[:i], added_suffix=o[i + len(a) :]
+        )
     return Alignment(similarity=similarity, merged=a)
 
 
 def _cjk_len(text: str) -> int:
     """Số ký tự CJK (bỏ punctuation/khoảng trắng/số Latin)."""
-    return sum(1 for ch in str(text or "")
-               if "\u4e00" <= ch <= "\u9fff")
+    return sum(1 for ch in str(text or "") if "\u4e00" <= ch <= "\u9fff")
 
 
 def _median(values: list[float]) -> float | None:
@@ -113,6 +113,7 @@ def _median(values: list[float]) -> float | None:
 @dataclass
 class SuspectResult:
     """Kết quả chia transcript: normal (yên tâm) và suspect (cần soi)."""
+
     normal: list[dict] = field(default_factory=list)
     suspect: list[dict] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
@@ -143,11 +144,11 @@ def detect_suspect_segments(
             flagged[idx].append(reason)
 
     # 1) Char-rate bất thường (adaptive theo median của chính transcript).
-    rates = [(_cjk_len(s.get("text")) /
-              max(1e-6, float(s.get("end", 0)) - float(s.get("start", 0))))
-             for s in ordered
-             if (float(s.get("end", 0)) - float(s.get("start", 0))
-                 >= CHAR_RATE_MIN_DURATION_S)]
+    rates = [
+        (_cjk_len(s.get("text")) / max(1e-6, float(s.get("end", 0)) - float(s.get("start", 0))))
+        for s in ordered
+        if (float(s.get("end", 0)) - float(s.get("start", 0)) >= CHAR_RATE_MIN_DURATION_S)
+    ]
     med_rate = _median(rates) if len(rates) >= CHAR_RATE_MIN_SAMPLES else None
     stats["median_char_rate"] = round(med_rate, 3) if med_rate else None
     if med_rate:
@@ -156,17 +157,15 @@ def detect_suspect_segments(
             if dur < CHAR_RATE_MIN_DURATION_S:
                 continue
             rate = _cjk_len(seg.get("text")) / max(1e-6, dur)
-            if rate < med_rate * CHAR_RATE_MIN_RATIO:
-                _flag(i, REASON_TEXT_TOO_SHORT)
-            elif rate > med_rate * CHAR_RATE_MAX_RATIO:
+            if rate < med_rate * CHAR_RATE_MIN_RATIO or rate > med_rate * CHAR_RATE_MAX_RATIO:
                 _flag(i, REASON_TEXT_TOO_SHORT)
 
     # 2) Gap bất thường giữa hai câu kề (adaptive × median gap).
-    gaps = [float(ordered[i + 1]["start"]) - float(ordered[i]["end"])
-            for i in range(len(ordered) - 1)]
+    gaps = [
+        float(ordered[i + 1]["start"]) - float(ordered[i]["end"]) for i in range(len(ordered) - 1)
+    ]
     med_gap = _median([g for g in gaps if g > 0])
-    gap_threshold = max(GAP_ANOMALY_MIN_S,
-                        (med_gap or 0.0) * GAP_ANOMALY_MEDIAN_MULT)
+    gap_threshold = max(GAP_ANOMALY_MIN_S, (med_gap or 0.0) * GAP_ANOMALY_MEDIAN_MULT)
     stats["gap_threshold_s"] = round(gap_threshold, 3)
     for i, gap in enumerate(gaps):
         if gap > gap_threshold:
@@ -174,35 +173,44 @@ def detect_suspect_segments(
             _flag(i + 1, REASON_GAP_ANOMALY)
 
     # 3) Chunk có tiếng nhưng decode rỗng mà không câu nào phủ lấy.
-    for chunk in (empty_chunks or []):
+    for chunk in empty_chunks or []:
         cs = float(chunk.get("start", 0.0))
         ce = float(chunk.get("end", 0.0))
         span = max(1e-6, ce - cs)
-        covered = max(
-            (max(0.0, min(ce, float(s.get("end", 0)))
-                 - max(cs, float(s.get("start", 0)))) for s in ordered),
-            default=0.0,
-        ) / span
+        covered = (
+            max(
+                (
+                    max(0.0, min(ce, float(s.get("end", 0))) - max(cs, float(s.get("start", 0))))
+                    for s in ordered
+                ),
+                default=0.0,
+            )
+            / span
+        )
         if covered >= EMPTY_CHUNK_COVER_RATIO:
             continue
         nearest = min(
             range(len(ordered)),
-            key=lambda i: min(abs(float(ordered[i].get("start", 0)) - ce),
-                              abs(float(ordered[i].get("end", 0)) - cs)),
+            key=lambda i: min(
+                abs(float(ordered[i].get("start", 0)) - ce),
+                abs(float(ordered[i].get("end", 0)) - cs),
+            ),
             default=-1,
         )
         _flag(nearest, REASON_EMPTY_CHUNK)
 
     # 4) OCR có text nhưng không khớp câu ASR nào (lần gọi sau khi có OCR).
     ocr_unmatched = 0
-    for ocr in (ocr_segments or []):
+    for ocr in ocr_segments or []:
         if _cjk_len(ocr.get("text")) < 3:
             continue
         os_ = float(ocr.get("start_time", ocr.get("start", 0.0)) or 0.0)
         oe_ = float(ocr.get("end_time", ocr.get("end", 0.0)) or 0.0)
         overlap = max(
-            (max(0.0, min(oe_, float(s.get("end", 0)))
-                 - max(os_, float(s.get("start", 0)))) for s in ordered),
+            (
+                max(0.0, min(oe_, float(s.get("end", 0))) - max(os_, float(s.get("start", 0))))
+                for s in ordered
+            ),
             default=0.0,
         )
         if overlap >= 0.2:
@@ -211,14 +219,20 @@ def detect_suspect_segments(
         mid = (os_ + oe_) / 2
         nearest = min(
             range(len(ordered)),
-            key=lambda i: abs((float(ordered[i].get("start", 0))
-                               + float(ordered[i].get("end", 0))) / 2 - mid),
+            key=lambda i: abs(
+                (float(ordered[i].get("start", 0)) + float(ordered[i].get("end", 0))) / 2 - mid
+            ),
             default=-1,
         )
-        if nearest >= 0 and abs(
-                (float(ordered[nearest].get("start", 0))
-                 + float(ordered[nearest].get("end", 0))) / 2 - mid
-        ) <= OCR_MATCH_MAX_DIST_S:
+        if (
+            nearest >= 0
+            and abs(
+                (float(ordered[nearest].get("start", 0)) + float(ordered[nearest].get("end", 0)))
+                / 2
+                - mid
+            )
+            <= OCR_MATCH_MAX_DIST_S
+        ):
             _flag(nearest, REASON_OCR_NO_ASR)
     stats["ocr_unmatched"] = ocr_unmatched
 
@@ -235,11 +249,16 @@ def detect_suspect_segments(
     stats["suspect"] = len(suspect)
     res = SuspectResult(normal=normal, suspect=suspect, stats=stats)
     if suspect:
-        logger.info("Suspect detection: %d/%d câu có dấu hiệu cần soi "
-                    "(%s)", len(suspect), len(ordered),
-                    ", ".join(f"{k}={v}" for k, v in stats.items()
-                              if k.endswith(("chunk", "duration", "anomaly",
-                                             "asr_match"))))
+        logger.info(
+            "Suspect detection: %d/%d câu có dấu hiệu cần soi (%s)",
+            len(suspect),
+            len(ordered),
+            ", ".join(
+                f"{k}={v}"
+                for k, v in stats.items()
+                if k.endswith(("chunk", "duration", "anomaly", "asr_match"))
+            ),
+        )
     return res
 
 
@@ -287,13 +306,15 @@ def fuse(
         oconf = float(ocr.get("confidence", 0.9) or 0.9)
         if oend <= ostart:
             oend = ostart + 0.5
-        parsed_ocr.append({
-            "text": otext,
-            "start": ostart,
-            "end": oend,
-            "confidence": oconf,
-            "used": False,
-        })
+        parsed_ocr.append(
+            {
+                "text": otext,
+                "start": ostart,
+                "end": oend,
+                "confidence": oconf,
+                "used": False,
+            }
+        )
 
     decisions = []
     fused_raw = []
@@ -315,23 +336,34 @@ def fuse(
 
         if not matched_ocrs:
             # Không có OCR khớp
-            fused_raw.append({
-                "text": asr_text,
-                "start": asr_start,
-                "end": asr_end,
-                "orig": seg,
-            })
-            decisions.append({
-                "segment_id": seg_id,
-                "decision": "keep_asr_no_ocr",
-                "rule": 0,
-                "scores": {"asr": 1.0, "ocr": 0.0, "align": 1.0, "temporal": 0.0, "completeness": 1.0, "final": 1.0},
-                "asr_text": asr_text,
-                "ocr_text": "",
-                "final_text": asr_text,
-                "start": asr_start,
-                "end": asr_end,
-            })
+            fused_raw.append(
+                {
+                    "text": asr_text,
+                    "start": asr_start,
+                    "end": asr_end,
+                    "orig": seg,
+                }
+            )
+            decisions.append(
+                {
+                    "segment_id": seg_id,
+                    "decision": "keep_asr_no_ocr",
+                    "rule": 0,
+                    "scores": {
+                        "asr": 1.0,
+                        "ocr": 0.0,
+                        "align": 1.0,
+                        "temporal": 0.0,
+                        "completeness": 1.0,
+                        "final": 1.0,
+                    },
+                    "asr_text": asr_text,
+                    "ocr_text": "",
+                    "final_text": asr_text,
+                    "start": asr_start,
+                    "end": asr_end,
+                }
+            )
             continue
 
         # Gộp text OCR khớp
@@ -402,9 +434,8 @@ def fuse(
             rule_num = 1
 
         # Quy tắc 2: ALIGN >= 0.80 và OCR bổ sung prefix hoặc suffix
-        elif (
-            align_score >= ALIGN_MERGE_THRESHOLD
-            and (len(align_res.added_prefix) >= 1 or len(align_res.added_suffix) >= 1)
+        elif align_score >= ALIGN_MERGE_THRESHOLD and (
+            len(align_res.added_prefix) >= 1 or len(align_res.added_suffix) >= 1
         ):
             final_text = align_res.merged
             f_start = asr_start
@@ -436,44 +467,63 @@ def fuse(
             decision_name = "keep_asr"
             rule_num = 0
 
-        fused_raw.append({
-            "text": final_text,
-            "start": f_start,
-            "end": f_end,
-            "orig": seg,
-        })
-        decisions.append({
-            "segment_id": seg_id,
-            "decision": decision_name,
-            "rule": rule_num,
-            "scores": scores_dict,
-            "asr_text": asr_text,
-            "ocr_text": ocr_text,
-            "final_text": final_text,
-            "start": f_start,
-            "end": f_end,
-        })
+        fused_raw.append(
+            {
+                "text": final_text,
+                "start": f_start,
+                "end": f_end,
+                "orig": seg,
+            }
+        )
+        decisions.append(
+            {
+                "segment_id": seg_id,
+                "decision": decision_name,
+                "rule": rule_num,
+                "scores": scores_dict,
+                "asr_text": asr_text,
+                "ocr_text": ocr_text,
+                "final_text": final_text,
+                "start": f_start,
+                "end": f_end,
+            }
+        )
 
     # 2. Xử lý các đoạn OCR độc lập (không trùng với câu ASR nào) — Quy tắc 1 OCR Standalone
     for ocr in parsed_ocr:
-        if not ocr["used"] and _cjk_len(ocr["text"]) >= 3 and ocr["confidence"] >= OCR_SCORE_MIN_EMPTY:
-            fused_raw.append({
-                "text": ocr["text"],
-                "start": ocr["start"],
-                "end": ocr["end"],
-                "orig": None,
-            })
-            decisions.append({
-                "segment_id": None,
-                "decision": "ocr_standalone",
-                "rule": 1,
-                "scores": {"asr": 0.0, "ocr": round(ocr["confidence"], 3), "align": 0.0, "temporal": 0.0, "completeness": 1.0, "final": 0.8},
-                "asr_text": "",
-                "ocr_text": ocr["text"],
-                "final_text": ocr["text"],
-                "start": ocr["start"],
-                "end": ocr["end"],
-            })
+        if (
+            not ocr["used"]
+            and _cjk_len(ocr["text"]) >= 3
+            and ocr["confidence"] >= OCR_SCORE_MIN_EMPTY
+        ):
+            fused_raw.append(
+                {
+                    "text": ocr["text"],
+                    "start": ocr["start"],
+                    "end": ocr["end"],
+                    "orig": None,
+                }
+            )
+            decisions.append(
+                {
+                    "segment_id": None,
+                    "decision": "ocr_standalone",
+                    "rule": 1,
+                    "scores": {
+                        "asr": 0.0,
+                        "ocr": round(ocr["confidence"], 3),
+                        "align": 0.0,
+                        "temporal": 0.0,
+                        "completeness": 1.0,
+                        "final": 0.8,
+                    },
+                    "asr_text": "",
+                    "ocr_text": ocr["text"],
+                    "final_text": ocr["text"],
+                    "start": ocr["start"],
+                    "end": ocr["end"],
+                }
+            )
 
     # 3. Sắp xếp và đảm bảo tính bất biến thời gian
     fused_raw.sort(key=lambda x: float(x["start"]))
@@ -506,10 +556,11 @@ def fuse(
         "decisions": decisions,
         "stats": {
             "merged_count": sum(1 for d in decisions if d["decision"] == "merged_prefix_suffix"),
-            "ocr_added_count": sum(1 for d in decisions if d["decision"] in ("ocr_override_empty", "ocr_standalone")),
+            "ocr_added_count": sum(
+                1 for d in decisions if d["decision"] in ("ocr_override_empty", "ocr_standalone")
+            ),
             "asr_kept_count": sum(1 for d in decisions if "keep_asr" in d["decision"]),
         },
     }
 
     return fused_segments, report
-

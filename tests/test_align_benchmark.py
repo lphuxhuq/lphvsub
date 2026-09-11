@@ -1,12 +1,11 @@
 """Tests & benchmarks for subtitle alignment instrumentation and performance profiling."""
+
 import json
 import math
-import os
 import struct
 import time
 import wave
 from pathlib import Path
-import pytest
 
 from autodub.speech.align import AlignmentStats, align_segments
 
@@ -17,10 +16,11 @@ def _write_tone(path: str, dur: float, rate: int = 16000):
         w.setsampwidth(2)
         w.setframerate(rate)
         n = int(dur * rate)
-        w.writeframes(struct.pack(
-            f"<{n}h",
-            *[int(8000 * math.sin(2 * math.pi * 440 * i / rate))
-              for i in range(n)]))
+        w.writeframes(
+            struct.pack(
+                f"<{n}h", *[int(8000 * math.sin(2 * math.pi * 440 * i / rate)) for i in range(n)]
+            )
+        )
 
 
 def generate_benchmark_dataset(base_dir: Path, count: int = 50) -> tuple[list[dict], Path]:
@@ -28,19 +28,27 @@ def generate_benchmark_dataset(base_dir: Path, count: int = 50) -> tuple[list[di
     wav_dir.mkdir(parents=True, exist_ok=True)
 
     short_samples = [
-        "vâng ạ.", "đúng thế.", "chào bạn.", "rồi sao?", "tuyệt vời!",
-        "khoan đã.", "đi thôi.", "đồng ý.", "cảm ơn.", "không thể nào."
+        "vâng ạ.",
+        "đúng thế.",
+        "chào bạn.",
+        "rồi sao?",
+        "tuyệt vời!",
+        "khoan đã.",
+        "đi thôi.",
+        "đồng ý.",
+        "cảm ơn.",
+        "không thể nào.",
     ]
     normal_samples = [
         "hôm nay thời tiết thật là đẹp và mát mẻ.",
         "chúng ta sẽ cùng nhau tìm hiểu về dự án này.",
         "hệ thống hoạt động với tốc độ cực kỳ ấn tượng.",
         "video sau khi render có chất lượng hình ảnh sắc nét.",
-        "phụ đề tự động nhảy từng chữ theo giọng đọc chuẩn xác."
+        "phụ đề tự động nhảy từng chữ theo giọng đọc chuẩn xác.",
     ]
     long_samples = [
         "trong những năm gần đây công nghệ trí tuệ nhân tạo đã có những bước tiến vượt bậc mang lại rất nhiều giá trị thực tiễn.",
-        "chúng tôi cam kết luôn mang đến những trải nghiệm tốt nhất cho người dùng thông qua các tính năng tự động hoá thông minh."
+        "chúng tôi cam kết luôn mang đến những trải nghiệm tốt nhất cho người dùng thông qua các tính năng tự động hoá thông minh.",
     ]
 
     segments = []
@@ -63,14 +71,16 @@ def generate_benchmark_dataset(base_dir: Path, count: int = 50) -> tuple[list[di
         wav_path = wav_dir / wav_name
         _write_tone(str(wav_path), dur)
 
-        segments.append({
-            "id": i,
-            "start": round(curr_time, 3),
-            "end": round(curr_time + dur, 3),
-            "duration": dur,
-            "text_vi": text,
-            "category": category,
-        })
+        segments.append(
+            {
+                "id": i,
+                "start": round(curr_time, 3),
+                "end": round(curr_time + dur, 3),
+                "duration": dur,
+                "text_vi": text,
+                "category": category,
+            }
+        )
         curr_time += dur + 0.2
 
     return segments, wav_dir
@@ -112,8 +122,9 @@ def test_align_segments_instrumentation(tmp_path, monkeypatch):
     monkeypatch.setattr("autodub.speech.align._load_align_model", lambda: (DummyModel(), "cpu", 1))
 
     stats_cold = AlignmentStats()
-    out1 = align_segments(segments, str(wav_dir), "text_vi",
-                          cache_path=str(cache_file), stats=stats_cold)
+    out1 = align_segments(
+        segments, str(wav_dir), "text_vi", cache_path=str(cache_file), stats=stats_cold
+    )
 
     assert stats_cold.total_segments == 10
     assert stats_cold.cache_misses == 10
@@ -123,8 +134,9 @@ def test_align_segments_instrumentation(tmp_path, monkeypatch):
 
     # Lượt 2: Phải có cache hits (Warm run)
     stats_warm = AlignmentStats()
-    out2 = align_segments(segments, str(wav_dir), "text_vi",
-                          cache_path=str(cache_file), stats=stats_warm)
+    out2 = align_segments(
+        segments, str(wav_dir), "text_vi", cache_path=str(cache_file), stats=stats_warm
+    )
 
     assert stats_warm.total_segments == 10
     assert stats_warm.cache_hits == 10
@@ -133,7 +145,7 @@ def test_align_segments_instrumentation(tmp_path, monkeypatch):
 
 
 def test_build_cache_key_deterministic(tmp_path):
-    from autodub.speech.align import build_cache_key, ALIGN_CACHE_VERSION, ALIGN_MODEL
+    from autodub.speech.align import ALIGN_CACHE_VERSION, ALIGN_MODEL, build_cache_key
 
     wav_file = tmp_path / "test.wav"
     _write_tone(str(wav_file), 1.0)
@@ -147,7 +159,9 @@ def test_build_cache_key_deterministic(tmp_path):
     assert len(key1) >= 16
 
     # 2. Text thay đổi -> key khác
-    key_diff_text = build_cache_key(str(wav_file), "xin chào bạn", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION)
+    key_diff_text = build_cache_key(
+        str(wav_file), "xin chào bạn", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION
+    )
     assert key1 != key_diff_text
 
     # 3. Model thay đổi -> key khác
@@ -155,13 +169,17 @@ def test_build_cache_key_deterministic(tmp_path):
     assert key1 != key_diff_model
 
     # 4. Version thay đổi -> key khác
-    key_diff_version = build_cache_key(str(wav_file), "xin chào", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION + 1)
+    key_diff_version = build_cache_key(
+        str(wav_file), "xin chào", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION + 1
+    )
     assert key1 != key_diff_version
 
     # 5. Audio thay đổi -> key khác
     time.sleep(0.01)
     _write_tone(str(wav_file), 1.5)  # thay đổi kích thước và mtime
-    key_diff_audio = build_cache_key(str(wav_file), "xin chào", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION)
+    key_diff_audio = build_cache_key(
+        str(wav_file), "xin chào", ALIGN_MODEL, "vi", ALIGN_CACHE_VERSION
+    )
     assert key1 != key_diff_audio
 
 
@@ -228,7 +246,6 @@ def test_validate_alignment():
 
 def test_parallel_cache_io(tmp_path, monkeypatch):
     """Kiểm tra hai tiến trình/luồng cùng ghi cache không bị race condition hoặc corrupt file."""
-    import threading
     from concurrent.futures import ThreadPoolExecutor
 
     class DummyWord:
@@ -267,7 +284,3 @@ def test_parallel_cache_io(tmp_path, monkeypatch):
         data = json.load(f)
     assert isinstance(data, dict)
     assert len(data) >= 5  # Cache phải chứa entries được merge an toàn
-
-
-
-

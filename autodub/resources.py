@@ -15,6 +15,7 @@ tiếp gọi ``subprocess.run`` — và tuyệt đối không quanh ``pool.map``
 một hàm còn gọi tiếp hàm lá khác. Semaphore này không đệ quy: acquire hai lần
 lồng nhau trong cùng một luồng là deadlock.
 """
+
 from __future__ import annotations
 
 import os

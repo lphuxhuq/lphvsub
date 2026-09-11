@@ -8,6 +8,7 @@ The worker script (:mod:`autodub.speech.asr_paraformer_worker`) is standalone
 and executes with the .venv-asr interpreter — sherpa-onnx never has to be
 installed in (or bundled with) the main app.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,9 +56,12 @@ class ParaformerCache:
             python,
             _WORKER_SCRIPT,
             "--serve",
-            "--model-dir", model_dir,
-            "--num-threads", str(settings.asr_num_threads),
-            "--vad-pad", str(settings.asr_vad_pad_s),
+            "--model-dir",
+            model_dir,
+            "--num-threads",
+            str(settings.asr_num_threads),
+            "--vad-pad",
+            str(settings.asr_vad_pad_s),
         ]
         if not getattr(settings, "asr_gap_rescan", True):
             cmd.append("--no-gap-rescan")
@@ -103,8 +107,9 @@ class ParaformerCache:
         logger.info("Paraformer cache sẵn sàng (worker thường trú) — nhận diện tiếng Trung tức thì")
         return True
 
-    def transcribe(self, audio_path: str, settings: Settings,
-                   meta: dict | None = None) -> list[dict] | None:
+    def transcribe(
+        self, audio_path: str, settings: Settings, meta: dict | None = None
+    ) -> list[dict] | None:
         with self._lock:
             if not self._ensure(settings):
                 return None
@@ -123,15 +128,17 @@ class ParaformerCache:
                 self._failed = True
                 return None
 
+            import time
+
             from autodub.media.audio import wav_duration_s
             from autodub.utils import format_eta
-            import time
 
             total_audio_dur = wav_duration_s(audio_path) or 0.0
             t0 = time.time()
             segments: list[dict] = []
             empty_chunks: list[dict] | None = (
-                meta.setdefault("empty_chunks", []) if meta is not None else None)
+                meta.setdefault("empty_chunks", []) if meta is not None else None
+            )
             done = False
 
             while True:
@@ -168,18 +175,23 @@ class ParaformerCache:
                         rate = end / elapsed if elapsed > 0 else 1.0
                         rem_s = max(0.0, total_audio_dur - end) / rate
                         eta_text = f" [{pct}% | ⏱ Đã chạy: {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]"
-                    logger.info(f"Segment {len(segments)}: "
-                                f"[{start:.1f}s-{end:.1f}s]{eta_text} {msg['text'][:40]}...")
+                    logger.info(
+                        f"Segment {len(segments)}: "
+                        f"[{start:.1f}s-{end:.1f}s]{eta_text} {msg['text'][:40]}..."
+                    )
                 elif msg.get("empty"):
                     if empty_chunks is not None:
-                        empty_chunks.append({
-                            "start": round(float(msg["start"]), 3),
-                            "end": round(float(msg["end"]), 3),
-                        })
+                        empty_chunks.append(
+                            {
+                                "start": round(float(msg["start"]), 3),
+                                "end": round(float(msg["end"]), 3),
+                            }
+                        )
                     logger.warning(
                         f"Paraformer: đoạn [{float(msg['start']):.1f}s-"
                         f"{float(msg['end']):.1f}s] có tiếng nhưng không nhận "
-                        "dạng được chữ")
+                        "dạng được chữ"
+                    )
                 elif msg.get("done"):
                     done = True
                     break
@@ -211,16 +223,21 @@ class ParaformerCache:
                     try:
                         s.close()
                     except Exception:
-                        pass
+                        logger.debug(
+                            "Bỏ qua lỗi Exception trong paraformer_transcriber.py", exc_info=True
+                        )
 
     def close(self) -> None:
         with self._lock:
             self._shutdown()
 
 
-def transcribe_paraformer(audio_path: str, settings: Settings,
-                          meta: dict | None = None,
-                          paraformer_cache: ParaformerCache | None = None) -> list[dict]:
+def transcribe_paraformer(
+    audio_path: str,
+    settings: Settings,
+    meta: dict | None = None,
+    paraformer_cache: ParaformerCache | None = None,
+) -> list[dict]:
     """Run the Paraformer worker on ``audio_path`` (16 kHz mono WAV).
 
     Returns Whisper-shaped segments ``[{id, text, start, end, duration}]``.
@@ -237,10 +254,14 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
     cmd = [
         settings.asr_venv_python_path(),
         _WORKER_SCRIPT,
-        "--audio", audio_path,
-        "--model-dir", settings.paraformer_model_dir_path(),
-        "--num-threads", str(settings.asr_num_threads),
-        "--vad-pad", str(settings.asr_vad_pad_s),
+        "--audio",
+        audio_path,
+        "--model-dir",
+        settings.paraformer_model_dir_path(),
+        "--num-threads",
+        str(settings.asr_num_threads),
+        "--vad-pad",
+        str(settings.asr_vad_pad_s),
     ]
     if not getattr(settings, "asr_gap_rescan", True):
         cmd.append("--no-gap-rescan")
@@ -267,15 +288,17 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
 
     threading.Thread(target=_drain, daemon=True).start()
 
+    import time
+
     from autodub.media.audio import wav_duration_s
     from autodub.utils import format_eta
-    import time
 
     total_audio_dur = wav_duration_s(audio_path) or 0.0
     t0 = time.time()
     segments: list[dict] = []
     empty_chunks: list[dict] | None = (
-        meta.setdefault("empty_chunks", []) if meta is not None else None)
+        meta.setdefault("empty_chunks", []) if meta is not None else None
+    )
     done = False
     try:
         for line in proc.stdout:
@@ -299,7 +322,7 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
                     "duration": round(end - start, 3),
                 }
                 if msg.get("rescan"):
-                    seg["rescan"] = True   # bắt ở pass 3 (khoảng trống VAD)
+                    seg["rescan"] = True  # bắt ở pass 3 (khoảng trống VAD)
                 segments.append(seg)
                 elapsed = time.time() - t0
                 eta_text = ""
@@ -307,19 +330,26 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
                     pct = min(99, int((end / total_audio_dur) * 100))
                     rate = end / elapsed if elapsed > 0 else 1.0
                     rem_s = max(0.0, total_audio_dur - end) / rate
-                    eta_text = f" [{pct}% | ⏱ Đã chạy: {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]"
-                logger.info(f"Segment {len(segments)}: "
-                            f"[{start:.1f}s-{end:.1f}s]{eta_text} {msg['text'][:40]}...")
+                    eta_text = (
+                        f" [{pct}% | ⏱ Đã chạy: {format_eta(elapsed)} | ETA: ~{format_eta(rem_s)}]"
+                    )
+                logger.info(
+                    f"Segment {len(segments)}: "
+                    f"[{start:.1f}s-{end:.1f}s]{eta_text} {msg['text'][:40]}..."
+                )
             elif msg.get("empty"):
                 if empty_chunks is not None:
-                    empty_chunks.append({
-                        "start": round(float(msg["start"]), 3),
-                        "end": round(float(msg["end"]), 3),
-                    })
+                    empty_chunks.append(
+                        {
+                            "start": round(float(msg["start"]), 3),
+                            "end": round(float(msg["end"]), 3),
+                        }
+                    )
                 logger.warning(
                     f"Paraformer: đoạn [{float(msg['start']):.1f}s-"
                     f"{float(msg['end']):.1f}s] có tiếng nhưng không nhận "
-                    "dạng được chữ")
+                    "dạng được chữ"
+                )
             elif msg.get("done"):
                 done = True
         # Thời lượng phụ thuộc độ dài video — chờ tiến trình kết thúc hẳn
@@ -333,7 +363,9 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
                 try:
                     s.close()
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Bỏ qua lỗi Exception trong paraformer_transcriber.py", exc_info=True
+                    )
 
     # Gap-rescan (pass 3 của worker) phát segment SAU các chunk thường nên
     # thứ tự arrival lệch thứ tự thời gian — chốt theo mốc bắt đầu, đánh lại
@@ -346,11 +378,15 @@ def transcribe_paraformer(audio_path: str, settings: Settings,
     if not done:
         raise RuntimeError(
             f"Paraformer worker thoát bất thường (exit {proc.returncode})"
-            + (f"\n{tail}" if tail else ""))
+            + (f"\n{tail}" if tail else "")
+        )
     if not segments:
-        raise RuntimeError("Paraformer không nhận dạng được câu nào"
-                           + (f"\n{tail}" if tail else ""))
+        raise RuntimeError(
+            "Paraformer không nhận dạng được câu nào" + (f"\n{tail}" if tail else "")
+        )
     if empty_chunks:
-        logger.warning(f"Paraformer bỏ lỡ {len(empty_chunks)} đoạn có tiếng "
-                       "không decode được — xem empty_chunks trong ASR meta")
+        logger.warning(
+            f"Paraformer bỏ lỡ {len(empty_chunks)} đoạn có tiếng "
+            "không decode được — xem empty_chunks trong ASR meta"
+        )
     return segments

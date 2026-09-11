@@ -1,4 +1,5 @@
 """Lưới thẻ dự án, tự đổi số cột theo bề rộng cửa sổ."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QThreadPool, Signal
@@ -22,8 +23,7 @@ class ProjectGrid(QWidget):
     delete_project = Signal(str)
     card_clicked = Signal(str)
 
-    def __init__(self, parent: QWidget | None = None, *, max_items: int = 0,
-                 columns: int = 0):
+    def __init__(self, parent: QWidget | None = None, *, max_items: int = 0, columns: int = 0):
         super().__init__(parent)
         self._max_items = max_items
         self._fixed_columns = columns
@@ -31,8 +31,7 @@ class ProjectGrid(QWidget):
         self._order: list[str] = []
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(_MAX_THUMB_JOBS)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding,
-                           QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._grid = QGridLayout(self)
         self._grid.setContentsMargins(0, 0, 0, 0)
         self._grid.setSpacing(tokens.SP_4)
@@ -42,12 +41,17 @@ class ProjectGrid(QWidget):
     def set_projects(self, projects: list) -> None:
         """Dựng lại toàn bộ lưới từ danh sách dự án."""
         self.clear()
-        shown = projects[:self._max_items] if self._max_items else projects
+        shown = projects[: self._max_items] if self._max_items else projects
         for project in shown:
             card = ProjectCard(self)
-            card.set_project(project.key, project.title, project.date_label,
-                             project.status, project.status_label,
-                             project.duration_s)
+            card.set_project(
+                project.key,
+                project.title,
+                project.date_label,
+                project.status,
+                project.status_label,
+                project.duration_s,
+            )
             card.open_video.connect(self.open_video.emit)
             card.open_folder.connect(self.open_folder.emit)
             card.edit_project.connect(self.edit_project.emit)
@@ -124,6 +128,6 @@ class ProjectGrid(QWidget):
         for column in range(max(columns, self._grid.columnCount())):
             self._grid.setColumnStretch(column, 1 if column < columns else 0)
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._relayout()

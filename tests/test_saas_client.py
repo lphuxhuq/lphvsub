@@ -1,13 +1,15 @@
 """Máy khách SaaS: mã thiết bị, khóa idempotency, ghép bản dịch."""
+
 from __future__ import annotations
 
-import pytest
-
 from autodub.device_id import get_fingerprint, short_id
-from autodub.text.translate_common import TranslateError
 from autodub.text.translate_saas import (
-    _batch_job_id, _context_from_settings, _merge, _payload_segment,
-    _prev_context, run_id_for,
+    _batch_job_id,
+    _context_from_settings,
+    _merge,
+    _payload_segment,
+    _prev_context,
+    run_id_for,
 )
 
 
@@ -19,11 +21,18 @@ TARGET = _Target()
 
 
 def seg(i: int, text: str = "你好", duration: float = 2.0, slot: float = 2.5) -> dict:
-    return {"id": i, "text": text, "start": 0.0, "end": duration,
-            "duration": duration, "slot": slot}
+    return {
+        "id": i,
+        "text": text,
+        "start": 0.0,
+        "end": duration,
+        "duration": duration,
+        "slot": slot,
+    }
 
 
 # --------------------------------------------------------------- mã máy ----
+
 
 def test_fingerprint_is_stable_within_a_session():
     assert get_fingerprint() == get_fingerprint()
@@ -40,6 +49,7 @@ def test_short_id_matches_fingerprint_prefix():
 
 
 # -------------------------------------------------------- khóa idempotency --
+
 
 def test_run_id_stable_for_same_transcript():
     """Chạy lại cùng transcript phải ra cùng mã — nếu không thì các lô đã
@@ -67,6 +77,7 @@ def test_batch_job_ids_follow_content_not_index():
 
 # ------------------------------------------------------------- payload -----
 
+
 def test_payload_drops_timeline_fields():
     """start/end không giúp gì cho việc dịch mà nhân với hàng nghìn câu là
     hàng chục nghìn token vô ích."""
@@ -92,6 +103,7 @@ def test_payload_without_timing_has_no_budget():
 
 # ------------------------------------------------------------- ngữ cảnh ----
 
+
 class _Settings:
     translate_domain = "review công nghệ"
     translate_context = ""
@@ -103,8 +115,11 @@ class _Settings:
 
 def test_context_skips_empty_fields():
     out = _context_from_settings(_Settings())
-    assert out == {"videoTitle": "Đập hộp", "domain": "review công nghệ",
-                   "pronouns": "mình – các bạn"}
+    assert out == {
+        "videoTitle": "Đập hộp",
+        "domain": "review công nghệ",
+        "pronouns": "mình – các bạn",
+    }
 
 
 def test_context_of_none_is_empty():
@@ -129,6 +144,7 @@ def test_prev_context_includes_existing_translation():
 
 # ---------------------------------------------------------------- ghép -----
 
+
 def test_merge_keeps_client_side_fields():
     """Máy chủ chỉ trả id + bản dịch; start/end/slot của máy khách phải còn
     nguyên, nếu không thì bước TTS mất hết mốc thời gian."""
@@ -146,9 +162,8 @@ def test_merge_does_not_mutate_source():
 
 def test_merge_matches_by_id_not_position():
     merged = _merge(
-        [seg(1), seg(2)],
-        [{"id": 2, "text_vi": "Hai."}, {"id": 1, "text_vi": "Một."}],
-        "text_vi")
+        [seg(1), seg(2)], [{"id": 2, "text_vi": "Hai."}, {"id": 1, "text_vi": "Một."}], "text_vi"
+    )
     assert [m["text_vi"] for m in merged] == ["Một.", "Hai."]
 
 

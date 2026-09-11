@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 
 class Platform(str, enum.Enum):
@@ -15,16 +16,16 @@ class Platform(str, enum.Enum):
 
 
 class ErrorType(str, enum.Enum):
-    AUTH_ERROR = "auth_error"                     # HTTP 403 / expired cookie
-    RANGE_NOT_SATISFIABLE = "range_not_satisfiable" # HTTP 416
-    RATE_LIMITED = "rate_limited"                 # HTTP 429
-    TIMEOUT = "timeout"                           # Network socket timeout
-    CONNECTION_RESET = "connection_reset"         # Reset by peer
-    MISSING_AUDIO = "missing_audio"               # Video downloaded without expected audio
-    INVALID_MEDIA = "invalid_media"               # Truncated container, 0 duration, corrupt codec
-    NOT_FOUND = "not_found"                       # HTTP 404
-    NETWORK_ERROR = "network_error"               # Generic network failure
-    CANCELLED = "cancelled"                       # User cancelled
+    AUTH_ERROR = "auth_error"  # HTTP 403 / expired cookie
+    RANGE_NOT_SATISFIABLE = "range_not_satisfiable"  # HTTP 416
+    RATE_LIMITED = "rate_limited"  # HTTP 429
+    TIMEOUT = "timeout"  # Network socket timeout
+    CONNECTION_RESET = "connection_reset"  # Reset by peer
+    MISSING_AUDIO = "missing_audio"  # Video downloaded without expected audio
+    INVALID_MEDIA = "invalid_media"  # Truncated container, 0 duration, corrupt codec
+    NOT_FOUND = "not_found"  # HTTP 404
+    NETWORK_ERROR = "network_error"  # Generic network failure
+    CANCELLED = "cancelled"  # User cancelled
     UNKNOWN = "unknown"
 
 
@@ -38,19 +39,20 @@ class BandwidthMode(str, enum.Enum):
 @dataclass
 class DownloadRequest:
     """Specification of a download task requested by downstream callers."""
+
     url: str
     output_dir: str
-    cookie_file: Optional[str] = None
+    cookie_file: str | None = None
     audio_only: bool = False
     max_retries: int = 4
     bandwidth_mode: BandwidthMode = BandwidthMode.AUTO
-    cancel_event: Optional[Any] = None
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
-    headers: Optional[Dict[str, str]] = None
-    preferred_quality: Optional[str] = None
-    custom_filename: Optional[str] = None
+    cancel_event: Any | None = None
+    progress_callback: Callable[[dict[str, Any]], None] | None = None
+    headers: dict[str, str] | None = None
+    preferred_quality: str | None = None
+    custom_filename: str | None = None
     use_cache: bool = True
-    concurrency_override: Optional[int] = None
+    concurrency_override: int | None = None
 
     def is_cancelled(self) -> bool:
         if self.cancel_event is None:
@@ -63,6 +65,7 @@ class DownloadRequest:
 @dataclass
 class PreflightResult:
     """Result of metadata probing and preflight inspection before downloading."""
+
     platform: Platform
     media_id: str
     title: str = ""
@@ -70,20 +73,21 @@ class PreflightResult:
     has_audio: bool = True
     is_dash: bool = False
     estimated_size: int = 0
-    candidate_cdns: List[str] = field(default_factory=list)
+    candidate_cdns: list[str] = field(default_factory=list)
     recommended_backend: str = "http"
     recommended_concurrency: int = 4
-    raw_metadata: Dict[str, Any] = field(default_factory=dict)
+    raw_metadata: dict[str, Any] = field(default_factory=dict)
     probe_latency_ms: float = 0.0
-    direct_play_url: Optional[str] = None
-    audio_stream_url: Optional[str] = None
+    direct_play_url: str | None = None
+    audio_stream_url: str | None = None
 
 
 @dataclass
 class DownloadResult:
     """Standardized download execution result contract for all backends."""
+
     success: bool
-    path: Optional[str] = None
+    path: str | None = None
     platform: str = ""
     media_id: str = ""
     duration: float = 0.0
@@ -102,11 +106,11 @@ class DownloadResult:
     resumed: bool = False
     cache_hit: bool = False
     validation_passed: bool = True
-    error_message: Optional[str] = None
-    error_type: Optional[ErrorType] = None
-    telemetry: Dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
+    error_type: ErrorType | None = None
+    telemetry: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "path": self.path,

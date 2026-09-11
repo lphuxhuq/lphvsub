@@ -1,4 +1,5 @@
 import os
+
 from autodub.text.srt import generate_srt
 
 
@@ -43,7 +44,7 @@ def test_generate_srt_empty_segments(tmp_path):
 
 # ----------------------- display splitting (merged segments) --------------- #
 
-from autodub.text.srt import split_for_display, MAX_LINE_CHARS, MAX_LINES_PER_CUE
+from autodub.text.srt import MAX_LINE_CHARS, MAX_LINES_PER_CUE, split_for_display
 
 
 def test_short_segment_single_cue():
@@ -54,9 +55,11 @@ def test_short_segment_single_cue():
 
 
 def test_long_segment_splits_into_cues():
-    text = ("Nhưng khi giải mã nội dung bức bích họa, các nhà khoa học phát "
-            "hiện một điều kỳ lạ, loài này không giống các loài động vật "
-            "khác mà chúng ta từng biết.")
+    text = (
+        "Nhưng khi giải mã nội dung bức bích họa, các nhà khoa học phát "
+        "hiện một điều kỳ lạ, loài này không giống các loài động vật "
+        "khác mà chúng ta từng biết."
+    )
     seg = {"start": 10.0, "end": 17.4, "text_vi": text}
     cues = split_for_display(seg, "text_vi")
     assert len(cues) >= 2
@@ -73,7 +76,10 @@ def test_long_segment_splits_into_cues():
 
 
 def test_cue_time_proportional_to_text():
-    text = "ngắn thôi, " + "còn vế sau này thì dài hơn hẳn so với vế trước đó nhiều lắm luôn nhé bạn ơi."
+    text = (
+        "ngắn thôi, "
+        + "còn vế sau này thì dài hơn hẳn so với vế trước đó nhiều lắm luôn nhé bạn ơi."
+    )
     seg = {"start": 0.0, "end": 10.0, "text_vi": text}
     cues = split_for_display(seg, "text_vi")
     if len(cues) >= 2:
@@ -86,8 +92,10 @@ def test_empty_text_no_cues():
 
 def test_max_lines_single_line_strictly_one_line():
     """Khi chọn max_lines=1, mọi cue sinh ra đều chỉ có đúng 1 dòng (không có \\n)."""
-    text = ("Hôm nay chúng ta sẽ cùng nhau khám phá một địa điểm vô cùng thú vị, "
-            "hấp dẫn tại Việt Nam mà có thể bạn chưa từng được biết tới trước đây.")
+    text = (
+        "Hôm nay chúng ta sẽ cùng nhau khám phá một địa điểm vô cùng thú vị, "
+        "hấp dẫn tại Việt Nam mà có thể bạn chưa từng được biết tới trước đây."
+    )
     seg = {"start": 0.0, "end": 12.0, "text_vi": text}
     cues = split_for_display(seg, "text_vi", max_lines=1)
     assert len(cues) >= 3
@@ -95,4 +103,3 @@ def test_max_lines_single_line_strictly_one_line():
         assert "\n" not in c["text"]
         assert len(c["text"].splitlines()) == 1
         assert len(c["text"]) <= 32
-

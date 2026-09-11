@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 from autodub.media.download.contract import ErrorType
 
@@ -17,7 +18,7 @@ class ErrorClassifier:
     """Classifies exceptions, status codes, and error messages into semantic ErrorType."""
 
     @staticmethod
-    def classify(error: Any, status_code: Optional[int] = None) -> ErrorType:
+    def classify(error: Any, status_code: int | None = None) -> ErrorType:
         if status_code is not None:
             if status_code == 403:
                 return ErrorType.AUTH_ERROR
@@ -40,7 +41,12 @@ class ErrorClassifier:
         if "cancel" in err_str:
             return ErrorType.CANCELLED
 
-        if "403" in err_str or "forbidden" in err_str or "cookie" in err_str or "unauthorized" in err_str:
+        if (
+            "403" in err_str
+            or "forbidden" in err_str
+            or "cookie" in err_str
+            or "unauthorized" in err_str
+        ):
             return ErrorType.AUTH_ERROR
 
         if "416" in err_str or "range not satisfiable" in err_str:
@@ -55,7 +61,10 @@ class ErrorClassifier:
         if any(w in err_type_name.lower() or w in err_str for w in ("timeout", "timed out")):
             return ErrorType.TIMEOUT
 
-        if any(w in err_str for w in ("connection reset", "connection_reset", "remotedisconnected", "broken pipe")):
+        if any(
+            w in err_str
+            for w in ("connection reset", "connection_reset", "remotedisconnected", "broken pipe")
+        ):
             return ErrorType.CONNECTION_RESET
 
         if "missing audio" in err_str or "audio stream required" in err_str:
@@ -64,7 +73,10 @@ class ErrorClassifier:
         if any(w in err_str for w in ("corrupt", "invalid media", "truncated", "moov atom")):
             return ErrorType.INVALID_MEDIA
 
-        if any(w in err_str for w in ("connectionerror", "failed to establish", "network is unreachable")):
+        if any(
+            w in err_str
+            for w in ("connectionerror", "failed to establish", "network is unreachable")
+        ):
             return ErrorType.NETWORK_ERROR
 
         return ErrorType.UNKNOWN
@@ -73,6 +85,7 @@ class ErrorClassifier:
 @dataclass
 class RetryDecision:
     """Decision made by SmartRetryPolicy after an error."""
+
     should_retry: bool
     delay_seconds: float
     error_type: ErrorType
@@ -102,7 +115,7 @@ class SmartRetryPolicy:
         self,
         attempt: int,
         error: Any,
-        status_code: Optional[int] = None,
+        status_code: int | None = None,
     ) -> RetryDecision:
         """Evaluates whether to retry and what corrective actions to apply.
 
@@ -142,13 +155,13 @@ class SmartRetryPolicy:
             )
 
         # Calculate exponential backoff: base * 2^attempt
-        raw_delay = min(self.max_delay, self.base_delay * (2 ** attempt))
+        raw_delay = min(self.max_delay, self.base_delay * (2**attempt))
         delay = raw_delay + random.uniform(0, self.jitter)
 
         if error_type == ErrorType.AUTH_ERROR:
             # 403 or auth error: retry with session refresh or candidate switch
             return RetryDecision(
-                should_retry=attempt < 2, # limit auth retries
+                should_retry=attempt < 2,  # limit auth retries
                 delay_seconds=delay,
                 error_type=error_type,
                 refresh_session=True,
@@ -209,8 +222,8 @@ class SmartRetryPolicy:
     def execute_with_retry(
         self,
         func: Callable[[], Any],
-        on_retry: Optional[Callable[[int, RetryDecision], None]] = None,
-        is_cancelled: Optional[Callable[[], bool]] = None,
+        on_retry: Callable[[int, RetryDecision], None] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> Any:
         """Executes a callable with smart retry policy."""
         attempt = 0
@@ -234,7 +247,7 @@ class SmartRetryPolicy:
                     step = 0.1
                     while slept < decision.delay_seconds:
                         if is_cancelled and is_cancelled():
-                            raise RuntimeError("Operation cancelled during retry wait")
+                            raise RuntimeError("Operation cancelled during retry wait") from None
                         time.sleep(min(step, decision.delay_seconds - slept))
                         slept += step
 

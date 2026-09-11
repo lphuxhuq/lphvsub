@@ -4,6 +4,7 @@
 mạng, chạy lại mới xong (server trả cache theo ``job_id``). Retry ở đây làm lần
 đầu cũng xong — và vì ``job_id`` băm theo nội dung lô nên gửi lại không tốn Vox.
 """
+
 from __future__ import annotations
 
 import threading
@@ -39,8 +40,7 @@ class FakeClient:
         if self.errors:
             raise self.errors.pop(0)
         return {
-            "segments": [{"id": s["id"], "text_vi": f"vi {s['text']}"}
-                         for s in segments],
+            "segments": [{"id": s["id"], "text_vi": f"vi {s['text']}"} for s in segments],
             "creditCharged": len(segments),
             "balanceAfter": 100,
         }
@@ -49,15 +49,15 @@ class FakeClient:
 @pytest.fixture
 def patched(monkeypatch):
     """Bỏ chờ thật và bỏ chặn nhịp — test chỉ quan tâm số lượt gọi."""
-    monkeypatch.setattr(translate_saas, "_sleep_cancellable",
-                        lambda delay, reporter, stop: None)
+    monkeypatch.setattr(translate_saas, "_sleep_cancellable", lambda delay, reporter, stop: None)
     monkeypatch.setattr(translate_saas.RATE_LIMITER, "acquire", lambda: None)
 
 
 def _run(client, monkeypatch):
     monkeypatch.setattr(translate_saas, "get_client", lambda: client)
     return translate_saas.translate_segments(
-        [dict(s) for s in SEGMENTS], get_target("vi"), "zh", Settings())
+        [dict(s) for s in SEGMENTS], get_target("vi"), "zh", Settings()
+    )
 
 
 def test_transient_network_error_is_retried(patched, monkeypatch):
@@ -115,15 +115,20 @@ def test_client_error_is_not_retried(patched, monkeypatch):
 
 
 def test_missing_provider_is_not_retried(patched, monkeypatch):
-    client = FakeClient([SaasError(
-        'Chưa cấu hình nơi gọi mô hình cho "translate".',
-        code="NO_PROVIDER", status=503)])
+    client = FakeClient(
+        [
+            SaasError(
+                'Chưa cấu hình nơi gọi mô hình cho "translate".', code="NO_PROVIDER", status=503
+            )
+        ]
+    )
     with pytest.raises(TranslateError, match="nơi gọi mô hình"):
         _run(client, monkeypatch)
     assert len(client.job_ids) == 1
 
 
 # ------------------------------------------------------------ chặn nhịp ----
+
 
 def test_rate_limiter_admits_up_to_the_limit_then_waits():
     limiter = translate_saas._RateLimiter(limit=3, window_s=60.0)
@@ -136,11 +141,11 @@ def test_rate_limiter_admits_up_to_the_limit_then_waits():
 
     for _ in range(3):
         limiter.acquire(sleep=fake_sleep, now=lambda: clock[0])
-    assert slept == []          # ba lượt đầu đi ngay
+    assert slept == []  # ba lượt đầu đi ngay
 
     limiter.acquire(sleep=fake_sleep, now=lambda: clock[0])
-    assert slept                # lượt thứ tư phải chờ
-    assert clock[0] >= 60.0     # tới khi mốc cũ nhất rời cửa sổ
+    assert slept  # lượt thứ tư phải chờ
+    assert clock[0] >= 60.0  # tới khi mốc cũ nhất rời cửa sổ
 
 
 def test_rate_limiter_is_shared_across_threads():
@@ -168,10 +173,10 @@ def test_rate_limiter_is_shared_across_threads():
 def test_retry_after_header_wins_over_backoff(monkeypatch):
     """Máy chủ nói chờ bao lâu thì nghe máy chủ, nếu lâu hơn giãn cách mặc định."""
     waited: list[float] = []
-    monkeypatch.setattr(translate_saas, "_sleep_cancellable",
-                        lambda delay, reporter, stop: waited.append(delay))
+    monkeypatch.setattr(
+        translate_saas, "_sleep_cancellable", lambda delay, reporter, stop: waited.append(delay)
+    )
     monkeypatch.setattr(translate_saas.RATE_LIMITER, "acquire", lambda: None)
-    client = FakeClient([SaasError("bận", code="RATE_LIMITED", status=429,
-                                   retry_after=42.0)])
+    client = FakeClient([SaasError("bận", code="RATE_LIMITED", status=429, retry_after=42.0)])
     _run(client, monkeypatch)
     assert waited == [42.0]

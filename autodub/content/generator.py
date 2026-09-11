@@ -9,6 +9,7 @@ Phần chữ do máy chủ VoxDub viết (app không giữ API Key nào). Ảnh 
 hẳn khỏi sản phẩm — ảnh bìa gốc của video vẫn được tải về làm tham chiếu nếu
 người dùng muốn tự thiết kế.
 """
+
 import json
 import os
 import re
@@ -59,8 +60,7 @@ def fetch_original_thumbnail(url: str, output_dir: str) -> str | None:
     return None
 
 
-def extract_script_text(segments: list[dict], text_field: str,
-                        output_path: str) -> str:
+def extract_script_text(segments: list[dict], text_field: str, output_path: str) -> str:
     """Rút lời thoại thuần chữ ra tệp .txt và trả về chính chuỗi đó."""
     lines = []
     for seg in segments:
@@ -74,6 +74,7 @@ def extract_script_text(segments: list[dict], text_field: str,
 
 
 # ------------------------------------------------------- nội dung đăng bài -- #
+
 
 def _has_cjk(text: str) -> bool:
     """Kiểm tra chuỗi có chứa ký tự tiếng Trung/Nhật/Hàn hay không."""
@@ -116,8 +117,15 @@ def _clean_social_metadata(meta: dict, script_translated: str) -> dict:
     tags = yt_obj.get("tags") or meta.get("tags")
     if not isinstance(tags, list) or not tags or any(_has_cjk(x) for x in tags):
         tags = [
-            "review phim", "lồng tiếng", "tóm tắt phim", "phim hay",
-            "phim mới", "shorts", "xem phim", "viral video", "thịnh hành"
+            "review phim",
+            "lồng tiếng",
+            "tóm tắt phim",
+            "phim hay",
+            "phim mới",
+            "shorts",
+            "xem phim",
+            "viral video",
+            "thịnh hành",
         ]
 
     hashtags = yt_obj.get("hashtags") or meta.get("hashtags")
@@ -150,7 +158,7 @@ def _clean_social_metadata(meta: dict, script_translated: str) -> dict:
 
     yts_desc = str(yt_shorts.get("description") or "").strip()
     if not yts_desc or _has_cjk(yts_desc):
-        yts_desc = f"Xem ngay khoảnh khắc cao trào nhất! Xem bản full đầy đủ trên kênh nhé."
+        yts_desc = "Xem ngay khoảnh khắc cao trào nhất! Xem bản full đầy đủ trên kênh nhé."
 
     yts_tags = yt_shorts.get("hashtags")
     if not isinstance(yts_tags, list) or not yts_tags or any(_has_cjk(x) for x in yts_tags):
@@ -213,7 +221,9 @@ def generate_social_metadata_direct(
         return {}
 
     from autodub.text.translate_direct import (
-        get_direct_client, _slice_to_payload, _strip_fences_and_citations
+        _slice_to_payload,
+        _strip_fences_and_citations,
+        get_direct_client,
     )
 
     try:
@@ -305,7 +315,9 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
         data = json.loads(_slice_to_payload(clean))
         if isinstance(data, dict):
             data = _clean_social_metadata(data, script_translated)
-            logger.info(f"Đã tạo nội dung đăng bài qua {provider_name}: «{data.get('title', '')[:50]}»")
+            logger.info(
+                f"Đã tạo nội dung đăng bài qua {provider_name}: «{data.get('title', '')[:50]}»"
+            )
             return data
     except Exception as e:
         logger.warning(f"Tạo nội dung đăng bài qua {provider_name} lỗi ({e}) — bỏ qua")
@@ -397,7 +409,9 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
             data = json.loads(_slice_to_payload(clean))
             if isinstance(data, dict):
                 data = _clean_social_metadata(data, script_translated)
-                logger.info(f"Đã tạo nội dung đăng bài qua Google AI Studio: «{data.get('title', '')[:50]}»")
+                logger.info(
+                    f"Đã tạo nội dung đăng bài qua Google AI Studio: «{data.get('title', '')[:50]}»"
+                )
                 return data
         finally:
             client.close()
@@ -422,8 +436,16 @@ def _generate_fallback_metadata(script_translated: str, video_title: str = "") -
         f"+ Nhấn LIKE và ĐĂNG KÝ KÊNH để không bỏ lỡ những siêu phẩm video hấp dẫn tiếp theo nhé!"
     )
     tags = [
-        "review phim", "lồng tiếng", "tóm tắt phim", "phim hay", "phim mới",
-        "shorts", "xem phim", "viral video", "thịnh hành", "video hot"
+        "review phim",
+        "lồng tiếng",
+        "tóm tắt phim",
+        "phim hay",
+        "phim mới",
+        "shorts",
+        "xem phim",
+        "viral video",
+        "thịnh hành",
+        "video hot",
     ]
     hashtags = ["#reviewphim", "#phimhay", "#tomtatphim", "#trending", "#viral", "#xuhuong"]
 
@@ -451,24 +473,28 @@ def _generate_fallback_metadata(script_translated: str, video_title: str = "") -
         "youtube_shorts": {
             "title": f"{title[:50]} #Shorts",
             "description": "Khoảnh khắc gay cấn nhất! Đừng quên xem bản đầy đủ trên kênh nhé.",
-            "hashtags": ["#shorts", "#trending", "#viral", "#phimhay", "#xuhuong"]
+            "hashtags": ["#shorts", "#trending", "#viral", "#phimhay", "#xuhuong"],
         },
         "tiktok": {
             "title": f"{title[:55]} | Xem ngay để biết cái kết!",
             "description": "Mọi người nghĩ sao về chi tiết này? Để lại bình luận nhé!",
-            "hashtags": ["#fyp", "#xuhuong", "#viral", "#shorts", "#phimhay"]
+            "hashtags": ["#fyp", "#xuhuong", "#viral", "#shorts", "#phimhay"],
         },
         "facebook": {
             "title": f"Mọi người thấy diễn biến này thế nào? Bình luận bên dưới nhé!\n{title}",
             "description": "Cùng theo dõi và chia sẻ cảm nghĩ của bạn về video này nhé!",
-            "hashtags": ["#reels", "#trending", "#viral", "#phimhay"]
-        }
+            "hashtags": ["#reels", "#trending", "#viral", "#phimhay"],
+        },
     }
 
 
-def generate_social_metadata(script_original: str, script_translated: str,
-                             video_title: str = "", job_id: str = "",
-                             settings=None) -> dict:
+def generate_social_metadata(
+    script_original: str,
+    script_translated: str,
+    video_title: str = "",
+    job_id: str = "",
+    settings=None,
+) -> dict:
     """Tạo tiêu đề, mô tả và hashtag tự động qua API Key trực tiếp, AI Studio hoặc máy chủ."""
     if settings:
         res = generate_social_metadata_direct(
@@ -485,19 +511,28 @@ def generate_social_metadata(script_original: str, script_translated: str,
                 return _clean_social_metadata(res_browser, script_translated)
 
     from autodub.saas_client import (
-        InsufficientCreditError, SaasError, get_client, is_configured,
-        new_job_id)
+        InsufficientCreditError,
+        SaasError,
+        get_client,
+        is_configured,
+        new_job_id,
+    )
     from autodub.text.translate_common import HOLD
 
     if is_configured():
         try:
             metadata = get_client().generate_post(
-                script_original, script_translated,
-                job_id=job_id or new_job_id(), video_title=video_title,
-                hold_id=HOLD.hold_id)
+                script_original,
+                script_translated,
+                job_id=job_id or new_job_id(),
+                video_title=video_title,
+                hold_id=HOLD.hold_id,
+            )
             if metadata:
-                logger.info("Đã viết xong nội dung đăng bài qua server: "
-                            f"«{str(metadata.get('title', ''))[:50]}»")
+                logger.info(
+                    "Đã viết xong nội dung đăng bài qua server: "
+                    f"«{str(metadata.get('title', ''))[:50]}»"
+                )
                 return _clean_social_metadata(metadata, script_translated)
         except InsufficientCreditError:
             raise
@@ -509,6 +544,7 @@ def generate_social_metadata(script_original: str, script_translated: str,
 
 
 # ------------------------------------------------------------- ghi ra tệp -- #
+
 
 def _write_post_file(path: str, meta: dict) -> None:
     """``youtube_post.txt`` — nội dung đăng bài chuyên nghiệp, phân rõ 4 nền tảng riêng biệt."""
@@ -540,41 +576,45 @@ def _write_post_file(path: str, meta: dict) -> None:
             lines.append(f"  {idx}. {at}")
         lines.append("")
 
-    lines.extend([
-        f"► MÔ TẢ VIDEO (DESCRIPTION):\n{youtube.get('description', meta.get('description', ''))}",
-        "",
-        f"► DANH SÁCH THẺ TỪ KHÓA (TAGS / KEYWORDS - Copy dán thẳng vào YouTube Studio):\n{', '.join(tags)}",
-        "",
-        f"► HASHTAGS YOUTUBE:\n{' '.join(youtube.get('hashtags') or meta.get('hashtags') or [])}",
-        "",
-        "======================== 2. YOUTUBE SHORTS (VIDEO NGẮN) ========================",
-        f"► TIÊU ĐỀ SHORTS (TITLE):\n{yt_shorts.get('title') or (str(meta.get('title', ''))[:50] + ' #Shorts')}",
-        "",
-        f"► MÔ TẢ SHORTS (DESCRIPTION):\n{yt_shorts.get('description', 'Xem trọn vẹn video trên kênh nhé!')}",
-        "",
-        f"► HASHTAGS SHORTS:\n{' '.join(yt_shorts.get('hashtags') or ['#shorts', '#trending', '#viral'])}",
-        "",
-        "=============================== 3. TIKTOK ===============================",
-        f"► CAPTION / TIÊU ĐỀ TIKTOK:\n{tiktok.get('title', meta.get('title', ''))}",
-        "",
-        f"► LỜI DẪN / MÔ TẢ TIKTOK:\n{tiktok.get('description', '')}",
-        "",
-        f"► HASHTAGS TIKTOK:\n{' '.join(tiktok.get('hashtags') or meta.get('hashtags') or [])}",
-        "",
-        "====================== 4. FACEBOOK REELS & BÀI ĐĂNG ======================",
-        f"► BÀI ĐĂNG FACEBOOK / REELS:\n{facebook.get('title', meta.get('title', ''))}",
-        "",
-    ])
+    lines.extend(
+        [
+            f"► MÔ TẢ VIDEO (DESCRIPTION):\n{youtube.get('description', meta.get('description', ''))}",
+            "",
+            f"► DANH SÁCH THẺ TỪ KHÓA (TAGS / KEYWORDS - Copy dán thẳng vào YouTube Studio):\n{', '.join(tags)}",
+            "",
+            f"► HASHTAGS YOUTUBE:\n{' '.join(youtube.get('hashtags') or meta.get('hashtags') or [])}",
+            "",
+            "======================== 2. YOUTUBE SHORTS (VIDEO NGẮN) ========================",
+            f"► TIÊU ĐỀ SHORTS (TITLE):\n{yt_shorts.get('title') or (str(meta.get('title', ''))[:50] + ' #Shorts')}",
+            "",
+            f"► MÔ TẢ SHORTS (DESCRIPTION):\n{yt_shorts.get('description', 'Xem trọn vẹn video trên kênh nhé!')}",
+            "",
+            f"► HASHTAGS SHORTS:\n{' '.join(yt_shorts.get('hashtags') or ['#shorts', '#trending', '#viral'])}",
+            "",
+            "=============================== 3. TIKTOK ===============================",
+            f"► CAPTION / TIÊU ĐỀ TIKTOK:\n{tiktok.get('title', meta.get('title', ''))}",
+            "",
+            f"► LỜI DẪN / MÔ TẢ TIKTOK:\n{tiktok.get('description', '')}",
+            "",
+            f"► HASHTAGS TIKTOK:\n{' '.join(tiktok.get('hashtags') or meta.get('hashtags') or [])}",
+            "",
+            "====================== 4. FACEBOOK REELS & BÀI ĐĂNG ======================",
+            f"► BÀI ĐĂNG FACEBOOK / REELS:\n{facebook.get('title', meta.get('title', ''))}",
+            "",
+        ]
+    )
 
     fb_desc = facebook.get("description", "")
     if fb_desc:
         lines.extend([f"► MÔ TẢ CHI TIẾT:\n{fb_desc}", ""])
 
-    lines.extend([
-        f"► HASHTAGS FACEBOOK:\n{' '.join(facebook.get('hashtags') or meta.get('hashtags') or [])}",
-        "",
-        bar_double,
-    ])
+    lines.extend(
+        [
+            f"► HASHTAGS FACEBOOK:\n{' '.join(facebook.get('hashtags') or meta.get('hashtags') or [])}",
+            "",
+            bar_double,
+        ]
+    )
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -593,9 +633,11 @@ def generate_content(
     result: dict = {"metadata": {}, "metadata_file": None}
 
     script_original = extract_script_text(
-        segments, "text", os.path.join(output_dir, "script_original.txt"))
+        segments, "text", os.path.join(output_dir, "script_original.txt")
+    )
     script_translated = extract_script_text(
-        segments, "text_vi", os.path.join(output_dir, "script_vi.txt"))
+        segments, "text_vi", os.path.join(output_dir, "script_vi.txt")
+    )
 
     if source_url:
         fetch_original_thumbnail(source_url, output_dir)
@@ -607,18 +649,26 @@ def generate_content(
     # Nếu đã có metadata trích xuất từ trước (ví dụ từ bản dịch Google AI Studio):
     if os.path.exists(metadata_path):
         try:
-            with open(metadata_path, "r", encoding="utf-8") as f:
+            with open(metadata_path, encoding="utf-8") as f:
                 saved_meta = json.load(f)
-            if isinstance(saved_meta, dict) and saved_meta.get("title") and not _has_cjk(saved_meta.get("title", "")):
+            if (
+                isinstance(saved_meta, dict)
+                and saved_meta.get("title")
+                and not _has_cjk(saved_meta.get("title", ""))
+            ):
                 meta = saved_meta
                 logger.info(f"Dùng lại tiêu đề, mô tả đã có: «{str(saved_meta.get('title'))[:50]}»")
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong generator.py", exc_info=True)
 
     if not meta or not meta.get("title") or _has_cjk(meta.get("title", "")):
         meta = generate_social_metadata(
-            script_original, script_translated, video_title=video_title,
-            job_id=job_id, settings=settings)
+            script_original,
+            script_translated,
+            video_title=video_title,
+            job_id=job_id,
+            settings=settings,
+        )
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
@@ -631,6 +681,7 @@ def generate_content(
     # Tự động sinh Thumbnail High-CTR (16:9 và 9:16) nếu có video_path
     if video_path and os.path.exists(video_path):
         from autodub.media.thumbnail import generate_high_ctr_thumbnail
+
         thumb_title = meta.get("title") or "VIDEO MỚI NHẤT"
         thumb_landscape = os.path.join(output_dir, "thumbnail_landscape.jpg")
         thumb_portrait = os.path.join(output_dir, "thumbnail_portrait.jpg")

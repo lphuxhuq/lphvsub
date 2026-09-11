@@ -10,6 +10,7 @@ Người dùng cấu hình **Phương thức 2 (Xóa sạch AI Inpainting)** tro
   ```python
   if self._session is None:
       import cv2
+
       mask_uint8 = (mask > 0).astype(np.uint8) * 255
       kernel = np.ones((3, 3), np.uint8)
       mask_dilated = cv2.dilate(mask_uint8, kernel, iterations=1)

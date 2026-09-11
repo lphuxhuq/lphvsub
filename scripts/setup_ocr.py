@@ -8,6 +8,7 @@ Các bước đều resume-safe — chạy lại script sẽ bỏ qua phần đ�
   3. Smoke test OCR 1 ảnh tự sinh → installed_ok.json
   4. Nhắc bật OCR_ENABLED=true trong .env
 """
+
 import json
 import os
 import subprocess
@@ -17,14 +18,14 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_DIR = os.path.join(PROJECT_ROOT, ".venv-ocr")
-VENV_PY = os.path.join(VENV_DIR, "Scripts" if os.name == "nt" else "bin",
-                       "python.exe" if os.name == "nt" else "python")
+VENV_PY = os.path.join(
+    VENV_DIR, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+)
 WORKER = os.path.join(PROJECT_ROOT, "autodub", "media", "ocr_worker.py")
 if not os.path.isfile(WORKER):
     # Bản đóng gói: worker nằm trong data/ (PyInstaller contents_directory).
     for _d in ("data", "_internal"):
-        _candidate = os.path.join(PROJECT_ROOT, _d, "autodub", "media",
-                                  "ocr_worker.py")
+        _candidate = os.path.join(PROJECT_ROOT, _d, "autodub", "media", "ocr_worker.py")
         if os.path.isfile(_candidate):
             WORKER = _candidate
             break
@@ -77,12 +78,15 @@ def _smoke_test() -> None:
     r = _run([VENV_PY, "-c", code])
     if r.returncode != 0 or not os.path.isfile(img):
         sys.exit("Không sinh được ảnh smoke test.")
-    with open(os.path.join(smoke_dir, "list.txt"), "w",
-              encoding="utf-8") as f:
+    with open(os.path.join(smoke_dir, "list.txt"), "w", encoding="utf-8") as f:
         f.write(img)
-    r = _run([VENV_PY, WORKER, "--list", os.path.join(smoke_dir, "list.txt")],
-             capture_output=True, text=True, encoding="utf-8",
-             errors="replace")
+    r = _run(
+        [VENV_PY, WORKER, "--list", os.path.join(smoke_dir, "list.txt")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     ok = r.returncode == 0 and '"done"' in (r.stdout or "")
     if not ok:
         sys.exit(f"Smoke test OCR lỗi:\n{r.stderr[-500:]}")

@@ -3,19 +3,27 @@
 State indicators are drawn (small squares/dots) rather than typed as text
 glyphs, so rendering is identical on every system font.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QTextCursor
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar,
-    QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QProgressBar,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
-from autodub.progress import ProgressEvent, STEPS
+from autodub.progress import STEPS, ProgressEvent
 from autodub_gui import theme, tokens
 
 STEP_LABELS = {
@@ -63,7 +71,7 @@ class StatusDot(QWidget):
         self._filled = state in ("start", "progress", "done", "error")
         self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 — Qt API
+    def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         rect = self.rect().adjusted(3, 3, -3, -3)
@@ -113,7 +121,7 @@ class StepTracker(QWidget):
         self._bar = QProgressBar()
         self._bar.setRange(0, 100)
         self._bar.setValue(0)
-        self._bar.setFixedHeight(16)   # tall enough to render the % text
+        self._bar.setFixedHeight(16)  # tall enough to render the % text
         self._bar.setVisible(False)
         layout.addWidget(self._bar)
         # First-progress timestamps per step, for the ETA estimate.
@@ -166,8 +174,7 @@ class StepTracker(QWidget):
         dot, name, status = row
         state = ev.status if ev.status in _STATE_COLOR else "start"
         dot.set_state(state)
-        name.setStyleSheet(
-            f"color: {theme.TEXT if state != 'idle' else theme.TEXT_DIM};")
+        name.setStyleSheet(f"color: {theme.TEXT if state != 'idle' else theme.TEXT_DIM};")
         color = _STATE_COLOR[state]
         status.setStyleSheet(f"color: {color}; font-size: 12px;")
 
@@ -219,11 +226,13 @@ class LogPanel(QPlainTextEdit):
             f"QPlainTextEdit {{ background: {tokens.LOG_BG}; "
             f"color: {theme.TEXT_MUTED}; "
             f"font-family: 'Segoe UI', sans-serif; font-size: 13px; "
-            f"border: 1px solid {theme.BORDER}; padding: 4px 8px; }}")
+            f"border: 1px solid {theme.BORDER}; padding: 4px 8px; }}"
+        )
         self._last_is_progress = False
 
     def _color_for(self, levelno: int) -> str:
         from autodub_gui.log_text import SUCCESS
+
         if levelno >= logging.ERROR:
             return theme.ERROR
         if levelno >= logging.WARNING:
@@ -232,16 +241,14 @@ class LogPanel(QPlainTextEdit):
             return theme.SUCCESS
         return theme.TEXT_MUTED
 
-    def append_log(self, message: str, levelno: int,
-                   is_progress: bool = False) -> None:
+    def append_log(self, message: str, levelno: int, is_progress: bool = False) -> None:
         """Thêm một dòng mới vào Nhật ký.
 
         ``is_progress=True``: ghi đè dòng cuối nếu nó cũng là dòng tiến trình,
         thay vì chèn thêm — tránh làm ngập panel khi số câu lớn.
         """
         color = self._color_for(levelno)
-        escaped = (message.replace("&", "&amp;").replace("<", "&lt;")
-                   .replace(">", "&gt;"))
+        escaped = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         html = f'<span style="color:{color};">{escaped}</span>'
 
         if is_progress and self._last_is_progress:
@@ -282,7 +289,8 @@ class RunStatsPanel(QFrame):
         self.setObjectName("runstats")
         self.setStyleSheet(
             f"QFrame#runstats {{ background: {theme.BG_PANEL}; "
-            f"border: 1px solid {theme.BORDER}; border-radius: 3px; }}")
+            f"border: 1px solid {theme.BORDER}; border-radius: 3px; }}"
+        )
         row = QHBoxLayout(self)
         row.setContentsMargins(12, 8, 12, 8)
         row.setSpacing(18)
@@ -323,7 +331,7 @@ class RunStatsPanel(QFrame):
         if vox:
             self._vox.setText(f"Vox tạm tính: {vox:,}")
 
-    def hideEvent(self, event) -> None:  # noqa: N802 — Qt API
+    def hideEvent(self, event) -> None:
         self._timer.stop()
         super().hideEvent(event)
 
@@ -334,12 +342,14 @@ class Banner(QFrame):
     def __init__(self, kind: str, title: str, parent=None):
         super().__init__(parent)
         self.setObjectName("banner")
-        color = {"success": theme.SUCCESS, "warning": theme.WARNING,
-                 "error": theme.ERROR}.get(kind, theme.ACCENT)
+        color = {"success": theme.SUCCESS, "warning": theme.WARNING, "error": theme.ERROR}.get(
+            kind, theme.ACCENT
+        )
         self.setStyleSheet(
             f"QFrame#banner {{ background: {theme.BG_PANEL}; "
             f"border: 1px solid {theme.BORDER}; border-left: 3px solid {color}; "
-            f"border-radius: 3px; }}")
+            f"border-radius: 3px; }}"
+        )
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)

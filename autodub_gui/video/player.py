@@ -7,16 +7,25 @@ video gốc vẽ thẳng lên bề mặt của hệ điều hành nên mọi th�
 Câu phụ đề đang hiện được tìm bằng phép tìm nhị phân trên mảng mốc bắt đầu đã
 sắp xếp; quét tuần tự sẽ chậm thấy rõ với video dài hàng trăm câu.
 """
+
 from __future__ import annotations
 
 import bisect
 import os
 
-from PySide6.QtCore import QPointF, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QPointF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
-    QGraphicsScene, QGraphicsTextItem, QGraphicsView, QHBoxLayout, QLabel,
-    QSizePolicy, QSlider, QStackedWidget, QVBoxLayout, QWidget,
+    QGraphicsScene,
+    QGraphicsTextItem,
+    QGraphicsView,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QSlider,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
@@ -28,12 +37,13 @@ from autodub_gui.ui.style import panel_background
 try:
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
     from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
+
     HAS_MULTIMEDIA = True
-except ImportError:      # thiếu phần đa phương tiện thì vẫn mở được ứng dụng
+except ImportError:  # thiếu phần đa phương tiện thì vẫn mở được ứng dụng
     HAS_MULTIMEDIA = False
 
 _MS = 1000.0
-_TICK_MS = 40                  # nhịp cập nhật vị trí, đủ mượt mà không tốn sức
+_TICK_MS = 40  # nhịp cập nhật vị trí, đủ mượt mà không tốn sức
 _CONTROL_H = 44
 _ICON = 32
 _SEEK_STEP_S = 1.0
@@ -48,10 +58,10 @@ _PIP_W, _PIP_H = 320, 180
 class VideoPlayer(QWidget):
     """Khung phát video kèm thanh điều khiển và lớp phụ đề."""
 
-    position_changed = Signal(float)     # vị trí hiện tại, tính bằng giây
+    position_changed = Signal(float)  # vị trí hiện tại, tính bằng giây
     duration_changed = Signal(float)
-    state_changed = Signal(bool)         # đang phát hay không
-    open_requested = Signal()            # người dùng muốn chọn thư mục dự án
+    state_changed = Signal(bool)  # đang phát hay không
+    open_requested = Signal()  # người dùng muốn chọn thư mục dự án
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -82,11 +92,11 @@ class VideoPlayer(QWidget):
         self._stack.addWidget(self._build_stage())
         self.empty = EmptyState(
             "Chưa mở dự án nào",
-            "Chọn một dự án ở trang Dự án của tôi, hoặc mở thư mục dự án có "
-            "sẵn trên máy.", "Chọn thư mục dự án…")
+            "Chọn một dự án ở trang Dự án của tôi, hoặc mở thư mục dự án có sẵn trên máy.",
+            "Chọn thư mục dự án…",
+        )
         self.empty.action_clicked.connect(self.open_requested.emit)
-        self.error = ErrorState("Không phát được video",
-                                retry_label="", action_label="")
+        self.error = ErrorState("Không phát được video", retry_label="", action_label="")
         self._stack.addWidget(self.empty)
         self._stack.addWidget(self.error)
         root.addWidget(self._stack, 1)
@@ -97,16 +107,13 @@ class VideoPlayer(QWidget):
         """Vùng hiển thị hình ảnh và chữ phụ đề."""
         self.view = QGraphicsView()
         self.view.setFrameShape(QGraphicsView.Shape.NoFrame)
-        self.view.setRenderHints(QPainter.RenderHint.Antialiasing
-                                 | QPainter.RenderHint.SmoothPixmapTransform)
-        self.view.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.view.setStyleSheet(
-            f"QGraphicsView {{ background: {tokens.BG_VIDEO}; border: none; }}")
-        self.view.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                QSizePolicy.Policy.Expanding)
+        self.view.setRenderHints(
+            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+        )
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setStyleSheet(f"QGraphicsView {{ background: {tokens.BG_VIDEO}; border: none; }}")
+        self.view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.scene = QGraphicsScene(self)
         self.view.setScene(self.scene)
 
@@ -143,15 +150,13 @@ class VideoPlayer(QWidget):
         row.setContentsMargins(tokens.SP_2, 0, tokens.SP_2, 0)
         row.setSpacing(tokens.SP_1)
 
-        self.btn_play = IconButton(icons.play(tokens.SUCCESS),
-                                   "Phát hoặc tạm dừng", size=_ICON)
+        self.btn_play = IconButton(icons.play(tokens.SUCCESS), "Phát hoặc tạm dừng", size=_ICON)
         self.btn_play.clicked.connect(self.toggle_play)
         row.addWidget(self.btn_play)
         for icon, tip, handler in (
-                (icons.skip_back(tokens.TEXT_SECONDARY), "Về câu trước",
-                 self.previous_segment),
-                (icons.skip_forward(tokens.TEXT_SECONDARY), "Sang câu sau",
-                 self.next_segment)):
+            (icons.skip_back(tokens.TEXT_SECONDARY), "Về câu trước", self.previous_segment),
+            (icons.skip_forward(tokens.TEXT_SECONDARY), "Sang câu sau", self.next_segment),
+        ):
             button = IconButton(icon, tip, size=_ICON)
             button.clicked.connect(handler)
             row.addWidget(button)
@@ -165,7 +170,8 @@ class VideoPlayer(QWidget):
         self.time_label = QLabel("00:00 / 00:00")
         self.time_label.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         row.addWidget(self.time_label)
 
         self.volume = QSlider(Qt.Orientation.Horizontal)
@@ -174,15 +180,17 @@ class VideoPlayer(QWidget):
         self.volume.setMaximumWidth(90)
         self.volume.setToolTip("Âm lượng")
         self.volume.valueChanged.connect(self._on_volume)
-        row.addWidget(IconButton(icons.volume(tokens.TEXT_SECONDARY),
-                                 "Âm lượng", size=_ICON))
+        row.addWidget(IconButton(icons.volume(tokens.TEXT_SECONDARY), "Âm lượng", size=_ICON))
         row.addWidget(self.volume)
 
         for icon, tip, handler in (
-                (icons.pip(tokens.TEXT_SECONDARY),
-                 "Xem trong cửa sổ nhỏ luôn nổi trên cùng", self.open_pip),
-                (icons.fullscreen(tokens.TEXT_SECONDARY),
-                 "Xem toàn màn hình", self.open_fullscreen)):
+            (
+                icons.pip(tokens.TEXT_SECONDARY),
+                "Xem trong cửa sổ nhỏ luôn nổi trên cùng",
+                self.open_pip,
+            ),
+            (icons.fullscreen(tokens.TEXT_SECONDARY), "Xem toàn màn hình", self.open_fullscreen),
+        ):
             button = IconButton(icon, tip, size=_ICON)
             button.clicked.connect(handler)
             row.addWidget(button)
@@ -196,13 +204,15 @@ class VideoPlayer(QWidget):
             self._show_error(
                 "Không tìm thấy tệp video",
                 "Tệp video của dự án này không còn trên máy. Có thể nó đã bị "
-                "di chuyển hoặc xóa đi.")
+                "di chuyển hoặc xóa đi.",
+            )
             return False
         if not HAS_MULTIMEDIA:
             self._show_error(
                 "Máy này chưa phát được video trong ứng dụng",
                 "Phần đa phương tiện của giao diện chưa sẵn sàng. Bạn vẫn có "
-                "thể mở video bằng trình phát ngoài.")
+                "thể mở video bằng trình phát ngoài.",
+            )
             return False
         self._source = path
         self.player.setSource(QUrl.fromLocalFile(path))
@@ -222,8 +232,8 @@ class VideoPlayer(QWidget):
     def _on_media_loaded_once(self, status) -> None:
         """Hiện frame đầu khi media vừa nạp xong (chỉ kích hoạt một lần)."""
         from PySide6.QtMultimedia import QMediaPlayer as _QMP
-        if status not in (_QMP.MediaStatus.LoadedMedia,
-                          _QMP.MediaStatus.BufferedMedia):
+
+        if status not in (_QMP.MediaStatus.LoadedMedia, _QMP.MediaStatus.BufferedMedia):
             return
         try:
             self.player.mediaStatusChanged.disconnect(self._on_media_loaded_once)
@@ -235,6 +245,7 @@ class VideoPlayer(QWidget):
         if self._source and not self.is_playing():
             self.player.play()
             from PySide6.QtCore import QTimer
+
             QTimer.singleShot(80, self._pause_after_first_frame)
 
     def _pause_after_first_frame(self) -> None:
@@ -295,8 +306,8 @@ class VideoPlayer(QWidget):
         self._show_error(
             "Không phát được video này",
             "Máy chưa có bộ giải mã phù hợp cho định dạng của video. Bạn vẫn "
-            "có thể mở bằng trình phát ngoài. "
-            + (message or ""))
+            "có thể mở bằng trình phát ngoài. " + (message or ""),
+        )
 
     # -- Điều khiển ----------------------------------------------------
     def play(self) -> None:
@@ -334,9 +345,10 @@ class VideoPlayer(QWidget):
         return self._duration
 
     def is_playing(self) -> bool:
-        return (self.player is not None
-                and self.player.playbackState()
-                == QMediaPlayer.PlaybackState.PlayingState)
+        return (
+            self.player is not None
+            and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        )
 
     def step(self, seconds: float) -> None:
         """Lùi hoặc tiến một khoảng so với vị trí hiện tại."""
@@ -382,8 +394,9 @@ class VideoPlayer(QWidget):
 
     def _on_state(self, state) -> None:
         playing = state == QMediaPlayer.PlaybackState.PlayingState
-        self.btn_play.setIcon(icons.pause(tokens.WARNING) if playing
-                              else icons.play(tokens.SUCCESS))
+        self.btn_play.setIcon(
+            icons.pause(tokens.WARNING) if playing else icons.play(tokens.SUCCESS)
+        )
         self.btn_play.setToolTip("Tạm dừng" if playing else "Phát")
         self._timer.start() if playing else self._timer.stop()
         self.state_changed.emit(playing)
@@ -399,8 +412,8 @@ class VideoPlayer(QWidget):
 
     def _refresh_time(self) -> None:
         self.time_label.setText(
-            f"{format_duration(self.position())} / "
-            f"{format_duration(self._duration)}")
+            f"{format_duration(self.position())} / {format_duration(self._duration)}"
+        )
 
     def _segment_index(self, seconds: float) -> int:
         """Chỉ số câu đang được đọc, tìm bằng phép tìm nhị phân."""
@@ -442,10 +455,12 @@ class VideoPlayer(QWidget):
             if float(segment.get("end", 0.0)) >= seconds:
                 s = self._style
                 cues = split_for_display(
-                    segment, self._text_field,
+                    segment,
+                    self._text_field,
                     line_words=int(s["line_words"]),
                     max_lines=int(s["max_lines"]),
-                    all_caps=bool(s["all_caps"]))
+                    all_caps=bool(s["all_caps"]),
+                )
                 # Tìm đúng cụm chữ khớp với vị trí hiện tại.
                 # KHÔNG dùng for-else: nếu con trỏ đang ở khoảng trống giữa
                 # hai cụm (ví dụ cuối câu trước khi hết segment), cụm cuối
@@ -470,7 +485,7 @@ class VideoPlayer(QWidget):
             self._layout_subtitle()
 
     # -- Bố trí khung hình ---------------------------------------------
-    def resizeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._layout_scene()
 
@@ -479,8 +494,7 @@ class VideoPlayer(QWidget):
         if self.video_item is not None:
             self.video_item.setSize(size)
         self.scene.setSceneRect(0, 0, size.width(), size.height())
-        self.view.fitInView(self.scene.sceneRect(),
-                            Qt.AspectRatioMode.KeepAspectRatio)
+        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._restyle_subtitle()
         self._layout_subtitle()
 
@@ -499,8 +513,7 @@ class VideoPlayer(QWidget):
             top = (rect.height() - bounds.height()) / 2
         else:
             top = rect.height() - bounds.height() - margin
-        self.subtitle_item.setPos(QPointF(
-            (rect.width() - bounds.width()) / 2, max(0.0, top)))
+        self.subtitle_item.setPos(QPointF((rect.width() - bounds.width()) / 2, max(0.0, top)))
 
     # -- Cửa sổ phụ ----------------------------------------------------
     def open_fullscreen(self) -> None:
@@ -518,8 +531,9 @@ class VideoPlayer(QWidget):
             return
         if self._external_dialog is not None:
             self._external_dialog.close()
-        window = DetachedVideoWindow(self.player, self, fullscreen=fullscreen,
-                                     size=(_PIP_W, _PIP_H))
+        window = DetachedVideoWindow(
+            self.player, self, fullscreen=fullscreen, size=(_PIP_W, _PIP_H)
+        )
         window.closed.connect(self._on_detached_closed)
         self._external_dialog = window
         window.show_video()

@@ -4,11 +4,13 @@ Sử dụng Computer Vision (Edge Density, Local Contrast, Horizontal Projection
 để tự động nhận diện các dải phụ đề cứng (burned-in subtitles) xuất hiện trên video, phân biệt với logo/watermark,
 và chuyển đổi thành schema `blur_regions` chuẩn của hệ thống LPHVSub.
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
 from dataclasses import dataclass, field
+
 import numpy as np
 from scipy import ndimage
 
@@ -25,13 +27,14 @@ logger = setup_logging("autodub.hardsub_detector")
 @dataclass
 class HardsubRegion:
     """Đại diện cho một vùng phụ đề cứng được phát hiện trên video."""
-    x: float          # [0.0 .. 1.0] Tọa độ X góc trên-trái
-    y: float          # [0.0 .. 1.0] Tọa độ Y góc trên-trái
-    width: float      # [0.0 .. 1.0] Chiều rộng
-    height: float     # [0.0 .. 1.0] Chiều cao
-    start: float      # (giây) Mốc thời gian bắt đầu xuất hiện
-    end: float        # (giây) Mốc thời gian kết thúc xuất hiện
-    confidence: float # [0.0 .. 1.0] Độ tin cậy
+
+    x: float  # [0.0 .. 1.0] Tọa độ X góc trên-trái
+    y: float  # [0.0 .. 1.0] Tọa độ Y góc trên-trái
+    width: float  # [0.0 .. 1.0] Chiều rộng
+    height: float  # [0.0 .. 1.0] Chiều cao
+    start: float  # (giây) Mốc thời gian bắt đầu xuất hiện
+    end: float  # (giây) Mốc thời gian kết thúc xuất hiện
+    confidence: float  # [0.0 .. 1.0] Độ tin cậy
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.x <= 1.0):
@@ -64,6 +67,7 @@ class HardsubRegion:
 @dataclass
 class FrameSample:
     """Mẫu khung hình trích xuất từ video kèm thông tin thời gian."""
+
     timestamp: float
     frame_index: int = 0
     image: np.ndarray | None = None  # Grayscale image (uint8)
@@ -74,6 +78,7 @@ class FrameSample:
 @dataclass
 class TextCandidate:
     """Ứng viên vùng văn bản thô được phát hiện trong một khung hình."""
+
     x: int
     y: int
     w: int
@@ -86,18 +91,22 @@ class TextCandidate:
 
     def __post_init__(self) -> None:
         # Công thức tính trọng số độ tin cậy đa chiều (Multi-factor Confidence Scoring)
-        self.confidence = float(np.clip(
-            0.30 * self.edge_score +
-            0.25 * self.contrast_score +
-            0.25 * self.density_score +
-            0.20 * self.position_score,
-            0.0, 1.0
-        ))
+        self.confidence = float(
+            np.clip(
+                0.30 * self.edge_score
+                + 0.25 * self.contrast_score
+                + 0.25 * self.density_score
+                + 0.20 * self.position_score,
+                0.0,
+                1.0,
+            )
+        )
 
 
 # --------------------------------------------------------------------------- #
 # 1. Trích xuất khung hình & Tiền xử lý (Frame Sampling & Preprocessing)
 # --------------------------------------------------------------------------- #
+
 
 def extract_video_frames(
     video_path: str,
@@ -111,8 +120,8 @@ def extract_video_frames(
         return []
 
     from autodub.media.video import probe_duration_s
-    duration = probe_duration_s(video_path) or 10.0
 
+    duration = probe_duration_s(video_path) or 10.0
 
     if duration <= 1.0:
         timestamps = [0.5]
@@ -140,14 +149,18 @@ def extract_video_frames(
                     if ret and frame is not None:
                         # Chuyển xám và resize
                         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                        resized = cv2.resize(gray, (target_width, target_height), interpolation=cv2.INTER_AREA)
-                        samples.append(FrameSample(
-                            timestamp=float(t),
-                            frame_index=idx,
-                            image=resized,
-                            orig_w=orig_w,
-                            orig_h=orig_h,
-                        ))
+                        resized = cv2.resize(
+                            gray, (target_width, target_height), interpolation=cv2.INTER_AREA
+                        )
+                        samples.append(
+                            FrameSample(
+                                timestamp=float(t),
+                                frame_index=idx,
+                                image=resized,
+                                orig_w=orig_w,
+                                orig_h=orig_h,
+                            )
+                        )
                 cap.release()
                 if len(samples) > 0:
                     return samples
@@ -158,26 +171,37 @@ def extract_video_frames(
     frame_bytes = target_width * target_height
     for idx, t in enumerate(timestamps):
         cmd = [
-            "ffmpeg", "-y",
-            "-ss", f"{t:.2f}",
-            "-i", video_path,
-            "-vframes", "1",
-            "-s", f"{target_width}x{target_height}",
-            "-pix_fmt", "gray",
-            "-f", "rawvideo",
+            "ffmpeg",
+            "-y",
+            "-ss",
+            f"{t:.2f}",
+            "-i",
+            video_path,
+            "-vframes",
+            "1",
+            "-s",
+            f"{target_width}x{target_height}",
+            "-pix_fmt",
+            "gray",
+            "-f",
+            "rawvideo",
             "-",
         ]
         try:
             res = subprocess.run(cmd, capture_output=True, check=False, timeout=8)
             if res.returncode == 0 and len(res.stdout) == frame_bytes:
-                img = np.frombuffer(res.stdout, dtype=np.uint8).reshape((target_height, target_width))
-                samples.append(FrameSample(
-                    timestamp=float(t),
-                    frame_index=idx,
-                    image=img,
-                    orig_w=target_width,
-                    orig_h=target_height,
-                ))
+                img = np.frombuffer(res.stdout, dtype=np.uint8).reshape(
+                    (target_height, target_width)
+                )
+                samples.append(
+                    FrameSample(
+                        timestamp=float(t),
+                        frame_index=idx,
+                        image=img,
+                        orig_w=target_width,
+                        orig_h=target_height,
+                    )
+                )
         except Exception:
             continue
 
@@ -187,6 +211,7 @@ def extract_video_frames(
 # --------------------------------------------------------------------------- #
 # 2. Phát hiện & Lọc ứng viên văn bản (Candidate Detection & Filtering)
 # --------------------------------------------------------------------------- #
+
 
 def detect_text_candidates_in_frame(
     gray_img: np.ndarray,
@@ -263,7 +288,10 @@ def detect_text_candidates_in_frame(
 
             if density >= 0.04 and contrast_score >= 0.15:
                 cand = TextCandidate(
-                    x=x0, y=y0, w=reg_w, h=reg_h,
+                    x=x0,
+                    y=y0,
+                    w=reg_w,
+                    h=reg_h,
                     edge_score=edge_score,
                     contrast_score=contrast_score,
                     density_score=density_score,
@@ -278,6 +306,7 @@ def detect_text_candidates_in_frame(
 # --------------------------------------------------------------------------- #
 # 3. Phân cụm Không gian & Thời gian (Spatial & Temporal Clustering)
 # --------------------------------------------------------------------------- #
+
 
 def spatial_merge_candidates(
     candidates: list[TextCandidate],
@@ -316,20 +345,27 @@ def spatial_merge_candidates(
                 break
 
         if not matched:
-            merged.append({
-                "x1": c.x, "y1": c.y, "x2": c.x + c.w, "y2": c.y + c.h,
-                "confidences": [c.confidence],
-            })
+            merged.append(
+                {
+                    "x1": c.x,
+                    "y1": c.y,
+                    "x2": c.x + c.w,
+                    "y2": c.y + c.h,
+                    "confidences": [c.confidence],
+                }
+            )
 
     results: list[dict] = []
     for m in merged:
-        results.append({
-            "x": float(m["x1"]) / img_w,
-            "y": float(m["y1"]) / img_h,
-            "w": float(m["x2"] - m["x1"]) / img_w,
-            "h": float(m["y2"] - m["y1"]) / img_h,
-            "confidence": float(np.mean(m["confidences"])),
-        })
+        results.append(
+            {
+                "x": float(m["x1"]) / img_w,
+                "y": float(m["y1"]) / img_h,
+                "w": float(m["x2"] - m["x1"]) / img_w,
+                "h": float(m["y2"] - m["y1"]) / img_h,
+                "confidence": float(np.mean(m["confidences"])),
+            }
+        )
     return results
 
 
@@ -417,6 +453,7 @@ def track_temporal_regions(
 # 4. Giao diện Chính & Giải quyết Xung đột (Public API & Conflict Resolution)
 # --------------------------------------------------------------------------- #
 
+
 def detect_hardsub_regions(
     video_path: str,
     sample_interval_s: float = 1.5,
@@ -452,12 +489,12 @@ def merge_blur_regions_with_manual(
 ) -> list[dict]:
     """Hợp nhất các vùng che thủ công và tự động, loại bỏ các vùng trùng lặp để tránh sinh filter thừa."""
     combined: list[dict] = list(manual_regions or [])
-    for auto_r in (auto_regions or []):
+    for auto_r in auto_regions or []:
         duplicate = False
         for man_r in combined:
             # Nếu 2 vùng có tâm và kích thước tương tự nhau
-            center_x_diff = abs((auto_r["x"] + auto_r["w"]/2) - (man_r["x"] + man_r["w"]/2))
-            center_y_diff = abs((auto_r["y"] + auto_r["h"]/2) - (man_r["y"] + man_r["h"]/2))
+            center_x_diff = abs((auto_r["x"] + auto_r["w"] / 2) - (man_r["x"] + man_r["w"] / 2))
+            center_y_diff = abs((auto_r["y"] + auto_r["h"] / 2) - (man_r["y"] + man_r["h"] / 2))
             if center_x_diff < 0.08 and center_y_diff < 0.06:
                 duplicate = True
                 break

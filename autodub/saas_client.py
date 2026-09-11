@@ -16,6 +16,7 @@ rồi trỏ ``VOXDUB_API_URL`` về đó. Khi đã có máy chủ:
 Nguyên tắc fail-closed: đã cấu hình máy chủ mà gọi không được thì dừng bước
 dịch với lời báo rõ ràng, không âm thầm bỏ qua.
 """
+
 from __future__ import annotations
 
 import os
@@ -32,14 +33,15 @@ ENV_KEY = "VOXDUB_API_URL"
 TOKEN_KEY = "VOXDUB_DEVICE_TOKEN"
 
 _CONNECT_TIMEOUT = 10.0
-_READ_TIMEOUT = 300.0     # một lô dịch lớn có thể mất vài phút
+_READ_TIMEOUT = 300.0  # một lô dịch lớn có thể mất vài phút
 
 
 class SaasError(Exception):
     """Máy chủ không trả về kết quả dùng được."""
 
-    def __init__(self, message: str, code: str = "", status: int = 0,
-                 retry_after: float = 0.0) -> None:
+    def __init__(
+        self, message: str, code: str = "", status: int = 0, retry_after: float = 0.0
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
@@ -160,9 +162,16 @@ class SaasClient:
 
     # ------------------------------------------------------- gọi HTTP ----
 
-    def _request(self, method: str, path: str, *, json_body: dict | None = None,
-                 auth: bool = True, timeout: float = _READ_TIMEOUT,
-                 _retry_auth: bool = True) -> dict:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: dict | None = None,
+        auth: bool = True,
+        timeout: float = _READ_TIMEOUT,
+        _retry_auth: bool = True,
+    ) -> dict:
         """Một lượt gọi API. Ném :class:`SaasError` cho mọi lỗi.
 
         Gặp 401 thì đăng ký lại thiết bị đúng một lần rồi thử lại — token hết
@@ -181,8 +190,8 @@ class SaasClient:
         url = f"{self.base_url}{path}"
         try:
             resp = self._http().request(
-                method, url, json=json_body, headers=headers,
-                timeout=(_CONNECT_TIMEOUT, timeout))
+                method, url, json=json_body, headers=headers, timeout=(_CONNECT_TIMEOUT, timeout)
+            )
         except requests.exceptions.RequestException as e:
             raise OfflineError(
                 "Không kết nối được máy chủ VoxDub. Kiểm tra mạng rồi thử lại."
@@ -204,12 +213,15 @@ class SaasClient:
         if resp.status_code == 401 and auth and _retry_auth:
             # Token hết hạn hoặc bị thu hồi — đăng ký lại rồi thử lại đúng một lần.
             self.forget_token()
-            return self._request(method, path, json_body=json_body, auth=auth,
-                                 timeout=timeout, _retry_auth=False)
+            return self._request(
+                method, path, json_body=json_body, auth=auth, timeout=timeout, _retry_auth=False
+            )
         if resp.status_code == 402:
             raise InsufficientCreditError(
-                message, balance=int(data.get("balance") or 0),
-                required=int(data.get("required") or 0))
+                message,
+                balance=int(data.get("balance") or 0),
+                required=int(data.get("required") or 0),
+            )
         if code == "DEVICE_BLOCKED":
             raise DeviceBlockedError(message, code=code, status=resp.status_code)
         if code == "MAINTENANCE":
@@ -217,10 +229,13 @@ class SaasClient:
         if resp.status_code == 429:
             raise SaasError(
                 "Máy chủ đang bận (quá nhiều yêu cầu). Chờ một chút rồi thử lại.",
-                code="RATE_LIMITED", status=429,
-                retry_after=_retry_after_s(resp))
-        raise SaasError(message, code=code, status=resp.status_code,
-                        retry_after=_retry_after_s(resp))
+                code="RATE_LIMITED",
+                status=429,
+                retry_after=_retry_after_s(resp),
+            )
+        raise SaasError(
+            message, code=code, status=resp.status_code, retry_after=_retry_after_s(resp)
+        )
 
     # ---------------------------------------------------------- thiết bị --
 
@@ -231,12 +246,16 @@ class SaasClient:
             if self._token:
                 return self._token
             data = self._request(
-                "POST", "/v1/device/register", auth=False, timeout=30.0,
+                "POST",
+                "/v1/device/register",
+                auth=False,
+                timeout=30.0,
                 json_body={
                     "fingerprint": get_fingerprint(),
                     "name": get_device_name(),
                     "appVersion": _app_version(),
-                })
+                },
+            )
             self._store_token(str(data["token"]))
             self._device = data.get("device") or {}
             return self._token
@@ -274,28 +293,34 @@ class SaasClient:
 
     def activate_key(self, code: str) -> dict:
         """Kích hoạt một mã. Trả về ``{vox, balanceAfter, alreadyActivated}``."""
-        data = self._request("POST", "/v1/device/activate", timeout=30.0,
-                             json_body={"code": str(code).strip()})
+        data = self._request(
+            "POST", "/v1/device/activate", timeout=30.0, json_body={"code": str(code).strip()}
+        )
         self._device["balance"] = int(data.get("balanceAfter") or 0)
         return data
 
     def credit_history(self, page: int = 1, limit: int = 20) -> dict:
-        return self._request(
-            "GET", f"/v1/device/history?page={page}&limit={limit}", timeout=30.0)
+        return self._request("GET", f"/v1/device/history?page={page}&limit={limit}", timeout=30.0)
 
-    def estimate(self, sentences: int, *, auto_translate: bool = False,
-                 metadata: bool = False) -> dict:
+    def estimate(
+        self, sentences: int, *, auto_translate: bool = False, metadata: bool = False
+    ) -> dict:
         """Giá của một video ``sentences`` segment, hỏi trước khi chạy.
 
         Cùng công thức với lúc tạo hold nên con số hiện cho người dùng ở bước
         xem trước khớp đúng số bị trừ. Trả về ``{"estimated", "balance",
         "enough"}`` — máy chủ không trả bảng chi tiết theo bước xử lý.
         """
-        return self._request("POST", "/v1/device/estimate", timeout=30.0, json_body={
-            "sentences": int(sentences),
-            "autoTranslate": bool(auto_translate),
-            "metadata": bool(metadata),
-        })
+        return self._request(
+            "POST",
+            "/v1/device/estimate",
+            timeout=30.0,
+            json_body={
+                "sentences": int(sentences),
+                "autoTranslate": bool(auto_translate),
+                "metadata": bool(metadata),
+            },
+        )
 
     # ------------------------------------------------------ cấu hình app --
 
@@ -308,8 +333,7 @@ class SaasClient:
         if self._config and not force:
             return self._config
         try:
-            config = self._request("GET", "/v1/config/app", auth=False,
-                                   timeout=15.0)
+            config = self._request("GET", "/v1/config/app", auth=False, timeout=15.0)
         except SaasError:
             config = {}
         with self._lock:
@@ -333,10 +357,14 @@ class SaasClient:
 
     # ------------------------------------------------------ hold (giữ chỗ) --
 
-    def create_hold(self, hold_id: str, sentences: int,
-                    video_duration_s: float = 0.0,
-                    auto_translate: bool = True,
-                    metadata: bool = True) -> dict:
+    def create_hold(
+        self,
+        hold_id: str,
+        sentences: int,
+        video_duration_s: float = 0.0,
+        auto_translate: bool = True,
+        metadata: bool = True,
+    ) -> dict:
         """Giữ chỗ Vox cho một lượt lồng tiếng — TRỪ ĐỦ GIÁ ngay tại đây.
 
         ``hold_id`` = run_id (hash nội dung transcript) nên gọi lại cùng
@@ -348,13 +376,18 @@ class SaasClient:
         Trả về ``{"hold": {..., "encKeyHex"}, "balance", "created"}``.
         Thiếu Vox → :class:`InsufficientCreditError`.
         """
-        data = self._request("POST", "/v1/holds", timeout=30.0, json_body={
-            "holdId": str(hold_id),
-            "sentences": int(sentences),
-            "videoDurationS": float(video_duration_s),
-            "autoTranslate": bool(auto_translate),
-            "metadata": bool(metadata),
-        })
+        data = self._request(
+            "POST",
+            "/v1/holds",
+            timeout=30.0,
+            json_body={
+                "holdId": str(hold_id),
+                "sentences": int(sentences),
+                "videoDurationS": float(video_duration_s),
+                "autoTranslate": bool(auto_translate),
+                "metadata": bool(metadata),
+            },
+        )
         self._device["balance"] = int(data.get("balance") or 0)
         return data
 
@@ -386,10 +419,17 @@ class SaasClient:
 
     # -------------------------------------------------------------- AI ---
 
-    def translate(self, segments: list[dict], *, job_id: str, source_lang: str,
-                  context: dict | None = None, cps_budget: float = 12.5,
-                  prev_context: list[dict] | None = None,
-                  hold_id: str | None = None) -> dict:
+    def translate(
+        self,
+        segments: list[dict],
+        *,
+        job_id: str,
+        source_lang: str,
+        context: dict | None = None,
+        cps_budget: float = 12.5,
+        prev_context: list[dict] | None = None,
+        hold_id: str | None = None,
+    ) -> dict:
         """Dịch một lô câu.
 
         ``segments``: ``[{"id", "text", "duration", "max_chars"}]``.
@@ -411,8 +451,15 @@ class SaasClient:
         self._note_usage(data)
         return data
 
-    def analyze(self, lines: list[str], *, job_id: str, source_lang: str,
-                video_title: str = "", hold_id: str | None = None) -> dict | None:
+    def analyze(
+        self,
+        lines: list[str],
+        *,
+        job_id: str,
+        source_lang: str,
+        video_title: str = "",
+        hold_id: str | None = None,
+    ) -> dict | None:
         """Phân tích ngữ cảnh video (lượt 0). Trả về dict hoặc None."""
         payload = {
             "jobId": job_id,
@@ -422,14 +469,20 @@ class SaasClient:
         }
         if hold_id:
             payload["holdId"] = hold_id
-        data = self._request("POST", "/v1/ai/analyze", timeout=120.0,
-                             json_body=payload)
+        data = self._request("POST", "/v1/ai/analyze", timeout=120.0, json_body=payload)
         self._note_usage(data)
         return data.get("analysis")
 
-    def review(self, items: list[dict], *, job_id: str, source_lang: str,
-               context: dict | None = None, cps_budget: float = 12.5,
-               hold_id: str | None = None) -> list[dict]:
+    def review(
+        self,
+        items: list[dict],
+        *,
+        job_id: str,
+        source_lang: str,
+        context: dict | None = None,
+        cps_budget: float = 12.5,
+        hold_id: str | None = None,
+    ) -> list[dict]:
         """Rà soát các câu nghi vấn. Trả về danh sách câu ĐÃ SỬA (có thể rỗng)."""
         payload = {
             "jobId": job_id,
@@ -445,9 +498,15 @@ class SaasClient:
         self._note_usage(data)
         return data.get("segments") or []
 
-    def generate_post(self, script_original: str, script_vi: str, *,
-                      job_id: str, video_title: str = "",
-                      hold_id: str | None = None) -> dict:
+    def generate_post(
+        self,
+        script_original: str,
+        script_vi: str,
+        *,
+        job_id: str,
+        video_title: str = "",
+        hold_id: str | None = None,
+    ) -> dict:
         """Viết tiêu đề, mô tả và hashtag. Trả về dict metadata."""
         payload = {
             "jobId": job_id,
@@ -457,8 +516,7 @@ class SaasClient:
         }
         if hold_id:
             payload["holdId"] = hold_id
-        data = self._request("POST", "/v1/ai/generate-post", timeout=180.0,
-                             json_body=payload)
+        data = self._request("POST", "/v1/ai/generate-post", timeout=180.0, json_body=payload)
         self._note_usage(data)
         return data.get("metadata") or {}
 
@@ -481,7 +539,7 @@ def _app_version() -> str:
         from autodub_gui.app import APP_VERSION
 
         return APP_VERSION
-    except Exception:  # noqa: BLE001 — dùng từ CLI, không có GUI
+    except Exception:
         return "3.0.0"
 
 

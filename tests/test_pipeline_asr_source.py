@@ -1,6 +1,5 @@
-import os
 from unittest.mock import MagicMock, patch
-import pytest
+
 from autodub.config import Settings
 from autodub.pipeline import DubPipeline, DubRequest
 
@@ -33,6 +32,7 @@ def test_asr_source_with_demucs_vocals(tmp_path):
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        source = pipeline._asr_source(str(tmp_path), mock_future, pipeline.settings, default_audio, req)
+        source = pipeline._asr_source(
+            str(tmp_path), mock_future, pipeline.settings, default_audio, req
+        )
         assert "asr_vocals.wav" in source or source == str(vocals_wav)
-

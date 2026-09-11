@@ -38,14 +38,17 @@ import numpy as np
 import pytest
 from autodub.speech.tts_trimmer import trim_tts_silence
 
+
 def test_trim_tts_silence(tmp_path):
     # Tạo file wav có 200ms im lặng, 400ms âm thanh (sine wave), 200ms im lặng
     rate = 16000
     lead_silence = np.zeros(int(0.2 * rate), dtype=np.int16)
-    audio = (np.sin(2 * np.pi * 440 * np.linspace(0, 0.4, int(0.4 * rate))) * 16000).astype(np.int16)
+    audio = (np.sin(2 * np.pi * 440 * np.linspace(0, 0.4, int(0.4 * rate))) * 16000).astype(
+        np.int16
+    )
     tail_silence = np.zeros(int(0.2 * rate), dtype=np.int16)
     full = np.concatenate([lead_silence, audio, tail_silence])
-    
+
     in_wav = str(tmp_path / "raw.wav")
     out_wav = str(tmp_path / "trimmed.wav")
     with wave.open(in_wav, "wb") as w:
@@ -53,7 +56,7 @@ def test_trim_tts_silence(tmp_path):
         w.setsampwidth(2)
         w.setframerate(rate)
         w.writeframes(full.tobytes())
-        
+
     out_path, lead_s, tail_s = trim_tts_silence(in_wav, out_wav, margin_s=0.02)
     assert os.path.exists(out_path)
     assert 0.15 <= lead_s <= 0.20
@@ -89,6 +92,7 @@ Expected: PASS.
 import os
 import pytest
 from autodub.media.voice_stretch import apply_formant_preserved_stretch
+
 
 def test_formant_preserved_stretch_tempo(tmp_path):
     # Test stretching audio file with tempo 1.15x
@@ -130,10 +134,11 @@ import pytest
 from autodub.media.scene_detector import detect_scene_cuts
 from autodub.media.timing import plan_voice_placements
 
+
 def test_scene_cut_drift_guard():
     segments = [{"start": 1.0, "end": 3.0, "speech_duration": 2.0}]
-    durations = [2.8] # Vượt quá 2.0s
-    scene_cuts = [3.2] # Chuyển cảnh tại giây 3.2
+    durations = [2.8]  # Vượt quá 2.0s
+    scene_cuts = [3.2]  # Chuyển cảnh tại giây 3.2
     placements, report = plan_voice_placements(
         segments, durations, scene_cuts=scene_cuts, max_speed=1.20
     )

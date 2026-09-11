@@ -1,4 +1,5 @@
 """Language definitions: dubbing targets and source-language code maps."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,15 +11,16 @@ class TargetLang:
 
     Vietnamese is the only supported dub target.
     """
-    key: str              # short key: "vi"
-    code: str             # BCP-47 code: "vi-VN"
-    iso639_2: str         # ISO 639-2 code used for MP4 subtitle track metadata
-    name: str             # English name used in prompts/hints
-    text_field: str       # translated-text field in transcript JSON
+
+    key: str  # short key: "vi"
+    code: str  # BCP-47 code: "vi-VN"
+    iso639_2: str  # ISO 639-2 code used for MP4 subtitle track metadata
+    name: str  # English name used in prompts/hints
+    text_field: str  # translated-text field in transcript JSON
     transcript_name: str  # translated transcript filename
-    srt_name: str         # translated SRT filename
-    audio_name: str       # merged dub audio filename
-    folder_suffix: str    # suffix for timestamped work dirs
+    srt_name: str  # translated SRT filename
+    audio_name: str  # merged dub audio filename
+    folder_suffix: str  # suffix for timestamped work dirs
 
 
 TARGETS: dict[str, TargetLang] = {

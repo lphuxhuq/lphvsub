@@ -8,6 +8,7 @@ tới ``data/`` của dự án đã có video kết quả, không bao giờ ch�
 
 Không import Qt — GUI bọc lại trong worker riêng, pytest gọi thẳng.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,13 +26,22 @@ OUTPUT_VIDEO = "dubbed_video.mp4"
 #: Các tệp/thư mục trung gian ở bản cũ (layout phẳng) được phép dọn. Bản mới
 #: gom hết vào ``data/`` nên chỉ cần xóa nguyên thư mục đó.
 _LEGACY_INTERMEDIATES = (
-    "original_audio.wav", "original_audio_hq.wav",
-    "vocals.wav", "no_vocals.wav",
-    "audio_vi_full.wav", "slowed_video.mp4", "slowed_background.wav",
+    "original_audio.wav",
+    "original_audio_hq.wav",
+    "vocals.wav",
+    "no_vocals.wav",
+    "audio_vi_full.wav",
+    "slowed_video.mp4",
+    "slowed_background.wav",
     "segments",
 )
-_LEGACY_DIR_PREFIXES = ("segments_speed", "segments_slow", "segments_fit",
-                        "segments_post", "segments_timed")
+_LEGACY_DIR_PREFIXES = (
+    "segments_speed",
+    "segments_slow",
+    "segments_fit",
+    "segments_post",
+    "segments_timed",
+)
 
 
 @dataclass
@@ -40,8 +50,8 @@ class ProjectUsage:
 
     work_dir: str
     total_bytes: int = 0
-    cleanable_bytes: int = 0     # phần trung gian, dọn được khi đã có video
-    has_output: bool = False     # đã có dubbed_video.mp4 chưa
+    cleanable_bytes: int = 0  # phần trung gian, dọn được khi đã có video
+    has_output: bool = False  # đã có dubbed_video.mp4 chưa
 
 
 @dataclass
@@ -86,9 +96,11 @@ def _cleanable_paths(work_dir: str) -> list[str]:
         entries = os.listdir(work_dir)
     except OSError:
         entries = []
-    paths.extend(os.path.join(work_dir, d) for d in entries
-                 if d.startswith(_LEGACY_DIR_PREFIXES)
-                 and os.path.isdir(os.path.join(work_dir, d)))
+    paths.extend(
+        os.path.join(work_dir, d)
+        for d in entries
+        if d.startswith(_LEGACY_DIR_PREFIXES) and os.path.isdir(os.path.join(work_dir, d))
+    )
     return paths
 
 
@@ -101,8 +113,7 @@ def measure_project(work_dir: str) -> ProjectUsage:
     # cần giữ tệp trung gian để chạy tiếp từ chỗ dừng.
     if usage.has_output:
         for path in _cleanable_paths(work_dir):
-            usage.cleanable_bytes += (dir_size(path) if os.path.isdir(path)
-                                      else _file_size(path))
+            usage.cleanable_bytes += dir_size(path) if os.path.isdir(path) else _file_size(path)
     return usage
 
 
@@ -121,10 +132,9 @@ def _iter_work_dirs(output_dir: str) -> list[str]:
     """
     found: list[str] = []
     for root, dirs, files in os.walk(output_dir):
-        if (OUTPUT_VIDEO in files or DATA_SUBDIR in dirs
-                or is_legacy_layout(root)):
+        if OUTPUT_VIDEO in files or DATA_SUBDIR in dirs or is_legacy_layout(root):
             found.append(root)
-            dirs.clear()        # không đào sâu vào trong một dự án
+            dirs.clear()  # không đào sâu vào trong một dự án
     return found
 
 
@@ -165,8 +175,7 @@ def clean_project(work_dir: str) -> int:
         except OSError as e:
             logger.warning(f"Không dọn được {path}: {e}")
     if freed:
-        logger.info(f"Đã dọn tệp trung gian: {work_dir} "
-                    f"({freed / (1024 ** 2):.0f} MB)")
+        logger.info(f"Đã dọn tệp trung gian: {work_dir} ({freed / (1024**2):.0f} MB)")
     return freed
 
 
@@ -188,7 +197,7 @@ def clean_audio_intermediates(work_dir: str) -> int:
             shutil.rmtree(seg_dir)
             freed += sz
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong diskspace.py", exc_info=True)
 
     # Xóa các file wav thô trong data/
     try:
@@ -201,12 +210,12 @@ def clean_audio_intermediates(work_dir: str) -> int:
                         os.remove(fpath)
                         freed += sz
                     except OSError:
-                        pass
+                        logger.debug("Bỏ qua lỗi OSError trong diskspace.py", exc_info=True)
     except OSError:
-        pass
+        logger.debug("Bỏ qua lỗi OSError trong diskspace.py", exc_info=True)
 
     if freed:
-        logger.info(f"Đã dọn audio trung gian ({freed / (1024 ** 2):.1f} MB): {work_dir}")
+        logger.info(f"Đã dọn audio trung gian ({freed / (1024**2):.1f} MB): {work_dir}")
     return freed
 
 

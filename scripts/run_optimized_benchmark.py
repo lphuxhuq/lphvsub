@@ -3,8 +3,8 @@
 Chạy trên các dataset 10, 50, 100 câu và so sánh trực tiếp với kết quả trong
 .artifacts/benchmarks/baseline_metrics.json để lập bảng Speedup Report.
 """
+
 import json
-import os
 import shutil
 import sys
 import time
@@ -54,15 +54,17 @@ def run_comparison():
         # 1. Cold run
         stats_cold = AlignmentStats()
         t0 = time.perf_counter()
-        out_cold = align_segments(segments, str(wav_dir), "text_vi",
-                                  cache_path=cache_path, stats=stats_cold)
+        out_cold = align_segments(
+            segments, str(wav_dir), "text_vi", cache_path=cache_path, stats=stats_cold
+        )
         dur_cold = time.perf_counter() - t0
 
         # 2. Warm run
         stats_warm = AlignmentStats()
         t0 = time.perf_counter()
-        out_warm = align_segments(segments, str(wav_dir), "text_vi",
-                                  cache_path=cache_path, stats=stats_warm)
+        out_warm = align_segments(
+            segments, str(wav_dir), "text_vi", cache_path=cache_path, stats=stats_warm
+        )
         dur_warm = time.perf_counter() - t0
 
         optimized_data[f"dataset_{count}"] = {
@@ -77,8 +79,12 @@ def run_comparison():
         cold_speedup = (base_cold / dur_cold) if dur_cold > 0 else 0.0
         warm_speedup = (base_cold / dur_warm) if dur_warm > 0 else 0.0
 
-        print(f"  - Cold run: {dur_cold:.3f}s (Baseline: {base_cold:.3f}s) -> Tăng tốc: {cold_speedup:.2f}x")
-        print(f"  - Warm run: {dur_warm:.3f}s (Baseline: {base_warm:.3f}s) -> Tăng tốc so với Baseline gốc: {warm_speedup:.2f}x")
+        print(
+            f"  - Cold run: {dur_cold:.3f}s (Baseline: {base_cold:.3f}s) -> Tăng tốc: {cold_speedup:.2f}x"
+        )
+        print(
+            f"  - Warm run: {dur_warm:.3f}s (Baseline: {base_warm:.3f}s) -> Tăng tốc so với Baseline gốc: {warm_speedup:.2f}x"
+        )
 
     # Lưu kết quả optimized
     opt_file = bench_dir / "optimized_metrics.json"
@@ -106,21 +112,25 @@ def run_comparison():
         ow = optimized_data[k]["warm_run"]["total_time"]
         c_spd = bc / oc if oc > 0 else 0.0
         w_spd = bc / ow if ow > 0 else 0.0
-        lines.append(f"| **{count} câu** | {bc:.2f}s | **{oc:.2f}s** | **{c_spd:.2f}x** | **{ow:.3f}s** | **{w_spd:.1f}x** |")
+        lines.append(
+            f"| **{count} câu** | {bc:.2f}s | **{oc:.2f}s** | **{c_spd:.2f}x** | **{ow:.3f}s** | **{w_spd:.1f}x** |"
+        )
 
-    lines.extend([
-        "",
-        "## 2. Chi tiết các thành phần tối ưu (Component Breakdown)",
-        "",
-        "- **Model Loading Latency:** Nhờ `GlobalModelPool` Singleton, thời gian nạp model ở lần chạy thứ 2 trở đi giảm từ ~0.75s về **0.000s**.",
-        "- **ASR Decoding (Greedy `beam_size=1`):** Giảm ~45% chi phí tính toán giải mã trên GPU/CPU mà vẫn bảo đảm mốc thời gian chuẩn xác.",
-        "- **Acoustic Fast-Path:** Các câu ngắn (<= 0.65s, <= 2 từ) được phân tích phổ năng lượng sóng âm 10ms NumPy tức thì trong **~0.002s** thay vì phải qua ASR.",
-        "- **Persistent Deterministic Cache (SHA256):** Bỏ qua toàn bộ alignment ở lượt chạy thứ 2, cho tốc độ tức thì **> 100 câu/s**.",
-        "",
-        "## 3. Kết luận",
-        "- Mục tiêu Cold Run (>= 2x): **ĐẠT**",
-        "- Mục tiêu Warm Run (>= 5x): **ĐẠT VƯỢT MỨC**",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 2. Chi tiết các thành phần tối ưu (Component Breakdown)",
+            "",
+            "- **Model Loading Latency:** Nhờ `GlobalModelPool` Singleton, thời gian nạp model ở lần chạy thứ 2 trở đi giảm từ ~0.75s về **0.000s**.",
+            "- **ASR Decoding (Greedy `beam_size=1`):** Giảm ~45% chi phí tính toán giải mã trên GPU/CPU mà vẫn bảo đảm mốc thời gian chuẩn xác.",
+            "- **Acoustic Fast-Path:** Các câu ngắn (<= 0.65s, <= 2 từ) được phân tích phổ năng lượng sóng âm 10ms NumPy tức thì trong **~0.002s** thay vì phải qua ASR.",
+            "- **Persistent Deterministic Cache (SHA256):** Bỏ qua toàn bộ alignment ở lượt chạy thứ 2, cho tốc độ tức thì **> 100 câu/s**.",
+            "",
+            "## 3. Kết luận",
+            "- Mục tiêu Cold Run (>= 2x): **ĐẠT**",
+            "- Mục tiêu Warm Run (>= 5x): **ĐẠT VƯỢT MỨC**",
+        ]
+    )
 
     with open(report_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

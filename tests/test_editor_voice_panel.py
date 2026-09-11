@@ -1,6 +1,3 @@
-import pytest
-from PySide6.QtWidgets import QApplication
-
 from autodub_gui.pages.editor_panels import VoicePanel
 
 

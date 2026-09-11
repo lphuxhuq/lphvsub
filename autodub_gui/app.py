@@ -3,6 +3,7 @@
 Bố cục: thanh bên trái, thanh tiêu đề và vùng nội dung xếp chồng. Mỗi trang
 chỉ được dựng khi người dùng mở lần đầu, nhờ vậy ứng dụng khởi động nhanh.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,8 +16,12 @@ _frozen.init()  # phải chạy trước mọi thứ khác: PATH, PLAYWRIGHT_BRO
 from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QIcon, QKeyEvent
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QApplication,
+    QHBoxLayout,
+    QMainWindow,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub.config import Settings
@@ -34,59 +39,114 @@ from autodub import __version__ as APP_VERSION
 # -- Danh mục trang ----------------------------------------------------
 ROW_HOME, ROW_NEW, ROW_PROJECTS, ROW_BATCH, ROW_DOWNLOAD = 0, 1, 2, 3, 4
 ROW_SETTINGS, ROW_HELP = 5, 6
-ROW_EDITOR = 7          # trang ngữ cảnh (ẩn header khi mở)
+ROW_EDITOR = 7  # trang ngữ cảnh (ẩn header khi mở)
 
 # Trang công cụ (mới — trang riêng, không phải shortcut vào Settings)
-ROW_VOICE    = 8    # Giọng đọc AI
-ROW_TRANSLATE = 9   # Dịch thuật
-ROW_SUBTITLE  = 10  # Phụ đề
-ROW_QUALITY   = 11  # Báo cáo chất lượng
-ROW_GEMINI_SRT = 12 # Dịch SRT Gemini Pro (Web Tool)
+ROW_VOICE = 8  # Giọng đọc AI
+ROW_TRANSLATE = 9  # Dịch thuật
+ROW_SUBTITLE = 10  # Phụ đề
+ROW_QUALITY = 11  # Báo cáo chất lượng
+ROW_GEMINI_SRT = 12  # Dịch SRT Gemini Pro (Web Tool)
 
 # Trang launcher editor (trung gian — không hiện trong sidebar)
 ROW_EDITOR_LAUNCHER = 13
 
-ROW_ACCOUNT = 14    # Tài khoản: ví Vox, kích hoạt mã, lịch sử
+ROW_ACCOUNT = 14  # Tài khoản: ví Vox, kích hoạt mã, lịch sử
 
 # (số thứ tự, nhãn ở thanh bên, tiêu đề trang, mô tả trang, biểu tượng, nhóm)
 PAGES: list[tuple[int, str, str, str, object, str]] = [
     # Nhóm "main" — LUỒNG LÀM VIỆC
-    (ROW_HOME,      "Trang chủ",         "Chào {name}!",
-     "Biến video của bạn thành nội dung tiếng Việt tự nhiên",
-     icons.home, "main"),
-    (ROW_NEW,       "Tạo dự án",         "Tạo dự án mới",
-     "Lồng tiếng video chuyên nghiệp với AI",
-     icons.file_plus, "main"),
-    (ROW_PROJECTS,  "Dự án",             "Dự án của tôi",
-     "Toàn bộ video đã và đang xử lý",
-     icons.folder, "main"),
-    (ROW_EDITOR,    "Trình chỉnh sửa",   "Trình chỉnh sửa",
-     "Chỉnh sửa phụ đề, giọng đọc và xuất video",
-     icons.edit, "main"),
-    (ROW_BATCH,     "Xử lý hàng loạt",   "Xử lý hàng loạt",
-     "Lồng tiếng nhiều video cùng lúc",
-     icons.layers, "main"),
-    (ROW_DOWNLOAD,  "Tải xuống",         "Tải xuống",
-     "Chỉ tải video về máy, không lồng tiếng",
-     icons.download, "main"),
+    (
+        ROW_HOME,
+        "Trang chủ",
+        "Chào {name}!",
+        "Biến video của bạn thành nội dung tiếng Việt tự nhiên",
+        icons.home,
+        "main",
+    ),
+    (
+        ROW_NEW,
+        "Tạo dự án",
+        "Tạo dự án mới",
+        "Lồng tiếng video chuyên nghiệp với AI",
+        icons.file_plus,
+        "main",
+    ),
+    (
+        ROW_PROJECTS,
+        "Dự án",
+        "Dự án của tôi",
+        "Toàn bộ video đã và đang xử lý",
+        icons.folder,
+        "main",
+    ),
+    (
+        ROW_EDITOR,
+        "Trình chỉnh sửa",
+        "Trình chỉnh sửa",
+        "Chỉnh sửa phụ đề, giọng đọc và xuất video",
+        icons.edit,
+        "main",
+    ),
+    (
+        ROW_BATCH,
+        "Xử lý hàng loạt",
+        "Xử lý hàng loạt",
+        "Lồng tiếng nhiều video cùng lúc",
+        icons.layers,
+        "main",
+    ),
+    (
+        ROW_DOWNLOAD,
+        "Tải xuống",
+        "Tải xuống",
+        "Chỉ tải video về máy, không lồng tiếng",
+        icons.download,
+        "main",
+    ),
     # Nhóm "tools" — CÔNG CỤ (trang riêng)
-    (ROW_VOICE,     "Giọng đọc AI",      "Giọng đọc AI",
-     "Quản lý và tùy chỉnh giọng đọc",
-     icons.user, "tools"),
-    (ROW_TRANSLATE, "Dịch thuật",        "Dịch thuật",
-     "Cấu hình engine dịch và kết nối API",
-     icons.globe, "tools"),
-    (ROW_SUBTITLE,  "Phụ đề",            "Phụ đề",
-     "Tùy chỉnh kiểu dáng và bố cục phụ đề",
-     icons.captions, "tools"),
+    (
+        ROW_VOICE,
+        "Giọng đọc AI",
+        "Giọng đọc AI",
+        "Quản lý và tùy chỉnh giọng đọc",
+        icons.user,
+        "tools",
+    ),
+    (
+        ROW_TRANSLATE,
+        "Dịch thuật",
+        "Dịch thuật",
+        "Cấu hình engine dịch và kết nối API",
+        icons.globe,
+        "tools",
+    ),
+    (
+        ROW_SUBTITLE,
+        "Phụ đề",
+        "Phụ đề",
+        "Tùy chỉnh kiểu dáng và bố cục phụ đề",
+        icons.captions,
+        "tools",
+    ),
     # ROW_QUALITY, ROW_GEMINI_SRT, ROW_ACCOUNT: ẩn khỏi sidebar (page code vẫn còn)
     # Nhóm "second" — HỆ THỐNG
-    (ROW_SETTINGS,  "Cài đặt",           "Cài đặt",
-     "Tùy chỉnh hệ thống theo nhu cầu của bạn",
-     icons.gear, "second"),
-    (ROW_HELP,      "Trợ giúp",          "Trợ giúp",
-     "Hướng dẫn, khắc phục sự cố, thông tin phiên bản",
-     icons.help_circle, "second"),
+    (
+        ROW_SETTINGS,
+        "Cài đặt",
+        "Cài đặt",
+        "Tùy chỉnh hệ thống theo nhu cầu của bạn",
+        icons.gear,
+        "second",
+    ),
+    (
+        ROW_HELP,
+        "Trợ giúp",
+        "Trợ giúp",
+        "Hướng dẫn, khắc phục sự cố, thông tin phiên bản",
+        icons.help_circle,
+        "second",
+    ),
 ]
 
 PAGE_COUNT = len({p[0] for p in PAGES} | {ROW_EDITOR, ROW_EDITOR_LAUNCHER})
@@ -104,18 +164,27 @@ _MIN_W, _MIN_H = 1024, 680
 _START_W, _START_H = 1360, 820
 _STARTUP_RECHECK_MS = 30 * 60 * 1000
 _SMOKE_DELAY_MS = 1500
-_VIDEO_PROBE_MS = 4000     # thời gian chờ tối đa khi thử giải mã video
+_VIDEO_PROBE_MS = 4000  # thời gian chờ tối đa khi thử giải mã video
 
 # Dựng sẵn các trang sau khi cửa sổ hiện lên: trang hay dùng trước, trang
 # nặng nhất (Cài đặt) dựng sớm để lần bấm đầu tiên không phải chờ.
-_PREWARM_ORDER = (ROW_HELP, ROW_SETTINGS, ROW_NEW, ROW_PROJECTS,
-                  ROW_BATCH, ROW_DOWNLOAD, ROW_EDITOR,
-                  ROW_VOICE, ROW_TRANSLATE, ROW_SUBTITLE,
-                  ROW_EDITOR_LAUNCHER)
-_PREWARM_START_MS = 700     # chờ khung hình đầu vẽ xong rồi mới dựng
-_PREWARM_GAP_MS = 250       # nghỉ giữa hai trang để giao diện luôn mượt
+_PREWARM_ORDER = (
+    ROW_HELP,
+    ROW_SETTINGS,
+    ROW_NEW,
+    ROW_PROJECTS,
+    ROW_BATCH,
+    ROW_DOWNLOAD,
+    ROW_EDITOR,
+    ROW_VOICE,
+    ROW_TRANSLATE,
+    ROW_SUBTITLE,
+    ROW_EDITOR_LAUNCHER,
+)
+_PREWARM_START_MS = 700  # chờ khung hình đầu vẽ xong rồi mới dựng
+_PREWARM_GAP_MS = 250  # nghỉ giữa hai trang để giao diện luôn mượt
 _PREFLIGHT_DELAY_MS = 1200  # kiểm tra máy sau khi cửa sổ đã hiện xong
-_FIRST_RUN_DELAY_MS = 400   # màn chào lần đầu, ngay sau khung hình đầu tiên
+_FIRST_RUN_DELAY_MS = 400  # màn chào lần đầu, ngay sau khung hình đầu tiên
 _UPDATE_CHECK_DELAY_MS = 5000  # hỏi bản mới sau cùng, khi mọi thứ đã yên
 
 
@@ -183,6 +252,7 @@ class MainWindow(QMainWindow):
         """Kích hoạt nạp trước các model AI (Paraformer đầu tiên, Whisper, Demucs...) ở luồng nền."""
         try:
             from autodub.model_preloader import preload_models_async
+
             settings = self._fresh_settings()
             preload_models_async(
                 settings,
@@ -205,7 +275,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Model AI: {name} đã sẵn sàng", 3000)
 
     def _on_model_preload_done(self, final_status: dict[str, str]) -> None:
-        self.statusBar().showMessage("Toàn bộ Model AI đã sẵn sàng (Không còn độ trễ chờ nạp)", 8000)
+        self.statusBar().showMessage(
+            "Toàn bộ Model AI đã sẵn sàng (Không còn độ trễ chờ nạp)", 8000
+        )
 
     def _prewarm_next(self) -> None:
         while self._prewarm_queue:
@@ -214,7 +286,7 @@ class MainWindow(QMainWindow):
                 continue
             try:
                 self._ensure_page(row)
-            except Exception:  # noqa: BLE001 — dựng sẵn hỏng thì để lúc bấm dựng lại
+            except Exception:
                 self._page_widgets.pop(row, None)
             break
         if self._prewarm_queue:
@@ -230,8 +302,8 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self) -> Sidebar:
         # ROW_ACCOUNT đã bị ẩn khỏi PAGES, không cần lọc thêm.
         rows = list(PAGES)
-        main   = [(p[0], p[1], p[4]) for p in rows if p[5] == "main"]
-        tools  = [(p[0], p[1], p[4]) for p in rows if p[5] == "tools"]
+        main = [(p[0], p[1], p[4]) for p in rows if p[5] == "main"]
+        tools = [(p[0], p[1], p[4]) for p in rows if p[5] == "tools"]
         second = [(p[0], p[1], p[4]) for p in rows if p[5] == "second"]
         sidebar = Sidebar(main, tools, second, APP_VERSION)
         sidebar.page_requested.connect(self.switch_page)
@@ -242,8 +314,7 @@ class MainWindow(QMainWindow):
 
     def _open_tool(self, key: str) -> None:
         """Compat: nếu còn code cũ gọi _open_tool, chuyển sang trang tương ứng."""
-        mapping = {"voice": ROW_VOICE, "translate": ROW_TRANSLATE,
-                   "subtitle": ROW_SUBTITLE}
+        mapping = {"voice": ROW_VOICE, "translate": ROW_TRANSLATE, "subtitle": ROW_SUBTITLE}
         row = mapping.get(key, ROW_SETTINGS)
         if row == ROW_SETTINGS:
             self.switch_page(ROW_SETTINGS)
@@ -276,7 +347,8 @@ class MainWindow(QMainWindow):
             f"QStatusBar {{ background: {tokens.BG_SIDEBAR}; "
             f"color: {tokens.TEXT_SECONDARY}; "
             f"border-top: 1px solid {tokens.BORDER_SUBTLE}; "
-            f"font-size: {tokens.FS_LABEL}px; padding: 4px 12px; }}")
+            f"font-size: {tokens.FS_LABEL}px; padding: 4px 12px; }}"
+        )
         bar.showMessage("Sẵn sàng")
 
     # -- Điều hướng ----------------------------------------------------
@@ -294,16 +366,17 @@ class MainWindow(QMainWindow):
         """Nạp mô đun của trang đúng lúc cần, giúp ứng dụng mở nhanh hơn."""
         if row == ROW_HOME:
             from autodub_gui.pages.home_page import HomePage
+
             page = HomePage(self._fresh_settings, self.pages)
             page.create_requested.connect(self._start_new_project)
             page.projects_requested.connect(lambda: self.switch_page(ROW_PROJECTS))
             page.edit_requested.connect(self.open_editor)
             page.batch_requested.connect(lambda: self.switch_page(ROW_BATCH))
             page.voices_requested.connect(lambda: self._open_tool("voice"))
-            page.settings_requested.connect(
-                lambda: self.switch_page(ROW_SETTINGS))
+            page.settings_requested.connect(lambda: self.switch_page(ROW_SETTINGS))
         elif row == ROW_NEW:
             from autodub_gui.pages.new_project_page import NewProjectPage
+
             page = NewProjectPage(self._fresh_settings, self.pages)
             page.settings_needed.connect(lambda _m: self.switch_page(ROW_SETTINGS))
             page.edit_requested.connect(self.open_editor)
@@ -311,54 +384,68 @@ class MainWindow(QMainWindow):
             page.projects_requested.connect(lambda: self.switch_page(ROW_PROJECTS))
         elif row == ROW_PROJECTS:
             from autodub_gui.pages.projects_page import ProjectsPage
+
             page = ProjectsPage(self._fresh_settings, self.pages)
             page.edit_requested.connect(self.open_editor)
             page.create_requested.connect(lambda: self.switch_page(ROW_NEW))
             page.settings_requested.connect(lambda: self.switch_page(ROW_SETTINGS))
         elif row == ROW_BATCH:
             from autodub_gui.pages.batch_page import BatchPage
+
             page = BatchPage(self._fresh_settings, self.pages)
             page.settings_needed.connect(lambda _m: self.switch_page(ROW_SETTINGS))
         elif row == ROW_DOWNLOAD:
             from autodub_gui.pages.download_page import DownloadPage
+
             page = DownloadPage(self.pages)
         elif row == ROW_SETTINGS:
             from autodub_gui.pages.settings_page import SettingsPage
+
             page = SettingsPage(self.pages)
             page.saved.connect(self._on_settings_saved)
         elif row == ROW_HELP:
             from autodub_gui.pages.help_page import HelpPage
+
             page = HelpPage(self._fresh_settings, self.pages)
             page.settings_requested.connect(lambda: self.switch_page(ROW_SETTINGS))
         elif row == ROW_EDITOR:
             from autodub_gui.pages.editor_page import EditorPage
+
             page = EditorPage(self._fresh_settings, self.pages)
             page.settings_needed.connect(lambda _m: self.switch_page(ROW_SETTINGS))
             page.close_requested.connect(lambda: self.switch_page(ROW_PROJECTS))
         elif row == ROW_VOICE:
             from autodub_gui.pages.voice_tool_page import VoiceToolPage
+
             page = VoiceToolPage(self._fresh_settings, self.pages)
         elif row == ROW_TRANSLATE:
             from autodub_gui.pages.translate_tool_page import TranslateToolPage
+
             page = TranslateToolPage(self._fresh_settings, self.pages)
         elif row == ROW_SUBTITLE:
             from autodub_gui.pages.subtitle_tool_page import SubtitleToolPage
+
             page = SubtitleToolPage(self._fresh_settings, self.pages)
         elif row == ROW_QUALITY:
             from autodub_gui.pages.quality_page import QualityPage
+
             page = QualityPage(self._fresh_settings, self.pages)
         elif row == ROW_GEMINI_SRT:
             from autodub_gui.pages.gemini_srt_page import GeminiSrtPage
+
             page = GeminiSrtPage(self._fresh_settings, self.pages)
         elif row == ROW_ACCOUNT:
             from autodub_gui.pages.account_page import AccountPage
+
             page = AccountPage(self._fresh_settings, self.pages)
         elif row == ROW_EDITOR_LAUNCHER:
             from autodub_gui.pages.editor_launcher_page import EditorLauncherPage
+
             page = EditorLauncherPage(self._fresh_settings, self.pages)
             page.open_requested.connect(self.open_editor)
         else:
             from autodub_gui.ui.empty import EmptyState
+
             page = EmptyState("Trang không xác định", f"ROW={row}")
         return page
 
@@ -386,10 +473,11 @@ class MainWindow(QMainWindow):
             page.on_breakpoint(self._breakpoint)
         # Fade in trang mới — motivated: state transition mượt mà, không chớp nháy
         try:
-            from autodub_gui.ui.animations import fade_in
             from autodub_gui import tokens as _tk
+            from autodub_gui.ui.animations import fade_in
+
             fade_in(page, duration=_tk.ANIM_MID, from_opacity=0.2)
-        except Exception:  # noqa: BLE001 — animation không critical
+        except Exception:
             pass
 
     def _row_of(self, page: QWidget) -> int:
@@ -405,6 +493,7 @@ class MainWindow(QMainWindow):
         if not page.has_unsaved_changes():
             return False
         from autodub_gui.ui.modal import confirm_discard
+
         return not confirm_discard(self, "Trang này")
 
     def _apply_header(self, row: int) -> None:
@@ -415,6 +504,7 @@ class MainWindow(QMainWindow):
         self.header.setVisible(True)
         _row, _label, title, subtitle, _icon, _group = _PAGE_BY_ROW[row]
         from autodub_gui.shell import display_name
+
         self.header.set_page(title.format(name=display_name()), subtitle)
         self.header.set_actions(self._header_actions(row))
 
@@ -447,6 +537,7 @@ class MainWindow(QMainWindow):
         launcher = self._page_widgets.get(ROW_EDITOR_LAUNCHER)
         if launcher and hasattr(launcher, "set_current_project"):
             from pathlib import Path
+
             title = Path(work_dir).stem
             launcher.set_current_project(work_dir, title)
 
@@ -500,7 +591,7 @@ class MainWindow(QMainWindow):
 
         try:
             repo = Settings.load(override=True).update_repo
-        except Exception:  # noqa: BLE001 — cấu hình hỏng thì bỏ qua lượt này
+        except Exception:
             return
         if not repo:
             return
@@ -515,7 +606,8 @@ class MainWindow(QMainWindow):
         TOASTS.info(
             f"Có bản NovaSub mới v{info.version} (bạn đang dùng v{APP_VERSION}).",
             action_label="Tải bản mới",
-            on_action=lambda url=info.url: open_url(url))
+            on_action=lambda url=info.url: open_url(url),
+        )
 
     def _show_notifications(self) -> None:
         self.popup.show_under(self.header.bell.anchor())
@@ -524,7 +616,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(activity.text, 6000)
 
     # -- Kích thước cửa sổ ---------------------------------------------
-    def resizeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         width = self.width()
         for threshold, name, sidebar_w in _BREAKPOINTS:
@@ -550,17 +642,19 @@ class MainWindow(QMainWindow):
         """Đọc lại tệp cấu hình mỗi lần chạy để thay đổi có hiệu lực ngay."""
         return Settings.load(override=True)
 
-    def closeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
-        running = [p for p in self._built_pages()
-                   if hasattr(p, "is_running") and p.is_running()]
+    def closeEvent(self, event) -> None:
+        running = [p for p in self._built_pages() if hasattr(p, "is_running") and p.is_running()]
         if running and not self._force_close:
             confirmed, _ = ConfirmDialog.ask(
-                self, "Đang có việc chạy dở",
+                self,
+                "Đang có việc chạy dở",
                 "Một tác vụ vẫn đang chạy. Nếu thoát bây giờ, phần đang làm "
                 "sẽ dừng lại — nhưng tiến độ đã lưu trên đĩa vẫn còn, lần sau "
                 "bạn có thể chạy tiếp từ chỗ dừng. Thoát luôn chứ?",
-                kind="warning", confirm_label="Dừng và thoát",
-                cancel_label="Ở lại")
+                kind="warning",
+                confirm_label="Dừng và thoát",
+                cancel_label="Ở lại",
+            )
             if not confirmed:
                 event.ignore()
                 return
@@ -571,14 +665,14 @@ class MainWindow(QMainWindow):
                 page.cleanup()
         # Chờ mọi QThread phụ xong — hủy QThread đang chạy lúc teardown
         # sẽ làm Qt crash cứng (exit code 0xC0000409).
-        for worker in (self._startup_watcher, self._status_worker,
-                       self._update_worker):
+        for worker in (self._startup_watcher, self._status_worker, self._update_worker):
             if worker is not None and worker.isRunning():
                 worker.wait(5000)
 
         # Dọn dẹp an toàn Model Preloader Pool
         try:
             from autodub.model_preloader import close_global_models
+
             close_global_models()
         except Exception:
             pass
@@ -589,13 +683,19 @@ class MainWindow(QMainWindow):
 class _NavKeyFilter(QObject):
     """Chặn ký tự rác do bộ gõ tiếng Việt sinh ra khi bấm phím mũi tên."""
 
-    _NAV_KEYS = {Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up,
-                 Qt.Key.Key_Down, Qt.Key.Key_Home, Qt.Key.Key_End,
-                 Qt.Key.Key_PageUp, Qt.Key.Key_PageDown}
+    _NAV_KEYS = {
+        Qt.Key.Key_Left,
+        Qt.Key.Key_Right,
+        Qt.Key.Key_Up,
+        Qt.Key.Key_Down,
+        Qt.Key.Key_Home,
+        Qt.Key.Key_End,
+        Qt.Key.Key_PageUp,
+        Qt.Key.Key_PageDown,
+    }
 
-    def eventFilter(self, obj, event) -> bool:  # noqa: N802 — theo quy ước của Qt
-        if (event.type() == QEvent.Type.KeyPress
-                and event.key() in self._NAV_KEYS and event.text()):
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.Type.KeyPress and event.key() in self._NAV_KEYS and event.text():
             clean = QKeyEvent(event.type(), event.key(), event.modifiers())
             QApplication.sendEvent(obj, clean)
             return True
@@ -626,12 +726,17 @@ def _smoke_report(window: MainWindow) -> int:
         "vieneu_installed": settings.vieneu_configured(),
         "voice_count": len(catalog(settings)),
         "translate_enabled": settings.translate_enabled,
-        "worker_scripts_found": all(os.path.isfile(p) for p in (
-            __import__("autodub.speech.tts.vieneu_vi",
-                       fromlist=["_WORKER_SCRIPT"])._WORKER_SCRIPT,
-            __import__("autodub.media.vocal_separator",
-                       fromlist=["_WORKER_SCRIPT"])._WORKER_SCRIPT,
-        )),
+        "worker_scripts_found": all(
+            os.path.isfile(p)
+            for p in (
+                __import__(
+                    "autodub.speech.tts.vieneu_vi", fromlist=["_WORKER_SCRIPT"]
+                )._WORKER_SCRIPT,
+                __import__(
+                    "autodub.media.vocal_separator", fromlist=["_WORKER_SCRIPT"]
+                )._WORKER_SCRIPT,
+            )
+        ),
         "yt_dlp_importable": True,
         "faster_whisper_importable": True,
         "playwright_importable": True,
@@ -644,9 +749,14 @@ def _smoke_report(window: MainWindow) -> int:
     _probe_video_playback(checks, settings)
     _probe_env_file(checks)
 
-    required = ("gui_constructed", "env_path_writable", "yt_dlp_importable",
-                "worker_scripts_found",
-                "new_modules_importable", "multimedia_importable")
+    required = (
+        "gui_constructed",
+        "env_path_writable",
+        "yt_dlp_importable",
+        "worker_scripts_found",
+        "new_modules_importable",
+        "multimedia_importable",
+    )
     checks["ok"] = all(checks.get(k) for k in required)
 
     out = os.path.join(app_root(), "smoke_test_result.json")
@@ -664,34 +774,35 @@ def _probe_optional_imports(checks: dict) -> None:
     for key, module in probes.items():
         try:
             __import__(module)
-        except Exception:  # noqa: BLE001 — thiếu thư viện tùy chọn là bình thường
+        except Exception:
             checks[key] = False
     try:
         from playwright.sync_api import sync_playwright  # noqa: F401
-    except Exception:  # noqa: BLE001
+    except Exception:
         checks["playwright_importable"] = False
     try:
         from PySide6.QtMultimedia import QMediaPlayer  # noqa: F401
         from PySide6.QtMultimediaWidgets import QGraphicsVideoItem  # noqa: F401
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         checks["multimedia_importable"] = False
         checks["multimedia_error"] = str(e)
     try:
         from autodub.media.timing import apply_soft_timing  # noqa: F401
+        from autodub.saas_client import SaasClient  # noqa: F401
         from autodub.speech.align import align_segments  # noqa: F401
         from autodub.speech.tts.voices import catalog  # noqa: F401
         from autodub.text.ass_karaoke import build_karaoke_ass  # noqa: F401
         from autodub.text.subtitles import refresh_subtitles  # noqa: F401
-        from autodub.saas_client import SaasClient  # noqa: F401
         from autodub.text.translate_review import review_translations  # noqa: F401
         from autodub.text.translate_saas import translate_segments  # noqa: F401
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         checks["new_modules_importable"] = False
         checks["new_modules_error"] = str(e)
     try:
         from autodub_gui.fonts import load_app_fonts
+
         checks["app_fonts_loaded"] = len(load_app_fonts())
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
@@ -746,23 +857,24 @@ def _probe_env_file(checks: dict) -> None:
     """Kiểm tra tệp cấu hình có ghi được không."""
     try:
         from autodub_gui.env_store import ENV_PATH, read_env, write_env
+
         before = read_env()
         write_env({"_SMOKE_TEST": "1"})
         checks["env_path_writable"] = read_env().get("_SMOKE_TEST") == "1"
         write_env({"_SMOKE_TEST": ""})
         checks["env_path"] = ENV_PATH
         checks["env_existed_before"] = bool(before)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         checks["env_path_writable"] = False
         checks["env_error"] = str(e)
 
 
-def _noop_startup_watch(window: MainWindow) -> "QTimer":
+def _noop_startup_watch(window: MainWindow) -> QTimer:
     """Không kiểm tra license/server — trả về timer rỗng để không vỡ smoke test."""
     from PySide6.QtCore import QTimer as _QTimer
+
     timer = _QTimer(window)
     return timer
-
 
 
 def main() -> int:
@@ -772,13 +884,14 @@ def main() -> int:
     # Phải gọi TRƯỚC khi tạo QApplication (trước khi có cửa sổ đầu tiên).
     if sys.platform == "win32":
         import ctypes
+
         try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "NovaSub.App")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NovaSub.App")
         except (AttributeError, OSError):
             pass  # Windows quá cũ — taskbar dùng icon mặc định, không sao
     QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setStyle("Fusion")
@@ -787,6 +900,7 @@ def main() -> int:
     app.installEventFilter(nav_filter)
 
     from autodub.utils import bundled_file
+
     icon_path = bundled_file("logo.ico")
     if os.path.isfile(icon_path):
         app.setWindowIcon(QIcon(icon_path))
@@ -794,22 +908,27 @@ def main() -> int:
         app.setWindowIcon(QIcon(icons.brand_logo(64)))
 
     from autodub_gui.fonts import load_app_fonts
+
     load_app_fonts()
 
     # Ghi log ra tệp + lưới an toàn crash — trước khi dựng cửa sổ để lỗi
     # sớm nhất cũng được ghi lại.
     from autodub.utils import init_file_logging
+
     init_file_logging()
     from autodub_gui.crash import install_crash_handler
+
     install_crash_handler()
 
     # Tạo .env từ .env.example nếu chưa có — tránh Settings.load() dùng toàn
     # giá trị mặc định mà không ghi lại được gì cho lần sau.
     from autodub.utils import app_root as _app_root
+
     _env_path = os.path.join(_app_root(), ".env")
     _env_example = os.path.join(_app_root(), ".env.example")
     if not os.path.isfile(_env_path) and os.path.isfile(_env_example):
         import shutil as _shutil
+
         try:
             _shutil.copy(_env_example, _env_path)
         except OSError:
@@ -824,8 +943,9 @@ def main() -> int:
             os.environ["PATH"] = _local_bin + os.pathsep + _cur_path
 
     settings = Settings.load()
-    window = MainWindow()      # phím tắt được cửa sổ tự đăng ký khi dựng
+    window = MainWindow()  # phím tắt được cửa sổ tự đăng ký khi dựng
     from autodub.model_preloader import close_global_models
+
     app.aboutToQuit.connect(close_global_models)
     window.show()
 
@@ -834,14 +954,16 @@ def main() -> int:
     if os.environ.get("AUTODUB_SMOKE") != "1":
         try:
             from autodub_gui.setup_wizard import maybe_show_setup_wizard
+
             maybe_show_setup_wizard(window)
-        except Exception:  # noqa: BLE001 — wizard hỏng không được chặn app
+        except Exception:
             pass
 
     # Tải + enroll voice library nếu chưa có (chỉ khi VieNeu đã cài).
     # Chạy SAU wizard để không chen vào giữa wizard đang mở.
     if os.environ.get("AUTODUB_SMOKE") != "1":
         from autodub_gui.voice_setup_dialog import VoiceSetupDialog
+
         VoiceSetupDialog.ensure_voices(settings, window)
 
     startup_timer = _noop_startup_watch(window)

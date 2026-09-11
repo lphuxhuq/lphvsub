@@ -7,13 +7,18 @@ Nguyên tắc quan trọng: khi con trỏ đang ở trong một ô nhập chữ,
 gồm một ký tự (như phím cách) phải nhường lại cho ô nhập, nếu không người
 dùng sẽ không gõ được tiếng Việt.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QLineEdit, QPlainTextEdit, QTextEdit, QWidget,
+    QApplication,
+    QLineEdit,
+    QPlainTextEdit,
+    QTextEdit,
+    QWidget,
 )
 
 
@@ -77,8 +82,7 @@ def typing_in_text_field() -> bool:
     return isinstance(widget, _TEXT_WIDGETS)
 
 
-def bind(parent: QWidget, keys: str, callback, *,
-         skip_when_typing: bool = False) -> QShortcut:
+def bind(parent: QWidget, keys: str, callback, *, skip_when_typing: bool = False) -> QShortcut:
     """Gắn một phím tắt vào widget cha và trả về đối tượng vừa tạo."""
     shortcut = QShortcut(QKeySequence(keys), parent)
 
@@ -94,23 +98,23 @@ def bind(parent: QWidget, keys: str, callback, *,
 def install_global_shortcuts(window) -> list[QShortcut]:
     """Đăng ký các phím tắt dùng chung cho cửa sổ chính."""
     from autodub_gui.app import (
-        ROW_BATCH, ROW_DOWNLOAD, ROW_HELP, ROW_HOME, ROW_NEW, ROW_PROJECTS,
+        ROW_BATCH,
+        ROW_DOWNLOAD,
+        ROW_HELP,
+        ROW_HOME,
+        ROW_NEW,
+        ROW_PROJECTS,
         ROW_SETTINGS,
     )
 
-    rows = (ROW_HOME, ROW_NEW, ROW_PROJECTS, ROW_BATCH, ROW_DOWNLOAD,
-            ROW_SETTINGS, ROW_HELP)
+    rows = (ROW_HOME, ROW_NEW, ROW_PROJECTS, ROW_BATCH, ROW_DOWNLOAD, ROW_SETTINGS, ROW_HELP)
     created: list[QShortcut] = []
-    created.append(bind(window, "Ctrl+N",
-                        lambda: window.switch_page(ROW_NEW)))
-    created.append(bind(window, "Ctrl+,",
-                        lambda: window.switch_page(ROW_SETTINGS)))
-    created.append(bind(window, "F1",
-                        lambda: window.switch_page(ROW_HELP)))
+    created.append(bind(window, "Ctrl+N", lambda: window.switch_page(ROW_NEW)))
+    created.append(bind(window, "Ctrl+,", lambda: window.switch_page(ROW_SETTINGS)))
+    created.append(bind(window, "F1", lambda: window.switch_page(ROW_HELP)))
     for index, row in enumerate(rows, start=1):
-        created.append(bind(window, f"Ctrl+{index}",
-                            lambda r=row: window.switch_page(r)))
-    window._shortcuts = created      # giữ tham chiếu để Qt không thu hồi
+        created.append(bind(window, f"Ctrl+{index}", lambda r=row: window.switch_page(r)))
+    window._shortcuts = created  # giữ tham chiếu để Qt không thu hồi
     return created
 
 
@@ -123,11 +127,9 @@ def install_editor_shortcuts(page) -> list[QShortcut]:
     created = [
         bind(page, "Space", page.toggle_play, skip_when_typing=True),
         # J/K/L — bộ phím quen thuộc của dân dựng phim (lùi/dừng/tiến).
-        bind(page, "J", lambda: page.player.nudge_back(big=True),
-             skip_when_typing=True),
+        bind(page, "J", lambda: page.player.nudge_back(big=True), skip_when_typing=True),
         bind(page, "K", page.toggle_play, skip_when_typing=True),
-        bind(page, "L", lambda: page.player.nudge_forward(big=True),
-             skip_when_typing=True),
+        bind(page, "L", lambda: page.player.nudge_forward(big=True), skip_when_typing=True),
         bind(page, "Delete", page.delete_selected, skip_when_typing=True),
         bind(page, "Ctrl+S", page.save_now),
         bind(page, "Ctrl+Z", page.undo),
@@ -137,14 +139,12 @@ def install_editor_shortcuts(page) -> list[QShortcut]:
         bind(page, "Ctrl+E", page.open_export_tab),
         bind(page, "Ctrl+F", page.focus_search),
         bind(page, "F11", page.player.open_fullscreen),
-        bind(page, "Left", lambda: page.player.nudge_back(),
-             skip_when_typing=True),
-        bind(page, "Right", lambda: page.player.nudge_forward(),
-             skip_when_typing=True),
-        bind(page, "Shift+Left", lambda: page.player.nudge_back(big=True),
-             skip_when_typing=True),
-        bind(page, "Shift+Right", lambda: page.player.nudge_forward(big=True),
-             skip_when_typing=True),
+        bind(page, "Left", lambda: page.player.nudge_back(), skip_when_typing=True),
+        bind(page, "Right", lambda: page.player.nudge_forward(), skip_when_typing=True),
+        bind(page, "Shift+Left", lambda: page.player.nudge_back(big=True), skip_when_typing=True),
+        bind(
+            page, "Shift+Right", lambda: page.player.nudge_forward(big=True), skip_when_typing=True
+        ),
         bind(page, "Ctrl+Left", page.player.previous_segment),
         bind(page, "Ctrl+Right", page.player.next_segment),
     ]

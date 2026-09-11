@@ -1,13 +1,13 @@
 """Benchmark so sánh beam_size=1 (Greedy) và beam_size=2 của Whisper Alignment."""
+
 import math
-import os
 import struct
 import time
 import wave
-from pathlib import Path
+
 import pytest
 
-from autodub.speech.align import _load_align_model, _asr_words, ALIGN_MODEL
+from autodub.speech.align import _asr_words, _load_align_model
 
 
 def _write_complex_tone(path: str, dur: float, rate: int = 16000):
@@ -21,9 +21,9 @@ def _write_complex_tone(path: str, dur: float, rate: int = 16000):
         for i in range(n):
             t = i / rate
             val = (
-                0.5 * math.sin(2 * math.pi * 200 * t) +
-                0.3 * math.sin(2 * math.pi * 400 * t) +
-                0.2 * math.sin(2 * math.pi * 800 * t)
+                0.5 * math.sin(2 * math.pi * 200 * t)
+                + 0.3 * math.sin(2 * math.pi * 400 * t)
+                + 0.2 * math.sin(2 * math.pi * 800 * t)
             )
             frames.append(int(val * 12000))
         w.writeframes(struct.pack(f"<{n}h", *frames))
@@ -31,6 +31,7 @@ def _write_complex_tone(path: str, dur: float, rate: int = 16000):
 
 def test_beam_size_parameter_supported(monkeypatch):
     """Xác minh hàm _asr_words hỗ trợ tham số beam_size."""
+
     class DummyModel:
         def __init__(self):
             self.last_beam = None
@@ -53,6 +54,7 @@ def test_beam1_vs_beam2_speedup_and_consistency(tmp_path):
     _write_complex_tone(str(wav_file), 1.5)
 
     from unittest import mock
+
     from autodub.speech.align import unload_align_model
 
     unload_align_model()
@@ -78,8 +80,8 @@ def test_beam1_vs_beam2_speedup_and_consistency(tmp_path):
 
     # Nếu có words, kiểm tra sai số thời gian MAE
     if words_beam1 and words_beam2 and len(words_beam1) == len(words_beam2):
-        errors = [abs(w1[1] - w2[1]) + abs(w1[2] - w2[2])
-                  for w1, w2 in zip(words_beam1, words_beam2)]
+        errors = [
+            abs(w1[1] - w2[1]) + abs(w1[2] - w2[2]) for w1, w2 in zip(words_beam1, words_beam2)
+        ]
         mae = sum(errors) / (2 * len(errors))
         assert mae <= 0.08  # Sai số mốc thời gian không quá 80ms
-

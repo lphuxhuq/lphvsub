@@ -1,10 +1,9 @@
 import os
 import tempfile
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from autodub.speech.align import align_segments, AlignmentStats
 from autodub.pipeline_cache import AlignGlobalCache
+from autodub.speech.align import AlignmentStats, align_segments
 
 
 def test_align_segments_incremental_flush(monkeypatch):
@@ -25,21 +24,30 @@ def test_align_segments_incremental_flush(monkeypatch):
             with open(w_path, "wb") as f:
                 f.write(b"RIFF" + b"\x00" * 40)  # fake wav
             wav_paths.append(w_path)
-            segments.append({
-                "id": i,
-                "start": float(i * 2),
-                "end": float(i * 2 + 1.5),
-                "text_vi": f"câu thứ {i}",
-            })
+            segments.append(
+                {
+                    "id": i,
+                    "start": float(i * 2),
+                    "end": float(i * 2 + 1.5),
+                    "text_vi": f"câu thứ {i}",
+                }
+            )
 
         # Mock Whisper transcribe và mapper
         dummy_model = MagicMock()
-        monkeypatch.setattr("autodub.speech.align._load_align_model", lambda: (dummy_model, "cpu", 2))
-        monkeypatch.setattr("autodub.speech.align._asr_words", lambda m, w, beam_size=1: [("câu", 0.1, 0.4), ("thứ", 0.5, 0.8), ("test", 0.9, 1.2)])
+        monkeypatch.setattr(
+            "autodub.speech.align._load_align_model", lambda: (dummy_model, "cpu", 2)
+        )
+        monkeypatch.setattr(
+            "autodub.speech.align._asr_words",
+            lambda m, w, beam_size=1: [("câu", 0.1, 0.4), ("thứ", 0.5, 0.8), ("test", 0.9, 1.2)],
+        )
         monkeypatch.setattr("autodub.media.audio.wav_duration_s", lambda p: 1.5)
         monkeypatch.setattr(
             "autodub.speech.align._map_words",
-            lambda tw, asr, base, dur: [(w, base + 0.1 * i, base + 0.1 * i + 0.08) for i, w in enumerate(tw)],
+            lambda tw, asr, base, dur: [
+                (w, base + 0.1 * i, base + 0.1 * i + 0.08) for i, w in enumerate(tw)
+            ],
         )
 
         stats = AlignmentStats()
@@ -62,7 +70,8 @@ def test_align_segments_incremental_flush(monkeypatch):
 
         # Kiểm tra file json cục bộ cũng tồn tại và có đủ 25 entries
         import json
-        with open(cache_path, "r", encoding="utf-8") as f:
+
+        with open(cache_path, encoding="utf-8") as f:
             disk_data = json.load(f)
         assert len(disk_data) == 25
 
@@ -121,6 +130,7 @@ def test_pipeline_video_reuse_condition():
 
         v_mtime = os.path.getmtime(dubbed_video)
         dep_mtimes = [os.path.getmtime(video_path), os.path.getmtime(audio_path)]
-        can_reuse = all(d <= v_mtime for d in dep_mtimes) and os.path.getsize(dubbed_video) > 100_000
+        can_reuse = (
+            all(d <= v_mtime for d in dep_mtimes) and os.path.getsize(dubbed_video) > 100_000
+        )
         assert can_reuse is True
-

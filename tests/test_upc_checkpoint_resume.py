@@ -1,20 +1,19 @@
 import os
-import shutil
-from unittest import mock
-from pathlib import Path
-import pytest
 
+import autodub.pipeline_cache as pc
 from autodub.config import Settings
 from autodub.languages import get_target
 from autodub.pipeline import DubPipeline, DubRequest
 from autodub.workdir import data_dir, data_path
-import autodub.pipeline_cache as pc
 
 
 def _create_dummy_wav(path: str):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "wb") as f:
-        f.write(b"RIFF\x24\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00" + b"\x55" * 256)
+        f.write(
+            b"RIFF\x24\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00"
+            + b"\x55" * 256
+        )
 
 
 def test_upc_and_local_resume_coexistence(tmp_path):
@@ -34,6 +33,7 @@ def test_upc_and_local_resume_coexistence(tmp_path):
     # Pre-populate proj1 with local transcript
     local_transcript = data_path(proj1_dir, "transcript_original.json")
     from autodub.speech.transcriber import save_transcript
+
     orig_segs = [{"id": 1, "start": 0.0, "end": 1.0, "text": "Local Line 1"}]
     save_transcript(orig_segs, local_transcript)
 
@@ -69,7 +69,10 @@ def test_mid_run_interruption_leaves_cache_untainted(tmp_path):
     pc.get_demucs_cache().store_result(audio, fake_vocals, fake_no_vocals, "htdemucs", 44100, 2)
 
     # Lookup should still be None
-    assert pc.get_demucs_cache().lookup_and_restore(audio, str(tmp_path / "out"), "htdemucs", 44100, 2) is None
+    assert (
+        pc.get_demucs_cache().lookup_and_restore(audio, str(tmp_path / "out"), "htdemucs", 44100, 2)
+        is None
+    )
 
     # Try storing non-WAV in TTS cache
     bad_wav = tmp_path / "bad.wav"

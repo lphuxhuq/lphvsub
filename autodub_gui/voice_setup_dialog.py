@@ -3,12 +3,17 @@
 Chạy ở luồng nền (QThread) để không đóng băng giao diện, hiện tiến độ
 realtime theo từng bước: tải ZIP → giải nén → enroll từng giọng.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QDialog, QLabel, QProgressBar, QPushButton, QVBoxLayout,
+    QDialog,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
 )
 
 from autodub_gui import tokens
@@ -17,11 +22,11 @@ from autodub_gui import tokens
 class _VoiceSetupWorker(QThread):
     """Luồng nền thực hiện: tải → giải nén → enroll."""
 
-    stage_changed = Signal(str)          # "Đang tải...", "Đang giải nén...", ...
-    download_progress = Signal(int, int) # (bytes_downloaded, total_bytes)
+    stage_changed = Signal(str)  # "Đang tải...", "Đang giải nén...", ...
+    download_progress = Signal(int, int)  # (bytes_downloaded, total_bytes)
     enroll_progress = Signal(int, int, str)  # (current, total, voice_name)
-    finished_ok = Signal(int)            # tổng số giọng enrolled
-    finished_err = Signal(str)           # thông báo lỗi
+    finished_ok = Signal(int)  # tổng số giọng enrolled
+    finished_err = Signal(str)  # thông báo lỗi
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -54,16 +59,15 @@ class _VoiceSetupWorker(QThread):
             # Đếm số giọng đã enrolled
             try:
                 import json
-                with open(self.settings.vieneu_custom_voices_path(),
-                          encoding="utf-8") as f:
+
+                with open(self.settings.vieneu_custom_voices_path(), encoding="utf-8") as f:
                     data = json.load(f)
                 self._total_enrolled = len(data.get("presets", {}))
             except Exception:
                 self._total_enrolled = 0
             self.finished_ok.emit(self._total_enrolled)
         else:
-            self.finished_err.emit(
-                "Không thể tải voice library. Kiểm tra kết nối mạng và thử lại.")
+            self.finished_err.emit("Không thể tải voice library. Kiểm tra kết nối mạng và thử lại.")
 
 
 class VoiceSetupDialog(QDialog):
@@ -94,7 +98,8 @@ class VoiceSetupDialog(QDialog):
         # Mô tả
         desc = QLabel(
             "Lần đầu chạy app, VoxDub cần tải bộ giọng đọc từ máy chủ.\n"
-            "Quá trình này chỉ diễn ra MỘT LẦN DUY NHẤT.")
+            "Quá trình này chỉ diễn ra MỘT LẦN DUY NHẤT."
+        )
         desc.setWordWrap(True)
         desc.setStyleSheet(f"color: {tokens.TEXT_SECONDARY};")
         layout.addWidget(desc)
@@ -125,7 +130,8 @@ class VoiceSetupDialog(QDialog):
         # Nhãn giọng đang enroll
         self.voice_label = QLabel("")
         self.voice_label.setStyleSheet(
-            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px;")
+            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px;"
+        )
         layout.addWidget(self.voice_label)
 
         # Nút bấm
@@ -169,14 +175,12 @@ class VoiceSetupDialog(QDialog):
             self.enroll_bar.setFormat(f"Mã hóa giọng: {current}/{total}")
         if name:
             self.voice_label.setText(f"Đang xử lý: {name}")
-        self.stage_label.setText(
-            f"Đang mã hóa giọng ({current}/{total})...")
+        self.stage_label.setText(f"Đang mã hóa giọng ({current}/{total})...")
 
     def _on_ok(self, count: int) -> None:
         self._success = True
         self.stage_label.setText(f"Hoàn tất! Đã cài đặt {count} giọng đọc.")
-        self.stage_label.setStyleSheet(
-            f"color: {tokens.SUCCESS}; font-weight: bold;")
+        self.stage_label.setStyleSheet(f"color: {tokens.SUCCESS}; font-weight: bold;")
         self.dl_bar.setValue(100)
         self.dl_bar.setFormat("Tải xuống: hoàn tất")
         self.enroll_bar.setValue(100)
@@ -185,12 +189,12 @@ class VoiceSetupDialog(QDialog):
         self.btn.setText("Bắt đầu sử dụng")
         self.btn.setStyleSheet(
             f"background: {tokens.SUCCESS}; color: white; font-weight: 600; "
-            f"border-radius: 6px; padding: 8px 16px;")
+            f"border-radius: 6px; padding: 8px 16px;"
+        )
 
     def _on_err(self, msg: str) -> None:
         self.stage_label.setText(f"Lỗi: {msg}")
-        self.stage_label.setStyleSheet(
-            f"color: {tokens.DANGER}; font-weight: bold;")
+        self.stage_label.setStyleSheet(f"color: {tokens.DANGER}; font-weight: bold;")
         self.btn.setText("Thử lại")
         self.btn.setStyleSheet("")
         self._worker = None  # allow retry
@@ -221,8 +225,7 @@ class VoiceSetupDialog(QDialog):
         lbl = self.btn.text()
         if lbl == "Thử lại":
             # Reset UI và chạy lại
-            self.stage_label.setStyleSheet(
-                f"color: {tokens.TEXT_PRIMARY};")
+            self.stage_label.setStyleSheet(f"color: {tokens.TEXT_PRIMARY};")
             self.stage_label.setText("Đang kết nối...")
             self.dl_bar.setValue(0)
             self.dl_bar.setFormat("Tải xuống: %p%")

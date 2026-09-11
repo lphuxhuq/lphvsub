@@ -6,9 +6,9 @@ Measures:
 3. Cache store and lookup latency (cold vs warm).
 4. Corruption detection and recovery overhead.
 """
+
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 import tempfile
@@ -30,7 +30,9 @@ def create_dummy_wav(path: Path, size_bytes: int) -> None:
     with path.open("wb") as f:
         f.write(b"RIFF")
         f.write((size_bytes - 8).to_bytes(4, "little"))
-        f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data")
+        f.write(
+            b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data"
+        )
         f.write((size_bytes - 44).to_bytes(4, "little"))
         remaining = size_bytes - 44
         chunk = b"\x00" * min(remaining, 65536)
@@ -83,6 +85,7 @@ def benchmark_fingerprint(tmp_dir: Path) -> dict:
 
 def benchmark_demucs_cache(tmp_dir: Path) -> dict:
     import autodub.pipeline_cache as pc
+
     cache_root = tmp_dir / "cache_demucs"
     pc._ROOT = cache_root
     cache = DemucsGlobalCache()
@@ -126,6 +129,7 @@ def benchmark_demucs_cache(tmp_dir: Path) -> dict:
 
 def benchmark_asr_cache(tmp_dir: Path) -> dict:
     import autodub.pipeline_cache as pc
+
     cache_root = tmp_dir / "cache_asr"
     pc._ROOT = cache_root
     cache = AsrGlobalCache()
@@ -170,6 +174,7 @@ def benchmark_asr_cache(tmp_dir: Path) -> dict:
 
 def benchmark_translation_cache(tmp_dir: Path) -> dict:
     from autodub.pipeline_cache import TranslationGlobalCache
+
     db_path = tmp_dir / "cache_trans" / "translations.db"
     cache = TranslationGlobalCache(db_path=db_path)
 
@@ -208,6 +213,7 @@ def benchmark_translation_cache(tmp_dir: Path) -> dict:
 
 def benchmark_tts_cache(tmp_dir: Path) -> dict:
     from autodub.pipeline_cache import TtsGlobalCache
+
     tts_dir = tmp_dir / "cache_tts"
     cache = TtsGlobalCache(cache_dir=tts_dir)
 
@@ -250,7 +256,9 @@ def main():
         fp_res = benchmark_fingerprint(tmp_path)
         print("\n1. Fingerprint Performance:")
         for k, v in fp_res.items():
-            print(f"  - {k} ({v['size_bytes'] / (1024*1024):.1f} MB): Cold={v['cold_ms']}ms, Warm={v['warm_avg_ms']}ms")
+            print(
+                f"  - {k} ({v['size_bytes'] / (1024 * 1024):.1f} MB): Cold={v['cold_ms']}ms, Warm={v['warm_avg_ms']}ms"
+            )
 
         demucs_res = benchmark_demucs_cache(tmp_path)
         print("\n2. Demucs Cache Performance (5MB WAV stems):")

@@ -1,7 +1,9 @@
 import time
+
 import requests
-import pytest
+
 from autodub.tools.gemini_srt_ui.server_manager import GeminiSrtServerManager
+
 
 def test_server_manager_lifecycle():
     manager = GeminiSrtServerManager()

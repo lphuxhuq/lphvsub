@@ -1,8 +1,9 @@
 """Test unit cho progress_cb truyền từ tầng downloader lên GUI."""
-import pytest
+
 from unittest.mock import MagicMock, patch
-from autodub.media.download.contract import DownloadRequest
+
 from autodub.media.download.bilibili_engine import BilibiliDownloader
+from autodub.media.download.contract import DownloadRequest
 from autodub.media.downloader import download_video
 
 
@@ -38,7 +39,9 @@ def test_download_video_signature_accepts_progress_cb():
         res.backend = "mock"
         engine_instance.execute.return_value = res
 
-        path = download_video("https://www.bilibili.com/video/BV174bJ6tEQQ", "downloads", progress_cb=my_cb)
+        path = download_video(
+            "https://www.bilibili.com/video/BV174bJ6tEQQ", "downloads", progress_cb=my_cb
+        )
         assert path == __file__
 
         # Kiểm tra request được tạo với progress_callback
@@ -48,17 +51,20 @@ def test_download_video_signature_accepts_progress_cb():
 
 
 def test_prefetch_worker_progress_signal():
-    from autodub_gui.workers import PrefetchWorker
-    from PySide6.QtWidgets import QApplication
     import sys
+
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.workers import PrefetchWorker
 
     app = QApplication.instance() or QApplication(sys.argv)
     worker = PrefetchWorker("https://www.bilibili.com/video/BV174bJ6tEQQ", "downloads")
-    
+
     received = []
     worker.progress.connect(lambda pct, msg: received.append((pct, msg)))
 
     with patch("autodub.media.downloader.download_video") as mock_dl:
+
         def fake_download(url, out_dir, progress_cb=None):
             if progress_cb:
                 progress_cb(0.45, "Đang tải: 45MB / 100MB (45%) - 5MB/s")
@@ -75,9 +81,11 @@ def test_prefetch_worker_progress_signal():
 
 
 def test_download_progress_bar_widget():
-    from autodub_gui.ui.progress import DownloadProgressBar
-    from PySide6.QtWidgets import QApplication
     import sys
+
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.ui.progress import DownloadProgressBar
 
     app = QApplication.instance() or QApplication(sys.argv)
     pbar = DownloadProgressBar()
@@ -94,19 +102,22 @@ def test_download_progress_bar_widget():
 
 
 def test_prefetch_worker_detailed_signals():
-    from autodub_gui.workers import PrefetchWorker
-    from PySide6.QtWidgets import QApplication
     import sys
+
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.workers import PrefetchWorker
 
     app = QApplication.instance() or QApplication(sys.argv)
     worker = PrefetchWorker("https://www.youtube.com/watch?v=123", "downloads")
-    
+
     received_url = []
     received_ok = []
     worker.progress_url.connect(lambda u, pct, msg: received_url.append((u, pct, msg)))
     worker.finished_ok_url.connect(lambda u, p: received_ok.append((u, p)))
 
     with patch("autodub.media.downloader.download_video") as mock_dl:
+
         def fake_download(url, out_dir, progress_cb=None):
             if progress_cb:
                 progress_cb(0.5, "Tải 50%")
@@ -123,10 +134,12 @@ def test_prefetch_worker_detailed_signals():
 
 
 def test_download_progress_bar_cross_thread():
-    import threading
-    from autodub_gui.ui.progress import DownloadProgressBar
-    from PySide6.QtWidgets import QApplication
     import sys
+    import threading
+
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.ui.progress import DownloadProgressBar
 
     app = QApplication.instance() or QApplication(sys.argv)
     pbar = DownloadProgressBar()
@@ -141,5 +154,3 @@ def test_download_progress_bar_cross_thread():
 
     assert pbar.bar.value() == 88
     assert pbar.lbl_percent.text() == "88%"
-
-

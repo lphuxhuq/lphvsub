@@ -1,10 +1,7 @@
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from autodub.config import Settings
 from autodub.speech.voice_catalog import (
-    VieNeuVoiceProvider,
-    CapCutVoiceProvider,
     UnifiedVoiceCatalog,
 )
 from autodub.speech.voice_models import VoiceProfile
@@ -12,12 +9,48 @@ from autodub.speech.voice_models import VoiceProfile
 
 def test_unified_voice_catalog_mock_providers():
     mock_vieneu_voices = [
-        VoiceProfile(voice_id="nam_bac_1", name="Nam Bắc 1", provider="vieneu", gender="male", region="bac", style="tin_tuc", narrator_suitability=0.9, pitch_tag="deep_male"),
-        VoiceProfile(voice_id="nu_bac_1", name="Nữ Bắc 1", provider="vieneu", gender="female", region="bac", style="tu_nhien", narrator_suitability=0.7, pitch_tag="female"),
+        VoiceProfile(
+            voice_id="nam_bac_1",
+            name="Nam Bắc 1",
+            provider="vieneu",
+            gender="male",
+            region="bac",
+            style="tin_tuc",
+            narrator_suitability=0.9,
+            pitch_tag="deep_male",
+        ),
+        VoiceProfile(
+            voice_id="nu_bac_1",
+            name="Nữ Bắc 1",
+            provider="vieneu",
+            gender="female",
+            region="bac",
+            style="tu_nhien",
+            narrator_suitability=0.7,
+            pitch_tag="female",
+        ),
     ]
     mock_capcut_voices = [
-        VoiceProfile(voice_id="capcut_male_1", name="CapCut Nam 1", provider="capcut", gender="male", region="bac", style="tu_nhien", narrator_suitability=0.8, pitch_tag="young_male"),
-        VoiceProfile(voice_id="capcut_female_1", name="CapCut Nữ 1", provider="capcut", gender="female", region="nam", style="tu_nhien", narrator_suitability=0.75, pitch_tag="female"),
+        VoiceProfile(
+            voice_id="capcut_male_1",
+            name="CapCut Nam 1",
+            provider="capcut",
+            gender="male",
+            region="bac",
+            style="tu_nhien",
+            narrator_suitability=0.8,
+            pitch_tag="young_male",
+        ),
+        VoiceProfile(
+            voice_id="capcut_female_1",
+            name="CapCut Nữ 1",
+            provider="capcut",
+            gender="female",
+            region="nam",
+            style="tu_nhien",
+            narrator_suitability=0.75,
+            pitch_tag="female",
+        ),
     ]
 
     p_vieneu = MagicMock()

@@ -1,6 +1,10 @@
+import contextlib
+import os
+
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QApplication
-from autodub_gui.style_dialog import _FrameCanvas, StyleDialog
+
+from autodub_gui.style_dialog import StyleDialog, _FrameCanvas
 
 
 def test_frame_canvas_multiple_blur_regions_and_presets(qtbot):
@@ -51,8 +55,17 @@ def test_frame_canvas_multiple_blur_regions_and_presets(qtbot):
 def test_style_dialog_tabs_and_logo_watermark(qtbot):
     app = QApplication.instance() or QApplication([])
     style = {"font": "Arial", "font_size": 24, "margin_v": 40, "position": "bottom"}
-    logo_opts = {"logo_path": "test_logo.png", "logo_position": "top_right", "logo_scale": 0.15, "logo_opacity": 0.9}
-    wm_opts = {"watermark_text": "@MyChannel", "watermark_motion": "bounce", "watermark_opacity": 0.3}
+    logo_opts = {
+        "logo_path": "test_logo.png",
+        "logo_position": "top_right",
+        "logo_scale": 0.15,
+        "logo_opacity": 0.9,
+    }
+    wm_opts = {
+        "watermark_text": "@MyChannel",
+        "watermark_motion": "bounce",
+        "watermark_opacity": 0.3,
+    }
 
     dialog = StyleDialog(
         video_path=None,
@@ -104,17 +117,16 @@ def test_style_dialog_tabs_and_logo_watermark(qtbot):
     dialog.canvas.repaint()
 
     # Thử đổi sang ảnh thật và repaint
-    import tempfile, os
+    import tempfile
+
     tmp_logo = os.path.join(tempfile.gettempdir(), "test_logo_sample.png")
     pm = QPixmap(100, 100)
     pm.fill()
     pm.save(tmp_logo)
     dialog.txt_logo_path.setText(tmp_logo)
     dialog.canvas.repaint()
-    try:
+    with contextlib.suppress(OSError):
         os.remove(tmp_logo)
-    except OSError:
-        pass
 
 
 def test_voice_step_set_logo_and_watermark_signals(qtbot):
@@ -125,30 +137,35 @@ def test_voice_step_set_logo_and_watermark_signals(qtbot):
 
     # Đảm bảo kết nối signal changed không bị TypeError khi nạp options
     changed_count = 0
+
     def on_changed():
         nonlocal changed_count
         changed_count += 1
 
     step.changed.connect(on_changed)
 
-    step.set_logo_options({
-        "logo_path": "my_logo.png",
-        "logo_position": "top_left",
-        "logo_scale": 0.20,
-        "logo_opacity": 0.8,
-        "logo_motion": "bounce",
-    })
+    step.set_logo_options(
+        {
+            "logo_path": "my_logo.png",
+            "logo_position": "top_left",
+            "logo_scale": 0.20,
+            "logo_opacity": 0.8,
+            "logo_motion": "bounce",
+        }
+    )
     vals = step.values()
     assert vals["logo_path"] == "my_logo.png"
     assert vals["logo_position"] == "top_left"
     assert vals["logo_motion"] == "bounce"
 
-    step.set_watermark_options({
-        "watermark_text": "@Antigravity",
-        "watermark_motion": "bounce",
-        "watermark_opacity": 0.45,
-        "watermark_speed": 60,
-    })
+    step.set_watermark_options(
+        {
+            "watermark_text": "@Antigravity",
+            "watermark_motion": "bounce",
+            "watermark_opacity": 0.45,
+            "watermark_speed": 60,
+        }
+    )
     vals = step.values()
     assert vals["watermark_text"] == "@Antigravity"
     assert vals["watermark_speed"] == 60
@@ -156,11 +173,10 @@ def test_voice_step_set_logo_and_watermark_signals(qtbot):
 
 
 def test_pipeline_stop_for_export_saves_logo_and_watermark_to_render_opts(tmp_path, monkeypatch):
-    import os
-    import json
+
     from autodub.config import Settings
-    from autodub.pipeline import DubPipeline
     from autodub.editor import load_render_opts
+    from autodub.pipeline import DubPipeline
     from autodub.text.translate_common import HOLD
 
     work_dir = str(tmp_path / "proj")
@@ -198,6 +214,7 @@ def test_pipeline_stop_for_export_saves_logo_and_watermark_to_render_opts(tmp_pa
 
         # Mock encrypt_file / add_locked_file / write_json_secure to avoid external dependencies
         from autodub import securestore
+
         monkeypatch.setattr(securestore, "encrypt_file", lambda f, k: None)
         monkeypatch.setattr(securestore, "add_locked_file", lambda w, h, f: None)
         monkeypatch.setattr(securestore, "write_json_secure", lambda d, p, k: None)
@@ -267,6 +284,3 @@ def test_style_dialog_banner_options(qtbot):
 
     # Test painting with banner enabled doesn't throw
     dialog.canvas.repaint()
-
-
-

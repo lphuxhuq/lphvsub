@@ -1,10 +1,13 @@
 """Tests for autodub.keystore — optional keyring integration."""
-from unittest.mock import MagicMock, patch
 
-import pytest
+from unittest.mock import MagicMock
 
 from autodub.keystore import (
-    SENTINEL, available, delete_secret, get_secret, resolve, set_secret,
+    SENTINEL,
+    available,
+    get_secret,
+    resolve,
+    set_secret,
 )
 
 
@@ -37,6 +40,7 @@ def _with_keyring(mod=None):
 
 # -- available() -----------------------------------------------------------
 
+
 def test_available_without_keyring(monkeypatch):
     monkeypatch.setattr("autodub.keystore._keyring", lambda: None)
     assert available() is False
@@ -48,6 +52,7 @@ def test_available_with_keyring(monkeypatch):
 
 
 # -- get_secret / set_secret / delete_secret --------------------------------
+
 
 def test_get_secret_no_keyring(monkeypatch):
     monkeypatch.setattr("autodub.keystore._keyring", lambda: None)
@@ -90,6 +95,7 @@ def test_set_secret_empty_deletes(monkeypatch):
 
 
 # -- resolve() -------------------------------------------------------------
+
 
 def test_resolve_plain_value(monkeypatch):
     monkeypatch.setattr("autodub.keystore._keyring", lambda: None)

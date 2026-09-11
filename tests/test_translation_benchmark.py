@@ -10,19 +10,20 @@ Tests & Benchmarks:
   * 429 count
   * Effective concurrency
 """
+
 import json
 import time
 from collections import defaultdict
 from unittest import mock
-import pytest
 
 from autodub.config import Settings
-from autodub.languages import TargetLang, get_target
+from autodub.languages import get_target
 from autodub.text.translate_direct import _KeyRateLimiter, translate_segments_direct
 
 
 class MockDirectClient:
     """Mock client that records call metrics, enforces rate limit checks, and simulates API latency."""
+
     def __init__(self, keys: list[str], latency_s: float = 0.02):
         self.keys = keys
         self.latency_s = latency_s
@@ -40,10 +41,11 @@ class MockDirectClient:
         self.call_history.append((k, now))
         self.key_hits[k].append(now)
         time.sleep(self.latency_s)
-        
+
         # Parse JSON payload from prompt
         try:
             import re
+
             m = re.search(r"(\[\s*\{[\s\S]*\}\s*\])", user_prompt)
             if m:
                 items = json.loads(m.group(1))
@@ -58,7 +60,10 @@ class MockDirectClient:
 
 def test_translation_segment_ordering_preserved():
     """Verify that even when batches complete out of order, the final result is strictly ordered 1..N."""
-    segments = [{"id": i, "text": f"Original {i}", "start": float(i), "end": float(i + 1)} for i in range(1, 41)]
+    segments = [
+        {"id": i, "text": f"Original {i}", "start": float(i), "end": float(i + 1)}
+        for i in range(1, 41)
+    ]
     api_keys = ["key_A", "key_B", "key_C", "key_D"]
 
     settings = Settings()
@@ -66,8 +71,10 @@ def test_translation_segment_ordering_preserved():
     settings.translate_direct_workers = 4
 
     client = MockDirectClient(keys=api_keys, latency_s=0.01)
-    
-    with mock.patch("autodub.text.translate_direct.get_direct_client", return_value=(client, "Mock Gemini")):
+
+    with mock.patch(
+        "autodub.text.translate_direct.get_direct_client", return_value=(client, "Mock Gemini")
+    ):
         results = translate_segments_direct(
             segments,
             target=get_target("vi"),
@@ -78,14 +85,16 @@ def test_translation_segment_ordering_preserved():
     # Segment ordering invariant
     result_ids = [s["id"] for s in results]
     expected_ids = list(range(1, 41))
-    assert result_ids == expected_ids, f"Ordering violated! Expected {expected_ids[:5]}..., got {result_ids[:5]}..."
+    assert result_ids == expected_ids, (
+        f"Ordering violated! Expected {expected_ids[:5]}..., got {result_ids[:5]}..."
+    )
     for s in results:
         assert s["text_vi"].startswith("Dịch câu")
 
 
 def test_translation_concurrency_scaling_benchmark():
     """Benchmark translation across 1, 2, 4, 8, 16 keys.
-    
+
     Measures:
     - Wall time
     - Segments per second
@@ -94,12 +103,17 @@ def test_translation_concurrency_scaling_benchmark():
     - Speedup factor
     """
     num_segments = 32
-    segments = [{"id": i, "text": f"Sentence {i}", "start": float(i), "end": float(i + 1)} for i in range(1, num_segments + 1)]
+    segments = [
+        {"id": i, "text": f"Sentence {i}", "start": float(i), "end": float(i + 1)}
+        for i in range(1, num_segments + 1)
+    ]
     key_counts = [1, 2, 4, 8, 16]
     benchmark_results = {}
 
     print("\n--- TRANSLATION BENCHMARK RESULTS ---")
-    print(f"{'Keys':<6} | {'Workers':<8} | {'Wall Time':<10} | {'Segs/sec':<10} | {'Retries':<8} | {'429s':<6} | {'Speedup':<8}")
+    print(
+        f"{'Keys':<6} | {'Workers':<8} | {'Wall Time':<10} | {'Segs/sec':<10} | {'Retries':<8} | {'429s':<6} | {'Speedup':<8}"
+    )
     print("-" * 68)
 
     base_time = None
@@ -113,9 +127,13 @@ def test_translation_concurrency_scaling_benchmark():
         settings.translate_direct_workers = min(k_count, 16)
 
         t0 = time.perf_counter()
-        with mock.patch("autodub.text.translate_direct.KEY_LIMITER", limiter), \
-             mock.patch("autodub.text.translate_direct.get_direct_client", return_value=(client, f"Mock Gemini ({k_count} keys)")):
-            
+        with (
+            mock.patch("autodub.text.translate_direct.KEY_LIMITER", limiter),
+            mock.patch(
+                "autodub.text.translate_direct.get_direct_client",
+                return_value=(client, f"Mock Gemini ({k_count} keys)"),
+            ),
+        ):
             results = translate_segments_direct(
                 segments,
                 target=get_target("vi"),
@@ -137,7 +155,9 @@ def test_translation_concurrency_scaling_benchmark():
             "speedup": speedup,
         }
 
-        print(f"{k_count:<6} | {min(k_count, 16):<8} | {elapsed:>8.3f}s | {segs_per_sec:>8.1f}/s | {client.retry_count:<8} | {client.rate_limit_429_count:<6} | {speedup:>6.2f}x")
+        print(
+            f"{k_count:<6} | {min(k_count, 16):<8} | {elapsed:>8.3f}s | {segs_per_sec:>8.1f}/s | {client.retry_count:<8} | {client.rate_limit_429_count:<6} | {speedup:>6.2f}x"
+        )
 
         # Invariant checks
         assert len(results) == num_segments

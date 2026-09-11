@@ -13,6 +13,7 @@ trước/sau), và chỉ những câu THỰC SỰ tốt hơn mới bị tính ph
 
 Mọi lỗi đều không gây hỏng: rà soát lỗi thì giữ nguyên bản dịch lượt đầu.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,10 +27,10 @@ from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.translate_review")
 
-_OVER_BUDGET_TOLERANCE = 1.25   # vượt max_chars 25% mới tính là tràn
-_MIN_SOURCE_RATIO = 0.25        # dịch < 25% độ dài nguồn = nghi sót ý
-_MAX_REVIEW_FRACTION = 0.35     # >35% số câu bị cờ ⇒ lỗi hệ thống, bỏ review
-_MAX_ITEMS_PER_REQUEST = 60     # trần của máy chủ
+_OVER_BUDGET_TOLERANCE = 1.25  # vượt max_chars 25% mới tính là tràn
+_MIN_SOURCE_RATIO = 0.25  # dịch < 25% độ dài nguồn = nghi sót ý
+_MAX_REVIEW_FRACTION = 0.35  # >35% số câu bị cờ ⇒ lỗi hệ thống, bỏ review
+_MAX_ITEMS_PER_REQUEST = 60  # trần của máy chủ
 
 
 def _chunk_job_id(run_id: str, chunk: list[dict]) -> str:
@@ -62,7 +63,10 @@ def _flag(seg: dict, text_field: str, cps: float) -> str | None:
 
 
 def review_translations(
-    segments: list[dict], target: TargetLang, source_lang: str, settings,
+    segments: list[dict],
+    target: TargetLang,
+    source_lang: str,
+    settings,
     run_id: str = "",
 ) -> list[dict]:
     """Soát + dịch lại các câu nghi vấn. Trả về danh sách câu (có thể mới).
@@ -83,26 +87,33 @@ def review_translations(
     for _, r in flagged:
         by_reason[r] = by_reason.get(r, 0) + 1
     # Nhãn tiếng Việt cho Nhật ký GUI (log kỹ thuật xem code/console).
-    labels = {"over_budget": "hơi dài so với chỗ trống",
-              "cjk": "còn sót chữ Trung",
-              "too_short": "nghi dịch sót ý"}
+    labels = {
+        "over_budget": "hơi dài so với chỗ trống",
+        "cjk": "còn sót chữ Trung",
+        "too_short": "nghi dịch sót ý",
+    }
     breakdown = ", ".join(f"{v} câu {labels.get(k, k)}" for k, v in by_reason.items())
 
     if len(flagged) > len(segments) * _MAX_REVIEW_FRACTION:
         # Cờ tràn lan ⇒ vấn đề nằm ở prompt/budget chứ không phải từng câu —
         # dịch lại từng câu chỉ đốt Vox. Ghi nhận và thôi.
-        hint = ("video nói nhanh và dày — nếu nghe bị chồng tiếng, giảm "
-                "Tốc độ video trong Cài đặt rồi chạy lại"
-                if by_reason.get("over_budget", 0) >= len(flagged) * 0.6
-                else "xem quality_report.json trong thư mục kết quả")
+        hint = (
+            "video nói nhanh và dày — nếu nghe bị chồng tiếng, giảm "
+            "Tốc độ video trong Cài đặt rồi chạy lại"
+            if by_reason.get("over_budget", 0) >= len(flagged) * 0.6
+            else "xem quality_report.json trong thư mục kết quả"
+        )
         logger.warning(
             f"Soát lại bản dịch: {len(flagged)}/{len(segments)} câu cần xem "
             f"({breakdown}) — nhiều quá nên giữ nguyên bản dịch, không sửa "
-            f"từng câu. Gợi ý: {hint}.")
+            f"từng câu. Gợi ý: {hint}."
+        )
         return segments
 
-    logger.info(f"Soát lại bản dịch: {len(flagged)} câu cần sửa "
-                f"({breakdown}) — đang nhờ AI dịch lại các câu đó...")
+    logger.info(
+        f"Soát lại bản dịch: {len(flagged)} câu cần sửa "
+        f"({breakdown}) — đang nhờ AI dịch lại các câu đó..."
+    )
 
     from autodub.text.translate_saas import _context_from_settings
 
@@ -111,8 +122,7 @@ def review_translations(
         for j in range(max(0, idx - 2), min(len(segments), idx + 3)):
             if j == idx:
                 continue
-            rows.append(f'  {segments[j].get("id")}: '
-                        f'{str(segments[j].get("text", ""))[:80]}')
+            rows.append(f"  {segments[j].get('id')}: {str(segments[j].get('text', ''))[:80]}")
         return "\n".join(rows)
 
     items = []
@@ -138,14 +148,17 @@ def review_translations(
     fixed: dict[int, str] = {}
     # Máy chủ nhận tối đa 60 câu mỗi lượt — chia nhỏ nếu vượt.
     for offset in range(0, len(items), _MAX_ITEMS_PER_REQUEST):
-        chunk = items[offset:offset + _MAX_ITEMS_PER_REQUEST]
+        chunk = items[offset : offset + _MAX_ITEMS_PER_REQUEST]
         try:
             RATE_LIMITER.acquire()
             result = client.review(
                 chunk,
                 job_id=_chunk_job_id(run_id, chunk),
-                source_lang=source_lang, context=context, cps_budget=cps,
-                hold_id=HOLD.hold_id)
+                source_lang=source_lang,
+                context=context,
+                cps_budget=cps,
+                hold_id=HOLD.hold_id,
+            )
         except InsufficientCreditError:
             # Hết Vox giữa chừng: bản dịch lượt đầu vẫn dùng được, không nên
             # ném lỗi ra làm hỏng cả video vì một bước cải thiện.
@@ -167,7 +180,6 @@ def review_translations(
         return segments
     logger.info(f"Soát lại bản dịch: đã sửa xong {len(fixed)}/{len(flagged)} câu")
     return [
-        ({**s, target.text_field: fixed[int(s["id"])]}
-         if int(s["id"]) in fixed else s)
+        ({**s, target.text_field: fixed[int(s["id"])]} if int(s["id"]) in fixed else s)
         for s in segments
     ]

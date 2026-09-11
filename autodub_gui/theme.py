@@ -10,6 +10,7 @@ Cấm viết mã màu hex trực tiếp ở đây (`tests/test_ui_tokens.py` s�
 Thiết kế: Ethereal Glass — OLED dark, hairline borders, elevated surface system.
 Ma trận trạng thái: default / hover / active / focus / disabled / selected.
 """
+
 from __future__ import annotations
 
 import os as _os
@@ -48,20 +49,18 @@ RUNNING = _t.PROCESSING
 
 def _grad_h(start: str, end: str) -> str:
     """Dải chuyển sắc ngang từ trái sang phải, dùng trong QSS."""
-    return (f"qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-            f"stop:0 {start}, stop:1 {end})")
+    return f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {start}, stop:1 {end})"
 
 
 def _grad_v(start: str, end: str) -> str:
     """Dải chuyển sắc dọc từ trên xuống dưới, dùng trong QSS."""
-    return (f"qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 {start}, stop:1 {end})")
+    return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {start}, stop:1 {end})"
 
 
-def _triangle_asset(name: str, w: int, h: int, color: str, *,
-                    up: bool = False) -> str:
+def _triangle_asset(name: str, w: int, h: int, color: str, *, up: bool = False) -> str:
     """Vẽ một tam giác nhỏ ra tệp PNG rồi trả về đường dẫn dùng trong QSS."""
-    from PySide6.QtCore import QPointF, Qt as _Qt
+    from PySide6.QtCore import QPointF
+    from PySide6.QtCore import Qt as _Qt
     from PySide6.QtGui import QColor, QImage, QPainter, QPolygonF
 
     folder = _os.path.join(_os.path.expanduser("~"), ".voxdub_cache", "ui")
@@ -117,7 +116,8 @@ def _check_asset(name: str, w: int, h: int, color: str) -> str:
 
 def _dot_asset(name: str, size: int, color: str) -> str:
     """Vẽ chấm tròn ra tệp PNG cho radio button checked."""
-    from PySide6.QtCore import QPointF, Qt as _Qt
+    from PySide6.QtCore import QPointF
+    from PySide6.QtCore import Qt as _Qt
     from PySide6.QtGui import QColor, QImage, QPainter
 
     folder = _os.path.join(_os.path.expanduser("~"), ".voxdub_cache", "ui")

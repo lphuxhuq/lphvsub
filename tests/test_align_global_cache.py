@@ -1,7 +1,4 @@
-import os
-import sqlite3
-import pytest
-from autodub.pipeline_cache import AlignGlobalCache, get_align_cache
+from autodub.pipeline_cache import AlignGlobalCache
 
 
 def test_align_global_cache_store_and_lookup(tmp_path):

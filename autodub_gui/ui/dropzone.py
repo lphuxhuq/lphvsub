@@ -5,6 +5,7 @@ Nghỉ, đang kéo qua, đang chuẩn bị, đã sẵn sàng và lỗi.
 Việc kiểm tra tệp (có đọc được không, có luồng hình ảnh không) do trang gọi
 thực hiện ở luồng nền; vùng này chỉ lo hiển thị trạng thái.
 """
+
 from __future__ import annotations
 
 import os
@@ -12,8 +13,13 @@ import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QSizePolicy, QStackedLayout,
-    QVBoxLayout, QWidget,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QStackedLayout,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
@@ -23,20 +29,19 @@ from autodub_gui.ui.progress import ThinProgressBar
 from autodub_gui.ui.style import clear_background
 
 VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".flv", ".wmv")
-VIDEO_FILTER = ("Video (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.flv *.wmv);;"
-                "Tất cả tệp (*.*)")
+VIDEO_FILTER = "Video (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.flv *.wmv);;Tất cả tệp (*.*)"
 SUPPORTED_TEXT = "Hỗ trợ: MP4, MOV, MKV, AVI, WebM — Tối đa 10GB"
-LARGE_FILE_BYTES = 4 * 1024 ** 3      # trên mức này chỉ cảnh báo mềm, không chặn
+LARGE_FILE_BYTES = 4 * 1024**3  # trên mức này chỉ cảnh báo mềm, không chặn
 
 _DASH_INSET = 10
 _DASH_PATTERN = (6, 4)
 _ICON_PX = 40
-_INSET = _DASH_INSET + 6   # chừa chỗ cho viền nét đứt vẽ ở paintEvent
+_INSET = _DASH_INSET + 6  # chừa chỗ cho viền nét đứt vẽ ở paintEvent
 # Chiều cao tối thiểu phải đủ chứa nội dung cộng hai lề, nếu không chữ dưới
 # cùng sẽ bị đẩy đè lên viền nét đứt.
 _MIN_H = 212
 _COMPACT_H = 152
-_DRAG_TINT_ALPHA = 26      # khoảng 10% — nền xanh mờ khi đang kéo tệp qua
+_DRAG_TINT_ALPHA = 26  # khoảng 10% — nền xanh mờ khi đang kéo tệp qua
 
 
 def is_video_file(path: str) -> bool:
@@ -47,8 +52,8 @@ def is_video_file(path: str) -> bool:
 class DragDropZone(QWidget):
     """Vùng nhận video kéo thả hoặc chọn từ máy."""
 
-    file_selected = Signal(str)       # đường dẫn tệp hợp lệ
-    files_rejected = Signal(list)     # người dùng thả nhiều tệp một lúc
+    file_selected = Signal(str)  # đường dẫn tệp hợp lệ
+    files_rejected = Signal(list)  # người dùng thả nhiều tệp một lúc
     retry_requested = Signal()
 
     STATES = ("idle", "dragover", "busy", "success", "error")
@@ -59,9 +64,10 @@ class DragDropZone(QWidget):
         self._state = "idle"
         self._compact = compact
         self.setMinimumHeight(_COMPACT_H if compact else _MIN_H)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding,
-                           QSizePolicy.Policy.Expanding if not compact
-                           else QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding if not compact else QSizePolicy.Policy.Fixed,
+        )
         self._build()
         self._apply_state()
 
@@ -75,8 +81,7 @@ class DragDropZone(QWidget):
         self._page_busy = self._build_busy()
         self._page_done = self._build_done()
         self._page_error = self._build_error()
-        for page in (self._page_idle, self._page_busy,
-                     self._page_done, self._page_error):
+        for page in (self._page_idle, self._page_busy, self._page_done, self._page_error):
             self._stack.addWidget(page)
 
     def _centered(self) -> tuple[QWidget, QVBoxLayout]:
@@ -95,28 +100,28 @@ class DragDropZone(QWidget):
         clear_background(label)
         return label
 
-    def _text(self, text: str, *, size: int, color: str,
-              weight: int = 500) -> QLabel:
+    def _text(self, text: str, *, size: int, color: str, weight: int = 500) -> QLabel:
         label = QLabel(text)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setWordWrap(True)
         label.setStyleSheet(
-            f"color: {color}; font-size: {size}px; font-weight: {weight}; "
-            f"background: transparent;")
+            f"color: {color}; font-size: {size}px; font-weight: {weight}; background: transparent;"
+        )
         return label
 
     def _build_idle(self) -> QWidget:
         page, layout = self._centered()
-        self._idle_icon = self._icon(icons.upload_cloud(),
-                                     _ICON_PX if not self._compact else 26)
+        self._idle_icon = self._icon(icons.upload_cloud(), _ICON_PX if not self._compact else 26)
         layout.addWidget(self._idle_icon)
-        self._idle_title = self._text("Kéo & thả video vào đây",
-                                      size=tokens.FS_CARD_TITLE,
-                                      color=tokens.TEXT_PRIMARY, weight=600)
+        self._idle_title = self._text(
+            "Kéo & thả video vào đây",
+            size=tokens.FS_CARD_TITLE,
+            color=tokens.TEXT_PRIMARY,
+            weight=600,
+        )
         layout.addWidget(self._idle_title)
         if not self._compact:
-            layout.addWidget(self._text("hoặc", size=tokens.FS_LABEL,
-                                        color=tokens.TEXT_MUTED))
+            layout.addWidget(self._text("hoặc", size=tokens.FS_LABEL, color=tokens.TEXT_MUTED))
         row = QHBoxLayout()
         row.addStretch()
         self._btn_browse = PrimaryButton("Chọn file từ máy")
@@ -124,15 +129,16 @@ class DragDropZone(QWidget):
         row.addWidget(self._btn_browse)
         row.addStretch()
         layout.addLayout(row)
-        layout.addWidget(self._text(SUPPORTED_TEXT, size=tokens.FS_META,
-                                    color=tokens.TEXT_MUTED, weight=400))
+        layout.addWidget(
+            self._text(SUPPORTED_TEXT, size=tokens.FS_META, color=tokens.TEXT_MUTED, weight=400)
+        )
         return page
 
     def _build_busy(self) -> QWidget:
         page, layout = self._centered()
-        self._busy_label = self._text("Đang chuẩn bị video…",
-                                      size=tokens.FS_BODY,
-                                      color=tokens.TEXT_PRIMARY, weight=600)
+        self._busy_label = self._text(
+            "Đang chuẩn bị video…", size=tokens.FS_BODY, color=tokens.TEXT_PRIMARY, weight=600
+        )
         layout.addWidget(self._busy_label)
         self._busy_bar = ThinProgressBar()
         self._busy_bar.setMinimumWidth(220)
@@ -142,13 +148,15 @@ class DragDropZone(QWidget):
     def _build_done(self) -> QWidget:
         page, layout = self._centered()
         layout.addWidget(self._icon(icons.check(tokens.SUCCESS), 32))
-        layout.addWidget(self._text("Video đã sẵn sàng", size=tokens.FS_BODY,
-                                    color=tokens.SUCCESS, weight=600))
+        layout.addWidget(
+            self._text("Video đã sẵn sàng", size=tokens.FS_BODY, color=tokens.SUCCESS, weight=600)
+        )
         self._done_name = ElidedLabel("")
         self._done_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._done_name.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         layout.addWidget(self._done_name)
         row = QHBoxLayout()
         row.addStretch()
@@ -162,8 +170,7 @@ class DragDropZone(QWidget):
     def _build_error(self) -> QWidget:
         page, layout = self._centered()
         layout.addWidget(self._icon(icons.error(tokens.DANGER), 32))
-        self._error_label = self._text("", size=tokens.FS_LABEL,
-                                       color=tokens.DANGER, weight=500)
+        self._error_label = self._text("", size=tokens.FS_LABEL, color=tokens.DANGER, weight=500)
         layout.addWidget(self._error_label)
         row = QHBoxLayout()
         row.addStretch()
@@ -187,8 +194,10 @@ class DragDropZone(QWidget):
 
     def _apply_state(self) -> None:
         pages = {
-            "idle": self._page_idle, "dragover": self._page_idle,
-            "busy": self._page_busy, "success": self._page_done,
+            "idle": self._page_idle,
+            "dragover": self._page_idle,
+            "busy": self._page_busy,
+            "success": self._page_done,
             "error": self._page_error,
         }
         self._stack.setCurrentWidget(pages[self._state])
@@ -226,40 +235,39 @@ class DragDropZone(QWidget):
     def browse(self) -> None:
         """Mở hộp thoại chọn tệp video từ máy."""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER)
+            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER
+        )
         if path:
             self.file_selected.emit(path)
 
-    def dragEnterEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             self.set_state("dragover")
 
-    def dragLeaveEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def dragLeaveEvent(self, event) -> None:
         if self._state == "dragover":
             self.set_state("idle")
         super().dragLeaveEvent(event)
 
-    def dropEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def dropEvent(self, event) -> None:
         paths = [u.toLocalFile() for u in event.mimeData().urls()]
         paths = [p for p in paths if p and os.path.isfile(p)]
         self.set_state("idle")
         if not paths:
-            self.set_error("Không nhận được tệp nào. Hãy thử kéo lại một tệp "
-                           "video từ máy của bạn.")
+            self.set_error("Không nhận được tệp nào. Hãy thử kéo lại một tệp video từ máy của bạn.")
             return
         if len(paths) > 1:
             self.files_rejected.emit(paths)
         self.file_selected.emit(paths[0])
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
-        if (event.button() == Qt.MouseButton.LeftButton
-                and self._state in ("idle", "dragover")):
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._state in ("idle", "dragover"):
             self.browse()
         super().mousePressEvent(event)
 
     # -- Vẽ nền --------------------------------------------------------
-    def paintEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect().adjusted(1, 1, -2, -2)
@@ -285,9 +293,10 @@ class DragDropZone(QWidget):
         else:
             # Idle/busy: subtle gradient bg + dashed border
             from PySide6.QtGui import QBrush, QLinearGradient
+
             grad = QLinearGradient(
-                float(rect.left()), float(rect.top()),
-                float(rect.right()), float(rect.bottom()))
+                float(rect.left()), float(rect.top()), float(rect.right()), float(rect.bottom())
+            )
             grad.setColorAt(0, QColor(tokens.UPLOAD_GRAD_A))
             grad.setColorAt(1, QColor(tokens.UPLOAD_GRAD_B))
             painter.fillPath(outer, QBrush(grad))
@@ -299,8 +308,9 @@ class DragDropZone(QWidget):
             painter.setPen(dashed)
             inner = QPainterPath()
             inner.addRoundedRect(
-                rect.adjusted(_DASH_INSET, _DASH_INSET,
-                              -_DASH_INSET, -_DASH_INSET),
-                tokens.RADIUS_MD, tokens.RADIUS_MD)
+                rect.adjusted(_DASH_INSET, _DASH_INSET, -_DASH_INSET, -_DASH_INSET),
+                tokens.RADIUS_MD,
+                tokens.RADIUS_MD,
+            )
             painter.drawPath(inner)
         painter.end()

@@ -8,6 +8,7 @@ Lưu ý quan trọng về hành vi: sửa chữ KHÔNG tự tạo lại giọng 
 phải bấm Lưu tất cả và đọc lại, rồi Xuất video. Một băng nhắc luôn hiện khi
 còn câu đã sửa mà chưa đọc lại.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,22 +16,40 @@ import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QUndoStack
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QSplitter,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens, waveform
+from autodub_gui.log_text import Narrator
 from autodub_gui.pages import BasePage
-from autodub_gui.pages.editor_export import VoiceAndExportMixin
 from autodub_gui.pages.editor_commands import (
-    AddSegmentCommand, DeleteSegmentCommand, EditTextCommand,
-    MergeSegmentCommand, MoveSegmentCommand, SplitSegmentCommand,
+    AddSegmentCommand,
+    DeleteSegmentCommand,
+    MergeSegmentCommand,
+    MoveSegmentCommand,
+    SplitSegmentCommand,
 )
+from autodub_gui.pages.editor_export import VoiceAndExportMixin
 from autodub_gui.pages.editor_panels import (
-    AudioPanel, BackgroundPanel, DirtyBanner, ExportPanel, OverviewPanel,
-    QCPanel, SubtitleListPanel, VoicePanel, debounce_timer,
+    AudioPanel,
+    BackgroundPanel,
+    DirtyBanner,
+    ExportPanel,
+    OverviewPanel,
+    QCPanel,
+    SubtitleListPanel,
+    VoicePanel,
+    debounce_timer,
 )
-from autodub_gui.run_state import REGISTRY, ActiveJob
 from autodub_gui.system_open import open_file, open_folder
 from autodub_gui.ui.buttons import PrimaryButton
 from autodub_gui.ui.modal import ConfirmDialog, confirm_discard
@@ -41,7 +60,6 @@ from autodub_gui.video.player import VideoPlayer
 from autodub_gui.video.timeline import Timeline
 from autodub_gui.voice_preview import VoicePreview
 from autodub_gui.widgets import LogPanel
-from autodub_gui.log_text import Narrator
 
 TOP_BAR_H = 56
 # Đủ rộng cho nhãn dài nhất («Xuất video») cộng biểu tượng, lề và đệm của
@@ -50,7 +68,7 @@ RAIL_W = 138
 _UNDO_LIMIT = 100
 _SPLIT_LEFT, _SPLIT_RIGHT = 62, 38
 _MIN_LIST_W = 280
-DEFAULT_DUCK_DB = -12.0     # mức giảm tiếng gốc mặc định
+DEFAULT_DUCK_DB = -12.0  # mức giảm tiếng gốc mặc định
 _RAIL_ICON = 20
 
 # (khóa, nhãn, hàm vẽ biểu tượng)
@@ -121,9 +139,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
         bar.setFixedHeight(TOP_BAR_H)
-        panel_background(bar, tokens.BG_SIDEBAR,
-                         border=f"none; border-bottom: 1px solid "
-                                f"{tokens.BORDER_SUBTLE}")
+        panel_background(
+            bar, tokens.BG_SIDEBAR, border=f"none; border-bottom: 1px solid {tokens.BORDER_SUBTLE}"
+        )
         row = QHBoxLayout(bar)
         row.setContentsMargins(tokens.SP_4, 0, tokens.SP_4, 0)
         row.setSpacing(tokens.SP_3)
@@ -134,14 +152,16 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         caption = QLabel("Chỉnh sửa dự án")
         caption.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Tên dự án")
         self.name_edit.setReadOnly(True)
         self.name_edit.setStyleSheet(
             f"QLineEdit {{ background: transparent; border: none; "
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_CARD_TITLE}px; "
-            f"font-weight: 600; padding: 0; }}")
+            f"font-weight: 600; padding: 0; }}"
+        )
         row.addWidget(logo)
         row.addWidget(caption)
         row.addWidget(self.name_edit, 1)
@@ -161,7 +181,8 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.rail.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.rail.setStyleSheet(
             f"QListWidget#nav {{ background: {tokens.BG_SIDEBAR}; "
-            f"border: none; border-right: 1px solid {tokens.BORDER_SUBTLE}; }}")
+            f"border: none; border-right: 1px solid {tokens.BORDER_SUBTLE}; }}"
+        )
         for _key, label, icon_fn in RAIL_ITEMS:
             item = QListWidgetItem(label)
             item.setIcon(icons.nav_icon(icon_fn))
@@ -174,8 +195,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
     def _build_content(self) -> QWidget:
         holder = QWidget()
         layout = QVBoxLayout(holder)
-        layout.setContentsMargins(tokens.SP_3, tokens.SP_3,
-                                  tokens.SP_3, tokens.SP_3)
+        layout.setContentsMargins(tokens.SP_3, tokens.SP_3, tokens.SP_3, tokens.SP_3)
         layout.setSpacing(tokens.SP_3)
 
         self.banner = DirtyBanner()
@@ -266,11 +286,18 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         # trên tab Giọng đọc AI.  Tín hiệu finished luôn được phát sau play()
         # dù là phát ngay hay phải chờ tổng hợp câu mẫu lần đầu.
         self._preview.finished.connect(
-            lambda _ok: self.voice_panel.picker.set_preview_enabled(True))
+            lambda _ok: self.voice_panel.picker.set_preview_enabled(True)
+        )
 
-        for widget in (self.overview, self.subtitles, self.qc_panel,
-                       self.audio_panel, self.voice_panel,
-                       self.background_panel, self.export_panel):
+        for widget in (
+            self.overview,
+            self.subtitles,
+            self.qc_panel,
+            self.audio_panel,
+            self.voice_panel,
+            self.background_panel,
+            self.export_panel,
+        ):
             self.panels.addWidget(self._scrollable(widget))
         layout.addWidget(self.panels)
         # Mở sẵn mục Phụ đề vì đó là chỗ người dùng làm việc nhiều nhất.
@@ -292,8 +319,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QScrollArea.Shape.NoFrame)
-        area.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         clear_background(area)
         clear_background(area.viewport())
         holder = QWidget()
@@ -331,10 +357,12 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             self._state = load_work_dir(work_dir)
         except EditorError as e:
             ConfirmDialog.show_error(
-                self, "Không mở được dự án này",
+                self,
+                "Không mở được dự án này",
                 "Thư mục này chưa có bản dịch nên chưa chỉnh sửa được. Hãy "
                 "chạy lồng tiếng cho video trước, hoặc chọn một thư mục khác.",
-                detail=str(e))
+                detail=str(e),
+            )
             return
         self._work_dir = work_dir
         self._project = load_project(work_dir)
@@ -352,8 +380,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self.name_edit.setText(self._project.title)
         self.subtitles.set_segments(self._segments, self._state.target.text_field)
         self.timeline.set_segments(self._segments)
-        self.overview.set_project(self._project, len(self._segments),
-                                  self._read_quality())
+        self.overview.set_project(self._project, len(self._segments), self._read_quality())
         self.overview.set_context(self._read_context())
         self._load_render_opts()
         self.banner.set_count(0, 0)
@@ -365,23 +392,23 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._load_waveform()
 
     def _read_quality(self) -> dict:
-        from autodub.workdir import data_path
         import json
 
+        from autodub.workdir import data_path
+
         try:
-            with open(data_path(self._work_dir, "quality_report.json"),
-                      encoding="utf-8") as f:
+            with open(data_path(self._work_dir, "quality_report.json"), encoding="utf-8") as f:
                 return json.load(f)
         except (OSError, ValueError):
             return {}
 
     def _read_context(self) -> dict:
-        from autodub.workdir import data_path
         import json
 
+        from autodub.workdir import data_path
+
         try:
-            with open(data_path(self._work_dir, "video_context.json"),
-                      encoding="utf-8") as f:
+            with open(data_path(self._work_dir, "video_context.json"), encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
@@ -395,17 +422,15 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         from autodub.workdir import data_path
 
         try:
-            save_json_atomic(context,
-                             data_path(self._work_dir, "video_context.json"))
+            save_json_atomic(context, data_path(self._work_dir, "video_context.json"))
             TOASTS.info("Đã lưu ngữ cảnh dịch của video này.")
         except OSError as e:
             TOASTS.warn(f"Không lưu được ngữ cảnh: {e}")
 
     def _load_video(self) -> None:
-        target = (self._project.output_path or self._state.video_path or "")
+        target = self._project.output_path or self._state.video_path or ""
         if target and self.player.open(target):
-            self.player.set_segments(self._segments,
-                                     self._state.target.text_field)
+            self.player.set_segments(self._segments, self._state.target.text_field)
             self._sync_overlay(target)
             dur = self._project.duration_s or self.player.duration()
             self.timeline.set_duration(dur)
@@ -421,8 +446,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._stop_thumb_worker()
         if not video_path or duration_s <= 0:
             return
-        worker = TimelineThumbnailWorker(
-            video_path, duration_s, self._work_dir, parent=self)
+        worker = TimelineThumbnailWorker(video_path, duration_s, self._work_dir, parent=self)
         worker.ready.connect(self.timeline.set_thumbnails)
         worker.finished.connect(lambda w=worker: self._thumb_worker_finished(w))
         self._thumb_worker = worker
@@ -463,11 +487,12 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         from autodub.editor import load_render_opts
 
         opened_output = bool(
-            self._project and self._project.output_path
+            self._project
+            and self._project.output_path
             and os.path.normcase(os.path.normpath(opened_path))
-            == os.path.normcase(os.path.normpath(self._project.output_path)))
-        burned = (opened_output and load_render_opts(self._work_dir)
-                  .get("subtitle_mode") == "burn")
+            == os.path.normcase(os.path.normpath(self._project.output_path))
+        )
+        burned = opened_output and load_render_opts(self._work_dir).get("subtitle_mode") == "burn"
         self.player.set_overlay_enabled(not burned)
 
     def _load_waveform(self) -> None:
@@ -493,11 +518,8 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             return
         self.timeline.set_loading(True)
         for kind, path in sources.items():
-            worker = WaveformWorker(
-                path, parent=self,
-                cache_name=waveform.cache_name_for(path))
-            worker.ready.connect(
-                functools.partial(self.timeline.set_track_peaks, kind))
+            worker = WaveformWorker(path, parent=self, cache_name=waveform.cache_name_for(path))
+            worker.ready.connect(functools.partial(self.timeline.set_track_peaks, kind))
             self._wave_workers.append(worker)
             worker.start()
 
@@ -507,32 +529,32 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         opts = load_render_opts(self._work_dir)
         settings = self._settings_provider()
         self.audio_panel.load(opts, settings)
-        
+
         # Nhạc nền: lấy từ opts của dự án hoặc fallback sang cài đặt mặc định đã lưu
         bg_mode_default = getattr(settings, "bg_mode", "demucs")
         bg_duck_default = getattr(settings, "bg_duck_db", DEFAULT_DUCK_DB)
         self.background_panel.mode.set_key(opts.get("bg_mode", bg_mode_default))
-        self.background_panel.duck.set_value(
-            float(opts.get("bg_duck_db", bg_duck_default)))
+        self.background_panel.duck.set_value(float(opts.get("bg_duck_db", bg_duck_default)))
         self.background_panel.set_separated(self._has_separated_audio())
 
         # Phụ đề
-        self.export_panel.subtitle.set_key(
-            opts.get("subtitle_mode", settings.subtitle_mode))
+        self.export_panel.subtitle.set_key(opts.get("subtitle_mode", settings.subtitle_mode))
         self.voice_panel.picker.reload(settings)
 
         # Giọng đọc
         from autodub.speech.tts import voices as voice_catalog
+
         project_voice = voice_catalog.resolve(
-            settings, opts.get("voice") or getattr(settings, "vieneu_voice", "") or self._project.voice)
+            settings,
+            opts.get("voice") or getattr(settings, "vieneu_voice", "") or self._project.voice,
+        )
         self.voice_panel.set_project_voice(project_voice)
         self.overview.set_voice(project_voice)
         selected_voice = opts.get("selected_voice") or getattr(settings, "vieneu_voice", "")
         if selected_voice and selected_voice != project_voice:
             self.voice_panel.picker.set_voice(selected_voice)
             self.voice_panel._refresh_hint()
-        self.voice_panel.speed.set_value(
-            float(opts.get("voice_speed", settings.voice_speed)))
+        self.voice_panel.speed.set_value(float(opts.get("voice_speed", settings.voice_speed)))
         self.voice_panel.set_speakers(
             self._segments,
             opts.get("speaker_voices"),
@@ -546,37 +568,73 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._subtitle_style = opts.get("subtitle_style")
         self.export_panel.preset.set_key(
             (self._subtitle_style or {}).get("preset")
-            or opts.get("subtitle_preset") or settings.subtitle_preset)
+            or opts.get("subtitle_preset")
+            or settings.subtitle_preset
+        )
 
         # Logo & Watermark
         self._logo_path = opts.get("logo_path", getattr(settings, "logo_path", ""))
-        self._logo_position = opts.get("logo_position", getattr(settings, "logo_position", "top_right"))
+        self._logo_position = opts.get(
+            "logo_position", getattr(settings, "logo_position", "top_right")
+        )
         self._logo_scale = opts.get("logo_scale", getattr(settings, "logo_scale", 0.12))
         self._logo_opacity = opts.get("logo_opacity", getattr(settings, "logo_opacity", 0.85))
         self._logo_margin = opts.get("logo_margin", getattr(settings, "logo_margin", 24))
         self._logo_motion = opts.get("logo_motion", getattr(settings, "logo_motion", "static"))
         self._watermark_text = opts.get("watermark_text", getattr(settings, "watermark_text", ""))
-        self._watermark_opacity = opts.get("watermark_opacity", getattr(settings, "watermark_opacity", 0.28))
-        self._watermark_font_size = opts.get("watermark_font_size", getattr(settings, "watermark_font_size", 26))
-        self._watermark_color = opts.get("watermark_color", getattr(settings, "watermark_color", "white"))
-        self._watermark_speed = opts.get("watermark_speed", getattr(settings, "watermark_speed", 40))
-        self._watermark_motion = opts.get("watermark_motion", getattr(settings, "watermark_motion", "bounce"))
+        self._watermark_opacity = opts.get(
+            "watermark_opacity", getattr(settings, "watermark_opacity", 0.28)
+        )
+        self._watermark_font_size = opts.get(
+            "watermark_font_size", getattr(settings, "watermark_font_size", 26)
+        )
+        self._watermark_color = opts.get(
+            "watermark_color", getattr(settings, "watermark_color", "white")
+        )
+        self._watermark_speed = opts.get(
+            "watermark_speed", getattr(settings, "watermark_speed", 40)
+        )
+        self._watermark_motion = opts.get(
+            "watermark_motion", getattr(settings, "watermark_motion", "bounce")
+        )
 
         # Mask options (Che / Xóa phụ đề)
         self._mask_method = opts.get("mask_method", getattr(settings, "mask_method", "blur"))
-        self._inpaint_engine = opts.get("inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx"))
-        self._inpaint_device = opts.get("inpaint_device", getattr(settings, "inpaint_device", "auto"))
+        self._inpaint_engine = opts.get(
+            "inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")
+        )
+        self._inpaint_device = opts.get(
+            "inpaint_device", getattr(settings, "inpaint_device", "auto")
+        )
 
         # Banner options (Khung viền trên & dưới)
-        self._frame_banner_enabled = opts.get("frame_banner_enabled", getattr(settings, "frame_banner_enabled", False))
-        self._frame_banner_color = opts.get("frame_banner_color", getattr(settings, "frame_banner_color", "#000000"))
-        self._frame_banner_top_text = opts.get("frame_banner_top_text", getattr(settings, "frame_banner_top_text", ""))
-        self._frame_banner_top_size = opts.get("frame_banner_top_size", getattr(settings, "frame_banner_top_size", 42))
-        self._frame_banner_top_color = opts.get("frame_banner_top_color", getattr(settings, "frame_banner_top_color", "#FFFFFF"))
-        self._frame_banner_bottom_text = opts.get("frame_banner_bottom_text", getattr(settings, "frame_banner_bottom_text", ""))
-        self._frame_banner_bottom_size = opts.get("frame_banner_bottom_size", getattr(settings, "frame_banner_bottom_size", 36))
-        self._frame_banner_bottom_color = opts.get("frame_banner_bottom_color", getattr(settings, "frame_banner_bottom_color", "#FFFF00"))
-        self._randomize_metadata = opts.get("randomize_metadata", getattr(settings, "randomize_metadata", True))
+        self._frame_banner_enabled = opts.get(
+            "frame_banner_enabled", getattr(settings, "frame_banner_enabled", False)
+        )
+        self._frame_banner_color = opts.get(
+            "frame_banner_color", getattr(settings, "frame_banner_color", "#000000")
+        )
+        self._frame_banner_top_text = opts.get(
+            "frame_banner_top_text", getattr(settings, "frame_banner_top_text", "")
+        )
+        self._frame_banner_top_size = opts.get(
+            "frame_banner_top_size", getattr(settings, "frame_banner_top_size", 42)
+        )
+        self._frame_banner_top_color = opts.get(
+            "frame_banner_top_color", getattr(settings, "frame_banner_top_color", "#FFFFFF")
+        )
+        self._frame_banner_bottom_text = opts.get(
+            "frame_banner_bottom_text", getattr(settings, "frame_banner_bottom_text", "")
+        )
+        self._frame_banner_bottom_size = opts.get(
+            "frame_banner_bottom_size", getattr(settings, "frame_banner_bottom_size", 36)
+        )
+        self._frame_banner_bottom_color = opts.get(
+            "frame_banner_bottom_color", getattr(settings, "frame_banner_bottom_color", "#FFFF00")
+        )
+        self._randomize_metadata = opts.get(
+            "randomize_metadata", getattr(settings, "randomize_metadata", True)
+        )
 
         self._apply_style_to_player()
 
@@ -638,17 +696,18 @@ class EditorPage(VoiceAndExportMixin, BasePage):
     def _sync_editor_defaults_to_env(self, opts: dict) -> None:
         """Tự động lưu các lựa chọn trong Trình chỉnh sửa thành cấu hình mặc định cho các video sau."""
         try:
-            from autodub_gui.env_store import bool_to_env, write_env
             import json
+
+            from autodub_gui.env_store import bool_to_env, write_env
 
             updates = {}
             if "voice_speed" in opts:
                 updates["VOICE_SPEED"] = str(opts["voice_speed"])
-            if "selected_voice" in opts and opts["selected_voice"]:
+            if opts.get("selected_voice"):
                 updates["VIENEU_VOICE"] = str(opts["selected_voice"])
             if "subtitle_mode" in opts:
                 updates["SUBTITLE_MODE"] = str(opts["subtitle_mode"])
-            if "subtitle_preset" in opts and opts["subtitle_preset"]:
+            if opts.get("subtitle_preset"):
                 updates["SUBTITLE_PRESET"] = str(opts["subtitle_preset"])
             if "bg_mode" in opts:
                 updates["BG_MODE"] = str(opts["bg_mode"])
@@ -701,7 +760,6 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             if "randomize_metadata" in opts:
                 updates["RANDOMIZE_METADATA"] = bool_to_env(bool(opts["randomize_metadata"]))
 
-
             # Logo
             if "logo_path" in opts:
                 updates["LOGO_PATH"] = str(opts["logo_path"])
@@ -737,21 +795,36 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             # Subtitle style
             style = opts.get("subtitle_style")
             if isinstance(style, dict):
-                if "font" in style: updates["SUBTITLE_FONT"] = str(style["font"])
-                if "font_size" in style: updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
-                if "position" in style: updates["SUBTITLE_POSITION"] = str(style["position"])
-                if "color" in style: updates["SUBTITLE_COLOR"] = str(style["color"])
-                if "outline" in style: updates["SUBTITLE_OUTLINE"] = str(style["outline"])
-                if "outline_color" in style: updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
-                if "shadow" in style: updates["SUBTITLE_SHADOW"] = str(style["shadow"])
-                if "bold" in style: updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
-                if "box" in style: updates["SUBTITLE_BOX"] = str(style["box"])
-                if "box_color" in style: updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
-                if "box_opacity" in style: updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
-                if "display" in style: updates["SUBTITLE_DISPLAY"] = str(style["display"])
-                if "words_per_cue" in style: updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
-                if "effect" in style: updates["KARAOKE_EFFECT"] = str(style["effect"])
-                if "highlight_color" in style: updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
+                if "font" in style:
+                    updates["SUBTITLE_FONT"] = str(style["font"])
+                if "font_size" in style:
+                    updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
+                if "position" in style:
+                    updates["SUBTITLE_POSITION"] = str(style["position"])
+                if "color" in style:
+                    updates["SUBTITLE_COLOR"] = str(style["color"])
+                if "outline" in style:
+                    updates["SUBTITLE_OUTLINE"] = str(style["outline"])
+                if "outline_color" in style:
+                    updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
+                if "shadow" in style:
+                    updates["SUBTITLE_SHADOW"] = str(style["shadow"])
+                if "bold" in style:
+                    updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
+                if "box" in style:
+                    updates["SUBTITLE_BOX"] = str(style["box"])
+                if "box_color" in style:
+                    updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
+                if "box_opacity" in style:
+                    updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
+                if "display" in style:
+                    updates["SUBTITLE_DISPLAY"] = str(style["display"])
+                if "words_per_cue" in style:
+                    updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
+                if "effect" in style:
+                    updates["KARAOKE_EFFECT"] = str(style["effect"])
+                if "highlight_color" in style:
+                    updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
 
             if updates:
                 write_env(updates)
@@ -769,10 +842,12 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             # logic với lúc tạo dự án, để hai nơi ra cùng một chữ trên video.
             try:
                 settings = self._settings_provider()
-                self._subtitle_style = (settings.subtitle_style()
-                                        if preset == settings.subtitle_preset
-                                        else preset_style(preset))
-            except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng bộ sẵn
+                self._subtitle_style = (
+                    settings.subtitle_style()
+                    if preset == settings.subtitle_preset
+                    else preset_style(preset)
+                )
+            except Exception:
                 self._subtitle_style = preset_style(preset)
         self._save_render_opts()
         self._apply_style_to_player()
@@ -803,11 +878,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
 
     def _flush_edits(self) -> None:
         """Ghi những câu vừa sửa xuống đĩa."""
-        if not self._work_dir or not (self._pending_edits
-                                      or self._pending_subs):
+        if not self._work_dir or not (self._pending_edits or self._pending_subs):
             return
-        from autodub.editor import (EditorError, save_segment_texts,
-                                    save_subtitle_texts)
+        from autodub.editor import EditorError, save_segment_texts, save_subtitle_texts
         from autodub.text.srt import SUBTITLE_FIELD
 
         edits = dict(self._pending_edits)
@@ -815,12 +888,12 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._pending_edits.clear()
         self._pending_subs.clear()
         try:
-            changed = (save_segment_texts(self._work_dir, edits,
-                                          self._state.target.key)
-                       if edits else [])
-            sub_changed = (save_subtitle_texts(self._work_dir, subs,
-                                               self._state.target.key)
-                           if subs else [])
+            changed = (
+                save_segment_texts(self._work_dir, edits, self._state.target.key) if edits else []
+            )
+            sub_changed = (
+                save_subtitle_texts(self._work_dir, subs, self._state.target.key) if subs else []
+            )
         except (EditorError, OSError) as e:
             self.save_indicator.set_state("error", str(e))
             return
@@ -834,8 +907,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             if segment is None:
                 continue
             clean = text.strip()
-            if clean and clean != str(
-                    segment.get(self._state.target.text_field, "")):
+            if clean and clean != str(segment.get(self._state.target.text_field, "")):
                 segment[SUBTITLE_FIELD] = clean
             else:
                 segment.pop(SUBTITLE_FIELD, None)
@@ -848,16 +920,13 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             # (sub_vi) hay sửa chữ giọng đọc (text_vi) — cả hai đều ảnh
             # hưởng tới phụ đề hiện trên màn hình vì subtitle_text() dùng
             # sub_vi làm ghi đè, còn nếu thiếu thì fallback về text_vi.
-            self.player.set_segments(self._segments,
-                                     self._state.target.text_field)
+            self.player.set_segments(self._segments, self._state.target.text_field)
         import time
 
-        self.save_indicator.set_state(
-            "saved", "lúc " + time.strftime("%H:%M"))
+        self.save_indicator.set_state("saved", "lúc " + time.strftime("%H:%M"))
 
     def _refresh_banner(self) -> None:
-        voice = len(self._dirty_ids) or (
-            1 if getattr(self, "_structural_edit", False) else 0)
+        voice = len(self._dirty_ids) or (1 if getattr(self, "_structural_edit", False) else 0)
         self.banner.set_count(voice, len(self._sub_dirty_ids))
         self._refresh_qc()
 
@@ -865,9 +934,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         """Cập nhật bảng Kiểm tra theo trạng thái hiện tại của dự án."""
         if not self._work_dir or self._state is None:
             return
-        self.qc_panel.refresh(self._segments, self._read_quality(),
-                              self._dirty_ids,
-                              self._state.target.text_field)
+        self.qc_panel.refresh(
+            self._segments, self._read_quality(), self._dirty_ids, self._state.target.text_field
+        )
 
     def has_unsaved_changes(self) -> bool:
         return bool(self._pending_edits or self._pending_subs)
@@ -930,11 +999,10 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         if not self._work_dir:
             return
         try:
-            changed = set_segment_voice(
-                self._work_dir, seg_id, voice,
-                self.target_key())
-        except Exception as e:  # noqa: BLE001
+            changed = set_segment_voice(self._work_dir, seg_id, voice, self.target_key())
+        except Exception as e:
             from autodub_gui.ui.toast import TOASTS
+
             TOASTS.warn(f"Không lưu được giọng riêng: {e}")
             return
         if changed:
@@ -949,28 +1017,31 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             self._dirty_ids.add(seg_id)
             self._refresh_banner()
             from autodub_gui.ui.toast import TOASTS
+
             if voice:
-                TOASTS.info(f"Câu {seg_id}: đọc bằng giọng «{voice}». "
-                            "Bấm «Đọc lại câu này» để áp dụng.")
+                TOASTS.info(
+                    f"Câu {seg_id}: đọc bằng giọng «{voice}». Bấm «Đọc lại câu này» để áp dụng."
+                )
             else:
-                TOASTS.info(f"Câu {seg_id}: đã bỏ giọng riêng, "
-                            "quay về giọng chung của dự án.")
+                TOASTS.info(f"Câu {seg_id}: đã bỏ giọng riêng, quay về giọng chung của dự án.")
 
     def _add_segment(self) -> None:
         """Chèn một câu mới ngay sau câu đang chọn."""
         selected = self.subtitles.selected_id()
-        after = selected if selected > 0 else (
-            self._segments[-1]["id"] if self._segments else 0)
+        after = selected if selected > 0 else (self._segments[-1]["id"] if self._segments else 0)
         segment = self._segment(after)
         start = float(segment.get("end", 0.0)) + 0.05 if segment else 0.0
         self._undo.push(AddSegmentCommand(self, after, start, start + 1.0))
 
     def _delete_segment(self, seg_id: int) -> None:
         confirmed, _ = ConfirmDialog.ask(
-            self, "Xóa câu thoại",
+            self,
+            "Xóa câu thoại",
             f"Xóa câu số {seg_id} khỏi dự án? Giọng đọc của câu này cũng bị "
             "xóa theo. Bạn có thể hoàn tác bằng Ctrl+Z.",
-            kind="danger", confirm_label="Xóa câu")
+            kind="danger",
+            confirm_label="Xóa câu",
+        )
         if confirmed:
             self._undo.push(DeleteSegmentCommand(self, seg_id))
 
@@ -988,8 +1059,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         self._undo.push(SplitSegmentCommand(self, seg_id, at_time))
 
     def _merge_with_next(self, seg_id: int) -> None:
-        index = next((i for i, s in enumerate(self._segments)
-                      if s.get("id") == seg_id), -1)
+        index = next((i for i, s in enumerate(self._segments) if s.get("id") == seg_id), -1)
         if index < 0 or index + 1 >= len(self._segments):
             TOASTS.warn("Không có câu nào bên dưới để gộp.")
             return
@@ -1002,11 +1072,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
 
         self._state = load_work_dir(self._work_dir)
         self._segments = self._state.segments
-        self.subtitles.set_segments(self._segments,
-                                    self._state.target.text_field)
+        self.subtitles.set_segments(self._segments, self._state.target.text_field)
         self.timeline.set_segments(self._segments)
-        self.player.set_segments(self._segments,
-                                 self._state.target.text_field)
+        self.player.set_segments(self._segments, self._state.target.text_field)
         # Thêm, xóa, tách hay gộp câu đều làm một vài câu mất giọng đọc, nhưng
         # số thứ tự vừa được đánh lại nên không thể biết chắc là câu nào. Bật
         # băng nhắc để người dùng đọc lại trước khi xuất, thay vì âm thầm ghép
@@ -1033,22 +1101,22 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         """
         if position is None:
             return
-        candidates = (self._project.output_path if self._project else "",
-                      self._state.video_path if self._state else "")
+        candidates = (
+            self._project.output_path if self._project else "",
+            self._state.video_path if self._state else "",
+        )
         target = next((p for p in candidates if p and os.path.isfile(p)), "")
         if not target:
             self.player.show_empty()
             return
         if self.player.open(target):
-            self.player.set_segments(self._segments,
-                                     self._state.target.text_field)
+            self.player.set_segments(self._segments, self._state.target.text_field)
             self._sync_overlay(target)
             self.player.seek(position)
 
     def report_error(self, message: str) -> None:
         """Hiện lỗi của một thao tác sửa câu bằng lời thường."""
-        ConfirmDialog.show_error(
-            self, "Không thực hiện được thao tác này", message)
+        ConfirmDialog.show_error(self, "Không thực hiện được thao tác này", message)
 
     def work_dir(self) -> str:
         return self._work_dir
@@ -1061,12 +1129,16 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         if not self._work_dir:
             return
         import threading
+
         from PySide6.QtCore import QTimer
+
         from autodub.config import Settings
         from autodub.editor import retranslate_segment_ai
         from autodub_gui.ui.toast import TOASTS
 
-        settings = self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        settings = (
+            self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        )
         has_key = bool(
             getattr(settings, "gemini_api_key", "").strip()
             or getattr(settings, "deepseek_api_key", "").strip()
@@ -1074,7 +1146,9 @@ class EditorPage(VoiceAndExportMixin, BasePage):
             or getattr(settings, "openai_api_key", "").strip()
         )
         if not has_key:
-            TOASTS.warn("Chưa cấu hình Google Gemini API Key. Vui lòng vào Cài đặt > Dịch thuật để nhập key Gemini.")
+            TOASTS.warn(
+                "Chưa cấu hình Google Gemini API Key. Vui lòng vào Cài đặt > Dịch thuật để nhập key Gemini."
+            )
             return
 
         TOASTS.info(f"Đang dịch lại câu {seg_id} bằng AI...")
@@ -1087,15 +1161,20 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                     target_key=self.target_key(),
                     settings=settings,
                 )
+
                 def _done():
                     self._on_text_edited(seg_id, new_text)
                     self._flush_edits()
                     self.reload_segments()
                     TOASTS.success(f"Câu {seg_id}: đã dịch lại bằng AI thành công!")
+
                 QTimer.singleShot(0, _done)
             except Exception as e:
+                err_msg = str(e)  # except-as bị xóa khỏi scope khi block thoát
+
                 def _err():
-                    TOASTS.error(f"Lỗi dịch lại câu {seg_id}: {e}")
+                    TOASTS.error(f"Lỗi dịch lại câu {seg_id}: {err_msg}")
+
                 QTimer.singleShot(0, _err)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1105,14 +1184,18 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         if not self._work_dir or not self._segments:
             return
         import threading
+
         from PySide6.QtCore import QTimer
+
         from autodub.config import Settings
         from autodub.editor import retranslate_all_segments_ai
         from autodub.progress import ProgressReporter
         from autodub_gui.ui.modal import ConfirmDialog
         from autodub_gui.ui.toast import TOASTS
 
-        settings = self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        settings = (
+            self._settings_provider() if callable(self._settings_provider) else Settings.load()
+        )
         has_key = bool(
             getattr(settings, "custom_ai_api_key", "").strip()
             or getattr(settings, "gemini_api_key", "").strip()
@@ -1148,17 +1231,22 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                     settings=settings,
                     reporter=rep,
                 )
+
                 def _done():
                     self._dirty_ids.update(int(s["id"]) for s in self._segments)
                     self.reload_segments()
                     self._refresh_banner()
                     self.save_indicator.set_state("saved", "Đã dịch AI xong")
                     TOASTS.success(f"Đã dịch lại xong toàn bộ {len(translated)} câu bằng AI!")
+
                 QTimer.singleShot(0, _done)
             except Exception as e:
+                err_msg = str(e)  # except-as bị xóa khỏi scope khi block thoát
+
                 def _err():
-                    self.save_indicator.set_state("error", str(e))
-                    TOASTS.error(f"Lỗi dịch lại dự án: {e}")
+                    self.save_indicator.set_state("error", err_msg)
+                    TOASTS.error(f"Lỗi dịch lại dự án: {err_msg}")
+
                 QTimer.singleShot(0, _err)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1184,8 +1272,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
 
     def _open_other_folder(self) -> None:
         """Mở một thư mục dự án bất kỳ, giữ chức năng của bản cũ."""
-        path = QFileDialog.getExistingDirectory(
-            self, "Chọn thư mục dự án", "output")
+        path = QFileDialog.getExistingDirectory(self, "Chọn thư mục dự án", "output")
         if path:
             self.open_work_dir(path)
 
@@ -1275,24 +1362,31 @@ class EditorPage(VoiceAndExportMixin, BasePage):
     # -- Vòng đời ------------------------------------------------------
     def on_breakpoint(self, name: str) -> None:
         """Cửa sổ hẹp thì thu bớt phần bảng bên phải."""
-        ratios = {"xl": (62, 38), "lg": (58, 42), "md": (55, 45),
-                  "sm": (50, 50)}
+        ratios = {"xl": (62, 38), "lg": (58, 42), "md": (55, 45), "sm": (50, 50)}
         left, right = ratios.get(name, (62, 38))
         self.splitter.setStretchFactor(0, left)
         self.splitter.setStretchFactor(1, right)
 
     def is_running(self) -> bool:
-        return any(w is not None and w.isRunning()
-                   for w in (self._resynth_worker, self._rebuild_worker,
-                             self._preview_seg_worker,
-                             self._export_subs_file_worker,
-                             self._export_audio_worker))
+        return any(
+            w is not None and w.isRunning()
+            for w in (
+                self._resynth_worker,
+                self._rebuild_worker,
+                self._preview_seg_worker,
+                self._export_subs_file_worker,
+                self._export_audio_worker,
+            )
+        )
 
     def shutdown(self) -> None:
-        for worker in (self._resynth_worker, self._rebuild_worker,
-                       self._preview_seg_worker,
-                       self._export_subs_file_worker,
-                       self._export_audio_worker):
+        for worker in (
+            self._resynth_worker,
+            self._rebuild_worker,
+            self._preview_seg_worker,
+            self._export_subs_file_worker,
+            self._export_audio_worker,
+        ):
             if worker is not None and worker.isRunning():
                 worker.cancel()
                 worker.wait(5000)

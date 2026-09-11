@@ -10,10 +10,10 @@ from autodub.media.download.contract import (
 )
 
 __all__ = [
-    "Platform",
-    "ErrorType",
     "BandwidthMode",
     "DownloadRequest",
-    "PreflightResult",
     "DownloadResult",
+    "ErrorType",
+    "Platform",
+    "PreflightResult",
 ]

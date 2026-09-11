@@ -14,6 +14,7 @@ Thuật toán (Parallel Chunked Export):
 Chất lượng bit-identical với encode 1 process: cùng codec args, cùng filter
 graph, cùng audio encode — chỉ khác ranh giới GOP.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,8 +23,8 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, List, Optional
 
 from autodub.utils import setup_logging
 
@@ -45,26 +46,31 @@ class ParallelExportError(RuntimeError):
     """Lỗi xuất video song song — caller nên fallback sang đường 1 process."""
 
 
-def probe_keyframes(video_path: str, timeout: int = 600) -> List[float]:
+def probe_keyframes(video_path: str, timeout: int = 600) -> list[float]:
     """Trả về danh sách mốc thời gian (giây) của TẤT CẢ keyframe video.
 
     Dùng ffprobe show_packets với flag ``K`` — nhanh và không phụ thuộc
     format log của ffmpeg (FFmpeg 8 đã đổi format dòng progress).
     """
     cmd = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "packet=pts_time,flags",
-        "-of", "csv=p=0", video_path,
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "packet=pts_time,flags",
+        "-of",
+        "csv=p=0",
+        video_path,
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise ParallelExportError(f"Không quét được keyframe: {e}") from e
     if result.returncode != 0:
-        raise ParallelExportError(
-            f"ffprobe quét keyframe thất bại: {(result.stderr or '')[-300:]}")
-    frames: List[float] = []
+        raise ParallelExportError(f"ffprobe quét keyframe thất bại: {(result.stderr or '')[-300:]}")
+    frames: list[float] = []
     for line in (result.stdout or "").splitlines():
         # CSV: "12.345000,K__" — keyframe có flag K ở vị trí đầu
         parts = line.strip().split(",")
@@ -83,9 +89,21 @@ def probe_fps(video_path: str) -> float:
     """FPS trung bình của stream video (fallback 30 nếu không đọc được)."""
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=r_frame_rate", "-of", "json", video_path],
-            capture_output=True, text=True, timeout=60,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=r_frame_rate",
+                "-of",
+                "json",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         ratio = json.loads(result.stdout)["streams"][0]["r_frame_rate"]  # "30000/1001"
         num, den = ratio.split("/")
@@ -96,11 +114,11 @@ def probe_fps(video_path: str) -> float:
 
 
 def plan_chunk_boundaries(
-    keyframes: List[float],
+    keyframes: list[float],
     duration_s: float,
     target_chunks: int,
     min_chunk_s: float = _MIN_CHUNK_S,
-) -> List[float]:
+) -> list[float]:
     """Chọn mốc cắt từ danh sách keyframe — trả về list [0, c1, c2, ..., dur].
 
     Chia đều ``duration / target`` rồi snap về keyframe gần nhất (chỉ snap
@@ -124,8 +142,9 @@ def plan_chunk_boundaries(
     for i in range(1, target_chunks):
         ideal = i * ideal_step
         # Snap về keyframe gần nhất > cursor + min_chunk
-        candidates = [kf for kf in kfs
-                      if kf > cursor + min_chunk_s and kf < duration_s - min_chunk_s]
+        candidates = [
+            kf for kf in kfs if kf > cursor + min_chunk_s and kf < duration_s - min_chunk_s
+        ]
         if not candidates:
             break
         # Chọn keyframe gần ideal nhất
@@ -144,15 +163,19 @@ def _default_worker_count(encoder_name: str) -> int:
     cpu_cap = max(2, cpu_threads // 2)
     if "NVENC" in encoder_name or "VideoToolbox" in encoder_name:
         return max(2, min(cpu_cap, _MAX_NVENC_SESSIONS))
-    if "QSV" in encoder_name or "QuickSync" in encoder_name \
-            or "AMF" in encoder_name or "VAAPI" in encoder_name:
+    if (
+        "QSV" in encoder_name
+        or "QuickSync" in encoder_name
+        or "AMF" in encoder_name
+        or "VAAPI" in encoder_name
+    ):
         return max(2, min(cpu_cap, 3))
     # CPU libx264 — tự scale theo core, nhưng không quá 6 process (RAM/filter)
     return max(2, min(cpu_cap, 6))
 
 
 def _run_chunk(
-    cmd: List[str],
+    cmd: list[str],
     timeout_s: int,
     label: str,
 ) -> None:
@@ -160,7 +183,10 @@ def _run_chunk(
     no_win = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout_s,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
             creationflags=no_win,
         )
     except subprocess.TimeoutExpired as e:
@@ -170,7 +196,7 @@ def _run_chunk(
         raise ParallelExportError(f"Chunk {label} fail (code {result.returncode}): {tail}")
 
 
-def _write_concat_list(chunk_paths: List[str], list_path: str) -> None:
+def _write_concat_list(chunk_paths: list[str], list_path: str) -> None:
     """Ghi file concat demuxer — path tuyệt đối dạng file URI an toàn.
 
     Windows path ``C:/a/b.mp4`` → ``file:C:/a/b.mp4`` (concat demuxer chấp
@@ -186,17 +212,17 @@ def _write_concat_list(chunk_paths: List[str], list_path: str) -> None:
 
 
 def parallel_chunked_export(
-    build_chunk_cmd: Callable[[str, float, float, str], List[str]],
+    build_chunk_cmd: Callable[[str, float, float, str], list[str]],
     video_path: str,
     audio_path: str,
     output_path: str,
     duration_s: float,
-    progress_cb: Optional[Callable[[float, str], None]] = None,
-    cancel_event: Optional[threading.Event] = None,
-    max_workers: Optional[int] = None,
+    progress_cb: Callable[[float, str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    max_workers: int | None = None,
     min_chunk_s: float = _MIN_CHUNK_S,
-    fps: Optional[float] = None,
-    randomize_metadata_fn: Optional[Callable[[], None]] = None,
+    fps: float | None = None,
+    randomize_metadata_fn: Callable[[], None] | None = None,
 ) -> str:
     """Xuất video song song theo chunk rồi ghép bằng concat copy.
 
@@ -218,13 +244,15 @@ def parallel_chunked_export(
         raise ParallelExportError("Thời lượng video không hợp lệ")
 
     from autodub.media.video import video_encoder_name
+
     encoder_name = video_encoder_name()
     workers = max_workers or _default_worker_count(encoder_name)
 
     # Không đáng chia nhỏ: video ngắn hoặc worker=1 → caller tự dùng đường thường
     if duration_s < min_chunk_s * workers:
         raise ParallelExportError(
-            f"Video quá ngắn ({duration_s:.0f}s) cho {workers} chunk — dùng đường 1 process")
+            f"Video quá ngắn ({duration_s:.0f}s) cho {workers} chunk — dùng đường 1 process"
+        )
 
     t0 = time.time()
     keyframes = probe_keyframes(video_path)
@@ -235,12 +263,13 @@ def parallel_chunked_export(
 
     logger.info(
         f"[ParallelExport] {duration_s:.0f}s → {n_chunks} chunks × "
-        f"{workers} workers (encoder: {encoder_name})")
+        f"{workers} workers (encoder: {encoder_name})"
+    )
 
     tmp_dir = tempfile.mkdtemp(prefix="autodub_pexport_")
-    chunk_paths: List[str] = []
-    cmds: List[List[str]] = []
-    labels: List[str] = []
+    chunk_paths: list[str] = []
+    cmds: list[list[str]] = []
+    labels: list[str] = []
     try:
         fps_val = fps or probe_fps(video_path)
         total_frames = max(1.0, duration_s * fps_val)
@@ -266,14 +295,13 @@ def parallel_chunked_export(
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {}
-            for cmd, label, (start_s, end_s) in zip(cmds, labels,
-                                                    zip(bounds, bounds[1:])):
+            for cmd, label, (start_s, end_s) in zip(cmds, labels, zip(bounds, bounds[1:])):
                 if cancel_event is not None and cancel_event.is_set():
                     raise ParallelExportError("Đã hủy xuất video")
                 chunk_dur = end_s - start_s
-                futures[pool.submit(_run_chunk, cmd,
-                                    max(300, int((chunk_dur * 8) + 120)),
-                                    label)] = (label, chunk_dur)
+                futures[
+                    pool.submit(_run_chunk, cmd, max(300, int((chunk_dur * 8) + 120)), label)
+                ] = (label, chunk_dur)
             for fut in as_completed(futures):
                 label, chunk_dur = futures[fut]
                 if cancel_event is not None and cancel_event.is_set():
@@ -286,9 +314,21 @@ def parallel_chunked_export(
         _write_concat_list(chunk_paths, concat_list)
         concat_out = os.path.join(tmp_dir, "concat_out.mp4")
         concat_cmd = [
-            "ffmpeg", "-v", "error", "-y",
-            "-f", "concat", "-safe", "0", "-i", concat_list,
-            "-c", "copy", "-movflags", "+faststart", concat_out,
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_list,
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            concat_out,
         ]
         _run_chunk(concat_cmd, max(300, int(duration_s * 2)), "concat")
 
@@ -296,8 +336,9 @@ def parallel_chunked_export(
             try:
                 os.remove(output_path)
             except OSError:
-                pass
+                logger.debug("Bỏ qua lỗi OSError trong parallel_export.py", exc_info=True)
         import shutil
+
         shutil.move(concat_out, output_path)
 
         # randomize metadata TRÊN FILE CUỐI — cùng semantics đường 1 process
@@ -305,18 +346,20 @@ def parallel_chunked_export(
             try:
                 randomize_metadata_fn()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong parallel_export.py", exc_info=True)
 
         elapsed = time.time() - t0
         speed = duration_s / elapsed if elapsed > 0 else 0
         logger.info(
             f"[ParallelExport] Xong {duration_s:.0f}s video trong {elapsed:.1f}s "
-            f"({speed:.1f}x realtime, {n_chunks} chunks)")
+            f"({speed:.1f}x realtime, {n_chunks} chunks)"
+        )
         return output_path
     finally:
         # Dọn tmp chunk
         import shutil
+
         try:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong parallel_export.py", exc_info=True)

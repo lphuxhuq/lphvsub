@@ -1,12 +1,10 @@
 import os
 from unittest import mock
-from pathlib import Path
+
 from pydub import AudioSegment
 from pydub.generators import Sine
-import pytest
 
 from autodub.media import vocal_separator
-import autodub.pipeline_cache as pc
 
 
 def _make_wav(path: str, duration_ms: int = 200):
@@ -35,9 +33,13 @@ def test_demucs_global_cache_end_to_end(tmp_path):
         return mock.Mock(returncode=0, stderr="")
 
     # 1. First project: Cold run (cache miss -> runs worker -> stores cache)
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg):
-        res1 = vocal_separator.separate_vocals(input_wav, dir_project_1, model="htdemucs", sample_rate=44100, channels=2)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        res1 = vocal_separator.separate_vocals(
+            input_wav, dir_project_1, model="htdemucs", sample_rate=44100, channels=2
+        )
 
     assert len(fake_called) == 1
     assert os.path.exists(res1["vocals"])
@@ -45,10 +47,14 @@ def test_demucs_global_cache_end_to_end(tmp_path):
 
     # 2. Second project: Warm run (cache hit -> skips worker -> copies cached stems)
     fake_called.clear()
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator._run_demucs") as mock_cpu, \
-         mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg):
-        res2 = vocal_separator.separate_vocals(input_wav, dir_project_2, model="htdemucs", sample_rate=44100, channels=2)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator._run_demucs") as mock_cpu,
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        res2 = vocal_separator.separate_vocals(
+            input_wav, dir_project_2, model="htdemucs", sample_rate=44100, channels=2
+        )
 
     assert len(fake_called) == 0, "Demucs worker must NOT be called on warm cache hit"
     mock_cpu.assert_not_called()
@@ -79,15 +85,23 @@ def test_demucs_global_cache_invalidation_and_fallback(tmp_path):
         AudioSegment.from_wav(src).export(cmd[-1], format="wav")
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg):
-        vocal_separator.separate_vocals(input_wav, dir_project_1, model="htdemucs", sample_rate=44100, channels=2)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        vocal_separator.separate_vocals(
+            input_wav, dir_project_1, model="htdemucs", sample_rate=44100, channels=2
+        )
 
     assert worker_count == 1
 
     # Request with different model -> must invalidate and run worker
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg):
-        vocal_separator.separate_vocals(input_wav, dir_project_2, model="htdemucs_ft", sample_rate=44100, channels=2)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        vocal_separator.separate_vocals(
+            input_wav, dir_project_2, model="htdemucs_ft", sample_rate=44100, channels=2
+        )
 
     assert worker_count == 2, "Different model must invalidate cache and re-run worker"

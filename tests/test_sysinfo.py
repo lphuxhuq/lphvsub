@@ -1,4 +1,5 @@
 """Test autodub.sysinfo — đọc RAM không phụ thuộc thư viện ngoài."""
+
 from autodub import sysinfo
 
 
@@ -20,8 +21,7 @@ def test_failure_returns_none(monkeypatch):
 
 
 def test_posix_fallback_math(monkeypatch):
-    monkeypatch.setattr(sysinfo, "_memory_status",
-                        lambda: (8 * 1024 ** 3, 4 * 1024 ** 3))
+    monkeypatch.setattr(sysinfo, "_memory_status", lambda: (8 * 1024**3, 4 * 1024**3))
     sysinfo.total_ram_gb.cache_clear()
     assert sysinfo.total_ram_gb() == 8.0
     assert sysinfo.available_ram_gb() == 4.0
@@ -36,4 +36,3 @@ def test_vram_readings_mock(monkeypatch):
 def test_vram_readings_none(monkeypatch):
     monkeypatch.setattr(sysinfo, "gpu_vram_status_gb", lambda: None)
     assert sysinfo.available_vram_gb() is None
-

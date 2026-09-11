@@ -14,6 +14,7 @@ Thiết kế (high-end-visual-design skill):
   • Accent glow cho elements quan trọng (primary button, active card)
   • Bóng nhẹ — premium feel, không phủ màu
 """
+
 from __future__ import annotations
 
 from PySide6.QtGui import QColor
@@ -22,10 +23,12 @@ from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 from autodub_gui import tokens
 
 
-def soft_shadow(widget: QWidget,
-                blur: int = tokens.SHADOW_BLUR,
-                dy: int = tokens.SHADOW_Y,
-                alpha: int = tokens.SHADOW_ALPHA) -> QGraphicsDropShadowEffect:
+def soft_shadow(
+    widget: QWidget,
+    blur: int = tokens.SHADOW_BLUR,
+    dy: int = tokens.SHADOW_Y,
+    alpha: int = tokens.SHADOW_ALPHA,
+) -> QGraphicsDropShadowEffect:
     """Bóng mềm tinted indigo — không dùng black generic.
 
     Màu bóng: tối tím để phù hợp BG_APP.
@@ -40,10 +43,9 @@ def soft_shadow(widget: QWidget,
     return eff
 
 
-def accent_glow(widget: QWidget,
-                blur: int = 20,
-                dy: int = 2,
-                alpha: int = 60) -> QGraphicsDropShadowEffect:
+def accent_glow(
+    widget: QWidget, blur: int = 20, dy: int = 2, alpha: int = 60
+) -> QGraphicsDropShadowEffect:
     """Glow tím nhẹ cho primary buttons và active elements.
 
     Motivated: primary action cần visual weight — glow chỉ dùng cho CTA,
@@ -60,10 +62,9 @@ def accent_glow(widget: QWidget,
     return eff
 
 
-def danger_glow(widget: QWidget,
-                blur: int = 16,
-                dy: int = 2,
-                alpha: int = 50) -> QGraphicsDropShadowEffect:
+def danger_glow(
+    widget: QWidget, blur: int = 16, dy: int = 2, alpha: int = 50
+) -> QGraphicsDropShadowEffect:
     """Glow đỏ nhẹ cho destructive action buttons."""
     eff = QGraphicsDropShadowEffect(widget)
     eff.setBlurRadius(blur)

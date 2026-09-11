@@ -3,9 +3,9 @@
 Quét mọi tệp .py trong autodub_gui/ để bảo đảm không sót biểu tượng nào.
 Không nạp Qt, chỉ đọc chữ, nên chạy được trên mọi máy.
 """
+
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -15,15 +15,15 @@ import pytest
 # Chi bat pictographs, dingbats, symbols thuc su -- khong bat mui ten hay dau cau.
 _EMOJI_RE = re.compile(
     "["
-    "\U0001F000-\U0001FAFF"   # pictographs, emoticons, transport, symbols
-    "\U00002700-\U000027BF"   # dingbats (check, sparkles...)
-    "\U00002600-\U000026FF"   # misc symbols (sun, zap...)
-    "\U0001F1E6-\U0001F1FF"   # flags
-    "\U0000FE00-\U0000FE0F"   # variation selectors
-    "\U0001F3FB-\U0001F3FF"   # skin tones
-    "\U0000200D"              # ZWJ
-    "\U000020E3"              # combining keycap
-    "\U00002B00-\U00002BFF"   # arrows/stars (star, arrow...)
+    "\U0001f000-\U0001faff"  # pictographs, emoticons, transport, symbols
+    "\U00002700-\U000027bf"  # dingbats (check, sparkles...)
+    "\U00002600-\U000026ff"  # misc symbols (sun, zap...)
+    "\U0001f1e6-\U0001f1ff"  # flags
+    "\U0000fe00-\U0000fe0f"  # variation selectors
+    "\U0001f3fb-\U0001f3ff"  # skin tones
+    "\U0000200d"  # ZWJ
+    "\U000020e3"  # combining keycap
+    "\U00002b00-\U00002bff"  # arrows/stars (star, arrow...)
     "]"
 )
 
@@ -48,10 +48,18 @@ def _scan_file(filepath: str) -> list[tuple[int, str]]:
                 # Skip the _EMOJI_RE pattern itself (it defines what to strip)
                 stripped = line.strip()
                 if stripped.startswith('"') and any(
-                    k in stripped for k in (
-                        "U0001F000", "U00002700", "U00002600", "U0001F1E6",
-                        "U0000FE00", "U0001F3FB", "U0000200D", "U000020E3",
-                        "U00002B00", "U00002190",
+                    k in stripped
+                    for k in (
+                        "U0001F000",
+                        "U00002700",
+                        "U00002600",
+                        "U0001F1E6",
+                        "U0000FE00",
+                        "U0001F3FB",
+                        "U0000200D",
+                        "U000020E3",
+                        "U00002B00",
+                        "U00002190",
                     )
                 ):
                     continue
@@ -84,8 +92,7 @@ def test_no_emoji_in_gui() -> None:
         for fname, lineno, line in all_findings:
             msg_parts.append(f"  {fname}:{lineno}: {line}")
         msg_parts.append(
-            f"\nTotal: {len(all_findings)} emoji instances. "
-            "Use status_text.py constants instead."
+            f"\nTotal: {len(all_findings)} emoji instances. Use status_text.py constants instead."
         )
         pytest.fail("\n".join(msg_parts))
 
@@ -94,6 +101,7 @@ if __name__ == "__main__":
     # Allow running directly: python tests/test_gui_no_emoji.py
     try:
         import pytest
+
         test_no_emoji_in_gui()
     except ImportError:
         # Manual run without pytest

@@ -1,4 +1,5 @@
 """Kiểm thử sổ đăng ký việc đang chạy và nhật ký hoạt động."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,8 +7,16 @@ from dataclasses import dataclass
 import pytest
 
 from autodub_gui.run_state import (
-    DEFAULT_FEED_LIMIT, LEVEL_ERROR, LEVEL_INFO, MAX_ACTIVITIES, STEP_LABELS,
-    STEP_WEIGHTS, ActiveJob, RunRegistry, estimate_eta, step_percent,
+    DEFAULT_FEED_LIMIT,
+    LEVEL_ERROR,
+    LEVEL_INFO,
+    MAX_ACTIVITIES,
+    STEP_LABELS,
+    STEP_WEIGHTS,
+    ActiveJob,
+    RunRegistry,
+    estimate_eta,
+    step_percent,
 )
 
 
@@ -31,6 +40,7 @@ def registry() -> RunRegistry:
 
 # -- Bảng trọng số -----------------------------------------------------
 
+
 def test_weights_sum_to_one_hundred() -> None:
     """Tổng trọng số các bước phải đúng 100 để phần trăm không lệch."""
     assert sum(STEP_WEIGHTS.values()) == 100
@@ -52,6 +62,7 @@ def test_step_labels_match_core_pipeline_steps() -> None:
 
 
 # -- Tính phần trăm ----------------------------------------------------
+
 
 def test_percent_zero_at_start() -> None:
     assert step_percent(set()) == 0
@@ -83,6 +94,7 @@ def test_percent_ignores_unknown_step() -> None:
 
 # -- Ước lượng thời gian còn lại ---------------------------------------
 
+
 def test_eta_needs_enough_samples() -> None:
     """Mới chạy được một hai câu thì chưa ước lượng, tránh báo số sai lệch."""
     assert estimate_eta(elapsed=10.0, current=1, total=100) == 0.0
@@ -99,6 +111,7 @@ def test_eta_is_zero_when_finished() -> None:
 
 
 # -- Vòng đời của việc đang chạy ---------------------------------------
+
 
 def test_registry_starts_idle(registry: RunRegistry) -> None:
     assert registry.current() is None
@@ -130,8 +143,7 @@ def test_update_without_job_is_harmless(registry: RunRegistry) -> None:
 
 
 def test_finish_job_clears_state_and_logs(registry: RunRegistry) -> None:
-    registry.start_job(ActiveJob(kind="dub", title="video thử",
-                                 work_dir="output/x"))
+    registry.start_job(ActiveJob(kind="dub", title="video thử", work_dir="output/x"))
     registry.finish_job(True)
     assert registry.current() is None
     feed = registry.activities()
@@ -151,8 +163,7 @@ def test_finish_job_failure_is_logged_as_error(registry: RunRegistry) -> None:
 def test_cancel_calls_registered_callback(registry: RunRegistry) -> None:
     """Nút Dừng ở Trang chủ gọi đúng hàm dừng của trang đang chạy."""
     calls: list[int] = []
-    registry.start_job(ActiveJob(kind="dub", title="x"),
-                       on_cancel=lambda: calls.append(1))
+    registry.start_job(ActiveJob(kind="dub", title="x"), on_cancel=lambda: calls.append(1))
     assert registry.request_cancel() is True
     assert calls == [1]
 
@@ -162,6 +173,7 @@ def test_cancel_without_job_returns_false(registry: RunRegistry) -> None:
 
 
 # -- Nhật ký hoạt động -------------------------------------------------
+
 
 def test_activities_newest_first(registry: RunRegistry) -> None:
     registry.add_activity(LEVEL_INFO, "một")

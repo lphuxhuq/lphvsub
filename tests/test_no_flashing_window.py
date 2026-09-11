@@ -12,6 +12,7 @@ Lỗi gốc: ``ui/collapsible.py`` tạo ``QWidget()`` không cha rồi gọi
 Cách tránh: truyền cha ngay lúc tạo — ``QWidget(self)`` — hoặc chỉ ẩn/hiện SAU
 khi đã ``addWidget``.
 """
+
 from __future__ import annotations
 
 import re
@@ -26,17 +27,31 @@ _THU_MUC = _ROOT / "autodub_gui"
 _TAO_KHONG_CHA = re.compile(
     r"^\s*(?P<ten>(?:self\.)?[A-Za-z_][\w.]*)\s*=\s*"
     r"(?:QWidget|QFrame|QLabel|QScrollArea|QStackedWidget|QGroupBox|"
-    r"QTabWidget|QToolBar|QSplitter)\(\)\s*$")
+    r"QTabWidget|QToolBar|QSplitter)\(\)\s*$"
+)
 
 # Các cách hợp lệ để widget có cha.
-_DA_CO_CHA = ("addWidget(", "insertWidget(", "addTab(", "setWidget(",
-              "setParent(", "setCellWidget(", "setItemWidget(", "addItem(",
-              "setTitleBarWidget(", "setCentralWidget(", "setMenuWidget(",
-              "setCornerWidget(", "setViewport(", "setLayout(",
-              "addPermanentWidget(", "layout.addRow(", "addRow(")
+_DA_CO_CHA = (
+    "addWidget(",
+    "insertWidget(",
+    "addTab(",
+    "setWidget(",
+    "setParent(",
+    "setCellWidget(",
+    "setItemWidget(",
+    "addItem(",
+    "setTitleBarWidget(",
+    "setCentralWidget(",
+    "setMenuWidget(",
+    "setCornerWidget(",
+    "setViewport(",
+    "setLayout(",
+    "addPermanentWidget(",
+    "layout.addRow(",
+    "addRow(",
+)
 
-_CHO_HIEN = ("setVisible(True", ".show()", "setVisible(expanded",
-             "setVisible(bool")
+_CHO_HIEN = ("setVisible(True", ".show()", "setVisible(expanded", "setVisible(bool")
 
 
 def _tep_nguon() -> list[Path]:
@@ -67,12 +82,13 @@ def _quet(duong_dan: Path) -> list[str]:
             if ten not in sau:
                 continue
             if any(k in sau for k in _DA_CO_CHA):
-                break                      # đã có cha, an toàn
+                break  # đã có cha, an toàn
             if any(k in sau for k in _CHO_HIEN):
                 vi_pham.append(
                     f"{_nhan(duong_dan)}:{j + 1}: "
                     f"«{ten}» được cho hiện khi chưa có cha "
-                    f"(tạo ở dòng {i + 1}) -> {sau.strip()}")
+                    f"(tạo ở dòng {i + 1}) -> {sau.strip()}"
+                )
                 break
     return vi_pham
 
@@ -87,7 +103,8 @@ def test_khong_hien_widget_chua_co_cha() -> None:
             f"riêng trên màn hình. Có {len(vi_pham)} chỗ:\n"
             + "\n".join(vi_pham)
             + "\n\nCách sửa: truyền cha ngay lúc tạo, ví dụ QWidget(self), "
-              "hoặc chỉ gọi setVisible/show SAU khi đã addWidget.")
+            "hoặc chỉ gọi setVisible/show SAU khi đã addWidget."
+        )
 
 
 def test_bo_quet_thuc_su_bat_duoc_loi(tmp_path) -> None:
@@ -98,7 +115,8 @@ def test_bo_quet_thuc_su_bat_duoc_loi(tmp_path) -> None:
         "    self._content = QWidget()\n"
         "    self._content.setVisible(True)\n"
         "    root.addWidget(self._content)\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     assert _quet(mau), "bộ quét bỏ sót mẫu lỗi đã từng gây nháy cửa sổ"
 
 
@@ -110,5 +128,6 @@ def test_bo_quet_khong_bao_nham(tmp_path) -> None:
         "    self._content = QWidget()\n"
         "    root.addWidget(self._content)\n"
         "    self._content.setVisible(True)\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     assert not _quet(mau)

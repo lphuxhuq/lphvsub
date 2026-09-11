@@ -1,14 +1,12 @@
 """Unit tests cho GlobalModelPool và model_preloader."""
+
 import threading
 import time
 from unittest import mock
 
-import pytest
-
 from autodub.config import Settings
 from autodub.model_preloader import (
     GlobalModelPool,
-    close_global_models,
     get_global_demucs_cache,
     get_global_lama_engine,
     get_global_model_pool,
@@ -47,14 +45,15 @@ def test_preload_models_order():
     mock_synth = mock.Mock()
     mock_lama = mock.Mock()
 
-    with mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf), \
-         mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper), \
-         mock.patch.object(pool, "get_demucs_cache", return_value=mock_demucs), \
-         mock.patch.object(pool, "get_synth_cache", return_value=mock_synth), \
-         mock.patch.object(pool, "get_lama_engine", return_value=mock_lama), \
-         mock.patch("autodub.media.vocal_separator.gpu_venv_python", return_value="dummy_python"), \
-         mock.patch.object(settings, "paraformer_configured", return_value=True):
-
+    with (
+        mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf),
+        mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper),
+        mock.patch.object(pool, "get_demucs_cache", return_value=mock_demucs),
+        mock.patch.object(pool, "get_synth_cache", return_value=mock_synth),
+        mock.patch.object(pool, "get_lama_engine", return_value=mock_lama),
+        mock.patch("autodub.media.vocal_separator.gpu_venv_python", return_value="dummy_python"),
+        mock.patch.object(settings, "paraformer_configured", return_value=True),
+    ):
         steps = []
         done_event = threading.Event()
         final_res = {}
@@ -100,12 +99,13 @@ def test_preload_error_isolation():
     mock_demucs = mock.Mock()
     mock_demucs._ensure.return_value = True
 
-    with mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf), \
-         mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper), \
-         mock.patch.object(pool, "get_demucs_cache", return_value=mock_demucs), \
-         mock.patch("autodub.media.vocal_separator.gpu_venv_python", return_value="dummy_python"), \
-         mock.patch.object(settings, "paraformer_configured", return_value=True):
-
+    with (
+        mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf),
+        mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper),
+        mock.patch.object(pool, "get_demucs_cache", return_value=mock_demucs),
+        mock.patch("autodub.media.vocal_separator.gpu_venv_python", return_value="dummy_python"),
+        mock.patch.object(settings, "paraformer_configured", return_value=True),
+    ):
         done_event = threading.Event()
         final_res = {}
 
@@ -153,7 +153,9 @@ def test_get_global_align_model():
     dummy_model = mock.Mock()
 
     try:
-        with mock.patch("autodub.speech.align._create_whisper_align_model", return_value=(dummy_model, "cpu", 2)):
+        with mock.patch(
+            "autodub.speech.align._create_whisper_align_model", return_value=(dummy_model, "cpu", 2)
+        ):
             m1, dev1, w1 = pool.get_align_model()
             m2, dev2, w2 = pool.get_align_model()
 
@@ -163,7 +165,9 @@ def test_get_global_align_model():
             assert w1 == 2
 
         # Global function cũng lấy từ pool
-        with mock.patch("autodub.speech.align._create_whisper_align_model", return_value=(dummy_model, "cpu", 2)):
+        with mock.patch(
+            "autodub.speech.align._create_whisper_align_model", return_value=(dummy_model, "cpu", 2)
+        ):
             gm1, _, _ = get_global_align_model()
             gm2, _, _ = get_global_align_model()
             assert gm1 is gm2
@@ -174,6 +178,7 @@ def test_get_global_align_model():
 def test_model_preloader_qt_signals_safe(qtbot):
     """Xác nhận callback nạp model qua Qt Signals được dispatch về đúng Main Thread an toàn."""
     import threading
+
     from PySide6.QtCore import QObject, Signal
 
     class Receiver(QObject):
@@ -232,11 +237,12 @@ def test_preload_concurrent_calls_ignored():
     mock_pf = mock.Mock()
     mock_pf._ensure.side_effect = mock_pf_ensure
 
-    with mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf), \
-         mock.patch.object(pool, "get_whisper_cache", return_value=mock.Mock()), \
-         mock.patch.object(pool, "get_demucs_cache", return_value=mock.Mock()), \
-         mock.patch.object(settings, "paraformer_configured", return_value=True):
-
+    with (
+        mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf),
+        mock.patch.object(pool, "get_whisper_cache", return_value=mock.Mock()),
+        mock.patch.object(pool, "get_demucs_cache", return_value=mock.Mock()),
+        mock.patch.object(settings, "paraformer_configured", return_value=True),
+    ):
         # Lần 1
         pool.preload_all_async(settings)
         assert worker_started.wait(timeout=2.0)
@@ -269,10 +275,11 @@ def test_preload_early_cancellation():
     mock_pf._ensure.side_effect = mock_pf_ensure
     mock_whisper = mock.Mock()
 
-    with mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf), \
-         mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper), \
-         mock.patch.object(settings, "paraformer_configured", return_value=True):
-
+    with (
+        mock.patch.object(pool, "get_paraformer_cache", return_value=mock_pf),
+        mock.patch.object(pool, "get_whisper_cache", return_value=mock_whisper),
+        mock.patch.object(settings, "paraformer_configured", return_value=True),
+    ):
         pool.preload_all_async(settings)
         assert pf_started.wait(timeout=2.0)
 
@@ -331,6 +338,7 @@ def test_synth_cache_thread_safety():
     cache = SynthCache()
     settings = Settings()
     from autodub.languages import get_target
+
     target = get_target("vi")
 
     create_calls = 0
@@ -342,9 +350,10 @@ def test_synth_cache_thread_safety():
         create_calls += 1
         return dummy_synth
 
-    with mock.patch("autodub.speech.tts.get_synthesizer", side_effect=fake_get_synth), \
-         mock.patch("autodub.speech.tts.voice_catalog.resolve", return_value="test_voice"):
-
+    with (
+        mock.patch("autodub.speech.tts.get_synthesizer", side_effect=fake_get_synth),
+        mock.patch("autodub.speech.tts.voice_catalog.resolve", return_value="test_voice"),
+    ):
         threads = []
         results = [None] * 5
 
@@ -362,6 +371,3 @@ def test_synth_cache_thread_safety():
         assert create_calls == 1
         for res in results:
             assert res is dummy_synth
-
-
-

@@ -1,15 +1,12 @@
 import os
-import sys
+
 from PIL import Image, ImageDraw
-import pytest
 
 from autodub.media.thumbnail import (
-    render_thumbnail,
-    generate_high_ctr_thumbnail,
-    score_frame_quality,
     detect_badge_from_context,
     extract_info_from_link_or_text,
-    PRESETS,
+    render_thumbnail,
+    score_frame_quality,
 )
 
 
@@ -160,7 +157,9 @@ def test_detect_badge_from_context_all_scenarios():
 
     for kwargs, expected in cases:
         actual = detect_badge_from_context(**kwargs)
-        assert actual == expected, f"Lỗi nhận diện cho {kwargs}: kỳ vọng {expected}, thực tế {actual}"
+        assert actual == expected, (
+            f"Lỗi nhận diện cho {kwargs}: kỳ vọng {expected}, thực tế {actual}"
+        )
 
 
 def test_extract_info_from_link_or_text():
@@ -188,4 +187,3 @@ def test_extract_info_from_link_or_text():
     res_bili = extract_info_from_link_or_text(bili_url)
     assert res_bili["platform"] == "Bilibili"
     assert res_bili["badge"] == "TẬP 17"
-

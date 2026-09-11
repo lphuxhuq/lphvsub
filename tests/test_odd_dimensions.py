@@ -8,20 +8,21 @@ Guarantees:
 - NVENC & CPU encoder compatible (YUV420p)
 - Handles portrait, landscape, and mixed odd dimensions.
 """
+
 import os
 import shutil
 import subprocess
+
 import pytest
 
 from autodub.media.dimension import (
-    make_even,
-    is_even_dimension,
-    normalize_dimensions,
     build_dimension_filter,
-    build_even_scale_filter,
+    is_even_dimension,
+    make_even,
+    normalize_dimensions,
 )
 from autodub.media.subtitle import build_filter_complex
-from autodub.media.video import probe_dimensions, render_preview_clip
+from autodub.media.video import probe_dimensions
 
 
 def test_make_even_math():
@@ -90,8 +91,16 @@ def test_real_ffmpeg_encodes_odd_dimensions_landscape(tmp_path):
     odd_video = str(tmp_path / "odd_landscape.mp4")
     # Tạo video mẫu 321x241 (odd width và odd height)
     cmd_gen = [
-        "ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=321x241:rate=1:duration=1",
-        "-c:v", "libx264", "-pix_fmt", "yuv444p",  # 444p hỗ trợ kích thước lẻ
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=321x241:rate=1:duration=1",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv444p",  # 444p hỗ trợ kích thước lẻ
         odd_video,
     ]
     res = subprocess.run(cmd_gen, capture_output=True, text=True)
@@ -101,9 +110,16 @@ def test_real_ffmpeg_encodes_odd_dimensions_landscape(tmp_path):
     dim_flt = build_dimension_filter()
     out_video = str(tmp_path / "encoded_landscape.mp4")
     cmd_encode = [
-        "ffmpeg", "-y", "-i", odd_video,
-        "-vf", dim_flt,
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "ffmpeg",
+        "-y",
+        "-i",
+        odd_video,
+        "-vf",
+        dim_flt,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
         out_video,
     ]
     res_enc = subprocess.run(cmd_encode, capture_output=True, text=True)
@@ -123,8 +139,16 @@ def test_real_ffmpeg_encodes_odd_dimensions_portrait(tmp_path):
     odd_video = str(tmp_path / "odd_portrait.mp4")
     # Tạo video mẫu 241x321 (portrait odd)
     cmd_gen = [
-        "ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=241x321:rate=1:duration=1",
-        "-c:v", "libx264", "-pix_fmt", "yuv444p",
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=241x321:rate=1:duration=1",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv444p",
         odd_video,
     ]
     res = subprocess.run(cmd_gen, capture_output=True, text=True)
@@ -134,9 +158,16 @@ def test_real_ffmpeg_encodes_odd_dimensions_portrait(tmp_path):
     dim_flt = build_dimension_filter()
     out_video = str(tmp_path / "encoded_portrait.mp4")
     cmd_encode = [
-        "ffmpeg", "-y", "-i", odd_video,
-        "-vf", dim_flt,
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "ffmpeg",
+        "-y",
+        "-i",
+        odd_video,
+        "-vf",
+        dim_flt,
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
         out_video,
     ]
     res_enc = subprocess.run(cmd_encode, capture_output=True, text=True)

@@ -11,6 +11,7 @@ stays free for Whisper/Demucs. Duration
 fitting uses a post-render ffmpeg atempo pass — the model has no render-speed
 parameter.
 """
+
 import atexit
 import collections
 import json
@@ -84,21 +85,27 @@ class _VieNeuWorker:
         except (ValueError, OSError):
             pass
         finally:
-            self._resp_queue.put(None)   # sentinel: stream closed
+            self._resp_queue.put(None)  # sentinel: stream closed
 
     def _start(self) -> None:
         settings = self._owner.settings
         cmd = [
             settings.vieneu_venv_python_path(),
             _WORKER_SCRIPT,
-            "--voice", self._owner.voice_name,
-            "--style", settings.vieneu_style,
-            "--model-dir", settings.vieneu_model_dir_path(),
-            "--custom-voices", settings.vieneu_custom_voices_path(),
-            "--intra-threads", str(self._owner.intra_threads),
+            "--voice",
+            self._owner.voice_name,
+            "--style",
+            settings.vieneu_style,
+            "--model-dir",
+            settings.vieneu_model_dir_path(),
+            "--custom-voices",
+            settings.vieneu_custom_voices_path(),
+            "--intra-threads",
+            str(self._owner.intra_threads),
         ]
-        logger.info(f"[worker {self._idx}] Starting VieNeu worker "
-                    f"(voice: {self._owner.voice_name})...")
+        logger.info(
+            f"[worker {self._idx}] Starting VieNeu worker (voice: {self._owner.voice_name})..."
+        )
         # stderr=PIPE + drain thread (xem f5_vi.py — cùng lý do).
         self._proc = subprocess.Popen(
             cmd,
@@ -111,15 +118,16 @@ class _VieNeuWorker:
         # Reset the response queue — each (re)start gets a clean queue so
         # stale sentinels from a previous dead process don't confuse us.
         self._resp_queue = queue.Queue()
-        threading.Thread(target=self._drain_stderr,
-                         args=(self._proc.stderr,), daemon=True).start()
-        threading.Thread(target=self._pump_stdout,
-                         args=(self._proc.stdout,), daemon=True,
-                         name=f"vieneu-stdout-{self._idx}").start()
+        threading.Thread(target=self._drain_stderr, args=(self._proc.stderr,), daemon=True).start()
+        threading.Thread(
+            target=self._pump_stdout,
+            args=(self._proc.stdout,),
+            daemon=True,
+            name=f"vieneu-stdout-{self._idx}",
+        ).start()
         ready = self._read_response(STARTUP_TIMEOUT)
         if not ready.get("ready"):
-            raise RuntimeError(
-                f"VieNeu worker failed to start: {ready}\n{self._tail()}")
+            raise RuntimeError(f"VieNeu worker failed to start: {ready}\n{self._tail()}")
         logger.info(f"[worker {self._idx}] VieNeu worker ready")
 
     def ensure(self) -> None:
@@ -146,7 +154,7 @@ class _VieNeuWorker:
                     try:
                         s.close()
                     except Exception:
-                        pass
+                        logger.debug("Bỏ qua lỗi Exception trong vieneu_vi.py", exc_info=True)
 
     def _read_response(self, timeout: float) -> dict:
         """Read the next JSON line from the persistent stdout reader queue.
@@ -157,14 +165,12 @@ class _VieNeuWorker:
         """
         try:
             line = self._resp_queue.get(timeout=timeout)
-        except queue.Empty:
+        except queue.Empty as e:
             if self._proc is not None:
                 self._proc.kill()
-            raise RuntimeError(
-                f"VieNeu worker timed out after {timeout}s\n{self._tail()}")
+            raise RuntimeError(f"VieNeu worker timed out after {timeout}s\n{self._tail()}") from e
         if line is None:
-            raise RuntimeError(
-                f"VieNeu worker stream closed unexpectedly\n{self._tail()}")
+            raise RuntimeError(f"VieNeu worker stream closed unexpectedly\n{self._tail()}")
         return json.loads(line)
 
     # --- synthesis --------------------------------------------------------
@@ -187,8 +193,7 @@ class _VieNeuWorker:
             # run doesn't disable recovery for the rest of it.
             if self._restarted:
                 raise
-            logger.warning(f"[worker {self._idx}] VieNeu worker error ({e}) "
-                           "— restarting once...")
+            logger.warning(f"[worker {self._idx}] VieNeu worker error ({e}) — restarting once...")
             self._restarted = True
             self.close()
             return self.render(text, output_path)
@@ -201,8 +206,7 @@ class _VieNeuWorker:
 class VieNeuSynthesizer:
     """VieNeu preset-voice synthesizer for Vietnamese dub segments."""
 
-    def __init__(self, settings: Settings, voice_name: str,
-                 num_workers: int = 1):
+    def __init__(self, settings: Settings, voice_name: str, num_workers: int = 1):
         self.settings = settings
         self.voice_name = voice_name
         n = max(1, num_workers)
@@ -239,24 +243,26 @@ class VieNeuSynthesizer:
         A2 fix: dùng ThreadPoolExecutor để load tất cả worker song song thay
         vì tuần tự — 3 worker × 30-60s → giảm từ ~3 phút xuống ~1 phút.
         """
+
         def _warm_one(w: _VieNeuWorker) -> None:
             try:
                 w.ensure()
             except Exception as e:
                 if w._idx == 0:
                     logger.warning(
-                        f"Không khởi động sớm được VieNeu ({e}) — "
-                        "sẽ thử lại ở bước tạo giọng")
+                        f"Không khởi động sớm được VieNeu ({e}) — sẽ thử lại ở bước tạo giọng"
+                    )
                 else:
                     logger.warning(
-                        f"[worker {w._idx}] Không khởi động được ({e}) — "
-                        "chạy tiếp với ít luồng hơn")
+                        f"[worker {w._idx}] Không khởi động được ({e}) — chạy tiếp với ít luồng hơn"
+                    )
                     self._drop_worker(w)
 
         def _warm() -> None:
             workers = list(self._workers)
-            with ThreadPoolExecutor(max_workers=len(workers),
-                                    thread_name_prefix="vieneu-warm") as ex:
+            with ThreadPoolExecutor(
+                max_workers=len(workers), thread_name_prefix="vieneu-warm"
+            ) as ex:
                 # submit tất cả rồi chờ — lỗi được bắt trong _warm_one
                 list(ex.map(_warm_one, workers))
 
@@ -277,7 +283,7 @@ class VieNeuSynthesizer:
                 while True:
                     drained.append(self._free.get_nowait())
             except queue.Empty:
-                pass
+                logger.debug("Bỏ qua lỗi queue.Empty trong vieneu_vi.py", exc_info=True)
             for x in drained:
                 if x is not w:
                     self._free.put(x)
@@ -303,10 +309,11 @@ class VieNeuSynthesizer:
         # fail loudly instead of hanging the whole run on an empty queue.
         try:
             w = self._free.get(timeout=SYNTH_TIMEOUT + 60)
-        except queue.Empty:
+        except queue.Empty as e:
             raise RuntimeError(
                 "Không còn luồng VieNeu nào rảnh (worker chết hoặc kẹt) — "
-                "thử chạy lại; nếu lặp lại, giảm VIENEU_MAX_WORKERS")
+                "thử chạy lại; nếu lặp lại, giảm VIENEU_MAX_WORKERS"
+            ) from e
         try:
             return w.render(text, output_path)
         finally:
@@ -330,6 +337,7 @@ class VieNeuSynthesizer:
         # Numbers must be spelled out for clean reading. NO lowercasing —
         # VieNeu is trained on cased text (better for brand names).
         from autodub.text.vi_numbers import normalize_vi_text
+
         text = normalize_vi_text(text.strip())
         if not text.strip(".,!?;: "):
             # Dòng trống (transcript sửa tay) — clip im lặng ngắn thay vì

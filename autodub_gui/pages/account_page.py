@@ -9,11 +9,18 @@ Mọi lượt gọi mạng đều nằm trên luồng nền: một cú bấm "K�
 giây, và giao diện đứng im trong lúc đó là lỗi nghiêm trọng hơn cả việc mã
 sai.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import tokens
@@ -56,15 +63,16 @@ class _CallWorker(QThread):
             self.done.emit(self._fn(), "")
         except SaasError as e:
             self.done.emit(None, str(e))
-        except Exception as e:  # noqa: BLE001 — báo lên giao diện, không sập
+        except Exception as e:
             self.done.emit(None, f"{type(e).__name__}: {e}")
 
 
 def _hint(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
-    label.setStyleSheet(f"color: {tokens.TEXT_MUTED}; "
-                        f"font-size: {tokens.FS_META}px; background: transparent;")
+    label.setStyleSheet(
+        f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+    )
     return label
 
 
@@ -84,8 +92,7 @@ class AccountPage(BasePage):
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_4,
-                                _PAGE_MARGIN, tokens.SP_4)
+        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_4, _PAGE_MARGIN, tokens.SP_4)
         root.setSpacing(tokens.SP_3)
 
         scroll = QScrollArea()
@@ -113,7 +120,8 @@ class AccountPage(BasePage):
         self.balance_label = QLabel("— Vox")
         self.balance_label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: 32px; font-weight: 700; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         card.body.addWidget(self.balance_label)
 
         self.balance_note = _hint("Đang đọc số dư…")
@@ -135,15 +143,20 @@ class AccountPage(BasePage):
     def _build_activate_card(self) -> Card:
         card = Card(padding=tokens.SP_4, spacing=tokens.SP_2)
         card.add_header("Kích hoạt mã")
-        card.body.addWidget(_hint(
-            "Mua Vox trên website, thanh toán qua PayOS (quét QR, thẻ ngân "
-            "hàng hoặc ví điện tử) là nhận mã ngay. Dán mã vào đây để cộng "
-            "Vox vào máy này.\n"
-            "Mỗi mã chỉ kích hoạt được MỘT lần trên MỘT máy — không có ngoại lệ."))
+        card.body.addWidget(
+            _hint(
+                "Mua Vox trên website, thanh toán qua PayOS (quét QR, thẻ ngân "
+                "hàng hoặc ví điện tử) là nhận mã ngay. Dán mã vào đây để cộng "
+                "Vox vào máy này.\n"
+                "Mỗi mã chỉ kích hoạt được MỘT lần trên MỘT máy — không có ngoại lệ."
+            )
+        )
 
         self.key_input = LabeledLineEdit(
-            "Mã kích hoạt", "VOX-XXXX-XXXX-XXXX",
-            "Gõ thường hay hoa đều được, dấu gạch nối không bắt buộc.")
+            "Mã kích hoạt",
+            "VOX-XXXX-XXXX-XXXX",
+            "Gõ thường hay hoa đều được, dấu gạch nối không bắt buộc.",
+        )
         card.body.addWidget(self.key_input)
 
         row = QHBoxLayout()
@@ -170,17 +183,20 @@ class AccountPage(BasePage):
         card = Card(padding=tokens.SP_4, spacing=tokens.SP_2)
         card.add_header("Máy này")
         self.device_label = QLabel("—")
-        self.device_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.device_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.device_label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         card.body.addWidget(self.device_label)
-        card.body.addWidget(_hint(
-            "Vox gắn với chiếc máy này, không phải với tài khoản. Cài lại "
-            "ứng dụng hay xóa cấu hình đều không mất Vox.\n"
-            "Đổi máy hoặc cài lại Windows thì mã máy đổi theo — đọc mã dưới "
-            "đây cho bộ phận hỗ trợ để được chuyển Vox sang máy mới."))
+        card.body.addWidget(
+            _hint(
+                "Vox gắn với chiếc máy này, không phải với tài khoản. Cài lại "
+                "ứng dụng hay xóa cấu hình đều không mất Vox.\n"
+                "Đổi máy hoặc cài lại Windows thì mã máy đổi theo — đọc mã dưới "
+                "đây cho bộ phận hỗ trợ để được chuyển Vox sang máy mới."
+            )
+        )
         return card
 
     # -- Nạp dữ liệu ---------------------------------------------------
@@ -201,7 +217,8 @@ class AccountPage(BasePage):
             self.balance_note.setText(
                 "Đang chạy thuần trên máy — không dùng Vox.\n"
                 "Bước dịch chuyển sang dịch tay. Muốn dịch tự động thì dựng "
-                "máy chủ theo control_server/README.md rồi đặt VOXDUB_API_URL.")
+                "máy chủ theo control_server/README.md rồi đặt VOXDUB_API_URL."
+            )
             return
 
         def _load():
@@ -217,18 +234,16 @@ class AccountPage(BasePage):
     def _on_loaded(self, result, error: str) -> None:
         if error:
             self.balance_note.setText(
-                f"Chưa đọc được số dư: {error}\n"
-                "Kiểm tra kết nối mạng rồi bấm Đọc lại số dư.")
+                f"Chưa đọc được số dư: {error}\nKiểm tra kết nối mạng rồi bấm Đọc lại số dư."
+            )
             return
         device, history = result
         balance = int(device.get("balance", 0))
         self.balance_label.setText(f"{balance:,} Vox".replace(",", "."))
         if not device.get("creditEnabled", True):
-            self.balance_note.setText(
-                "Hệ thống credit đang tắt — mọi tính năng miễn phí.")
+            self.balance_note.setText("Hệ thống credit đang tắt — mọi tính năng miễn phí.")
         else:
-            self.balance_note.setText(
-                f"Đủ dịch khoảng {balance} câu thoại.")
+            self.balance_note.setText(f"Đủ dịch khoảng {balance} câu thoại.")
         self.balance_changed.emit(balance)
         self._fill_history(history.get("items") or [])
 
@@ -254,17 +269,19 @@ class AccountPage(BasePage):
         desc = str(entry.get("description") or kind)
 
         text = QLabel(desc)
-        text.setSizePolicy(QSizePolicy.Policy.Expanding,
-                           QSizePolicy.Policy.Preferred)
-        text.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; "
-                           f"font-size: {tokens.FS_LABEL}px; background: transparent;")
+        text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        text.setStyleSheet(
+            f"color: {tokens.TEXT_SECONDARY}; "
+            f"font-size: {tokens.FS_LABEL}px; background: transparent;"
+        )
         layout.addWidget(text, 1)
 
         amount = QLabel(f"{delta:+,}".replace(",", "."))
         amount.setStyleSheet(
             f"color: {tokens.SUCCESS if delta > 0 else tokens.TEXT_MUTED}; "
             f"font-size: {tokens.FS_LABEL}px; font-weight: 600; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         layout.addWidget(amount)
         return row
 
@@ -296,12 +313,12 @@ class AccountPage(BasePage):
         balance = int(result.get("balanceAfter", 0))
         if result.get("alreadyActivated"):
             self.activate_status.setText(
-                "Mã này đã được kích hoạt trên máy này từ trước — không cộng lại.")
+                "Mã này đã được kích hoạt trên máy này từ trước — không cộng lại."
+            )
             TOASTS.info("Mã đã kích hoạt trước đó rồi.")
         else:
             self.activate_status.setText(f"Đã cộng {vox:,} Vox.".replace(",", "."))
-            TOASTS.success(f"Kích hoạt thành công, cộng {vox:,} Vox."
-                           .replace(",", "."))
+            TOASTS.success(f"Kích hoạt thành công, cộng {vox:,} Vox.".replace(",", "."))
             self.key_input.set_text("")
         self.balance_label.setText(f"{balance:,} Vox".replace(",", "."))
         self.balance_changed.emit(balance)

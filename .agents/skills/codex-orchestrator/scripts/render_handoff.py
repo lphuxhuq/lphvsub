@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Render a provenance-bound Antigravity handoff from an approved plan and READY task."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-import re
 
 
 def read(path: Path) -> str:

@@ -9,6 +9,7 @@ lượng và ngày tháng trước đây không bao giờ hiện đúng. Hàm qu
 đúng tên mới trước, rồi mới thử tên cũ để những thư mục làm từ bản trước
 vẫn dùng được.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,7 @@ from autodub.workdir import data_path
 STATUS_COMPLETED = "completed"
 STATUS_PROCESSING = "processing"
 STATUS_PENDING = "pending"
-STATUS_LOCKED = "locked"          # đã lồng tiếng xong, chờ bấm Xuất video
+STATUS_LOCKED = "locked"  # đã lồng tiếng xong, chờ bấm Xuất video
 STATUS_FAILED = "failed"
 STATUS_QUEUED = "queued"
 
@@ -46,7 +47,7 @@ PENDING_MARKER = "TRANSLATE_PENDING.txt"
 _DERIVED_PREFIXES = ("dubbed_", "retimed_", "slowed_")
 _VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".avi", ".webm")
 _WORK_DIR_SUFFIX = "*_vi"
-_INDEX_VERSION = 3         # bump khi đổi cách suy trạng thái (thêm "locked")
+_INDEX_VERSION = 3  # bump khi đổi cách suy trạng thái (thêm "locked")
 _THUMB_WIDTH = 480
 _THUMB_SEEK_S = 1
 _FFMPEG_TIMEOUT_S = 20
@@ -106,8 +107,7 @@ def _source_video(work_dir: str) -> str:
         return path
     for name in sorted(os.listdir(work_dir)):
         lower = name.lower()
-        if (lower.endswith(_VIDEO_EXTS)
-                and not name.startswith(_DERIVED_PREFIXES)):
+        if lower.endswith(_VIDEO_EXTS) and not name.startswith(_DERIVED_PREFIXES):
             return os.path.join(work_dir, name)
     return ""
 
@@ -156,8 +156,7 @@ def _has_error_marker(work_dir: str) -> bool:
     try:
         for name in os.listdir(work_dir):
             lower = name.lower()
-            if lower.endswith(".error") or (lower.startswith("error")
-                                            and lower.endswith(".txt")):
+            if lower.endswith(".error") or (lower.startswith("error") and lower.endswith(".txt")):
                 return True
     except OSError:
         return False
@@ -248,8 +247,7 @@ def _save_index(output_dir: str, entries: dict) -> None:
     """Ghi bộ nhớ đệm; hỏng thì bỏ qua vì đây chỉ là thứ giúp chạy nhanh hơn."""
     try:
         with open(_index_path(output_dir), "w", encoding="utf-8") as f:
-            json.dump({"version": _INDEX_VERSION, "entries": entries}, f,
-                      ensure_ascii=False)
+            json.dump({"version": _INDEX_VERSION, "entries": entries}, f, ensure_ascii=False)
     except OSError:
         pass
 
@@ -258,8 +256,7 @@ def _to_dict(project: Project) -> dict:
     return {k: v for k, v in vars(project).items() if k != "extra"}
 
 
-def scan(output_dir: str, running_dir: str = "",
-         use_cache: bool = True) -> list[Project]:
+def scan(output_dir: str, running_dir: str = "", use_cache: bool = True) -> list[Project]:
     """Liệt kê mọi dự án trong thư mục kết quả, mới nhất đứng đầu.
 
     Kết quả được ghi đệm theo thời điểm sửa đổi của từng thư mục, nên lần
@@ -283,8 +280,9 @@ def scan(output_dir: str, running_dir: str = "",
             continue
         entry = cached.get(work_dir)
         # Thư mục đang chạy luôn phải đọc lại vì trạng thái đổi liên tục.
-        is_running = bool(running_dir) and os.path.normpath(
-            running_dir) == os.path.normpath(work_dir)
+        is_running = bool(running_dir) and os.path.normpath(running_dir) == os.path.normpath(
+            work_dir
+        )
         if entry and entry.get("mtime") == mtime and not is_running:
             project = Project(**entry["project"])
         else:
@@ -332,21 +330,33 @@ def ensure_thumbnail(project: Project) -> str:
         return ""
     os.makedirs(os.path.dirname(target), exist_ok=True)
     command = [
-        "ffmpeg", "-v", "error", "-ss", str(_THUMB_SEEK_S), "-i", source,
-        "-frames:v", "1", "-q:v", "3", "-y",
-        "-vf", f"scale={_THUMB_WIDTH}:-1", target,
+        "ffmpeg",
+        "-v",
+        "error",
+        "-ss",
+        str(_THUMB_SEEK_S),
+        "-i",
+        source,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "3",
+        "-y",
+        "-vf",
+        f"scale={_THUMB_WIDTH}:-1",
+        target,
     ]
     try:
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        subprocess.run(command, capture_output=True,
-                       timeout=_FFMPEG_TIMEOUT_S, creationflags=flags)
+        subprocess.run(command, capture_output=True, timeout=_FFMPEG_TIMEOUT_S, creationflags=flags)
     except (OSError, subprocess.SubprocessError):
         return ""
     return target if os.path.isfile(target) else ""
 
 
-def filter_projects(projects: list[Project], query: str = "",
-                    status: str = "", sort_key: str = "newest") -> list[Project]:
+def filter_projects(
+    projects: list[Project], query: str = "", status: str = "", sort_key: str = "newest"
+) -> list[Project]:
     """Lọc theo chữ tìm kiếm và trạng thái, rồi sắp xếp theo yêu cầu."""
     result = list(projects)
     text = (query or "").strip().lower()

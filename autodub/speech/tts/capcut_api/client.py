@@ -6,7 +6,7 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 from urllib.parse import urlencode
 
 try:
@@ -16,11 +16,16 @@ except ImportError:
 
 from autodub.speech.tts.capcut_api.config import BASE_URL, catalog_file
 from autodub.speech.tts.capcut_api.exceptions import CapCutAPIError, CapCutError, CapCutTaskError
-from autodub.speech.tts.capcut_api.models import DeviceConfig, SubtitleResult, UploadResult, VoiceInfo
+from autodub.speech.tts.capcut_api.models import (
+    DeviceConfig,
+    SubtitleResult,
+    UploadResult,
+    VoiceInfo,
+)
 from autodub.speech.tts.capcut_api.signer import (
     base_headers,
-    compact_json,
     common_query,
+    compact_json,
     escape_xml,
     make_sign_header,
     make_tts_payload_sign,
@@ -28,7 +33,7 @@ from autodub.speech.tts.capcut_api.signer import (
 from autodub.speech.tts.capcut_api.uploader import VODUploader
 
 
-def _checked_json_response(resp: Any, label: str) -> Dict[str, Any]:
+def _checked_json_response(resp: Any, label: str) -> dict[str, Any]:
     try:
         data = resp.json()
     except Exception as exc:
@@ -53,7 +58,7 @@ def _checked_json_response(resp: Any, label: str) -> Dict[str, Any]:
     return data
 
 
-def _extract_speech_url(task: Dict[str, Any]) -> str:
+def _extract_speech_url(task: dict[str, Any]) -> str:
     """Lấy URL audio từ payload TTS — API đổi field khá thường."""
     if not isinstance(task, dict):
         return ""
@@ -96,8 +101,8 @@ class CapCutClient:
 
     def __init__(
         self,
-        device: Optional[Union[DeviceConfig, Dict[str, Any], str, Path]] = None,
-        session: Optional[Any] = None,
+        device: DeviceConfig | dict[str, Any] | str | Path | None = None,
+        session: Any | None = None,
     ):
         """
         Initialize CapCutClient.
@@ -120,6 +125,7 @@ class CapCutClient:
             self.session = requests.Session()
             try:
                 from requests.adapters import HTTPAdapter
+
                 adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16)
                 self.session.mount("https://", adapter)
                 self.session.mount("http://", adapter)
@@ -134,10 +140,10 @@ class CapCutClient:
 
     def resolve_voice(
         self,
-        voice: Optional[str] = None,
-        resource_id: Optional[str] = None,
-        catalog_path: Optional[Union[str, Path]] = None,
-    ) -> Tuple[str, str]:
+        voice: str | None = None,
+        resource_id: str | None = None,
+        catalog_path: str | Path | None = None,
+    ) -> tuple[str, str]:
         """
         Resolve voice_type and resource_id from Voice.json catalog or explicit inputs.
 
@@ -162,7 +168,9 @@ class CapCutClient:
 
         # 2. Secondary match: display_name or resource_id
         for v in all_voices:
-            if v.display_name.lower() == target_lower or (target_res and v.resource_id == target_res):
+            if v.display_name.lower() == target_lower or (
+                target_res and v.resource_id == target_res
+            ):
                 return v.voice_type, target_res or v.resource_id
 
         # Fallback to provided values or defaults
@@ -176,11 +184,11 @@ class CapCutClient:
 
     def build_tts_new_request(
         self,
-        texts: Union[str, List[str]],
-        voice: Optional[str] = "BV074_streaming",
-        resource_id: Optional[str] = None,
+        texts: str | list[str],
+        voice: str | None = "BV074_streaming",
+        resource_id: str | None = None,
         rate: str = "1.0",
-    ) -> Tuple[str, Dict[str, str], str]:
+    ) -> tuple[str, dict[str, str], str]:
         """
         Build URL, headers, and body string for creating a new TTS task.
         Automatically resolves resource_id for voice character if omitted.
@@ -209,7 +217,7 @@ class CapCutClient:
                 f'resource_id="{final_resource_id}" emotion="" emotion_scale="0" style="" role="" '
                 f'moyin_emotion="" is_clone_tone="false" need_subtitle_timestamp="false">\n'
                 f'        <prosody rate="{rate}">{escape_xml(text)}</prosody>\n'
-                f'    </voice>'
+                f"    </voice>"
             )
         ssml = (
             '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">\n'
@@ -264,7 +272,7 @@ class CapCutClient:
         language: str = "zh-CN",
         translation_language: str = "vi-VN",
         use_translation: bool = False,
-    ) -> Tuple[str, Dict[str, str], str]:
+    ) -> tuple[str, dict[str, str], str]:
         """
         Build URL, headers, and body string for creating a new STT task.
         """
@@ -288,9 +296,7 @@ class CapCutClient:
             "max_lines": 1,
             "md5": audio_md5,
             "pack_options": {"need_attribute": True},
-            "songs_info": [
-                {"end_time": float(duration_ms) - 10.334, "id": "", "start_time": 0}
-            ],
+            "songs_info": [{"end_time": float(duration_ms) - 10.334, "id": "", "start_time": 0}],
             "translation_language": translation_language,
             "use_translation": bool(use_translation),
             "words_per_line": 15,
@@ -327,16 +333,12 @@ class CapCutClient:
         token: str,
         mode: str = "tts",
         bind_id: str = "",
-    ) -> Tuple[str, Dict[str, str], str]:
+    ) -> tuple[str, dict[str, str], str]:
         """
         Build URL, headers, and body string for querying a task.
         :param mode: "tts" or "stt"
         """
-        req_key = (
-            "sami_text_to_speech"
-            if mode in ("tts", "tts-query")
-            else "cc_audio_subtitle_asr"
-        )
+        req_key = "sami_text_to_speech" if mode in ("tts", "tts-query") else "cc_audio_subtitle_asr"
         device_dict = self.device.to_dict()
         body = {
             "tasks": [
@@ -353,9 +355,7 @@ class CapCutClient:
         path = "/lv/v1/common_task/query"
         query = common_query(device_dict, None, include_region=False)
         url = BASE_URL + path + "?" + urlencode(query)
-        headers = base_headers(
-            device_dict, body_text, appid=(mode in ("tts", "tts-query"))
-        )
+        headers = base_headers(device_dict, body_text, appid=(mode in ("tts", "tts-query")))
         lower_headers = {k.lower(): v for k, v in headers.items()}
         if "sign" not in lower_headers:
             headers["sign"] = make_sign_header(
@@ -369,11 +369,11 @@ class CapCutClient:
 
     def create_tts_task(
         self,
-        texts: Union[str, List[str]],
-        voice: Optional[str] = "BV074_streaming",
-        resource_id: Optional[str] = None,
+        texts: str | list[str],
+        voice: str | None = "BV074_streaming",
+        resource_id: str | None = None,
         rate: str = "1.0",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Submit a new Text-to-Speech task to CapCut API.
         """
@@ -383,9 +383,7 @@ class CapCutClient:
         resp = self.session.post(url, headers=headers, data=body_text.encode("utf-8"), timeout=60)
         return _checked_json_response(resp, "create_tts_task")
 
-    def query_tts_task(
-        self, task_id: str, token: str, bind_id: str = ""
-    ) -> Dict[str, Any]:
+    def query_tts_task(self, task_id: str, token: str, bind_id: str = "") -> dict[str, Any]:
         """
         Query TTS task status by task_id and token.
         """
@@ -399,14 +397,14 @@ class CapCutClient:
 
     def generate_speech(
         self,
-        texts: Union[str, List[str]],
-        voice: Optional[str] = "BV074_streaming",
-        resource_id: Optional[str] = None,
+        texts: str | list[str],
+        voice: str | None = "BV074_streaming",
+        resource_id: str | None = None,
         rate: str = "1.0",
         wait: bool = True,
         poll_interval: float = 0.35,
         timeout: float = 60.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Convenience method: Submits TTS task and polls until completed.
         """
@@ -428,7 +426,7 @@ class CapCutClient:
         start_time = time.time()
         # CapCut cần tối thiểu ~0.3s để sinh audio; query quá sớm (<0.1s) sẽ bị máy chủ chặn rate limit
         time.sleep(0.35)
-        last_query: Dict[str, Any] = {}
+        last_query: dict[str, Any] = {}
         interval = max(0.3, poll_interval)
         while time.time() - start_time < timeout:
             try:
@@ -457,20 +455,16 @@ class CapCutClient:
                 if status in ("success", "succeed", "succeeds", "done", "finished"):
                     url = _extract_speech_url(query_tasks[0])
                     if not url:
-                        raise CapCutTaskError(
-                            f"TTS Task succeeded but no audio URL: {query_res}"
-                        )
+                        raise CapCutTaskError(f"TTS Task succeeded but no audio URL: {query_res}")
                     query_tasks[0]["speech_url"] = url
                     return query_tasks[0]
                 if status in ("failed", "fail", "error"):
                     raise CapCutTaskError(f"TTS Task failed: {query_res}")
             time.sleep(interval)
 
-        raise CapCutTaskError(
-            f"TTS Task timed out after {timeout} seconds: {last_query}"
-        )
+        raise CapCutTaskError(f"TTS Task timed out after {timeout} seconds: {last_query}")
 
-    def upload_audio(self, file_path: Union[str, Path]) -> UploadResult:
+    def upload_audio(self, file_path: str | Path) -> UploadResult:
         """
         Upload audio or video file to VOD space.
         """
@@ -485,7 +479,7 @@ class CapCutClient:
         language: str = "zh-CN",
         translation_language: str = "vi-VN",
         use_translation: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Submit Speech-to-Text task using pre-uploaded media vid and md5.
         """
@@ -497,9 +491,7 @@ class CapCutClient:
         resp = self.session.post(url, headers=headers, data=body_text.encode("utf-8"), timeout=60)
         return _checked_json_response(resp, "create_stt_task")
 
-    def query_stt_task(
-        self, task_id: str, token: str, bind_id: str = ""
-    ) -> Dict[str, Any]:
+    def query_stt_task(self, task_id: str, token: str, bind_id: str = "") -> dict[str, Any]:
         """
         Query STT task status by task_id and token.
         """
@@ -513,14 +505,14 @@ class CapCutClient:
 
     def transcribe_file(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         language: str = "zh-CN",
         translation_language: str = "vi-VN",
         use_translation: bool = False,
         wait: bool = True,
         poll_interval: float = 2.0,
         timeout: float = 120.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Upload media file, create STT task, and optionally poll for completion.
         """
@@ -560,7 +552,7 @@ class CapCutClient:
 
         raise CapCutTaskError(f"STT Task timed out after {timeout} seconds")
 
-    def extract_subtitles(self, query_response: Dict[str, Any]) -> SubtitleResult:
+    def extract_subtitles(self, query_response: dict[str, Any]) -> SubtitleResult:
         """
         Extract and parse subtitles from an STT query response payload.
         """
@@ -578,13 +570,15 @@ class CapCutClient:
             raise CapCutError(f"Failed to parse subtitle payload: {exc}") from exc
 
     def list_voices(
-        self, lang: Optional[str] = None, catalog_path: Optional[Union[str, Path]] = None
-    ) -> List[VoiceInfo]:
+        self, lang: str | None = None, catalog_path: str | Path | None = None
+    ) -> list[VoiceInfo]:
         """
         List available CapCut TTS voices from catalog file.
         """
         path = catalog_path or catalog_file()
         voices = VoiceInfo.load_catalog(path)
         if lang:
-            return [v for v in voices if v.lang.lower() == lang.lower() or v.lan.lower() == lang.lower()]
+            return [
+                v for v in voices if v.lang.lower() == lang.lower() or v.lan.lower() == lang.lower()
+            ]
         return voices

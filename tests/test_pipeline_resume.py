@@ -7,17 +7,15 @@ Tests:
 4. Corrupt/truncated TTS WAV segments are detected and re-synthesized.
 5. Video merge reuse respects dependency mtimes (re-merges if audio or subtitles updated).
 """
+
 import json
 import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
 
 from autodub.config import Settings
 from autodub.languages import get_target
 from autodub.pipeline import DubPipeline, DubRequest
-from autodub.workdir import data_dir, data_path
 
 
 def _create_valid_wav(path: str, duration_samples: int = 16000):
@@ -30,7 +28,9 @@ def _create_valid_wav(path: str, duration_samples: int = 16000):
         # RIFF header
         f.write(b"RIFF" + riff_len.to_bytes(4, "little") + b"WAVE")
         # fmt chunk: 16-bit PCM, 1 channel, 16000 Hz, 32000 bytes/sec, 2 bytes/sample
-        f.write(b"fmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\x3e\x00\x00\x00\x7d\x00\x00\x02\x00\x10\x00")
+        f.write(
+            b"fmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\x3e\x00\x00\x00\x7d\x00\x00\x02\x00\x10\x00"
+        )
         # data chunk
         f.write(b"data" + data_len.to_bytes(4, "little") + raw_pcm)
 
@@ -57,12 +57,24 @@ def test_pipeline_resume_reuses_all_earlier_stages(tmp_path):
     _create_valid_wav(str(d_dir / "original_audio_hq.wav"))
 
     # Pre-populate transcript (with speaker_id to skip diarization)
-    orig_segs = [{"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "你好", "speaker_id": 1}]
+    orig_segs = [
+        {"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "你好", "speaker_id": 1}
+    ]
     with open(d_dir / "transcript_original.json", "w", encoding="utf-8") as f:
         json.dump(orig_segs, f)
 
     # Pre-populate translation
-    dub_segs = [{"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "你好", "text_vi": "Xin chào", "speaker_id": 1}]
+    dub_segs = [
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 1.0,
+            "duration": 1.0,
+            "text": "你好",
+            "text_vi": "Xin chào",
+            "speaker_id": 1,
+        }
+    ]
     with open(d_dir / "transcript_vi.json", "w", encoding="utf-8") as f:
         json.dump(dub_segs, f)
 
@@ -72,19 +84,27 @@ def test_pipeline_resume_reuses_all_earlier_stages(tmp_path):
     with open(seg_dir / ".render_mode", "w", encoding="utf-8") as f:
         f.write(DubPipeline.RENDER_MODE)
     from autodub.utils import seg_wav_path
+
     seg_file = seg_wav_path(str(seg_dir), 1)
     _create_valid_wav(str(seg_file))
 
     settings = Settings(bg_mode="none", diarization_enabled=False, speech_boundary_refine=False)
     pipeline = DubPipeline(settings)
-    req = DubRequest(file_path=str(video_file), resume_dir=str(proj_dir), target="vi", bg_mode="none", skip_video=True)
+    req = DubRequest(
+        file_path=str(video_file),
+        resume_dir=str(proj_dir),
+        target="vi",
+        bg_mode="none",
+        skip_video=True,
+    )
 
-    with patch("autodub.media.audio.extract_audio") as mock_extract, \
-         patch("autodub.speech.transcriber.transcribe") as mock_transcribe, \
-         patch.object(DubPipeline, "_auto_translate") as mock_translate, \
-         patch.object(DubPipeline, "_get_synth") as mock_get_synth, \
-         patch("autodub.media.audio.merge_segments") as mock_merge:
-
+    with (
+        patch("autodub.media.audio.extract_audio") as mock_extract,
+        patch("autodub.speech.transcriber.transcribe") as mock_transcribe,
+        patch.object(DubPipeline, "_auto_translate") as mock_translate,
+        patch.object(DubPipeline, "_get_synth") as mock_get_synth,
+        patch("autodub.media.audio.merge_segments") as mock_merge,
+    ):
         res = pipeline.run(req)
 
         assert res.status == "completed"
@@ -116,19 +136,44 @@ def test_pipeline_resume_handles_corrupted_transcript(tmp_path):
 
     settings = Settings(bg_mode="none", diarization_enabled=False, speech_boundary_refine=False)
     pipeline = DubPipeline(settings)
-    req = DubRequest(file_path=str(video_file), resume_dir=str(proj_dir), target="vi", bg_mode="none", skip_video=True)
+    req = DubRequest(
+        file_path=str(video_file),
+        resume_dir=str(proj_dir),
+        target="vi",
+        bg_mode="none",
+        skip_video=True,
+    )
 
-    mock_segs = [{"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "Re-transcribed text"}]
-    mock_dub_segs = [{"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "Re-transcribed text", "text_vi": "Văn bản nghe lại"}]
+    mock_segs = [
+        {"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "Re-transcribed text"}
+    ]
+    mock_dub_segs = [
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 1.0,
+            "duration": 1.0,
+            "text": "Re-transcribed text",
+            "text_vi": "Văn bản nghe lại",
+        }
+    ]
 
-    dummy_tts_res = [{"path": "dummy.wav", "actual_duration": 1.0, "speed_adjusted": False, "rate_applied": "cached"}]
+    dummy_tts_res = [
+        {
+            "path": "dummy.wav",
+            "actual_duration": 1.0,
+            "speed_adjusted": False,
+            "rate_applied": "cached",
+        }
+    ]
 
-    with patch("autodub.speech.transcriber.transcribe", return_value=mock_segs) as mock_transcribe, \
-         patch.object(DubPipeline, "_auto_translate", return_value=mock_dub_segs) as mock_translate, \
-         patch.object(DubPipeline, "_get_synth"), \
-         patch.object(DubPipeline, "_synthesize_segments", return_value=dummy_tts_res), \
-         patch("autodub.media.audio.merge_segments") as mock_merge:
-
+    with (
+        patch("autodub.speech.transcriber.transcribe", return_value=mock_segs) as mock_transcribe,
+        patch.object(DubPipeline, "_auto_translate", return_value=mock_dub_segs) as mock_translate,
+        patch.object(DubPipeline, "_get_synth"),
+        patch.object(DubPipeline, "_synthesize_segments", return_value=dummy_tts_res),
+        patch("autodub.media.audio.merge_segments") as mock_merge,
+    ):
         res = pipeline.run(req)
         assert res.status == "completed"
         # Must have fallen back to transcribing
@@ -155,20 +200,43 @@ def test_pipeline_resume_handles_corrupted_translation(tmp_path):
 
     # Corrupt translation file (0 bytes or invalid JSON)
     bad_trans = d_dir / "transcript_vi.json"
-    bad_trans.write_text("{\"broken\": ")
+    bad_trans.write_text('{"broken": ')
 
     settings = Settings(bg_mode="none", diarization_enabled=False, speech_boundary_refine=False)
     pipeline = DubPipeline(settings)
-    req = DubRequest(file_path=str(video_file), resume_dir=str(proj_dir), target="vi", bg_mode="none", skip_video=True)
+    req = DubRequest(
+        file_path=str(video_file),
+        resume_dir=str(proj_dir),
+        target="vi",
+        bg_mode="none",
+        skip_video=True,
+    )
 
-    mock_dub_segs = [{"id": 1, "start": 0.0, "end": 1.0, "duration": 1.0, "text": "你好", "text_vi": "Đã dịch lại"}]
-    dummy_tts_res = [{"path": "dummy.wav", "actual_duration": 1.0, "speed_adjusted": False, "rate_applied": "cached"}]
+    mock_dub_segs = [
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 1.0,
+            "duration": 1.0,
+            "text": "你好",
+            "text_vi": "Đã dịch lại",
+        }
+    ]
+    dummy_tts_res = [
+        {
+            "path": "dummy.wav",
+            "actual_duration": 1.0,
+            "speed_adjusted": False,
+            "rate_applied": "cached",
+        }
+    ]
 
-    with patch.object(DubPipeline, "_auto_translate", return_value=mock_dub_segs) as mock_translate, \
-         patch.object(DubPipeline, "_get_synth"), \
-         patch.object(DubPipeline, "_synthesize_segments", return_value=dummy_tts_res), \
-         patch("autodub.media.audio.merge_segments"):
-
+    with (
+        patch.object(DubPipeline, "_auto_translate", return_value=mock_dub_segs) as mock_translate,
+        patch.object(DubPipeline, "_get_synth"),
+        patch.object(DubPipeline, "_synthesize_segments", return_value=dummy_tts_res),
+        patch("autodub.media.audio.merge_segments"),
+    ):
         res = pipeline.run(req)
         assert res.status == "completed"
         # Must have recovered and re-translated
@@ -186,6 +254,7 @@ def test_pipeline_resume_detects_corrupted_wav_segment_and_resynthesizes(tmp_pat
 
     # Write a corrupt 8-byte file as segment 1
     from autodub.utils import seg_wav_path
+
     bad_seg = seg_wav_path(str(seg_dir), 1)
     with open(bad_seg, "wb") as f:
         f.write(b"BAD_WAV!")
@@ -213,9 +282,11 @@ def test_pipeline_resume_detects_corrupted_wav_segment_and_resynthesizes(tmp_pat
     }
 
     # Disable UPC cache to isolate local resume check
-    os.environ["LPHVSub_DISABLE_CACHE"] = "1"
+    os.environ["LPHVSub_DISABLE_CACHE"] = "1"  # noqa: SIM112 — tên env cũ của production
     try:
-        results = pipeline._synthesize_segments(target, "nam_bac_1", segments, str(seg_dir), synth=mock_synth)
+        results = pipeline._synthesize_segments(
+            target, "nam_bac_1", segments, str(seg_dir), synth=mock_synth
+        )
         assert len(results) == 2
         # Segment 1 was corrupt -> mock_synth.synthesize was called for segment 1!
         mock_synth.synthesize.assert_called_once()
@@ -257,7 +328,11 @@ def test_pipeline_resume_video_mtime_invalidation(tmp_path):
     os.utime(str(merged_audio), (t_new, t_new))
 
     v_mtime = os.path.getmtime(str(dubbed_video))
-    dep_mtimes = [os.path.getmtime(str(video_file)), os.path.getmtime(str(merged_audio)), os.path.getmtime(str(sub_file))]
+    dep_mtimes = [
+        os.path.getmtime(str(video_file)),
+        os.path.getmtime(str(merged_audio)),
+        os.path.getmtime(str(sub_file)),
+    ]
     can_reuse_case1 = all(d <= v_mtime for d in dep_mtimes)
     assert not can_reuse_case1, "Must NOT reuse video when merged_audio is newer"
 

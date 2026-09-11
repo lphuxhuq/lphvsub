@@ -1,11 +1,12 @@
-"""Adapter kết nối với công cụ ngoài YaoFANGUK/video-subtitle-remover (VSR).
-"""
+"""Adapter kết nối với công cụ ngoài YaoFANGUK/video-subtitle-remover (VSR)."""
+
 from __future__ import annotations
 
 import os
 import subprocess
 import threading
-from typing import Callable
+from collections.abc import Callable
+
 import numpy as np
 
 from autodub.media.inpaint.base import BaseInpaintEngine
@@ -24,6 +25,7 @@ class VSRBridgeEngine(BaseInpaintEngine):
     def inpaint_frame(self, frame_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """VSR chạy theo video hoặc batch ảnh; fallback về LaMa nếu gọi frame đơn lẻ."""
         from autodub.media.inpaint.lama_onnx import LaMaOnnxEngine
+
         return LaMaOnnxEngine().inpaint_frame(frame_bgr, mask)
 
     def inpaint_video(
@@ -54,9 +56,11 @@ class VSRBridgeEngine(BaseInpaintEngine):
 
         # Lấy tọa độ bounding box pixel
         from autodub.media.video import probe_dimensions
+
         width, height = probe_dimensions(video_path)
 
         from autodub.media.inpaint.base import get_bounding_box_for_regions
+
         rx, ry, rw, rh = get_bounding_box_for_regions(regions, width, height, padding=8)
         ymin, ymax = ry, ry + rh
         xmin, xmax = rx, rx + rw
@@ -64,9 +68,15 @@ class VSRBridgeEngine(BaseInpaintEngine):
         cmd = [
             self.python_exe,
             main_script,
-            "-i", os.path.abspath(video_path),
-            "-o", os.path.abspath(output_path),
-            "-c", str(ymin), str(ymax), str(xmin), str(xmax),
+            "-i",
+            os.path.abspath(video_path),
+            "-o",
+            os.path.abspath(output_path),
+            "-c",
+            str(ymin),
+            str(ymax),
+            str(xmin),
+            str(xmax),
         ]
 
         logger.info(f"Khởi chạy VSR Subprocess: {' '.join(cmd)}")
@@ -101,7 +111,7 @@ class VSRBridgeEngine(BaseInpaintEngine):
                             val = float(parts[-1])
                             progress_cb(val / 100.0, f"[VSR] {val:.0f}%")
                         except Exception:
-                            pass
+                            logger.debug("Bỏ qua lỗi Exception trong vsr_bridge.py", exc_info=True)
 
             ret = proc.wait()
             if ret != 0:

@@ -13,6 +13,7 @@ làm bộ lọc trong giao diện.
 Thêm một bộ giọng mới chỉ là: tạo thư mục con, chép các tệp .wav vào, viết
 manifest — không phải sửa dòng mã nào.
 """
+
 from __future__ import annotations
 
 import json
@@ -73,8 +74,7 @@ def _entry_to_voice(entry: dict, folder: str) -> LibraryVoice | None:
         parts = stem.split("_")
         name = " ".join(parts[3:]) if len(parts) > 3 else stem.replace("_", " ")
     language = str(entry.get("language", "")).lower()
-    country = str(entry.get("country", "")).lower() or _LANG_COUNTRY.get(
-        language, "vn")
+    country = str(entry.get("country", "")).lower() or _LANG_COUNTRY.get(language, "vn")
     return LibraryVoice(
         name=name,
         wav=wav,

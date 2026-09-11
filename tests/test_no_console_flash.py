@@ -7,6 +7,7 @@ rồi đóng ngay — người dùng thấy màn hình nháy liên tục.
 Bản vá nằm ở autodub_gui/_frozen.py và phải chạy cho CẢ bản chạy từ mã nguồn
 lẫn bản đóng gói (trước đây chỉ áp dụng cho bản đóng gói).
 """
+
 from __future__ import annotations
 
 import os
@@ -27,8 +28,7 @@ def ban_va_sach(monkeypatch):
     def gia_lap_init(self, *args, **kwargs):
         lan_goi.append(kwargs)
 
-    monkeypatch.setattr(subprocess.Popen, "__init__", gia_lap_init,
-                        raising=False)
+    monkeypatch.setattr(subprocess.Popen, "__init__", gia_lap_init, raising=False)
     monkeypatch.setattr(_frozen, "_windows_hidden", False)
     return lan_goi
 
@@ -65,8 +65,7 @@ def test_an_cua_so_ca_khi_chay_tu_ma_nguon(monkeypatch):
     nguồn vẫn nháy cửa sổ. Kiểm tra init() gọi bản vá trước nhánh đó."""
     da_goi: list[str] = []
     monkeypatch.setattr(_frozen, "is_frozen", lambda: False)
-    monkeypatch.setattr(_frozen, "_hide_subprocess_windows",
-                        lambda: da_goi.append("an_cua_so"))
+    monkeypatch.setattr(_frozen, "_hide_subprocess_windows", lambda: da_goi.append("an_cua_so"))
     monkeypatch.setattr(_frozen, "_prepend_path", lambda *a: None)
     monkeypatch.setattr(os, "chdir", lambda _p: da_goi.append("doi_thu_muc"))
 
@@ -74,4 +73,5 @@ def test_an_cua_so_ca_khi_chay_tu_ma_nguon(monkeypatch):
 
     assert da_goi == ["an_cua_so"], (
         "init() phải ẩn cửa sổ console ngay cả khi chạy từ mã nguồn, và "
-        "không đổi thư mục làm việc khi chưa đóng gói")
+        "không đổi thư mục làm việc khi chưa đóng gói"
+    )

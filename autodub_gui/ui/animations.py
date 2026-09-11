@@ -10,27 +10,31 @@ Quy tắc (theo high-end-visual-design + design-taste-frontend skills):
   • Mọi animation phải có lý do: hierarchy, feedback, state transition
   • KHÔNG thêm animation chỉ vì "trông hay" (mỗi anim phải motivated)
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import (
-    QEasingCurve, QObject, QParallelAnimationGroup, QPropertyAnimation,
-    QSequentialAnimationGroup, QTimer, Qt,
+    QEasingCurve,
+    QParallelAnimationGroup,
+    QPropertyAnimation,
+    QSequentialAnimationGroup,
+    QTimer,
 )
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
 from autodub_gui import tokens
 
-
 # ---------------------------------------------------------------------------
 # Easing curves — custom spring-feel
 # ---------------------------------------------------------------------------
-_EASE_OUT_CUBIC  = QEasingCurve.Type.OutCubic
+_EASE_OUT_CUBIC = QEasingCurve.Type.OutCubic
 _EASE_INOUT_CUBIC = QEasingCurve.Type.InOutCubic
-_EASE_OUT_BACK   = QEasingCurve.Type.OutBack
+_EASE_OUT_BACK = QEasingCurve.Type.OutBack
 
 
-def fade_in(widget: QWidget, duration: int = tokens.ANIM_MID,
-            from_opacity: float = 0.0) -> QPropertyAnimation:
+def fade_in(
+    widget: QWidget, duration: int = tokens.ANIM_MID, from_opacity: float = 0.0
+) -> QPropertyAnimation:
     """Fade in một widget từ transparent → opaque.
 
     Tạo QGraphicsOpacityEffect nếu chưa có. Widget giữ effect sau khi
@@ -53,8 +57,9 @@ def fade_in(widget: QWidget, duration: int = tokens.ANIM_MID,
     return anim
 
 
-def fade_out(widget: QWidget, duration: int = tokens.ANIM_MID,
-             on_finished: object = None) -> QPropertyAnimation:
+def fade_out(
+    widget: QWidget, duration: int = tokens.ANIM_MID, on_finished: object = None
+) -> QPropertyAnimation:
     """Fade out một widget → transparent. Tùy chọn callback khi xong."""
     old_anim = getattr(widget, "_active_fade_anim", None)
     if old_anim is not None:
@@ -75,8 +80,9 @@ def fade_out(widget: QWidget, duration: int = tokens.ANIM_MID,
     return anim
 
 
-def fade_switch(old_widget: QWidget, new_widget: QWidget,
-                duration: int = tokens.ANIM_SLOW) -> QSequentialAnimationGroup:
+def fade_switch(
+    old_widget: QWidget, new_widget: QWidget, duration: int = tokens.ANIM_SLOW
+) -> QSequentialAnimationGroup:
     """Chuyển trang: fade out trang cũ → show trang mới → fade in.
 
     Pattern: page transition motivated bởi state change — người dùng
@@ -107,9 +113,9 @@ def fade_switch(old_widget: QWidget, new_widget: QWidget,
     return group
 
 
-def slide_fade_in(widget: QWidget, direction: str = "up",
-                  distance: int = 16,
-                  duration: int = tokens.ANIM_SLOW) -> QParallelAnimationGroup:
+def slide_fade_in(
+    widget: QWidget, direction: str = "up", distance: int = 16, duration: int = tokens.ANIM_SLOW
+) -> QParallelAnimationGroup:
     """Slide + fade in — cho page content, modal, toast.
 
     direction: 'up' | 'down' | 'left' | 'right'
@@ -142,8 +148,9 @@ def slide_fade_in(widget: QWidget, direction: str = "up",
     return group
 
 
-def animate_width(widget: QWidget, target_w: int,
-                  duration: int = tokens.ANIM_MID) -> QParallelAnimationGroup:
+def animate_width(
+    widget: QWidget, target_w: int, duration: int = tokens.ANIM_MID
+) -> QParallelAnimationGroup:
     """Animate max + min width cùng lúc — dùng cho sidebar collapse/expand.
 
     Animate cả maxWidth lẫn minWidth để tránh widget bị squish khi thu.
@@ -168,9 +175,9 @@ def animate_width(widget: QWidget, target_w: int,
     return group
 
 
-def pulse_opacity(widget: QWidget, min_opacity: float = 0.4,
-                  max_opacity: float = 1.0,
-                  duration: int = 1400) -> QSequentialAnimationGroup:
+def pulse_opacity(
+    widget: QWidget, min_opacity: float = 0.4, max_opacity: float = 1.0, duration: int = 1400
+) -> QSequentialAnimationGroup:
     """Pulsing opacity loop — cho status indicator, logo khi processing.
 
     Motivated: trạng thái "đang chạy" cần visual indicator liên tục.
@@ -200,18 +207,15 @@ def pulse_opacity(widget: QWidget, min_opacity: float = 0.4,
     return group
 
 
-def toast_slide_in(widget: QWidget,
-                   duration: int = 160) -> QParallelAnimationGroup:
+def toast_slide_in(widget: QWidget, duration: int = 160) -> QParallelAnimationGroup:
     """Toast slide in từ phải bottom — phiên bản nhanh hơn OutCubic.
 
     Motivated: feedback cho user action — cần instant nhưng vẫn smooth.
     """
-    return slide_fade_in(widget, direction="up", distance=10,
-                         duration=duration)
+    return slide_fade_in(widget, direction="up", distance=10, duration=duration)
 
 
-def delayed_fade_in(widget: QWidget, delay_ms: int,
-                    duration: int = tokens.ANIM_MID) -> None:
+def delayed_fade_in(widget: QWidget, delay_ms: int, duration: int = tokens.ANIM_MID) -> None:
     """Fade in sau một khoảng delay — staggered entry cho card lists.
 
     Motivated: hierarchy — items xuất hiện tuần tự để user theo dõi được.
@@ -235,6 +239,7 @@ def _ensure_opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
 def _offset_geo(geo, direction: str, distance: int):
     """Tính geometry bắt đầu lệch so với vị trí đích."""
     from PySide6.QtCore import QRect
+
     x, y, w, h = geo.x(), geo.y(), geo.width(), geo.height()
     if direction == "up":
         return QRect(x, y + distance, w, h)

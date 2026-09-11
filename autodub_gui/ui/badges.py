@@ -2,6 +2,7 @@
 
 Sáu kiểu: hoàn thành, đang xử lý, cảnh báo, lỗi, trung tính và nhấn mạnh.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, QSize, Qt
@@ -12,12 +13,12 @@ from autodub_gui import tokens
 
 # kiểu huy hiệu -> (màu chữ, màu nền)
 KINDS: dict[str, tuple[str, str]] = {
-    "success":    (tokens.SUCCESS, tokens.SUCCESS_BG),
+    "success": (tokens.SUCCESS, tokens.SUCCESS_BG),
     "processing": (tokens.PROCESSING, tokens.PROCESSING_BG),
-    "warning":    (tokens.WARNING, tokens.WARNING_BG),
-    "error":      (tokens.DANGER, tokens.DANGER_BG),
-    "neutral":    (tokens.TEXT_SECONDARY, tokens.NEUTRAL_BG),
-    "accent":     (tokens.ACCENT_PURPLE, tokens.PURPLE_BG),
+    "warning": (tokens.WARNING, tokens.WARNING_BG),
+    "error": (tokens.DANGER, tokens.DANGER_BG),
+    "neutral": (tokens.TEXT_SECONDARY, tokens.NEUTRAL_BG),
+    "accent": (tokens.ACCENT_PURPLE, tokens.PURPLE_BG),
 }
 _DEFAULT_KIND = "neutral"
 
@@ -40,8 +41,7 @@ STATUS_KIND: dict[str, str] = {
 class StatusBadge(QWidget):
     """Huy hiệu chữ ngắn, tự co giãn theo độ dài chữ bên trong."""
 
-    def __init__(self, text: str = "", kind: str = _DEFAULT_KIND,
-                 parent: QWidget | None = None):
+    def __init__(self, text: str = "", kind: str = _DEFAULT_KIND, parent: QWidget | None = None):
         super().__init__(parent)
         self._text = text
         self._kind = kind if kind in KINDS else _DEFAULT_KIND
@@ -67,14 +67,14 @@ class StatusBadge(QWidget):
         f.setWeight(QFont.Weight.DemiBold)
         return f
 
-    def sizeHint(self) -> QSize:  # noqa: N802 — theo quy ước của Qt
+    def sizeHint(self) -> QSize:
         width = QFontMetrics(self._font()).horizontalAdvance(self._text)
         return QSize(max(_MIN_W, width + _PAD_X * 2), _HEIGHT)
 
-    def minimumSizeHint(self) -> QSize:  # noqa: N802 — theo quy ước của Qt
+    def minimumSizeHint(self) -> QSize:
         return self.sizeHint()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         fg, bg = KINDS[self._kind]

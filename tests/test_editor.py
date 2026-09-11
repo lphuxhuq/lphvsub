@@ -2,6 +2,7 @@
 
 TTS and ffmpeg are stubbed — no synthesis, no encoding.
 """
+
 import json
 import os
 
@@ -33,7 +34,8 @@ def work_dir(tmp_path):
     d = tmp_path / "20260101000000_vi"
     d.mkdir()
     (d / "transcript_vi.json").write_text(
-        json.dumps(make_segments(), ensure_ascii=False), encoding="utf-8")
+        json.dumps(make_segments(), ensure_ascii=False), encoding="utf-8"
+    )
     (d / "source.mp4").write_bytes(b"x")
     (d / "dubbed_video.mp4").write_bytes(b"x")
     (d / "audio_vi_full.wav").write_bytes(b"x")
@@ -45,6 +47,7 @@ def work_dir(tmp_path):
         (segs / f"seg_{i:03d}.wav").write_bytes(b"x")
     # Wavs rendered under the current 1:1 scheme (pre-1:1 dirs are rejected).
     from autodub.pipeline import DubPipeline
+
     (segs / ".render_mode").write_text(DubPipeline.RENDER_MODE, encoding="utf-8")
     fit = d / "segments_fit"
     fit.mkdir()
@@ -55,11 +58,12 @@ def work_dir(tmp_path):
 
 # --------------------------- load --------------------------- #
 
+
 def test_load_work_dir(work_dir):
     state = load_work_dir(work_dir)
     assert len(state.segments) == 2
     assert state.target.text_field == "text_vi"
-    assert state.video_path.endswith("source.mp4")     # not dubbed_video.mp4
+    assert state.video_path.endswith("source.mp4")  # not dubbed_video.mp4
 
 
 def test_load_missing_dir():
@@ -75,11 +79,12 @@ def test_load_without_translation(tmp_path):
 
 # --------------------------- edit --------------------------- #
 
+
 def test_update_segment_text_persists(work_dir):
     update_segment_text(work_dir, 1, "câu một mới")
     data = json.loads((open(os.path.join(work_dir, "transcript_vi.json"), encoding="utf-8")).read())
     assert data[0]["text_vi"] == "câu một mới"
-    assert data[1]["text_vi"] == "câu 2"                # untouched
+    assert data[1]["text_vi"] == "câu 2"  # untouched
 
 
 def test_update_rejects_empty(work_dir):
@@ -93,6 +98,7 @@ def test_update_unknown_id(work_dir):
 
 
 # --------------------------- resynth --------------------------- #
+
 
 def test_resynth_invalidates_stale_artifacts(work_dir, monkeypatch):
     calls = {}
@@ -108,10 +114,10 @@ def test_resynth_invalidates_stale_artifacts(work_dir, monkeypatch):
                 f.write(b"new-audio")
             return FakeResult()
 
-    monkeypatch.setattr(editor, "get_synthesizer", lambda *a, **k: FakeSynth(),
-                        raising=False)
+    monkeypatch.setattr(editor, "get_synthesizer", lambda *a, **k: FakeSynth(), raising=False)
     # get_synthesizer is imported inside the function; patch the source too.
     import autodub.speech.tts as tts
+
     monkeypatch.setattr(tts, "get_synthesizer", lambda *a, **k: FakeSynth())
 
     update_segment_text(work_dir, 1, "câu mới cho segment một")
@@ -144,6 +150,7 @@ def test_resynth_is_one_to_one(work_dir, monkeypatch):
             return FakeResult()
 
     import autodub.speech.tts as tts
+
     monkeypatch.setattr(tts, "get_synthesizer", lambda *a, **k: FakeSynth())
 
     resynth_segment(work_dir, 2, Settings())
@@ -155,6 +162,7 @@ def test_resynth_is_one_to_one(work_dir, monkeypatch):
 
 
 # --------------------------- background resolution --------------------------- #
+
 
 def test_background_demucs_reuses_no_vocals(work_dir):
     path, gain = resolve_existing_background(work_dir, "demucs", -12.0)
@@ -177,6 +185,7 @@ def test_background_demucs_missing_falls_back(tmp_path):
 
 # --------------------------- rebuild --------------------------- #
 
+
 def test_rebuild_reuses_cached_wavs(work_dir, monkeypatch):
     """Rebuild must not re-run TTS; it only mixes and muxes."""
     seen = {}
@@ -184,12 +193,13 @@ def test_rebuild_reuses_cached_wavs(work_dir, monkeypatch):
     import autodub.media.video as video_mod
     import autodub.text.srt as srt_mod
 
-    monkeypatch.setattr(audio_mod, "merge_segments",
-                        lambda *a, **k: seen.setdefault("merged", a[2]))
-    monkeypatch.setattr(video_mod, "merge_video",
-                        lambda *a, **k: seen.setdefault("video", a[2]) or a[2])
-    monkeypatch.setattr(srt_mod, "generate_srt",
-                        lambda *a, **k: seen.setdefault("srt", True))
+    monkeypatch.setattr(
+        audio_mod, "merge_segments", lambda *a, **k: seen.setdefault("merged", a[2])
+    )
+    monkeypatch.setattr(
+        video_mod, "merge_video", lambda *a, **k: seen.setdefault("video", a[2]) or a[2]
+    )
+    monkeypatch.setattr(srt_mod, "generate_srt", lambda *a, **k: seen.setdefault("srt", True))
 
     out = editor.rebuild_output(work_dir, Settings(), subtitle_mode="burn", blur_regions=[])
     assert out.endswith("dubbed_video.mp4")
@@ -205,6 +215,7 @@ def test_rebuild_defaults_to_persisted_render_opts(work_dir, monkeypatch):
     import autodub.media.audio as audio_mod
     import autodub.media.video as video_mod
     import autodub.text.srt as srt_mod
+
     monkeypatch.setattr(audio_mod, "merge_segments", lambda *a, **k: None)
     monkeypatch.setattr(srt_mod, "generate_srt", lambda *a, **k: None)
 
@@ -214,7 +225,7 @@ def test_rebuild_defaults_to_persisted_render_opts(work_dir, monkeypatch):
         return a[2]
 
     monkeypatch.setattr(video_mod, "merge_video", fake_merge_video)
-    editor.rebuild_output(work_dir, Settings())      # no explicit opts
+    editor.rebuild_output(work_dir, Settings())  # no explicit opts
     assert captured["mode"] == "soft"
     assert captured["blur"] == [{"x": 0}]
 
@@ -224,14 +235,17 @@ def test_rebuild_passes_subtitle_style(work_dir, monkeypatch):
     import autodub.media.audio as audio_mod
     import autodub.media.video as video_mod
     import autodub.text.srt as srt_mod
+
     monkeypatch.setattr(audio_mod, "merge_segments", lambda *a, **k: None)
     monkeypatch.setattr(srt_mod, "generate_srt", lambda *a, **k: None)
-    monkeypatch.setattr(video_mod, "merge_video",
-                        lambda *a, **k: captured.setdefault("style", k.get("subtitle_style")) or a[2])
+    monkeypatch.setattr(
+        video_mod,
+        "merge_video",
+        lambda *a, **k: captured.setdefault("style", k.get("subtitle_style")) or a[2],
+    )
 
     style = {"font_size": 30, "position": "top", "margin_v": 60}
-    editor.rebuild_output(work_dir, Settings(), subtitle_mode="burn",
-                          subtitle_style=style)
+    editor.rebuild_output(work_dir, Settings(), subtitle_mode="burn", subtitle_style=style)
 
     # Kiểu được điền đủ mọi khóa trước khi dùng, nhưng ba mục người dùng chốt
     # phải đi thẳng tới ffmpeg và được lưu lại y nguyên cho lần xuất sau.
@@ -242,6 +256,7 @@ def test_rebuild_passes_subtitle_style(work_dir, monkeypatch):
 
 # --------------------------- batch save --------------------------- #
 
+
 def read_transcript(work_dir):
     with open(os.path.join(work_dir, "transcript_vi.json"), encoding="utf-8") as f:
         return json.load(f)
@@ -249,7 +264,7 @@ def read_transcript(work_dir):
 
 def test_save_segment_texts_returns_only_changed(work_dir):
     changed = editor.save_segment_texts(work_dir, {1: "câu 1 mới", 2: "câu 2"})
-    assert changed == [1]                      # seg 2 text identical → not re-synth
+    assert changed == [1]  # seg 2 text identical → not re-synth
     assert read_transcript(work_dir)[0]["text_vi"] == "câu 1 mới"
 
 
@@ -273,6 +288,7 @@ def test_save_segment_texts_no_edits(work_dir):
 
 # --------------------------- batch resynth --------------------------- #
 
+
 def stub_tts(monkeypatch, log=None):
     class FakeResult:
         def to_dict(self):
@@ -287,6 +303,7 @@ def stub_tts(monkeypatch, log=None):
             return FakeResult()
 
     import autodub.speech.tts as tts
+
     monkeypatch.setattr(tts, "get_synthesizer", lambda *a, **k: FakeSynth())
 
 
@@ -296,8 +313,11 @@ def test_resynth_segments_reports_progress(work_dir, monkeypatch):
     editor.save_segment_texts(work_dir, {1: "một mới", 2: "hai mới"})
 
     results = editor.resynth_segments(
-        work_dir, [1, 2], Settings(),
-        on_progress=lambda done, total, sid: progress.append((done, total, sid)))
+        work_dir,
+        [1, 2],
+        Settings(),
+        on_progress=lambda done, total, sid: progress.append((done, total, sid)),
+    )
 
     # Strict 1:1 — each segment renders its own clip.
     assert spoken == ["một mới.", "hai mới."]
@@ -324,13 +344,14 @@ def test_resynth_segments_removes_locked_file_after_retry(work_dir, monkeypatch)
     editor.save_segment_texts(work_dir, {1: "một mới"})
     editor.resynth_segments(work_dir, [1], Settings())
 
-    assert state["denied"] == 2                 # retried past the lock
+    assert state["denied"] == 2  # retried past the lock
     assert not os.path.exists(locked)
 
 
 def test_editor_rebuild_with_scene_cuts(work_dir, monkeypatch):
     import json
-    from autodub.media import audio, video, scene_detector, timing
+
+    from autodub.media import audio, timing, video
 
     # Mock merge_video & merge_segments & wav_duration_s
     monkeypatch.setattr(video, "merge_video", lambda *a, **k: None)
@@ -345,6 +366,7 @@ def test_editor_rebuild_with_scene_cuts(work_dir, monkeypatch):
 
     cuts_loaded = None
     orig_apply = timing.apply_soft_timing
+
     def mock_apply(segments, src_dir, dst_dir, settings, max_workers=4, scene_cuts=None):
         nonlocal cuts_loaded
         cuts_loaded = scene_cuts
@@ -365,5 +387,3 @@ def test_get_or_analyze_viral_clips(work_dir):
     # File viral_clips.json được tạo ra
     cached = editor.get_or_analyze_viral_clips(state)
     assert cached == clips
-
-

@@ -27,8 +27,14 @@ def test_settings_defaults(monkeypatch):
     # Prevent load_dotenv from loading .env file values
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
 
-    for var in ("WHISPER_MODEL", "DEFAULT_SOURCE_LANG", "QUALITY_PRESET",
-                "AUDIO_SAMPLE_RATE", "OUTPUT_DIR", "VIDEO_URL"):
+    for var in (
+        "WHISPER_MODEL",
+        "DEFAULT_SOURCE_LANG",
+        "QUALITY_PRESET",
+        "AUDIO_SAMPLE_RATE",
+        "OUTPUT_DIR",
+        "VIDEO_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
 
     settings = Settings.load()
@@ -44,8 +50,7 @@ def test_settings_defaults(monkeypatch):
 
 def test_quality_presets(monkeypatch):
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
-    for var in ("WHISPER_MODEL", "HQ_BACKGROUND",
-                "TRANSLATE_ANALYSIS", "TRANSLATE_REVIEW"):
+    for var in ("WHISPER_MODEL", "HQ_BACKGROUND", "TRANSLATE_ANALYSIS", "TRANSLATE_REVIEW"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("QUALITY_PRESET", "fast")
     s = Settings.load()
@@ -71,9 +76,9 @@ def test_resolved_whisper_model():
 
 def test_timing_settings_clamped(monkeypatch):
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
-    monkeypatch.setenv("TIMING_MAX_ATEMPO", "2.0")   # trần cứng 1.3
+    monkeypatch.setenv("TIMING_MAX_ATEMPO", "2.0")  # trần cứng 1.3
     monkeypatch.setenv("TIMING_MAX_DRIFT_S", "99")
-    monkeypatch.setenv("BG_DUCK_VOICE_DB", "5")      # duck không được dương
+    monkeypatch.setenv("BG_DUCK_VOICE_DB", "5")  # duck không được dương
     s = Settings.load()
     assert s.timing_max_atempo == 1.3
     assert s.timing_max_drift_s == 5.0
@@ -159,7 +164,7 @@ def test_video_speed_clamped(monkeypatch):
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
     monkeypatch.setenv("VIDEO_SPEED", "0.1")
     assert Settings.load().video_speed == 0.5
-    monkeypatch.setenv("VIDEO_SPEED", "1.5")   # never speeds UP the video
+    monkeypatch.setenv("VIDEO_SPEED", "1.5")  # never speeds UP the video
     assert Settings.load().video_speed == 1.0
 
 
@@ -184,7 +189,7 @@ def test_voice_speed_clamped(monkeypatch):
 def test_whisper_beam_size_default_and_clamp(monkeypatch):
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
-    assert Settings.load().whisper_beam_size == 5   # mặc định = thư viện
+    assert Settings.load().whisper_beam_size == 5  # mặc định = thư viện
     monkeypatch.setenv("WHISPER_BEAM_SIZE", "1")
     assert Settings.load().whisper_beam_size == 1
     monkeypatch.setenv("WHISPER_BEAM_SIZE", "99")
@@ -201,13 +206,14 @@ def test_vieneu_workers_env_wins_over_governor(monkeypatch):
 
 def test_vieneu_workers_adaptive_by_ram(monkeypatch):
     import autodub.config as config
+
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
     monkeypatch.delenv("VIENEU_MAX_WORKERS", raising=False)
     monkeypatch.setattr("autodub.config.os.cpu_count", lambda: 16)
 
     # RAM dư nhiều → dùng tới trần tự tính (máy khỏe không còn bị kẹp ở 3)
     monkeypatch.setattr("autodub.sysinfo.available_ram_gb", lambda: 12.0)
-    config._governor_logged = True   # đã log rồi — test không cần log
+    config._governor_logged = True  # đã log rồi — test không cần log
     assert Settings.load().vieneu_max_workers == 6
 
     monkeypatch.setattr("autodub.sysinfo.available_ram_gb", lambda: 7.0)
@@ -223,6 +229,7 @@ def test_vieneu_workers_adaptive_by_ram(monkeypatch):
 
 def test_vieneu_workers_capped_by_cores(monkeypatch):
     import autodub.config as config
+
     monkeypatch.setattr("autodub.config.load_dotenv", lambda *a, **kw: None)
     monkeypatch.delenv("VIENEU_MAX_WORKERS", raising=False)
     monkeypatch.setattr("autodub.sysinfo.available_ram_gb", lambda: 32.0)
@@ -273,5 +280,3 @@ def test_inpaint_settings_load_env(monkeypatch):
     assert s.mask_method == "ai_inpaint"
     assert s.inpaint_engine == "vsr_cli"
     assert s.inpaint_device == "cuda"
-
-

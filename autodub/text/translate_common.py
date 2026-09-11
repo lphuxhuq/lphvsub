@@ -5,6 +5,7 @@ Việc gọi mô hình và đọc JSON đã chuyển hẳn lên máy chủ (xem
 những thứ chỉ máy khách mới cần: sổ đếm token cho báo cáo chất lượng, sổ lưu
 tạm bản dịch theo lô để chạy lại không mất công, và bộ dò chữ Hán sót.
 """
+
 from __future__ import annotations
 
 import json
@@ -140,17 +141,17 @@ class TranslateCheckpoint:
             from autodub import securestore
 
             data = securestore.read_json_secure(path, HOLD.key)
-            if (isinstance(data, dict)
-                    and data.get("text_field") == text_field
-                    and isinstance(data.get("items"), dict)):
+            if (
+                isinstance(data, dict)
+                and data.get("text_field") == text_field
+                and isinstance(data.get("items"), dict)
+            ):
                 self._items = {
-                    k: v for k, v in data["items"].items()
-                    if isinstance(v, dict) and v.get("text")
+                    k: v for k, v in data["items"].items() if isinstance(v, dict) and v.get("text")
                 }
                 if self._items:
-                    logger.info(f"Đọc sổ dịch tạm: {len(self._items)} câu "
-                                "đã dịch từ lượt trước")
-        except Exception as e:  # noqa: BLE001 — sổ hỏng/sai khóa đều dịch lại
+                    logger.info(f"Đọc sổ dịch tạm: {len(self._items)} câu đã dịch từ lượt trước")
+        except Exception as e:
             logger.warning(f"Sổ dịch tạm hỏng ({e}) — dịch lại từ đầu")
             self._items = {}
 
@@ -183,15 +184,16 @@ class TranslateCheckpoint:
 
                 # HOLD active → sổ tạm nằm trên đĩa dưới dạng mã hóa.
                 securestore.write_json_secure(
-                    {"text_field": self.text_field, "items": self._items},
-                    self.path, HOLD.key)
+                    {"text_field": self.text_field, "items": self._items}, self.path, HOLD.key
+                )
             except OSError as e:
                 # Không lưu được sổ tạm thì lượt dịch vẫn phải chạy tiếp —
                 # nhưng ở mức error, vì đây chính là lý do "chạy lại vẫn phải
                 # dịch lại từ đầu": không có sổ thì không có gì để dùng lại.
                 self.write_errors += 1
-                logger.error(f"Không ghi được sổ dịch tạm ({e}) — chạy lại "
-                             "sẽ phải dịch lại các lô này")
+                logger.error(
+                    f"Không ghi được sổ dịch tạm ({e}) — chạy lại sẽ phải dịch lại các lô này"
+                )
 
     def discard(self) -> None:
         """Xóa sổ khi cả lượt dịch đã thành công trọn vẹn."""
@@ -200,7 +202,7 @@ class TranslateCheckpoint:
         try:
             os.remove(self.path)
         except FileNotFoundError:
-            pass
+            logger.debug("Bỏ qua lỗi FileNotFoundError trong translate_common.py", exc_info=True)
         except OSError as e:
             logger.warning(f"Không xóa được sổ dịch tạm: {e}")
 
@@ -223,7 +225,7 @@ def _slice_to_payload(text: str) -> str:
         return text
     start = min(starts)
     end = max(text.rfind("}"), text.rfind("]"))
-    return text[start:end + 1] if end > start else text[start:]
+    return text[start : end + 1] if end > start else text[start:]
 
 
 def repair_json(text: str) -> str:
@@ -285,14 +287,10 @@ def parse_response_segments(content: str) -> list[dict]:
             data = data.get("segments", data.get("data", []))
         if isinstance(data, list):
             return [s for s in data if isinstance(s, dict)]
-    raise TranslateError(
-        "Không đọc được kết quả dịch (JSON hỏng): "
-        + raw[:200].replace("\n", " ")
-    )
+    raise TranslateError("Không đọc được kết quả dịch (JSON hỏng): " + raw[:200].replace("\n", " "))
 
 
-def merge_translations(batch: list[dict], returned: list[dict],
-                       text_field: str) -> list[dict]:
+def merge_translations(batch: list[dict], returned: list[dict], text_field: str) -> list[dict]:
     """Ghép bản dịch trả về vào đúng câu gốc, theo ``id``.
 
     Trả về danh sách BẢN SAO của ``batch`` đã có thêm ``text_field``; câu gốc
@@ -315,9 +313,11 @@ def merge_translations(batch: list[dict], returned: list[dict],
     # Mô hình bỏ mất id nhưng trả đúng số câu, đúng thứ tự — chấp nhận và
     # ghép theo vị trí, còn hơn ném đi cả một lô đã dịch xong.
     if not by_id and len(returned) == len(batch):
-        by_id = {int(seg.get("id")): str(item.get(text_field, "") or "").strip()
-                 for seg, item in zip(batch, returned)
-                 if str(item.get(text_field, "") or "").strip()}
+        by_id = {
+            int(seg.get("id")): str(item.get(text_field, "") or "").strip()
+            for seg, item in zip(batch, returned)
+            if str(item.get(text_field, "") or "").strip()
+        }
 
     merged: list[dict] = []
     missing: list = []

@@ -1,31 +1,38 @@
 """Quản lý bảng thuật ngữ (Glossary) và tìm kiếm/thay thế hàng loạt cho phụ đề."""
+
 from __future__ import annotations
 
 import json
 import os
 import re
-from typing import Dict, List, Tuple
-
 
 # Bảng phiên âm/ngữ âm mặc định cho AI TTS — dùng chung cho cả AI Studio và Direct API.
 # KHÔNG được thêm quy tắc ký tự đơn (i, e, a, x, v, z...) hoặc ký hiệu dấu câu (/, -).
 _DEFAULT_PHONETIC_GLOSSARY = [
     # Âm cảm thán / tiếng lóng rõ ràng (>= 3 ký tự)
-    ('hắc hắc', 'ha ha'), ('hắc hắc hắc', 'ha ha ha'),
-    ('hic', 'hích'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
-    ('huh', 'Hửm'),
-    ('ừhm', 'ừ'), ('Ưhm', 'ừ'),
-    ('hmm', 'hừ'), ('Hmm', 'hừ'), ('Hmmm', 'hừ'),
+    ("hắc hắc", "ha ha"),
+    ("hắc hắc hắc", "ha ha ha"),
+    ("hic", "hích"),
+    ("huhu", "hu hu"),
+    ("huhuhu", "hu hu hu"),
+    ("huh", "Hửm"),
+    ("ừhm", "ừ"),
+    ("Ưhm", "ừ"),
+    ("hmm", "hừ"),
+    ("Hmm", "hừ"),
+    ("Hmmm", "hừ"),
     # Từ tiếng Anh / nước ngoài đủ dài
-    ('cosplay', 'cốt bơ lay'),
-    ('NTR', 'Nờ Tê Rờ'),
-    ('bye', 'bai'),
-    ('app', 'áp'),
-    ('donate', 'đô nết'),
-    ('yes', 'dét'),
+    ("cosplay", "cốt bơ lay"),
+    ("NTR", "Nờ Tê Rờ"),
+    ("bye", "bai"),
+    ("app", "áp"),
+    ("donate", "đô nết"),
+    ("yes", "dét"),
     # Cụm từ Việt cụ thể đủ dài
-    ('tu vi', 'tu vy'), ('vi sư', 'vy sư'), ('vi diệu', 'vy diệu'),
-    ('xi măng', 'sy măng'),
+    ("tu vi", "tu vy"),
+    ("vi sư", "vy sư"),
+    ("vi diệu", "vy diệu"),
+    ("xi măng", "sy măng"),
 ]
 
 
@@ -40,7 +47,7 @@ def build_replacement_pattern(term: str, whole_word: bool = False) -> str:
 
 def apply_glossary(
     text: str,
-    glossary: Dict[str, str] | List[Tuple[str, str]],
+    glossary: dict[str, str] | list[tuple[str, str]],
     case_sensitive: bool = False,
 ) -> str:
     """Áp dụng bảng thuật ngữ để thay thế các từ khóa trong văn bản trong MỘT lượt (single-pass).
@@ -50,11 +57,7 @@ def apply_glossary(
     if not text or not glossary:
         return text
 
-    items = (
-        glossary.items()
-        if isinstance(glossary, dict)
-        else glossary
-    )
+    items = glossary.items() if isinstance(glossary, dict) else glossary
     # Sắp xếp ưu tiên cụm từ dài nhất trước
     sorted_items = sorted(
         [(k.strip(), v) for k, v in items if k and k.strip()],
@@ -87,11 +90,11 @@ def apply_glossary(
 
 
 def apply_glossary_to_segments(
-    segments: List[dict],
-    glossary: Dict[str, str],
+    segments: list[dict],
+    glossary: dict[str, str],
     text_field: str = "text_vi",
     case_sensitive: bool = False,
-) -> Tuple[List[dict], int]:
+) -> tuple[list[dict], int]:
     """Áp dụng bảng thuật ngữ lên toàn bộ danh sách câu thoại.
 
     Trả về (danh sách câu đã cập nhật, số lượng câu bị thay đổi).
@@ -104,9 +107,7 @@ def apply_glossary_to_segments(
     for seg in segments:
         new_seg = dict(seg)
         original_text = str(seg.get(text_field, ""))
-        new_text = apply_glossary(
-            original_text, glossary, case_sensitive=case_sensitive
-        )
+        new_text = apply_glossary(original_text, glossary, case_sensitive=case_sensitive)
         if new_text != original_text:
             new_seg[text_field] = new_text
             changed_count += 1
@@ -116,13 +117,13 @@ def apply_glossary_to_segments(
 
 
 def batch_replace_segments(
-    segments: List[dict],
+    segments: list[dict],
     search_term: str,
     replacement: str,
     text_field: str = "text_vi",
     case_sensitive: bool = False,
     whole_word: bool = False,
-) -> Tuple[List[dict], int]:
+) -> tuple[list[dict], int]:
     """Tìm kiếm và thay thế một từ/cụm từ trên toàn bộ các câu thoại."""
     if not search_term or not segments:
         return segments, 0
@@ -144,12 +145,12 @@ def batch_replace_segments(
     return updated_segments, changed_count
 
 
-def load_glossary_file(path: str) -> Dict[str, str]:
+def load_glossary_file(path: str) -> dict[str, str]:
     """Tải bảng thuật ngữ từ tệp JSON."""
     if not os.path.isfile(path):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return {str(k): str(v) for k, v in data.items()}
@@ -165,7 +166,7 @@ def load_glossary_file(path: str) -> Dict[str, str]:
     return {}
 
 
-def save_glossary_file(glossary: Dict[str, str], path: str) -> None:
+def save_glossary_file(glossary: dict[str, str], path: str) -> None:
     """Lưu bảng thuật ngữ ra tệp JSON."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:

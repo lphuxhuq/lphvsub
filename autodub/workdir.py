@@ -17,6 +17,7 @@ Older work dirs kept everything flat in the root. ``is_legacy_layout()``
 detects them and every helper falls back to the flat path, so resume and the
 segment editor keep working on dirs produced by previous builds.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,14 +26,17 @@ DATA_SUBDIR = "data"
 YOUTUBE_SUBDIR = "youtube"
 
 # Any of these at the work-dir ROOT ⇒ dir was produced by an older build.
-_LEGACY_MARKERS = ("transcript_original.json", "transcript_vi.json",
-                   "original_audio.wav", "segments")
+_LEGACY_MARKERS = (
+    "transcript_original.json",
+    "transcript_vi.json",
+    "original_audio.wav",
+    "segments",
+)
 
 
 def is_legacy_layout(work_dir: str) -> bool:
     """True when this work dir keeps technical files flat in the root."""
-    return any(os.path.exists(os.path.join(work_dir, m))
-               for m in _LEGACY_MARKERS)
+    return any(os.path.exists(os.path.join(work_dir, m)) for m in _LEGACY_MARKERS)
 
 
 def data_dir(work_dir: str, create: bool = False) -> str:
@@ -57,9 +61,9 @@ def load_video_meta(work_dir: str) -> dict:
     title chỉ là ngữ cảnh bổ sung, thiếu không được làm hỏng bước nào.
     """
     import json
+
     try:
-        with open(data_path(work_dir, "video_meta.json"),
-                  encoding="utf-8") as f:
+        with open(data_path(work_dir, "video_meta.json"), encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -83,6 +87,7 @@ def load_social_metadata(work_dir: str, default_title: str = "") -> dict:
     hoặc tự sinh fallback chất lượng cao nếu chưa có file metadata.
     """
     import json
+
     candidates = [
         os.path.join(youtube_dir(work_dir), "youtube_metadata.json"),
         os.path.join(work_dir, "youtube", "youtube_metadata.json"),
@@ -93,9 +98,11 @@ def load_social_metadata(work_dir: str, default_title: str = "") -> dict:
     for p in candidates:
         if os.path.exists(p):
             try:
-                with open(p, "r", encoding="utf-8") as f:
+                with open(p, encoding="utf-8") as f:
                     d = json.load(f)
-                if isinstance(d, dict) and (d.get("title") or d.get("hashtags") or d.get("youtube")):
+                if isinstance(d, dict) and (
+                    d.get("title") or d.get("hashtags") or d.get("youtube")
+                ):
                     raw_data = d
                     break
             except Exception:
@@ -155,13 +162,14 @@ def load_social_metadata(work_dir: str, default_title: str = "") -> dict:
 def save_social_metadata(work_dir: str, meta: dict) -> str:
     """Lưu metadata nội dung bài đăng vào youtube/youtube_metadata.json."""
     import json
+
     out_dir = youtube_dir(work_dir, create=True)
     out_path = os.path.join(out_dir, "youtube_metadata.json")
 
     existing: dict = {}
     if os.path.exists(out_path):
         try:
-            with open(out_path, "r", encoding="utf-8") as f:
+            with open(out_path, encoding="utf-8") as f:
                 d = json.load(f)
             if isinstance(d, dict):
                 existing = d
@@ -172,4 +180,3 @@ def save_social_metadata(work_dir: str, meta: dict) -> str:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=2)
     return out_path
-

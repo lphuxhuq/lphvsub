@@ -3,19 +3,23 @@
 Đây là trang mở ra đầu tiên. Khi ứng dụng còn trống trơn, trang này vẫn phải
 dùng được ngay và chỉ rõ ba bước để bắt đầu.
 """
+
 from __future__ import annotations
 
 import os
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
-from autodub_gui import icons
+from autodub_gui import icons, tokens
 from autodub_gui import projects as projects_mod
-from autodub_gui import tokens
-from autodub_gui.ui.style import clear_background
 from autodub_gui.formatting import format_eta
 from autodub_gui.pages import BasePage
 from autodub_gui.run_state import REGISTRY
@@ -26,6 +30,7 @@ from autodub_gui.ui.dropzone import DragDropZone, is_video_file
 from autodub_gui.ui.empty import EmptyState
 from autodub_gui.ui.grid import ProjectGrid
 from autodub_gui.ui.labels import title_label
+from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.toast import TOASTS
 
 RECENT_COUNT = 4
@@ -44,11 +49,11 @@ _STEPS_TEXT = (
 class HomePage(BasePage):
     """Trang chủ của ứng dụng."""
 
-    create_requested = Signal(str)      # đường dẫn video đã chọn, có thể rỗng
+    create_requested = Signal(str)  # đường dẫn video đã chọn, có thể rỗng
     projects_requested = Signal()
     edit_requested = Signal(str)
     batch_requested = Signal()
-    voices_requested = Signal()         # mở Cài đặt ở tab Giọng đọc
+    voices_requested = Signal()  # mở Cài đặt ở tab Giọng đọc
     settings_requested = Signal()
 
     def __init__(self, settings_provider, parent: QWidget | None = None):
@@ -65,15 +70,13 @@ class HomePage(BasePage):
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         clear_background(scroll)
         clear_background(scroll.viewport())
         body = QWidget()
         clear_background(body)
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(_PAGE_MARGIN, tokens.SP_2,
-                                  _PAGE_MARGIN, tokens.SP_5)
+        layout.setContentsMargins(_PAGE_MARGIN, tokens.SP_2, _PAGE_MARGIN, tokens.SP_5)
         layout.setSpacing(18)
 
         layout.addLayout(self._build_top_row())
@@ -89,8 +92,8 @@ class HomePage(BasePage):
         layout.addWidget(self.grid)
 
         self.empty = EmptyState(
-            "Chưa có dự án nào", "Video bạn lồng tiếng xong sẽ hiện ở đây.",
-            "Tạo dự án mới")
+            "Chưa có dự án nào", "Video bạn lồng tiếng xong sẽ hiện ở đây.", "Tạo dự án mới"
+        )
         self.empty.action_clicked.connect(lambda: self.create_requested.emit(""))
         layout.addWidget(self.empty)
         layout.addStretch()
@@ -111,8 +114,7 @@ class HomePage(BasePage):
         side = QVBoxLayout()
         side.setSpacing(14)
         self.processing = ProcessingCard()
-        self.processing.create_requested.connect(
-            lambda: self.create_requested.emit(""))
+        self.processing.create_requested.connect(lambda: self.create_requested.emit(""))
         self.processing.stop_requested.connect(self._stop_job)
         self.processing.details_requested.connect(self._open_job_details)
         side.addWidget(self.processing)
@@ -131,7 +133,8 @@ class HomePage(BasePage):
             label.setWordWrap(True)
             label.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; "
-                f"font-size: {tokens.FS_LABEL}px; background: transparent;")
+                f"font-size: {tokens.FS_LABEL}px; background: transparent;"
+            )
             card.body.addWidget(label)
         self._first_run_card = card
         card.setVisible(False)
@@ -149,18 +152,38 @@ class HomePage(BasePage):
         self._quick_grid = QGridLayout()
         self._quick_grid.setSpacing(tokens.SP_3)
         specs = (
-            ("Tạo dự án mới", "Lồng tiếng một video từ tệp hoặc liên kết",
-             icons.file_plus, tokens.PRIMARY, tokens.PROCESSING_BG,
-             lambda: self.create_requested.emit("")),
-            ("Xử lý hàng loạt", "Lồng tiếng nhiều video cùng lúc",
-             icons.layers, tokens.ACCENT_PURPLE, tokens.PURPLE_BG,
-             self.batch_requested.emit),
-            ("Thư viện giọng đọc", "Nghe thử và chọn giọng phù hợp",
-             icons.user, tokens.SUCCESS, tokens.SUCCESS_BG,
-             self.voices_requested.emit),
-            ("Cài đặt", "Tùy chỉnh hệ thống theo nhu cầu",
-             icons.gear, tokens.WARNING, tokens.WARNING_BG,
-             self.settings_requested.emit),
+            (
+                "Tạo dự án mới",
+                "Lồng tiếng một video từ tệp hoặc liên kết",
+                icons.file_plus,
+                tokens.PRIMARY,
+                tokens.PROCESSING_BG,
+                lambda: self.create_requested.emit(""),
+            ),
+            (
+                "Xử lý hàng loạt",
+                "Lồng tiếng nhiều video cùng lúc",
+                icons.layers,
+                tokens.ACCENT_PURPLE,
+                tokens.PURPLE_BG,
+                self.batch_requested.emit,
+            ),
+            (
+                "Thư viện giọng đọc",
+                "Nghe thử và chọn giọng phù hợp",
+                icons.user,
+                tokens.SUCCESS,
+                tokens.SUCCESS_BG,
+                self.voices_requested.emit,
+            ),
+            (
+                "Cài đặt",
+                "Tùy chỉnh hệ thống theo nhu cầu",
+                icons.gear,
+                tokens.WARNING,
+                tokens.WARNING_BG,
+                self.settings_requested.emit,
+            ),
         )
         self._quick_cards = []
         for title, desc, icon_fn, color, bg, handler in specs:
@@ -194,13 +217,13 @@ class HomePage(BasePage):
         if job is None:
             self.processing.show_idle()
             return
-        self.processing.show_job(job.title, job.step_label, job.percent,
-                                 format_eta(job.eta_s), job.thumbnail)
+        self.processing.show_job(
+            job.title, job.step_label, job.percent, format_eta(job.eta_s), job.thumbnail
+        )
 
     def _stop_job(self) -> None:
         if not REGISTRY.request_cancel():
-            TOASTS.info("Việc này được điều khiển ở trang khác. "
-                        "Hãy mở đúng trang đó rồi bấm Dừng.")
+            TOASTS.info("Việc này được điều khiển ở trang khác. Hãy mở đúng trang đó rồi bấm Dừng.")
 
     def _open_job_details(self) -> None:
         """Mở dự án đang chạy trong Trình chỉnh sửa để xem tiến trình chi tiết."""
@@ -220,7 +243,7 @@ class HomePage(BasePage):
             return
         try:
             output_dir = self._settings_provider().output_dir
-        except Exception:  # noqa: BLE001 — tệp cấu hình hỏng thì để trống
+        except Exception:
             output_dir = ""
         if not output_dir:
             self._apply([])
@@ -244,8 +267,10 @@ class HomePage(BasePage):
 
     def _on_scan_failed(self, message: str) -> None:
         self._apply([])
-        TOASTS.error("Không đọc được thư mục lưu video. Hãy kiểm tra lại "
-                     "đường dẫn trong Cài đặt.", detail=message)
+        TOASTS.error(
+            "Không đọc được thư mục lưu video. Hãy kiểm tra lại đường dẫn trong Cài đặt.",
+            detail=message,
+        )
 
     def _project(self, key: str):
         return next((p for p in self._projects if p.key == key), None)
@@ -270,9 +295,11 @@ class HomePage(BasePage):
     def _hide_project(self, key: str) -> None:
         """Ở Trang chủ chỉ ẩn khỏi danh sách; muốn xóa hẳn thì vào Dự án của tôi."""
         self.grid.remove(key)
-        TOASTS.info("Đã ẩn khỏi Trang chủ. Tệp trên máy vẫn còn nguyên.",
-                    action_label="Mở Dự án của tôi",
-                    on_action=self.projects_requested.emit)
+        TOASTS.info(
+            "Đã ẩn khỏi Trang chủ. Tệp trên máy vẫn còn nguyên.",
+            action_label="Mở Dự án của tôi",
+            on_action=self.projects_requested.emit,
+        )
 
     # -- Kéo thả -------------------------------------------------------
     def _on_file_chosen(self, path: str) -> None:
@@ -282,8 +309,8 @@ class HomePage(BasePage):
             return
         if not is_video_file(path):
             self.dropzone.set_error(
-                "Tệp này không phải video. Hãy chọn tệp MP4, MKV, MOV, AVI "
-                "hoặc WebM.")
+                "Tệp này không phải video. Hãy chọn tệp MP4, MKV, MOV, AVI hoặc WebM."
+            )
             return
         try:
             with open(path, "rb") as f:
@@ -291,12 +318,12 @@ class HomePage(BasePage):
         except OSError:
             self.dropzone.set_error(
                 "Không đọc được tệp. Có thể tệp đang được chương trình khác "
-                "sử dụng — hãy đóng chương trình đó rồi thử lại.")
+                "sử dụng — hãy đóng chương trình đó rồi thử lại."
+            )
             return
         self.dropzone.set_success(path)
         if os.path.getsize(path) > _large_file_limit():
-            TOASTS.warn("Video này rất lớn, quá trình xử lý có thể mất "
-                        "nhiều giờ.")
+            TOASTS.warn("Video này rất lớn, quá trình xử lý có thể mất nhiều giờ.")
         self.create_requested.emit(path)
 
     def _on_many_files(self, paths: list) -> None:
@@ -304,7 +331,8 @@ class HomePage(BasePage):
             f"Chỉ nhận một video ở đây — {len(paths)} tệp bạn vừa thả sẽ chỉ "
             "lấy tệp đầu tiên. Dùng Xử lý hàng loạt cho nhiều video.",
             action_label="Mở Xử lý hàng loạt",
-            on_action=self.batch_requested.emit)
+            on_action=self.batch_requested.emit,
+        )
 
     # -- Vòng đời ------------------------------------------------------
     def on_breakpoint(self, name: str) -> None:

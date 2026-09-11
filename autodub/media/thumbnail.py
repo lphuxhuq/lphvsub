@@ -11,15 +11,15 @@ Chuyên dụng cho phong cách YouTube Review Phim / Manhwa Cổ Đại & Quân 
 QUY TẮC BẤT BIẾN:
 100% Headless. Tuyệt đối không import PyQt, PySide hoặc bất kỳ thư viện GUI nào.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import math
 import os
 import re
 import subprocess
 import textwrap
-from typing import Sequence
+from dataclasses import dataclass
+
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageStat
 
 from autodub.utils import bundled_font_files, setup_logging
@@ -31,9 +31,11 @@ logger = setup_logging("autodub.thumbnail")
 # DATA MODELS & PRESETS
 # ==============================================================================
 
+
 @dataclass
 class StylePresetConfig:
     """Cấu hình phong cách đồ họa cho Thumbnail."""
+
     name: str
     label: str
     # Dòng trên (Eyebrow / Header)
@@ -62,10 +64,10 @@ PRESETS: dict[str, StylePresetConfig] = {
     "co_dai": StylePresetConfig(
         name="co_dai",
         label="Cổ Đại Làm Giàu",
-        top_text_color=(255, 220, 40),          # Vàng hoàng kim
-        top_stroke_inner=(185, 45, 15),         # Đỏ nâu tương phản
-        top_stroke_outer=(5, 5, 8),             # Viền ngoài đen tuyền
-        top_glow_color=(255, 180, 0, 190),      # Hào quang vàng cam
+        top_text_color=(255, 220, 40),  # Vàng hoàng kim
+        top_stroke_inner=(185, 45, 15),  # Đỏ nâu tương phản
+        top_stroke_outer=(5, 5, 8),  # Viền ngoài đen tuyền
+        top_glow_color=(255, 180, 0, 190),  # Hào quang vàng cam
         top_font_priority=[
             "Merienda-Bold.ttf",
             "StoryScript-Regular.ttf",
@@ -73,87 +75,87 @@ PRESETS: dict[str, StylePresetConfig] = {
             "BarlowCondensed-Bold.ttf",
         ],
         bottom_gradient=[
-            (255, 255, 140),                    # Đỉnh: Vàng sáng chanh
-            (255, 210, 0),                      # Giữa: Vàng nghệ rực rỡ
-            (255, 140, 0),                      # Đáy: Vàng cam ấm
+            (255, 255, 140),  # Đỉnh: Vàng sáng chanh
+            (255, 210, 0),  # Giữa: Vàng nghệ rực rỡ
+            (255, 140, 0),  # Đáy: Vàng cam ấm
         ],
-        bottom_stroke_inner=(255, 255, 255),    # Viền trong trắng sáng
-        bottom_stroke_outer=(0, 0, 0),          # Viền ngoài đen đậm dày
-        bottom_glow_color=(255, 190, 0, 160),   # Ánh sáng tỏa vàng gold
+        bottom_stroke_inner=(255, 255, 255),  # Viền trong trắng sáng
+        bottom_stroke_outer=(0, 0, 0),  # Viền ngoài đen đậm dày
+        bottom_glow_color=(255, 190, 0, 160),  # Ánh sáng tỏa vàng gold
         bottom_3d_depth=10,
-        bottom_3d_color=(15, 8, 2),             # Khối 3D đổ bóng sâu
+        bottom_3d_color=(15, 8, 2),  # Khối 3D đổ bóng sâu
         bottom_font_priority=[
             "BarlowCondensed-Bold.ttf",
             "Bangers-Regular.ttf",
             "FrancoisOne-Regular.ttf",
         ],
-        badge_bg=(255, 215, 0),                 # Huy hiệu vàng rực
-        badge_text=(0, 0, 0),                   # Chữ đen đanh thép
+        badge_bg=(255, 215, 0),  # Huy hiệu vàng rực
+        badge_text=(0, 0, 0),  # Chữ đen đanh thép
         badge_border=(0, 0, 0),
         vignette_intensity=0.38,
     ),
     "quan_su": StylePresetConfig(
         name="quan_su",
         label="Quân Sư Hiện Đại",
-        top_text_color=(255, 255, 255),         # Trắng tuyết tinh khiết
+        top_text_color=(255, 255, 255),  # Trắng tuyết tinh khiết
         top_stroke_inner=None,
-        top_stroke_outer=(20, 5, 35),           # Đen tím huyền ảo
-        top_glow_color=(236, 72, 153, 230),     # Neon Tím Hồng / Magenta Glow cực mạnh
+        top_stroke_outer=(20, 5, 35),  # Đen tím huyền ảo
+        top_glow_color=(236, 72, 153, 230),  # Neon Tím Hồng / Magenta Glow cực mạnh
         top_font_priority=[
             "BarlowCondensed-Bold.ttf",
             "FrancoisOne-Regular.ttf",
             "Coiny-Regular.ttf",
         ],
         bottom_gradient=[
-            (255, 255, 255),                    # Trắng pha vàng chanh
-            (255, 245, 10),                     # Vàng điện quang cực sáng
-            (250, 204, 21),                     # Vàng rực
+            (255, 255, 255),  # Trắng pha vàng chanh
+            (255, 245, 10),  # Vàng điện quang cực sáng
+            (250, 204, 21),  # Vàng rực
         ],
-        bottom_stroke_inner=(255, 255, 255),    # Viền trong trắng sắc nét
-        bottom_stroke_outer=(0, 0, 0),          # Viền đen 3D đanh thép
+        bottom_stroke_inner=(255, 255, 255),  # Viền trong trắng sắc nét
+        bottom_stroke_outer=(0, 0, 0),  # Viền đen 3D đanh thép
         bottom_glow_color=(192, 38, 211, 170),  # Tỏa neon violet / purple
         bottom_3d_depth=10,
-        bottom_3d_color=(12, 10, 25),           # Khối 3D xanh đêm
+        bottom_3d_color=(12, 10, 25),  # Khối 3D xanh đêm
         bottom_font_priority=[
             "BarlowCondensed-Bold.ttf",
             "FrancoisOne-Regular.ttf",
             "Bangers-Regular.ttf",
         ],
-        badge_bg=(15, 23, 42),                  # Huy hiệu nền đêm sâu
-        badge_text=(255, 255, 255),             # Chữ trắng
-        badge_border=(236, 72, 153),            # Viền Neon Pink 2px
+        badge_bg=(15, 23, 42),  # Huy hiệu nền đêm sâu
+        badge_text=(255, 255, 255),  # Chữ trắng
+        badge_border=(236, 72, 153),  # Viền Neon Pink 2px
         vignette_intensity=0.40,
     ),
     "chien_than": StylePresetConfig(
         name="chien_than",
         label="Chiến Thần Rực Lửa",
-        top_text_color=(255, 130, 45),          # Cam lửa rực sáng
-        top_stroke_inner=(150, 20, 0),          # Đỏ sẫm lửa
-        top_stroke_outer=(5, 2, 2),             # Đen
-        top_glow_color=(255, 69, 0, 220),       # Hào quang lửa đỏ rực
+        top_text_color=(255, 130, 45),  # Cam lửa rực sáng
+        top_stroke_inner=(150, 20, 0),  # Đỏ sẫm lửa
+        top_stroke_outer=(5, 2, 2),  # Đen
+        top_glow_color=(255, 69, 0, 220),  # Hào quang lửa đỏ rực
         top_font_priority=[
             "BarlowCondensed-Bold.ttf",
             "Bangers-Regular.ttf",
             "FrancoisOne-Regular.ttf",
         ],
         bottom_gradient=[
-            (255, 235, 120),                    # Đỉnh: Vàng lửa
-            (245, 75, 20),                      # Giữa: Cam đỏ rực lửa
-            (190, 18, 18),                      # Đáy: Đỏ thẫm chiến binh
+            (255, 235, 120),  # Đỉnh: Vàng lửa
+            (245, 75, 20),  # Giữa: Cam đỏ rực lửa
+            (190, 18, 18),  # Đáy: Đỏ thẫm chiến binh
         ],
-        bottom_stroke_inner=(255, 255, 255),    # Viền trong trắng tương phản
-        bottom_stroke_outer=(0, 0, 0),          # Viền ngoài đen đậm
-        bottom_glow_color=(239, 68, 68, 175),   # Ánh lửa rực xung quanh
+        bottom_stroke_inner=(255, 255, 255),  # Viền trong trắng tương phản
+        bottom_stroke_outer=(0, 0, 0),  # Viền ngoài đen đậm
+        bottom_glow_color=(239, 68, 68, 175),  # Ánh lửa rực xung quanh
         bottom_3d_depth=11,
-        bottom_3d_color=(20, 4, 4),             # Đổ bóng 3D than hồng
+        bottom_3d_color=(20, 4, 4),  # Đổ bóng 3D than hồng
         bottom_font_priority=[
             "BarlowCondensed-Bold.ttf",
             "Bangers-Regular.ttf",
             "FrancoisOne-Regular.ttf",
         ],
-        badge_bg=(225, 29, 72),                 # Huy hiệu đỏ tươi Crimson
-        badge_text=(255, 255, 255),             # Chữ trắng
-        badge_border=(250, 204, 21),            # Viền vàng kim loại
+        badge_bg=(225, 29, 72),  # Huy hiệu đỏ tươi Crimson
+        badge_text=(255, 255, 255),  # Chữ trắng
+        badge_border=(250, 204, 21),  # Viền vàng kim loại
         vignette_intensity=0.42,
     ),
 }
@@ -162,6 +164,7 @@ PRESETS: dict[str, StylePresetConfig] = {
 @dataclass
 class FrameScore:
     """Kết quả phân tích thị giác của một khung hình."""
+
     timestamp: float
     total_score: float
     sharpness: float
@@ -175,6 +178,7 @@ class FrameScore:
 @dataclass
 class ThumbnailConfig:
     """Cấu hình render thumbnail đầy đủ."""
+
     top_title: str = ""
     bottom_title: str = ""
     badge_text: str = ""
@@ -192,8 +196,17 @@ class ThumbnailConfig:
 # ==============================================================================
 
 _CN_NUMS = {
-    '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
-    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
 }
 
 
@@ -205,13 +218,13 @@ def _parse_chinese_numeral(s: str) -> int | None:
     if not s:
         return None
     val = 0
-    if '百' in s:
-        parts = s.split('百', 1)
+    if "百" in s:
+        parts = s.split("百", 1)
         hundred = _CN_NUMS.get(parts[0], 1) if parts[0] else 1
         val += hundred * 100
         s = parts[1]
-    if '十' in s:
-        parts = s.split('十', 1)
+    if "十" in s:
+        parts = s.split("十", 1)
         ten = _CN_NUMS.get(parts[0], 1) if parts[0] else 1
         val += ten * 10
         s = parts[1]
@@ -228,6 +241,7 @@ def _download_youtube_thumbnail(url: str, output_dir: str) -> str | None:
         return None
     video_id = m.group(1)
     import requests
+
     os.makedirs(output_dir, exist_ok=True)
     for res_name in ("maxresdefault.jpg", "hqdefault.jpg"):
         thumb_url = f"https://img.youtube.com/vi/{video_id}/{res_name}"
@@ -255,12 +269,14 @@ def detect_badge_from_context(
 
     # 1. Nhận diện từ Query URL (Bilibili ?p=12, YouTube &index=12, ?ep=12, ?part=15)
     if source_url:
-        p_match = re.search(r'[?&](?:p|index|ep|episode|part)=(\d+)', source_url, re.IGNORECASE)
+        p_match = re.search(r"[?&](?:p|index|ep|episode|part)=(\d+)", source_url, re.IGNORECASE)
         if p_match:
             return f"TẬP {int(p_match.group(1))}"
 
     # 2. Nhận diện Dải tập Video dài (Range: 1-100, 1~50, 01-30, 1_100, 全100集, 全50话)
-    range_match = re.search(r'(?:full|tập|tap|ep|part)?\s*(\d+)\s*[-–~到至_]\s*(\d+)', combined, re.IGNORECASE)
+    range_match = re.search(
+        r"(?:full|tập|tap|ep|part)?\s*(\d+)\s*[-–~到至_]\s*(\d+)", combined, re.IGNORECASE
+    )
     if range_match:
         start_ep = int(range_match.group(1))
         end_ep = int(range_match.group(2))
@@ -268,32 +284,34 @@ def detect_badge_from_context(
             return f"{start_ep}-{end_ep}"
 
     # Tiếng Trung: 全100集, 全12话 -> "1-100", "1-12"
-    cn_full_match = re.search(r'全\s*(\d+)\s*[集话話]', combined)
+    cn_full_match = re.search(r"全\s*(\d+)\s*[集话話]", combined)
     if cn_full_match:
         return f"1-{cn_full_match.group(1)}"
 
     # Từ khóa Full bộ / Trọn bộ
-    if re.search(r'(?i)(trọn bộ|toàn tập|full bộ|full season|合集)', combined):
+    if re.search(r"(?i)(trọn bộ|toàn tập|full bộ|full season|合集)", combined):
         return "TRỌN BỘ"
 
     # 3. Nhận diện Tập cuối / Kết thúc
-    if re.search(r'(?i)(tập cuối|đại kết cục|kết thúc|final|the end|大结局|结局)', combined):
+    if re.search(r"(?i)(tập cuối|đại kết cục|kết thúc|final|the end|大结局|结局)", combined):
         return "TẬP CUỐI"
 
     # 4. Nhận diện Tập lẻ tiếng Trung / Anime (第17集, 第十七回, 第42话, 第105期)
-    cn_ep_match = re.search(r'第\s*([0-9零一二两三四五六七八九十百]+)\s*[集话話回期]', combined)
+    cn_ep_match = re.search(r"第\s*([0-9零一二两三四五六七八九十百]+)\s*[集话話回期]", combined)
     if cn_ep_match:
         num = _parse_chinese_numeral(cn_ep_match.group(1))
         if num is not None:
             return f"TẬP {num}"
 
     # 5. Nhận diện Tập lẻ tiếng Việt / tiếng Anh (Tập 12, Tap 12, EP12, Ep.05, E12, Part 3)
-    single_match = re.search(r'(?i)(?:tập|tap|ep|e|chương|chuong|part)\s*[\.\_\-\s]*0*([1-9]\d*)', combined)
+    single_match = re.search(
+        r"(?i)(?:tập|tap|ep|e|chương|chuong|part)\s*[\.\_\-\s]*0*([1-9]\d*)", combined
+    )
     if single_match:
         return f"TẬP {single_match.group(1)}"
 
     # Số tập độc lập trong dấu ngoặc: [12], (12), 【12】
-    bracket_match = re.search(r'[\[\(【]0*([1-9]\d*)[\]\)】]', combined)
+    bracket_match = re.search(r"[\[\(【]0*([1-9]\d*)[\]\)】]", combined)
     if bracket_match:
         return f"TẬP {bracket_match.group(1)}"
 
@@ -323,7 +341,7 @@ def extract_info_from_link_or_text(text_or_url: str, output_dir: str = "") -> di
 
     # 1. Trích xuất URL nếu có trong văn bản
     url_m = re.search(r'https?://[^\s<>"]+', text)
-    extracted_url = url_m.group(0).rstrip('.,;!?') if url_m else ""
+    extracted_url = url_m.group(0).rstrip(".,;!?") if url_m else ""
     result["url"] = extracted_url
 
     # 2. Xác định nền tảng (Platform)
@@ -348,12 +366,12 @@ def extract_info_from_link_or_text(text_or_url: str, output_dir: str = "") -> di
     )
 
     # 4. Trích xuất Tiêu đề gợi ý từ dấu ngoặc vuông 【...】 hoặc tiêu đề text
-    bracket_m = re.search(r'【([^】]+)】', text)
+    bracket_m = re.search(r"【([^】]+)】", text)
     if bracket_m:
         raw_t = bracket_m.group(1).strip()
-        clean_t = re.sub(r'第\s*[0-9零一二两三四五六七八九十百]+\s*[集话話回期]', '', raw_t)
-        clean_t = re.sub(r'全\s*\d+\s*[集话話]', '', clean_t)
-        clean_t = re.sub(r'的作品', '', clean_t).strip()
+        clean_t = re.sub(r"第\s*[0-9零一二两三四五六七八九十百]+\s*[集话話回期]", "", raw_t)
+        clean_t = re.sub(r"全\s*\d+\s*[集话話]", "", clean_t)
+        clean_t = re.sub(r"的作品", "", clean_t).strip()
         if clean_t:
             result["suggested_title"] = clean_t
 
@@ -368,7 +386,10 @@ def extract_info_from_link_or_text(text_or_url: str, output_dir: str = "") -> di
 # FONT LOADER
 # ==============================================================================
 
-def _get_best_font(size: int, priority_names: list[str] | None = None) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+
+def _get_best_font(
+    size: int, priority_names: list[str] | None = None
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Nạp font chữ Việt hóa chất lượng cao, ưu tiên font nét đậm, hỗ trợ 100% tiếng Việt."""
     default_priorities = [
         "BarlowCondensed-Bold.ttf",
@@ -386,7 +407,9 @@ def _get_best_font(size: int, priority_names: list[str] | None = None) -> ImageF
         "Arial.ttf",
         "segoeui.ttf",
     ]
-    candidates = (priority_names or []) + [f for f in default_priorities if f not in (priority_names or [])]
+    candidates = (priority_names or []) + [
+        f for f in default_priorities if f not in (priority_names or [])
+    ]
 
     font_files = bundled_font_files()
     file_map = {os.path.basename(f).lower(): f for f in font_files}
@@ -422,6 +445,7 @@ def _get_best_font(size: int, priority_names: list[str] | None = None) -> ImageF
 # FRAME ANALYZER (SCORING THỰC TẾ)
 # ==============================================================================
 
+
 def score_frame_quality(img: Image.Image, timestamp: float = 0.0) -> FrameScore:
     """Chấm điểm chất lượng thị giác của khung hình qua độ nét, độ tương phản, rực màu và ánh sáng.
 
@@ -439,23 +463,38 @@ def score_frame_quality(img: Image.Image, timestamp: float = 0.0) -> FrameScore:
     # 1. Kiểm tra giới hạn phơi sáng (Hard penalty cho cảnh đen/cháy)
     if mean_lum < 25.0:
         return FrameScore(
-            timestamp=timestamp, total_score=-250.0, sharpness=0.0,
-            contrast=std_lum, saturation=0.0, exposure_balance=0.0,
-            is_valid=False, reason="Quá tối (cảnh đen / chuyển cảnh)"
+            timestamp=timestamp,
+            total_score=-250.0,
+            sharpness=0.0,
+            contrast=std_lum,
+            saturation=0.0,
+            exposure_balance=0.0,
+            is_valid=False,
+            reason="Quá tối (cảnh đen / chuyển cảnh)",
         )
     if mean_lum > 238.0:
         return FrameScore(
-            timestamp=timestamp, total_score=-250.0, sharpness=0.0,
-            contrast=std_lum, saturation=0.0, exposure_balance=0.0,
-            is_valid=False, reason="Cháy sáng (overexposed / flash trắng)"
+            timestamp=timestamp,
+            total_score=-250.0,
+            sharpness=0.0,
+            contrast=std_lum,
+            saturation=0.0,
+            exposure_balance=0.0,
+            is_valid=False,
+            reason="Cháy sáng (overexposed / flash trắng)",
         )
 
     # 2. Kiểm tra độ tương phản tối thiểu (Tránh cảnh màu bệt, phẳng lì)
     if std_lum < 16.0:
         return FrameScore(
-            timestamp=timestamp, total_score=-150.0, sharpness=0.0,
-            contrast=std_lum, saturation=0.0, exposure_balance=0.0,
-            is_valid=False, reason="Độ tương phản quá thấp (ảnh phẳng)"
+            timestamp=timestamp,
+            total_score=-150.0,
+            sharpness=0.0,
+            contrast=std_lum,
+            saturation=0.0,
+            exposure_balance=0.0,
+            is_valid=False,
+            reason="Độ tương phản quá thấp (ảnh phẳng)",
         )
 
     # 3. Tính độ sắc nét (Sharpness / Clarity qua viền cạnh)
@@ -497,12 +536,19 @@ def extract_frame_at_timestamp(video_path: str, timestamp_sec: float, output_pat
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     cmd = [
-        "ffmpeg", "-v", "error",
-        "-ss", f"{max(0.0, float(timestamp_sec)):.2f}",
-        "-i", video_path,
-        "-frames:v", "1",
-        "-q:v", "2",
-        "-y", output_path,
+        "ffmpeg",
+        "-v",
+        "error",
+        "-ss",
+        f"{max(0.0, float(timestamp_sec)):.2f}",
+        "-i",
+        video_path,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        "-y",
+        output_path,
     ]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
     if res.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 500:
@@ -514,9 +560,13 @@ def extract_frame_at_timestamp(video_path: str, timestamp_sec: float, output_pat
 def get_video_duration(video_path: str) -> float:
     """Lấy thời lượng video tính bằng giây."""
     cmd = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         video_path,
     ]
     try:
@@ -524,7 +574,7 @@ def get_video_duration(video_path: str) -> float:
         if res.returncode == 0 and res.stdout.strip():
             return max(1.0, float(res.stdout.strip()))
     except Exception:
-        pass
+        logger.debug("Bỏ qua lỗi Exception trong thumbnail.py", exc_info=True)
     return 30.0
 
 
@@ -567,20 +617,20 @@ def find_best_frame(
                     try:
                         os.remove(best_file)
                     except OSError:
-                        pass
+                        logger.debug("Bỏ qua lỗi OSError trong thumbnail.py", exc_info=True)
                 best_file = cand_file
             else:
                 if os.path.exists(cand_file):
                     try:
                         os.remove(cand_file)
                     except OSError:
-                        pass
+                        logger.debug("Bỏ qua lỗi OSError trong thumbnail.py", exc_info=True)
         except Exception:
             if os.path.exists(cand_file):
                 try:
                     os.remove(cand_file)
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong thumbnail.py", exc_info=True)
 
     if best_file and os.path.exists(best_file):
         os.replace(best_file, output_png)
@@ -603,6 +653,7 @@ def extract_best_frame(video_path: str, output_png: str, duration_sec: float | N
 # GRAPHIC RENDERER (3D EXTRUSION, DOUBLE STROKE & NEON GLOW)
 # ==============================================================================
 
+
 def _create_vignette_layer(width: int, height: int, intensity: float = 0.35) -> Image.Image:
     """Tạo lớp mờ tối nhẹ quanh 4 viền mép để tôn nhân vật và chữ ở trung tâm."""
     mask = Image.new("L", (width, height), 0)
@@ -613,7 +664,7 @@ def _create_vignette_layer(width: int, height: int, intensity: float = 0.35) -> 
 
     for r in range(max_r, inner_r, -15):
         factor = (r - inner_r) / (max_r - inner_r)
-        alpha = int(255 * (factor ** 1.6) * min(1.0, intensity))
+        alpha = int(255 * (factor**1.6) * min(1.0, intensity))
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=alpha)
 
     blurred_mask = mask.filter(ImageFilter.GaussianBlur(35))
@@ -695,7 +746,14 @@ def _render_3d_text_block(
         glow_layer = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
         g_draw = ImageDraw.Draw(glow_layer)
         glow_stroke = stroke_w_outer + 10
-        g_draw.text((tx, ty), text, font=font, fill=glow_color, stroke_width=glow_stroke, stroke_fill=glow_color)
+        g_draw.text(
+            (tx, ty),
+            text,
+            font=font,
+            fill=glow_color,
+            stroke_width=glow_stroke,
+            stroke_fill=glow_color,
+        )
         glow_blurred = glow_layer.filter(ImageFilter.GaussianBlur(14))
         text_layer = Image.alpha_composite(text_layer, glow_blurred)
 
@@ -790,8 +848,8 @@ def _draw_badge_box(
     b_draw.rounded_rectangle(
         [bx, by, bx + bw, by + bh],
         radius=8,
-        fill=preset.badge_bg + (255,),
-        outline=preset.badge_border + (255,),
+        fill=(*preset.badge_bg, 255),
+        outline=(*preset.badge_border, 255),
         width=3,
     )
     # Chữ bên trong huy hiệu
@@ -806,6 +864,7 @@ def _draw_badge_box(
 # ==============================================================================
 # MAIN RENDER FUNCTION
 # ==============================================================================
+
 
 def render_thumbnail(
     frame_path: str,
@@ -926,7 +985,11 @@ def render_thumbnail(
 
     # Tự động co kích thước font nếu bất kỳ dòng nào vượt quá 88% bề ngang canvas
     for _ in range(10):
-        max_w = max(top_draw.textbbox((0, 0), line, font=top_font)[2] - top_draw.textbbox((0, 0), line, font=top_font)[0] for line in top_lines)
+        max_w = max(
+            top_draw.textbbox((0, 0), line, font=top_font)[2]
+            - top_draw.textbbox((0, 0), line, font=top_font)[0]
+            for line in top_lines
+        )
         if max_w <= width * 0.88:
             break
         top_font_size -= 2
@@ -976,7 +1039,11 @@ def render_thumbnail(
 
     # Tự động co kích thước font nếu bất kỳ dòng nào vượt quá 88% bề ngang canvas
     for _ in range(12):
-        max_bw = max(top_draw.textbbox((0, 0), line, font=bot_font)[2] - top_draw.textbbox((0, 0), line, font=bot_font)[0] for line in bot_lines)
+        max_bw = max(
+            top_draw.textbbox((0, 0), line, font=bot_font)[2]
+            - top_draw.textbbox((0, 0), line, font=bot_font)[0]
+            for line in bot_lines
+        )
         if max_bw <= width * 0.88:
             break
         bot_font_size -= 2
@@ -1062,6 +1129,6 @@ def generate_high_ctr_thumbnail(
         try:
             os.remove(temp_frame)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong thumbnail.py", exc_info=True)
 
     return res

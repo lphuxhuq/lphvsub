@@ -17,6 +17,7 @@ Typical use::
     if result.status == "translate_pending":
         ...  # show TRANSLATE_PENDING.txt instructions, later re-run with resume_dir
 """
+
 from __future__ import annotations
 
 import json
@@ -30,10 +31,10 @@ from datetime import datetime
 
 from autodub.config import Settings
 from autodub.languages import TargetLang, get_target, resolve_source_lang
-from autodub.progress import PipelineCancelled, ProgressFn, ProgressReporter
 from autodub.media.audio import wav_duration_s
+from autodub.progress import PipelineCancelled, ProgressFn, ProgressReporter
 from autodub.speech.transcriber import save_transcript
-from autodub.utils import setup_logging, ensure_dir, seg_wav_path, ProgressTracker
+from autodub.utils import ProgressTracker, ensure_dir, seg_wav_path, setup_logging
 from autodub.workdir import data_dir, data_path, youtube_dir
 
 logger = setup_logging("autodub.pipeline")
@@ -60,7 +61,7 @@ def extract_video_id(url: str) -> str:
         try:
             parsed = urllib.parse.urlparse(url)
             qs = urllib.parse.parse_qs(parsed.query)
-            if "v" in qs and qs["v"]:
+            if qs.get("v"):
                 return qs["v"][0]
         except Exception:
             pass
@@ -103,24 +104,37 @@ def normalize_video_url(url: str) -> str:
 
     query_params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
     tracking_keys = {
-        "spm_id_from", "spm_id", "si", "fbclid", "feature",
-        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-        "from_source", "is_from_webapp", "sender_device"
+        "spm_id_from",
+        "spm_id",
+        "si",
+        "fbclid",
+        "feature",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "from_source",
+        "is_from_webapp",
+        "sender_device",
     }
     filtered_params = [
-        (k, v) for k, v in query_params
+        (k, v)
+        for k, v in query_params
         if k.lower() not in tracking_keys and not k.lower().startswith("utm_")
     ]
     new_query = urllib.parse.urlencode(filtered_params)
     path = parsed.path.rstrip("/")
-    normalized = urllib.parse.urlunparse((
-        parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        path.lower(),
-        parsed.params,
-        new_query.lower(),
-        ""
-    )).rstrip("/")
+    normalized = urllib.parse.urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path.lower(),
+            parsed.params,
+            new_query.lower(),
+            "",
+        )
+    ).rstrip("/")
     return normalized
 
 
@@ -145,7 +159,7 @@ def find_existing_project_by_url(base_dir: str, url: str) -> str | None:
         info_path = os.path.join(proj_dir, "data", "source_info.json")
         if os.path.isfile(info_path):
             try:
-                with open(info_path, "r", encoding="utf-8") as f:
+                with open(info_path, encoding="utf-8") as f:
                     data = json.load(f)
                     proj_url = data.get("url") or ""
                     if proj_url:
@@ -160,7 +174,7 @@ def find_existing_project_by_url(base_dir: str, url: str) -> str | None:
         src_video_path = os.path.join(proj_dir, "data", "source_video.json")
         if os.path.isfile(src_video_path):
             try:
-                with open(src_video_path, "r", encoding="utf-8") as f:
+                with open(src_video_path, encoding="utf-8") as f:
                     data = json.load(f)
                     proj_url = data.get("url") or ""
                     if proj_url:
@@ -223,29 +237,31 @@ def _usage_snapshot() -> dict:
     để đối chiếu với lịch sử ví.
     """
     from autodub.text.translate_common import USAGE
+
     return USAGE.snapshot()
 
 
 @dataclass
 class DubRequest:
     """Everything needed for one dubbing run (Vietnamese)."""
+
     url: str | None = None
     file_path: str | None = None
     source_lang: str = "zh-CN"
     #: TÊN giọng đọc (xem autodub.speech.tts.voices). None → giọng mặc định
     #: trong cấu hình.
     voice: str | None = None
-    bg_mode: str = "demucs"            # "demucs" | "duck" | "none"
+    bg_mode: str = "demucs"  # "demucs" | "duck" | "none"
     bg_duck_db: float = -12.0
     skip_video: bool = False
-    output_dir: str | None = None      # default resolved from Settings
+    output_dir: str | None = None  # default resolved from Settings
     resume_dir: str | None = None
-    subtitle_mode: str = "none"        # "none" | "soft" | "burn"
+    subtitle_mode: str = "none"  # "none" | "soft" | "burn"
     # Rectangles (normalized 0..1: x/y/w/h, optional t_start/t_end) blurred to
     # cover hardcoded source captions. Any region forces a video re-encode.
     blur_regions: list[dict] = field(default_factory=list)
     subtitle_style: dict | None = None  # libass styling; None → Settings default
-    aspect_preset: str | None = None   # "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
+    aspect_preset: str | None = None  # "original" | "tiktok_9_16" | "youtube_16_9" | "square_1_1"
 
     # Speaker Diarization & Multi-Speaker Voice options per request
     diarization_enabled: bool | None = None
@@ -387,6 +403,7 @@ class DubPipeline:
 
     def _get_synth(self, target, voice):
         from autodub.speech.tts import get_synthesizer
+
         if self._synth_cache is not None:
             return self._synth_cache.get(target, self.settings, voice)
         return get_synthesizer(target, self.settings, voice)
@@ -411,11 +428,9 @@ class DubPipeline:
                 fut.cancel()
                 # Observe the eventual result so a failure in the background
                 # thread isn't reported as "exception was never retrieved".
-                fut.add_done_callback(
-                    lambda f: f.cancelled() or f.exception())
+                fut.add_done_callback(lambda f: f.cancelled() or f.exception())
             synth = self._active_synth
-            if (self._synth_cache is None and synth is not None
-                    and hasattr(synth, "close")):
+            if self._synth_cache is None and synth is not None and hasattr(synth, "close"):
                 try:
                     synth.close()
                 except Exception as e:
@@ -439,30 +454,39 @@ class DubPipeline:
     def _log_machine_info(settings: Settings) -> None:
         """Một dòng cấu hình máy đầu mỗi lượt chạy — để đọc log là biết ngay
         video chậm vì máy yếu hay vì lỗi, không phải hỏi lại người dùng."""
-        from autodub.sysinfo import available_ram_gb, total_ram_gb
-        from autodub.media.vocal_separator import gpu_venv_python
         from autodub.media.video import video_encoder_name
+        from autodub.media.vocal_separator import gpu_venv_python
+        from autodub.sysinfo import available_ram_gb, total_ram_gb
 
         total = total_ram_gb()
         avail = available_ram_gb()
-        ram_txt = (f"RAM {avail:.1f}/{total:.1f} GB trống"
-                   if total is not None and avail is not None else "RAM ?")
+        ram_txt = (
+            f"RAM {avail:.1f}/{total:.1f} GB trống"
+            if total is not None and avail is not None
+            else "RAM ?"
+        )
         gpu_txt = "có" if gpu_venv_python() else "không"
         logger.info(
             f"Máy: {os.cpu_count() or '?'} nhân, {ram_txt}, GPU (venv) {gpu_txt} — "
             f"TTS {settings.vieneu_max_workers} luồng, "
-            f"parallel {settings.parallel_workers}")
+            f"parallel {settings.parallel_workers}"
+        )
         # Xuất video bằng card đồ họa nhanh gấp nhiều lần CPU. Ghi rõ ở đây để
         # người dùng máy yếu biết ngay mình đang chạy đường nào.
         try:
             logger.info(f"Xuất video bằng: {video_encoder_name()}")
-        except Exception as exc:      # ffmpeg lạ — không đáng làm hỏng lượt chạy
+        except Exception as exc:  # ffmpeg lạ — không đáng làm hỏng lượt chạy
             logger.debug(f"Không dò được encoder: {exc}")
 
     @staticmethod
-    def _asr_source(work_dir: str, bg_future, settings: Settings, default_audio: str, req: DubRequest) -> str:
+    def _asr_source(
+        work_dir: str, bg_future, settings: Settings, default_audio: str, req: DubRequest
+    ) -> str:
         """Chọn nguồn audio cho ASR: nếu bật asr_use_vocals và dùng Demucs, lấy vocals.wav đã tách."""
-        if not getattr(settings, "asr_use_vocals", True) or getattr(req, "bg_mode", "demucs") != "demucs":
+        if (
+            not getattr(settings, "asr_use_vocals", True)
+            or getattr(req, "bg_mode", "demucs") != "demucs"
+        ):
             return default_audio
         if bg_future is not None:
             try:
@@ -471,16 +495,32 @@ class DubPipeline:
                 logger.warning(f"Chờ tách nhạc nền lỗi ({e}) — ASR dùng audio gốc")
                 return default_audio
         from autodub.workdir import data_path
+
         vocals_path = data_path(work_dir, "vocals.wav")
         if not (os.path.isfile(vocals_path) and os.path.getsize(vocals_path) > 0):
             return default_audio
 
         asr_vocals_path = data_path(work_dir, "asr_vocals.wav")
         try:
-            if not os.path.isfile(asr_vocals_path) or os.path.getmtime(asr_vocals_path) < os.path.getmtime(vocals_path):
+            if not os.path.isfile(asr_vocals_path) or os.path.getmtime(
+                asr_vocals_path
+            ) < os.path.getmtime(vocals_path):
                 import subprocess
+
                 subprocess.run(
-                    ["ffmpeg", "-y", "-loglevel", "error", "-i", vocals_path, "-ar", "16000", "-ac", "1", asr_vocals_path],
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-loglevel",
+                        "error",
+                        "-i",
+                        vocals_path,
+                        "-ar",
+                        "16000",
+                        "-ac",
+                        "1",
+                        asr_vocals_path,
+                    ],
                     check=True,
                     timeout=120,
                 )
@@ -540,6 +580,7 @@ class DubPipeline:
         # Tự động ghim các tùy chọn ban đầu (voice, font, vùng che, nhạc nền) vào render_opts.json
         try:
             from autodub.editor import load_render_opts, save_render_opts
+
             opts = load_render_opts(work_dir)
             if req.voice:
                 opts["voice"] = req.voice
@@ -561,8 +602,7 @@ class DubPipeline:
 
         # Bố cục thư mục: file kỹ thuật vào data/, kết quả nằm ở gốc.
         # Thư mục cũ (mọi thứ phẳng ở gốc) được data_path tự nhận và giữ nguyên.
-        transcript_orig_path = data_path(work_dir, "transcript_original.json",
-                                         create_dir=True)
+        transcript_orig_path = data_path(work_dir, "transcript_original.json", create_dir=True)
         transcript_dub_path = data_path(work_dir, target.transcript_name)
         audio_path = data_path(work_dir, "original_audio.wav")
 
@@ -590,10 +630,8 @@ class DubPipeline:
         # soundtrack to phone-call bandwidth — the single biggest audio
         # quality loss of the old pipeline. Failure falls back to the ASR wav.
         hq_audio_path = data_path(work_dir, "original_audio_hq.wav")
-        have_asr = (os.path.exists(audio_path)
-                    and os.path.getsize(audio_path) > 0)
-        have_hq = (os.path.exists(hq_audio_path)
-                   and os.path.getsize(hq_audio_path) > 0)
+        have_asr = os.path.exists(audio_path) and os.path.getsize(audio_path) > 0
+        have_hq = os.path.exists(hq_audio_path) and os.path.getsize(hq_audio_path) > 0
         need_hq = settings.hq_background and not have_hq
         if have_asr:
             logger.info(f"STEP 2: Reusing existing extracted audio: {audio_path}")
@@ -602,29 +640,29 @@ class DubPipeline:
             logger.info("STEP 2: Extracting audio")
             rep.emit("extract", "start")
             from autodub.media.audio import extract_audio, extract_audio_dual
+
             if need_hq:
                 # Cần cả hai bản — một lệnh ffmpeg, video giải mã một lần.
                 try:
-                    extract_audio_dual(video_path, audio_path, hq_audio_path,
-                                       asr_rate=settings.audio_sample_rate)
+                    extract_audio_dual(
+                        video_path, audio_path, hq_audio_path, asr_rate=settings.audio_sample_rate
+                    )
                     need_hq = False
                 except Exception as e:
-                    logger.warning(f"Rút audio 1 lượt lỗi ({e}) — "
-                                   "tách thành hai lệnh rời")
-            if not (os.path.exists(audio_path)
-                    and os.path.getsize(audio_path) > 0):
-                extract_audio(video_path, audio_path,
-                              sample_rate=settings.audio_sample_rate)
+                    logger.warning(f"Rút audio 1 lượt lỗi ({e}) — tách thành hai lệnh rời")
+            if not (os.path.exists(audio_path) and os.path.getsize(audio_path) > 0):
+                extract_audio(video_path, audio_path, sample_rate=settings.audio_sample_rate)
             rep.emit("extract", "done", detail=audio_path)
         if settings.hq_background:
             if need_hq:
                 try:
                     from autodub.media.audio import extract_audio
-                    extract_audio(video_path, hq_audio_path,
-                                  sample_rate=44100, channels=2)
+
+                    extract_audio(video_path, hq_audio_path, sample_rate=44100, channels=2)
                 except Exception as e:
-                    logger.warning(f"Không rút được audio HQ ({e}) — "
-                                   "nhạc nền dùng bản 16 kHz như cũ")
+                    logger.warning(
+                        f"Không rút được audio HQ ({e}) — nhạc nền dùng bản 16 kHz như cũ"
+                    )
                     hq_audio_path = audio_path
         else:
             hq_audio_path = audio_path
@@ -635,10 +673,14 @@ class DubPipeline:
         # back, and each step alone peaks lower on RAM/VRAM.
         rep.check_cancelled()
         from concurrent.futures import ThreadPoolExecutor
+
         bg_executor = ThreadPoolExecutor(max_workers=1)
         bg_future = bg_executor.submit(
-            self._resolve_background, req.bg_mode, req.bg_duck_db,
-            hq_audio_path, work_dir,
+            self._resolve_background,
+            req.bg_mode,
+            req.bg_duck_db,
+            hq_audio_path,
+            work_dir,
         )
         # Giữ trên self, shutdown trong finally của run() — xem chú thích ở đó.
         self._bg_executor = bg_executor
@@ -650,8 +692,8 @@ class DubPipeline:
         from autodub.media.subtitle import normalize_style
         from autodub.text.subtitles import refresh_subtitles
         from autodub.text.translate_common import HOLD
-        subtitle_style = normalize_style(req.subtitle_style
-                                         or settings.subtitle_style())
+
+        subtitle_style = normalize_style(req.subtitle_style or settings.subtitle_style())
 
         def _refresh_subs(*args, **kwargs):
             # Hold chưa chốt → không để phụ đề (bản dịch thuần chữ) nằm
@@ -670,15 +712,19 @@ class DubPipeline:
             try:
                 with open(transcript_orig_path, encoding="utf-8") as f:
                     cached_segments = json.load(f)
-                if not (isinstance(cached_segments, list)
-                        and all(isinstance(s, dict) and "start" in s
-                                and "end" in s and "text" in s
-                                for s in cached_segments)):
+                if not (
+                    isinstance(cached_segments, list)
+                    and all(
+                        isinstance(s, dict) and "start" in s and "end" in s and "text" in s
+                        for s in cached_segments
+                    )
+                ):
                     raise ValueError("transcript thiếu trường bắt buộc")
                 segments = cached_segments
                 logger.info(f"STEP 3: Reusing existing transcript: {transcript_orig_path}")
-                logger.info(f"Dùng lại lời thoại đã nghe từ lần chạy trước "
-                            f"({len(segments)} câu) — đỡ chờ")
+                logger.info(
+                    f"Dùng lại lời thoại đã nghe từ lần chạy trước ({len(segments)} câu) — đỡ chờ"
+                )
                 rep.emit("asr", "skip", detail=f"{len(segments)} segments (cached)")
             except (ValueError, json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Transcript cũ hỏng ({e}) — nghe lại từ đầu")
@@ -691,29 +737,36 @@ class DubPipeline:
             # GPU (hoặc cùng 4 nhân CPU) chậm hơn chạy lần lượt.
             from autodub.media.vocal_separator import gpu_venv_python
             from autodub.speech.transcriber import asr_will_use_gpu
-            overlap_ok = (req.bg_mode == "demucs"
-                          and bool(gpu_venv_python())
-                          and not asr_will_use_gpu(settings, lang_code))
+
+            overlap_ok = (
+                req.bg_mode == "demucs"
+                and bool(gpu_venv_python())
+                and not asr_will_use_gpu(settings, lang_code)
+            )
             if overlap_ok:
-                logger.info("Demucs (GPU) và ASR (CPU) chạy song song — "
-                            "tiết kiệm thời gian chờ")
+                logger.info("Demucs (GPU) và ASR (CPU) chạy song song — tiết kiệm thời gian chờ")
             else:
                 # Let the separation finish first so Whisper gets the GPU
                 # alone (duck/none resolve instantly; a cached Demucs too).
                 bg_future.result()
             logger.info("STEP 3: Transcribing audio (ASR)")
-            logger.info("Đang nghe và ghi lại lời thoại trong video — "
-                        "video dài thì bước này hơi lâu...")
+            logger.info(
+                "Đang nghe và ghi lại lời thoại trong video — video dài thì bước này hơi lâu..."
+            )
             rep.emit("asr", "start")
             from autodub.speech.transcriber import transcribe
             from autodub.text.srt import generate_srt
 
             asr_audio = self._asr_source(work_dir, bg_future, settings, audio_path, req)
             meta: dict = {}
-            segments = transcribe(asr_audio, lang_code, settings,
-                                  whisper_cache=self._whisper_cache,
-                                  paraformer_cache=self._paraformer_cache,
-                                  meta=meta)
+            segments = transcribe(
+                asr_audio,
+                lang_code,
+                settings,
+                whisper_cache=self._whisper_cache,
+                paraformer_cache=self._paraformer_cache,
+                meta=meta,
+            )
 
             # --- OCR Hard-sub Selective Fallback & Fusion ---
             if getattr(settings, "ocr_enabled", False):
@@ -721,22 +774,34 @@ class DubPipeline:
                     from autodub.media.ocr import detect_hardsub, run_selective_ocr
                     from autodub.text.fusion import detect_suspect_segments, fuse
                     from autodub.utils import save_json_atomic
+
                     if detect_hardsub(video_path, settings):
                         suspects1 = detect_suspect_segments(segments, meta.get("empty_chunks"))
                         if suspects1.suspect:
-                            logger.info(f"OCR: phát hiện {len(suspects1.suspect)} câu nghi vấn — tiến hành Selective OCR")
-                            ocr_segs = run_selective_ocr(video_path, suspects1.suspect, settings, work_dir)
+                            logger.info(
+                                f"OCR: phát hiện {len(suspects1.suspect)} câu nghi vấn — tiến hành Selective OCR"
+                            )
+                            ocr_segs = run_selective_ocr(
+                                video_path, suspects1.suspect, settings, work_dir
+                            )
                             if ocr_segs:
-                                suspects2 = detect_suspect_segments(segments, meta.get("empty_chunks"), ocr_segs)
+                                suspects2 = detect_suspect_segments(
+                                    segments, meta.get("empty_chunks"), ocr_segs
+                                )
                                 segments, fusion_report = fuse(segments, ocr_segs, suspects2)
-                                save_json_atomic(fusion_report, data_path(work_dir, "asr_fusion_report.json"))
-                                logger.info(f"Fusion: đã kết hợp ASR + OCR ({len(segments)} câu cuối cùng)")
+                                save_json_atomic(
+                                    fusion_report, data_path(work_dir, "asr_fusion_report.json")
+                                )
+                                logger.info(
+                                    f"Fusion: đã kết hợp ASR + OCR ({len(segments)} câu cuối cùng)"
+                                )
                 except Exception as e:
                     logger.warning(f"OCR/Fusion gặp lỗi ({e}) — tiếp tục với transcript ASR gốc")
 
             save_transcript(segments, transcript_orig_path)
-            generate_srt(segments, data_path(work_dir, "transcript_original.srt"),
-                         text_field="text")
+            generate_srt(
+                segments, data_path(work_dir, "transcript_original.srt"), text_field="text"
+            )
             logger.info(f"Nghe xong: video có {len(segments)} câu thoại")
             rep.emit("asr", "done", detail=f"{len(segments)} segments")
         logger.info(f"Transcribed {len(segments)} segments")
@@ -746,18 +811,23 @@ class DubPipeline:
             raise RuntimeError(
                 "Không nhận dạng được lời nói nào trong video (video chỉ có "
                 "nhạc, hoặc chọn sai ngôn ngữ gốc). Kiểm tra lại ngôn ngữ "
-                "nguồn trong tab Lồng tiếng.")
+                "nguồn trong tab Lồng tiếng."
+            )
 
         # Thu hẹp biên VAD thô về biên speech thật (voice-sync): slot dịch
         # và dub onset bám chỗ người nói thật, không phải biên coarse của
         # VAD. Chạy cho cả transcript cache (resume) — rẻ và idempotent.
         if self.settings.speech_boundary_refine:
             from autodub.speech.boundaries import refine_speech_boundaries
-            segments = refine_speech_boundaries(segments, audio_path,
-                                                self.settings)
+
+            segments = refine_speech_boundaries(segments, audio_path, self.settings)
 
         # --- Step 3.6: Speaker Diarization (nhận diện và phân tách người nói) ---
-        diar_enabled = req.diarization_enabled if req.diarization_enabled is not None else getattr(settings, "diarization_enabled", True)
+        diar_enabled = (
+            req.diarization_enabled
+            if req.diarization_enabled is not None
+            else getattr(settings, "diarization_enabled", True)
+        )
         if diar_enabled and segments:
             rep.check_cancelled()
             logger.info("=" * 60)
@@ -765,8 +835,21 @@ class DubPipeline:
             rep.emit("diarize", "start")
             try:
                 from autodub.speech.diarization import diarize_segments
-                k_override = req.diarization_num_speakers if req.diarization_num_speakers is not None and req.diarization_num_speakers > 0 else (settings.diarization_num_speakers if settings.diarization_num_speakers > 0 else None)
-                max_spk = req.diarization_max_speakers if req.diarization_max_speakers is not None else getattr(settings, "diarization_max_speakers", 4)
+
+                k_override = (
+                    req.diarization_num_speakers
+                    if req.diarization_num_speakers is not None and req.diarization_num_speakers > 0
+                    else (
+                        settings.diarization_num_speakers
+                        if settings.diarization_num_speakers > 0
+                        else None
+                    )
+                )
+                max_spk = (
+                    req.diarization_max_speakers
+                    if req.diarization_max_speakers is not None
+                    else getattr(settings, "diarization_max_speakers", 4)
+                )
                 segments = diarize_segments(
                     audio_path,
                     segments,
@@ -779,10 +862,11 @@ class DubPipeline:
                 for s in segments:
                     s.setdefault("speaker_id", 0)
 
-
             save_transcript(segments, transcript_orig_path)
             spk_set = {s.get("speaker_id", 0) for s in segments}
-            logger.info(f"Phân tách người nói xong: phát hiện {len(spk_set)} giọng nói {sorted(spk_set)}")
+            logger.info(
+                f"Phân tách người nói xong: phát hiện {len(spk_set)} giọng nói {sorted(spk_set)}"
+            )
             rep.emit("diarize", "done", detail=f"{len(spk_set)} speakers")
         else:
             for s in segments:
@@ -798,10 +882,12 @@ class DubPipeline:
             if len(spk_set) > 1:
                 try:
                     from autodub.speech.speaker_profiler import profile_speakers
-                    from autodub.speech.voice_director import cast_voices
                     from autodub.speech.voice_catalog import UnifiedVoiceCatalog
+                    from autodub.speech.voice_director import cast_voices
 
-                    logger.info(f"AI Voice Director: phát hiện {len(spk_set)} người nói — tiến hành phân vai tự động")
+                    logger.info(
+                        f"AI Voice Director: phát hiện {len(spk_set)} người nói — tiến hành phân vai tự động"
+                    )
                     profiles = profile_speakers(audio_path, segments, settings)
                     catalog = UnifiedVoiceCatalog.create_default(settings)
                     casting = cast_voices(
@@ -823,6 +909,7 @@ class DubPipeline:
         # Real per-clip time window (until the next line starts) — drives the
         # translation character budget and the TTS target duration.
         from autodub.text.translate_hint import annotate_slots
+
         annotate_slots(segments)
 
         # --- Giữ chỗ Vox — sau ASR là lúc biết chính xác số câu và thời
@@ -832,10 +919,9 @@ class DubPipeline:
         # hai luồng là THỜI ĐIỂM chốt: wizard dừng chờ bấm Xuất video, còn
         # batch/legacy chốt ngay sau khi xuất xong (xem cuối hàm).
         video_duration_s = max(float(s.get("end", 0) or 0) for s in segments)
-        blocked = self._setup_hold(segments, target, work_dir,
-                                   video_duration_s)
+        blocked = self._setup_hold(segments, target, work_dir, video_duration_s)
         if blocked is not None:
-            bg_future.result()   # kết quả đã cache — lần chạy lại dùng ngay
+            bg_future.result()  # kết quả đã cache — lần chạy lại dùng ngay
             return blocked
 
         # Khởi động sớm bộ giọng: việc nạp model (vài giây trên CPU) nấp sau
@@ -886,9 +972,7 @@ class DubPipeline:
                 loaded_translation = False
 
         if not loaded_translation:
-            translated = self._auto_translate(segments, target,
-                                              req.source_lang,
-                                              work_dir=work_dir)
+            translated = self._auto_translate(segments, target, req.source_lang, work_dir=work_dir)
             if translated is None:
                 # Rẽ sang dịch tay. Hold GIỮ NGUYÊN: giá đã chốt và trừ đủ từ
                 # lúc giữ chỗ nên không có gì để hoàn, còn giữ hold thì lượt
@@ -896,14 +980,18 @@ class DubPipeline:
                 # chỉ cần nói rõ là không phát sinh thêm Vox.
                 refund_note = self._money_note_for_manual()
                 from autodub.text.translate_hint import write_hint
-                hint_path = write_hint(work_dir, target, req.source_lang,
-                                       settings=self.settings,
-                                       refund_note=refund_note)
+
+                hint_path = write_hint(
+                    work_dir,
+                    target,
+                    req.source_lang,
+                    settings=self.settings,
+                    refund_note=refund_note,
+                )
                 # Dòng info tiếng Anh cho console/dev; warning tiếng Việt là
                 # dòng người dùng thấy trong Nhật ký.
                 logger.info("Translation pending — see TRANSLATE_PENDING.txt in work dir")
-                logger.warning("Video đang chờ bản dịch — xem hướng dẫn "
-                               "3 bước hiện trên màn hình")
+                logger.warning("Video đang chờ bản dịch — xem hướng dẫn 3 bước hiện trên màn hình")
                 rep.emit("translate", "start", detail=hint_path)
                 # Let the background separation finish before stopping: the
                 # result is cached on disk, so the resume run reuses it.
@@ -911,8 +999,11 @@ class DubPipeline:
                 # Don't hold TTS resources while waiting for a manual
                 # translation (cache-owned synths stay alive — the batch
                 # owner closes them).
-                if (self._synth_cache is None and tts_synth is not None
-                        and hasattr(tts_synth, "close")):
+                if (
+                    self._synth_cache is None
+                    and tts_synth is not None
+                    and hasattr(tts_synth, "close")
+                ):
                     tts_synth.close()
                 return DubResult(status="translate_pending", work_dir=work_dir)
 
@@ -922,9 +1013,9 @@ class DubPipeline:
             if HOLD.active:
                 # Bản dịch trả phí — mã hóa trên đĩa cho tới khi commit hold.
                 from autodub import securestore
+
                 securestore.encrypt_file(transcript_dub_path, HOLD.key)
-                securestore.add_locked_file(work_dir, HOLD.hold_id,
-                                            transcript_dub_path)
+                securestore.add_locked_file(work_dir, HOLD.hold_id, transcript_dub_path)
             segments = self._load_translation(transcript_dub_path, segments, target)
             _refresh_subs(segments, work_dir, target, subtitle_style)
             rep.emit("translate", "done", detail=transcript_dub_path)
@@ -937,19 +1028,24 @@ class DubPipeline:
         rep.check_cancelled()
         logger.info("=" * 60)
         logger.info(f"STEP 5: Synthesizing {target.name} audio (TTS)")
-        logger.info(f"Bắt đầu tạo giọng đọc cho {len(segments)} câu — "
-                    "bước lâu nhất, tiến độ hiện ở khung bên trái...")
+        logger.info(
+            f"Bắt đầu tạo giọng đọc cho {len(segments)} câu — "
+            "bước lâu nhất, tiến độ hiện ở khung bên trái..."
+        )
         seg_dir = ensure_dir(data_path(work_dir, "segments", create_dir=True))
         self._ensure_render_mode(work_dir, seg_dir)
         tts_results = self._synthesize_segments(
-            target, req.voice, segments, seg_dir,
-            synth=tts_synth, speaker_voices=req.speaker_voices,
+            target,
+            req.voice,
+            segments,
+            seg_dir,
+            synth=tts_synth,
+            speaker_voices=req.speaker_voices,
         )
         # Free the TTS workers' VRAM before the NVENC video encode — unless a
 
         # batch cache owns them (the next video reuses the warm pool).
-        if (self._synth_cache is None and tts_synth is not None
-                and hasattr(tts_synth, "close")):
+        if self._synth_cache is None and tts_synth is not None and hasattr(tts_synth, "close"):
             tts_synth.close()
 
         # --- Step 5.5: Video speed (optional) — slow the WHOLE video by
@@ -963,30 +1059,36 @@ class DubPipeline:
             rep.check_cancelled()
             logger.info("=" * 60)
             logger.info(f"STEP 5.5: Slowing video ({settings.video_speed}x)")
-            logger.warning("VIDEO_SPEED != 1.0 may affect visual speech/"
-                           "lip synchronization — ưu tiên để 1.0 và để "
-                           "scheduler tự fit tempo từng câu.")
-            from autodub.media.retime import (apply_video_speed,
-                                              defer_video_speed,
-                                              rescale_blur_regions)
+            logger.warning(
+                "VIDEO_SPEED != 1.0 may affect visual speech/"
+                "lip synchronization — ưu tiên để 1.0 và để "
+                "scheduler tự fit tempo từng câu."
+            )
+            from autodub.media.retime import (
+                apply_video_speed,
+                defer_video_speed,
+                rescale_blur_regions,
+            )
+
             # Video đằng nào cũng mã hóa lại ở bước ghép (phụ đề ghi vào
             # hình / che chữ) → gộp setpts vào lượt đó, đỡ nguyên một lần
             # encode toàn bộ video. Không mã hóa lại thì đi đường rời như cũ.
             deferred = None
             if req.subtitle_mode == "burn" or req.blur_regions:
-                deferred = defer_video_speed(video_path, background_path,
-                                             segments, work_dir, settings)
+                deferred = defer_video_speed(
+                    video_path, background_path, segments, work_dir, settings
+                )
             if deferred is not None:
                 if deferred[0] is not None:
                     background_path = deferred[0]
                 deferred_speed = (float(settings.video_speed), deferred[2])
                 if req.blur_regions:
-                    req.blur_regions = rescale_blur_regions(
-                        req.blur_regions, deferred[1])
+                    req.blur_regions = rescale_blur_regions(req.blur_regions, deferred[1])
                 _refresh_subs(segments, work_dir, target, subtitle_style)
             else:
-                slowed = apply_video_speed(video_path, background_path,
-                                           segments, work_dir, settings)
+                slowed = apply_video_speed(
+                    video_path, background_path, segments, work_dir, settings
+                )
                 if slowed is not None:
                     video_path = slowed[0]
                     if slowed[1] is not None:
@@ -995,8 +1097,7 @@ class DubPipeline:
                     # transcript keeps ORIGINAL timestamps on disk so a resume
                     # rescales from the same base (and reuses the cached encode).
                     if req.blur_regions:
-                        req.blur_regions = rescale_blur_regions(
-                            req.blur_regions, slowed[2])
+                        req.blur_regions = rescale_blur_regions(req.blur_regions, slowed[2])
                     _refresh_subs(segments, work_dir, target, subtitle_style)
 
         # --- Step 6: voice speed + merge audio ---
@@ -1013,51 +1114,68 @@ class DubPipeline:
         # scheduler timing.py fit tempo TỪNG câu; một hệ số chung sẽ nhân
         # chồng lên tempo per-segment.
         merge_src = seg_dir
-        voice_speed = (self.settings.voice_speed
-                       if self.settings.voice_speed_legacy else 1.0)
-        if self.settings.voice_speed_legacy \
-                and abs(self.settings.voice_speed - 1.0) >= 0.005:
+        voice_speed = self.settings.voice_speed if self.settings.voice_speed_legacy else 1.0
+        if self.settings.voice_speed_legacy and abs(self.settings.voice_speed - 1.0) >= 0.005:
             logger.warning(
                 f"VOICE_SPEED={self.settings.voice_speed:.2f} (chế độ legacy) "
                 "— áp một tốc độ cho MỌI câu; scheduler per-segment có thể "
-                "nhân chồng hệ số này")
-        speed_in_post = (settings.voice_postprocess
-                         and abs(voice_speed - 1.0) >= 0.005)
+                "nhân chồng hệ số này"
+            )
+        speed_in_post = settings.voice_postprocess and abs(voice_speed - 1.0) >= 0.005
         if settings.voice_postprocess:
             logger.info("STEP 6a: Voice postprocess (loudnorm, fade, highpass)")
             logger.info("Đang cân chỉnh âm lượng các câu cho đều nhau...")
             from autodub.media.audio import postprocess_voice_clips
+
             # Tên thư mục mang hệ số tốc độ — đổi VOICE_SPEED giữa hai lần
             # chạy thì cache cũ tự bị bỏ qua (resume-safe).
-            post_dir = ("segments_post" if not speed_in_post else
-                        f"segments_post_speed{voice_speed:.2f}".replace(".", "_"))
+            post_dir = (
+                "segments_post"
+                if not speed_in_post
+                else f"segments_post_speed{voice_speed:.2f}".replace(".", "_")
+            )
             merge_src = postprocess_voice_clips(
-                segments, seg_dir, data_path(work_dir, post_dir),
+                segments,
+                seg_dir,
+                data_path(work_dir, post_dir),
                 target_lufs=settings.voice_target_lufs,
                 max_workers=min(8, settings.parallel_workers),
                 speed=voice_speed if speed_in_post else 1.0,
-                on_done=lambda n, t: rep.emit("merge_audio", "progress",
-                                              current=n, total=t))
+                on_done=lambda n, t: rep.emit("merge_audio", "progress", current=n, total=t),
+            )
 
-        merge_dir = (merge_src if speed_in_post
-                     else self._apply_voice_speed(segments, merge_src, work_dir))
+        merge_dir = (
+            merge_src if speed_in_post else self._apply_voice_speed(segments, merge_src, work_dir)
+        )
 
         # Chống chồng tiếng mềm & bảo vệ điểm chuyển cảnh (Scene Guard)
         timing_report = None
         if settings.soft_timing_fit:
             scene_cuts = None
-            if getattr(settings, "voice_scene_guard_enabled", True) and video_path and os.path.exists(video_path):
+            if (
+                getattr(settings, "voice_scene_guard_enabled", True)
+                and video_path
+                and os.path.exists(video_path)
+            ):
                 try:
                     from autodub.media.scene_detector import load_or_detect_scene_cuts
+
                     scene_cuts = load_or_detect_scene_cuts(video_path, work_dir=work_dir)
                 except Exception as e:
-                    logger.warning(f"Không thể quét điểm chuyển cảnh ({e}) — tiếp tục timing thông thường")
+                    logger.warning(
+                        f"Không thể quét điểm chuyển cảnh ({e}) — tiếp tục timing thông thường"
+                    )
 
             from autodub.media.timing import apply_soft_timing
+
             merge_dir, timing_report = apply_soft_timing(
-                segments, merge_dir, data_path(work_dir, "segments_timed"),
-                settings, max_workers=min(8, settings.parallel_workers),
-                scene_cuts=scene_cuts)
+                segments,
+                merge_dir,
+                data_path(work_dir, "segments_timed"),
+                settings,
+                max_workers=min(8, settings.parallel_workers),
+                scene_cuts=scene_cuts,
+            )
             _refresh_subs(segments, work_dir, target, subtitle_style)
 
         # A long clip may run past the last segment's end — extend the mix
@@ -1071,8 +1189,10 @@ class DubPipeline:
 
         # Xuất timing_report.json (Timing Guide) để người dùng theo dõi chênh lệch thời lượng từng câu
         from autodub.media.timing import build_timing_guide, save_timing_guide
+
         timing_guide_data = build_timing_guide(
-            segments, durations,
+            segments,
+            durations,
             target_field=target.text_field,
             source_url=getattr(req, "url", "") or "",
             target_lang=target.name,
@@ -1086,23 +1206,37 @@ class DubPipeline:
         speech_dip_db = 0.0
         if req.bg_mode == "duck":
             speech_intervals = sorted(
-                (float(s.get("speech_start", s.get("start", 0)) or 0),
-                 float(s.get("speech_end", s.get("end", 0)) or 0))
-                for s in segments)
+                (
+                    float(s.get("speech_start", s.get("start", 0)) or 0),
+                    float(s.get("speech_end", s.get("end", 0)) or 0),
+                )
+                for s in segments
+            )
             speech_intervals = [iv for iv in speech_intervals if iv[1] > iv[0]]
-            speech_dip_db = min(0.0, settings.original_voice_duck_db
-                                - background_gain_db)
+            speech_dip_db = min(0.0, settings.original_voice_duck_db - background_gain_db)
 
         logger.info("STEP 6: Merging audio segments")
         logger.info("Đang ghép giọng đọc với nhạc nền...")
         merged_audio_path = data_path(work_dir, target.audio_name)
-        auto_sfx = req.auto_sfx_enabled if req.auto_sfx_enabled is not None else getattr(settings, "auto_sfx_enabled", False)
+        auto_sfx = (
+            req.auto_sfx_enabled
+            if req.auto_sfx_enabled is not None
+            else getattr(settings, "auto_sfx_enabled", False)
+        )
         sfx_preset = req.sfx_preset or getattr(settings, "sfx_preset", "whoosh")
-        sfx_vol = req.sfx_volume_db if req.sfx_volume_db is not None else getattr(settings, "sfx_volume_db", -14.0)
+        sfx_vol = (
+            req.sfx_volume_db
+            if req.sfx_volume_db is not None
+            else getattr(settings, "sfx_volume_db", -14.0)
+        )
 
         from autodub.media.audio import merge_segments
+
         merge_segments(
-            segments, merge_dir, merged_audio_path, total_duration,
+            segments,
+            merge_dir,
+            merged_audio_path,
+            total_duration,
             background_path=background_path,
             background_gain_db=background_gain_db,
             duck_voice_db=settings.bg_duck_voice_db,
@@ -1127,8 +1261,7 @@ class DubPipeline:
             "deferred_speed": list(deferred_speed) if deferred_speed else None,
             "segments": segments,
             "tts_results": tts_results,
-            "timing": (timing_report.to_dict()
-                       if timing_report is not None else {}),
+            "timing": (timing_report.to_dict() if timing_report is not None else {}),
             "folder_name": folder_name,
             "lang_code": lang_code,
             "target": target.key,
@@ -1198,27 +1331,31 @@ class DubPipeline:
         # Ghim giọng + tùy chọn render để thẻ dự án hiện đúng thông tin
         # (Trình chỉnh sửa vẫn khóa cho tới khi xuất).
         render_opts = load_render_opts(work_dir)
-        render_opts["voice"] = voice_catalog.resolve(self.settings,
-                                                     state.get("voice"))
+        render_opts["voice"] = voice_catalog.resolve(self.settings, state.get("voice"))
         render_opts.setdefault("subtitle_mode", state.get("subtitle_mode"))
         render_opts.setdefault("blur_regions", state.get("blur_regions"))
         render_opts.setdefault("subtitle_style", state.get("subtitle_style"))
-        if state.get("logo_path") is not None: render_opts["logo_path"] = state["logo_path"]
-        if state.get("logo_position") is not None: render_opts["logo_position"] = state["logo_position"]
-        if state.get("logo_scale") is not None: render_opts["logo_scale"] = state["logo_scale"]
-        if state.get("logo_opacity") is not None: render_opts["logo_opacity"] = state["logo_opacity"]
-        if state.get("logo_margin") is not None: render_opts["logo_margin"] = state["logo_margin"]
-        if state.get("logo_motion") is not None: render_opts["logo_motion"] = state["logo_motion"]
-        if state.get("watermark_text") is not None: render_opts["watermark_text"] = state["watermark_text"]
-        if state.get("watermark_opacity") is not None: render_opts["watermark_opacity"] = state["watermark_opacity"]
-        if state.get("watermark_font_size") is not None: render_opts["watermark_font_size"] = state["watermark_font_size"]
-        if state.get("watermark_color") is not None: render_opts["watermark_color"] = state["watermark_color"]
-        if state.get("watermark_speed") is not None: render_opts["watermark_speed"] = state["watermark_speed"]
-        if state.get("watermark_motion") is not None: render_opts["watermark_motion"] = state["watermark_motion"]
-        if state.get("smart_flip") is not None: render_opts["smart_flip"] = state["smart_flip"]
-        if state.get("micro_zoom") is not None: render_opts["micro_zoom"] = state["micro_zoom"]
-        if state.get("color_filter") is not None: render_opts["color_filter"] = state["color_filter"]
-        if state.get("aspect_preset") is not None: render_opts["aspect_preset"] = state["aspect_preset"]
+        for _opt_key in (
+            "logo_path",
+            "logo_position",
+            "logo_scale",
+            "logo_opacity",
+            "logo_margin",
+            "logo_motion",
+            "watermark_text",
+            "watermark_opacity",
+            "watermark_font_size",
+            "watermark_color",
+            "watermark_speed",
+            "watermark_motion",
+            "smart_flip",
+            "micro_zoom",
+            "color_filter",
+            "aspect_preset",
+        ):
+            _opt_val = state.get(_opt_key)
+            if _opt_val is not None:
+                render_opts[_opt_key] = _opt_val
         save_render_opts(work_dir, render_opts)
 
         # Audio ghép + trạng thái xuất: mã hóa rồi ghi vào marker.
@@ -1244,8 +1381,9 @@ class DubPipeline:
         hold_detail = None
         try:
             from autodub.saas_client import get_client
+
             hold_detail = (get_client().get_hold(hold_id) or {}).get("hold")
-        except Exception:  # noqa: BLE001 — mạng chập chờn thì bỏ qua
+        except Exception:
             pass
         total = int((hold_detail or {}).get("estimatedVox") or usage["vox"] or 0)
         mins, secs = divmod(int(duration_s), 60)
@@ -1253,15 +1391,19 @@ class DubPipeline:
         logger.info("=" * 60)
         logger.info(
             f"Đã lồng tiếng xong ({len(segments)} câu, {dur_txt}) — video này "
-            f"tốn {total:,} Vox. Bấm Xuất video để nhận video hoàn chỉnh.")
-        return DubResult(status="export_pending", work_dir=work_dir,
-                         report={
-                             "hold_id": hold_id,
-                             "sentences": len(segments),
-                             "duration_s": round(duration_s, 1),
-                             "usage": usage,
-                             "hold": hold_detail,
-                         })
+            f"tốn {total:,} Vox. Bấm Xuất video để nhận video hoàn chỉnh."
+        )
+        return DubResult(
+            status="export_pending",
+            work_dir=work_dir,
+            report={
+                "hold_id": hold_id,
+                "sentences": len(segments),
+                "duration_s": round(duration_s, 1),
+                "usage": usage,
+                "hold": hold_detail,
+            },
+        )
 
     def _settle_hold_inline(self, work_dir: str) -> None:
         """Chốt hold ngay trước phase xuất (luồng batch/legacy).
@@ -1285,18 +1427,20 @@ class DubPipeline:
             return
         try:
             from autodub.saas_client import get_client
+
             data = get_client().commit_hold(hold_id)
             charged = int(data.get("chargedVox") or 0)
             balance = int(data.get("balance") or 0)
             # Thẻ tổng kết/nhật ký hiện đúng tổng Vox của video này.
             USAGE.reset()
             USAGE.add(charged, balance)
-            logger.info(f"Video này tốn {charged:,} Vox — ví còn "
-                        f"{balance:,} Vox")
-        except Exception as e:  # noqa: BLE001 — video sắp xuất xong, không chặn
-            logger.warning(f"Chưa chốt được lượt trả phí ({e}) — video vẫn "
-                           "hoàn chỉnh; lượt này sẽ tự chốt sau, không tính "
-                           "thêm Vox")
+            logger.info(f"Video này tốn {charged:,} Vox — ví còn {balance:,} Vox")
+        except Exception as e:
+            logger.warning(
+                f"Chưa chốt được lượt trả phí ({e}) — video vẫn "
+                "hoàn chỉnh; lượt này sẽ tự chốt sau, không tính "
+                "thêm Vox"
+            )
         # Mở khóa bằng khóa còn trong RAM — kể cả khi commit lỗi mạng, người
         # dùng đã trả đủ tiền nên dữ liệu thuộc về họ. video_context.json
         # được mã hóa ngay lúc phân tích (ngoài marker) nên mở riêng.
@@ -1306,18 +1450,18 @@ class DubPipeline:
             if securestore.is_locked(work_dir):
                 done = securestore.unlock_all(work_dir, key)
                 if done:
-                    logger.info(f"Đã mở khóa {len(done)} file dữ liệu "
-                                "của dự án")
+                    logger.info(f"Đã mở khóa {len(done)} file dữ liệu của dự án")
             ctx = data_path(work_dir, "video_context.json")
             if os.path.exists(ctx) and securestore.is_encrypted(ctx):
                 securestore.decrypt_file(ctx, key)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Không mở khóa được file trung gian ({e}) — "
-                           "chạy lại video sẽ tự mở, không tính phí "
-                           "lần hai")
+        except Exception as e:
+            logger.warning(
+                f"Không mở khóa được file trung gian ({e}) — "
+                "chạy lại video sẽ tự mở, không tính phí "
+                "lần hai"
+            )
 
-    def _export_phase(self, state: dict, work_dir: str,
-                      target: TargetLang) -> DubResult:
+    def _export_phase(self, state: dict, work_dir: str, target: TargetLang) -> DubResult:
         """Phase Xuất video: ghép video, nội dung đăng bài, báo cáo.
 
         Luồng batch/legacy chạy inline ngay sau ghép audio (hold được chốt
@@ -1335,8 +1479,7 @@ class DubPipeline:
         merged_audio_path = state["merged_audio_path"]
         subtitle_style = state.get("subtitle_style") or {}
         deferred = state.get("deferred_speed")
-        deferred_speed = ((float(deferred[0]), deferred[1])
-                          if deferred else None)
+        deferred_speed = (float(deferred[0]), deferred[1]) if deferred else None
         req = DubRequest(
             url=state.get("url"),
             voice=state.get("voice"),
@@ -1372,49 +1515,94 @@ class DubPipeline:
         # ghi đè — không xóa tùy chọn Trình chỉnh sửa đã lưu trước đó.
         from autodub.editor import load_render_opts, save_render_opts
         from autodub.speech.tts import voices as voice_catalog
+
         render_opts = load_render_opts(work_dir)
         render_opts["voice"] = voice_catalog.resolve(self.settings, req.voice)
         dubbed_video_path = None
         if not req.skip_video:
             rep.check_cancelled()
-            if (req.auto_mask_hardsub or getattr(self.settings, "auto_mask_hardsub", False)) and not req.blur_regions and os.path.exists(video_path):
+            if (
+                (req.auto_mask_hardsub or getattr(self.settings, "auto_mask_hardsub", False))
+                and not req.blur_regions
+                and os.path.exists(video_path)
+            ):
                 try:
                     from autodub.media.hardsub_detector import detect_hardsub_regions
+
                     detected = detect_hardsub_regions(video_path)
                     if detected:
                         req.blur_regions = detected
-                        logger.info(f"Auto Masking: Áp dụng {len(detected)} vùng che phụ đề cứng tự động.")
+                        logger.info(
+                            f"Auto Masking: Áp dụng {len(detected)} vùng che phụ đề cứng tự động."
+                        )
                 except Exception as e:
                     logger.warning(f"Lỗi khi tự động quét phụ đề ({e}) — tiếp tục ghép video.")
 
             logger.info("=" * 60)
             logger.info("STEP 7: Creating dubbed video")
-            logger.info("Đang xuất video hoàn chỉnh"
-                        + (" (có ghi phụ đề/che chữ nên lâu hơn chút)"
-                           if req.subtitle_mode == "burn" or req.blur_regions
-                           else "") + "...")
+            logger.info(
+                "Đang xuất video hoàn chỉnh"
+                + (
+                    " (có ghi phụ đề/che chữ nên lâu hơn chút)"
+                    if req.subtitle_mode == "burn" or req.blur_regions
+                    else ""
+                )
+                + "..."
+            )
             rep.emit("merge_video", "start")
             dubbed_video_path = os.path.join(work_dir, "dubbed_video.mp4")
-            render_opts.update({
-                "subtitle_mode": req.subtitle_mode,
-                "blur_regions": req.blur_regions,
-                "subtitle_style": subtitle_style,
-                "logo_path": req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""),
-                "logo_position": req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"),
-                "logo_scale": req.logo_scale if req.logo_scale is not None else getattr(settings, "logo_scale", 0.12),
-                "logo_opacity": req.logo_opacity if req.logo_opacity is not None else getattr(settings, "logo_opacity", 0.85),
-                "logo_margin": req.logo_margin if req.logo_margin is not None else getattr(settings, "logo_margin", 24),
-                "logo_motion": req.logo_motion if req.logo_motion is not None else getattr(settings, "logo_motion", "static"),
-                "watermark_text": req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""),
-                "watermark_opacity": req.watermark_opacity if req.watermark_opacity is not None else getattr(settings, "watermark_opacity", 0.28),
-                "watermark_font_size": req.watermark_font_size if req.watermark_font_size is not None else getattr(settings, "watermark_font_size", 26),
-                "watermark_color": req.watermark_color if req.watermark_color is not None else getattr(settings, "watermark_color", "white"),
-                "watermark_speed": req.watermark_speed if req.watermark_speed is not None else getattr(settings, "watermark_speed", 40),
-                "watermark_motion": req.watermark_motion if req.watermark_motion is not None else getattr(settings, "watermark_motion", "bounce"),
-                "smart_flip": req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False),
-                "micro_zoom": req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
-                "color_filter": req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
-            })
+            render_opts.update(
+                {
+                    "subtitle_mode": req.subtitle_mode,
+                    "blur_regions": req.blur_regions,
+                    "subtitle_style": subtitle_style,
+                    "logo_path": req.logo_path
+                    if req.logo_path is not None
+                    else getattr(settings, "logo_path", ""),
+                    "logo_position": req.logo_position
+                    if req.logo_position is not None
+                    else getattr(settings, "logo_position", "top_right"),
+                    "logo_scale": req.logo_scale
+                    if req.logo_scale is not None
+                    else getattr(settings, "logo_scale", 0.12),
+                    "logo_opacity": req.logo_opacity
+                    if req.logo_opacity is not None
+                    else getattr(settings, "logo_opacity", 0.85),
+                    "logo_margin": req.logo_margin
+                    if req.logo_margin is not None
+                    else getattr(settings, "logo_margin", 24),
+                    "logo_motion": req.logo_motion
+                    if req.logo_motion is not None
+                    else getattr(settings, "logo_motion", "static"),
+                    "watermark_text": req.watermark_text
+                    if req.watermark_text is not None
+                    else getattr(settings, "watermark_text", ""),
+                    "watermark_opacity": req.watermark_opacity
+                    if req.watermark_opacity is not None
+                    else getattr(settings, "watermark_opacity", 0.28),
+                    "watermark_font_size": req.watermark_font_size
+                    if req.watermark_font_size is not None
+                    else getattr(settings, "watermark_font_size", 26),
+                    "watermark_color": req.watermark_color
+                    if req.watermark_color is not None
+                    else getattr(settings, "watermark_color", "white"),
+                    "watermark_speed": req.watermark_speed
+                    if req.watermark_speed is not None
+                    else getattr(settings, "watermark_speed", 40),
+                    "watermark_motion": req.watermark_motion
+                    if req.watermark_motion is not None
+                    else getattr(settings, "watermark_motion", "bounce"),
+                    "smart_flip": req.smart_flip
+                    if req.smart_flip is not None
+                    else getattr(settings, "smart_flip", False),
+                    "micro_zoom": req.micro_zoom
+                    if req.micro_zoom is not None
+                    else getattr(settings, "micro_zoom", False),
+                    "color_filter": req.color_filter
+                    if req.color_filter is not None
+                    else getattr(settings, "color_filter", "none"),
+                }
+            )
 
         else:
             # Chỉ xuất âm thanh: vẫn ghim kiểu phụ đề của LẦN CHẠY NÀY để
@@ -1423,27 +1611,73 @@ class DubPipeline:
             render_opts.setdefault("subtitle_mode", req.subtitle_mode)
             render_opts.setdefault("blur_regions", req.blur_regions)
             render_opts.setdefault("subtitle_style", subtitle_style)
-            render_opts.setdefault("logo_path", req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""))
-            render_opts.setdefault("logo_position", req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"))
-            render_opts.setdefault("watermark_text", req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""))
-            render_opts.setdefault("smart_flip", req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False))
-            render_opts.setdefault("micro_zoom", req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False))
-            render_opts.setdefault("color_filter", req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"))
-            render_opts.setdefault("mask_method", getattr(req, "mask_method", None) or getattr(settings, "mask_method", "blur"))
-            render_opts.setdefault("inpaint_engine", getattr(req, "inpaint_engine", None) or getattr(settings, "inpaint_engine", "lama_onnx"))
-            render_opts.setdefault("inpaint_device", getattr(req, "inpaint_device", None) or getattr(settings, "inpaint_device", "auto"))
+            render_opts.setdefault(
+                "logo_path",
+                req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""),
+            )
+            render_opts.setdefault(
+                "logo_position",
+                req.logo_position
+                if req.logo_position is not None
+                else getattr(settings, "logo_position", "top_right"),
+            )
+            render_opts.setdefault(
+                "watermark_text",
+                req.watermark_text
+                if req.watermark_text is not None
+                else getattr(settings, "watermark_text", ""),
+            )
+            render_opts.setdefault(
+                "smart_flip",
+                req.smart_flip
+                if req.smart_flip is not None
+                else getattr(settings, "smart_flip", False),
+            )
+            render_opts.setdefault(
+                "micro_zoom",
+                req.micro_zoom
+                if req.micro_zoom is not None
+                else getattr(settings, "micro_zoom", False),
+            )
+            render_opts.setdefault(
+                "color_filter",
+                req.color_filter
+                if req.color_filter is not None
+                else getattr(settings, "color_filter", "none"),
+            )
+            render_opts.setdefault(
+                "mask_method",
+                getattr(req, "mask_method", None) or getattr(settings, "mask_method", "blur"),
+            )
+            render_opts.setdefault(
+                "inpaint_engine",
+                getattr(req, "inpaint_engine", None)
+                or getattr(settings, "inpaint_engine", "lama_onnx"),
+            )
+            render_opts.setdefault(
+                "inpaint_device",
+                getattr(req, "inpaint_device", None) or getattr(settings, "inpaint_device", "auto"),
+            )
         save_render_opts(work_dir, render_opts)
         if not req.skip_video:
             # Phụ đề ghi vào hình: cả câu (.srt) hay cụm chữ theo giọng đọc
             # (.ass) đều do refresh_subtitles quyết, dùng đúng bộ clip cuối
             # cùng nên chữ nhảy khớp giọng.
             _srt_path, burn_path = refresh_subtitles(
-                segments, work_dir, target, subtitle_style,
-                merge_dir=merge_dir, settings=settings,
-                for_burn=req.subtitle_mode == "burn")
+                segments,
+                work_dir,
+                target,
+                subtitle_style,
+                merge_dir=merge_dir,
+                settings=settings,
+                for_burn=req.subtitle_mode == "burn",
+            )
             from autodub.media.video import merge_video
+
             merge_video(
-                video_path, merged_audio_path, dubbed_video_path,
+                video_path,
+                merged_audio_path,
+                dubbed_video_path,
                 srt_path=burn_path,
                 subtitle_mode=req.subtitle_mode,
                 blur_regions=req.blur_regions,
@@ -1451,58 +1685,125 @@ class DubPipeline:
                 subtitle_lang=target.iso639_2,
                 speed=deferred_speed[0] if deferred_speed else None,
                 fps=deferred_speed[1] if deferred_speed else None,
-                aspect_preset=req.aspect_preset or getattr(settings, "video_aspect_preset", "original"),
-                logo_path=req.logo_path if req.logo_path is not None else getattr(settings, "logo_path", ""),
-                logo_position=req.logo_position if req.logo_position is not None else getattr(settings, "logo_position", "top_right"),
-                logo_scale=req.logo_scale if req.logo_scale is not None else getattr(settings, "logo_scale", 0.12),
-                logo_opacity=req.logo_opacity if req.logo_opacity is not None else getattr(settings, "logo_opacity", 0.85),
-                logo_margin=req.logo_margin if req.logo_margin is not None else getattr(settings, "logo_margin", 24),
-                logo_motion=req.logo_motion if req.logo_motion is not None else getattr(settings, "logo_motion", "static"),
-                watermark_text=req.watermark_text if req.watermark_text is not None else getattr(settings, "watermark_text", ""),
-                watermark_opacity=req.watermark_opacity if req.watermark_opacity is not None else getattr(settings, "watermark_opacity", 0.28),
-                watermark_font_size=req.watermark_font_size if req.watermark_font_size is not None else getattr(settings, "watermark_font_size", 26),
-                watermark_color=req.watermark_color if req.watermark_color is not None else getattr(settings, "watermark_color", "white"),
-                watermark_speed=req.watermark_speed if req.watermark_speed is not None else getattr(settings, "watermark_speed", 40),
-                watermark_motion=req.watermark_motion if req.watermark_motion is not None else getattr(settings, "watermark_motion", "bounce"),
-                smart_flip=req.smart_flip if req.smart_flip is not None else getattr(settings, "smart_flip", False),
-                micro_zoom=req.micro_zoom if req.micro_zoom is not None else getattr(settings, "micro_zoom", False),
-                color_filter=req.color_filter if req.color_filter is not None else getattr(settings, "color_filter", "none"),
-                reframe_mode=req.reframe_mode or state.get("reframe_mode") or getattr(settings, "video_reframe_mode", "blur"),
-                mask_method=getattr(req, "mask_method", None) or render_opts.get("mask_method") or getattr(settings, "mask_method", "blur"),
-                inpaint_engine=getattr(req, "inpaint_engine", None) or render_opts.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
-                inpaint_device=getattr(req, "inpaint_device", None) or render_opts.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
+                aspect_preset=req.aspect_preset
+                or getattr(settings, "video_aspect_preset", "original"),
+                logo_path=req.logo_path
+                if req.logo_path is not None
+                else getattr(settings, "logo_path", ""),
+                logo_position=req.logo_position
+                if req.logo_position is not None
+                else getattr(settings, "logo_position", "top_right"),
+                logo_scale=req.logo_scale
+                if req.logo_scale is not None
+                else getattr(settings, "logo_scale", 0.12),
+                logo_opacity=req.logo_opacity
+                if req.logo_opacity is not None
+                else getattr(settings, "logo_opacity", 0.85),
+                logo_margin=req.logo_margin
+                if req.logo_margin is not None
+                else getattr(settings, "logo_margin", 24),
+                logo_motion=req.logo_motion
+                if req.logo_motion is not None
+                else getattr(settings, "logo_motion", "static"),
+                watermark_text=req.watermark_text
+                if req.watermark_text is not None
+                else getattr(settings, "watermark_text", ""),
+                watermark_opacity=req.watermark_opacity
+                if req.watermark_opacity is not None
+                else getattr(settings, "watermark_opacity", 0.28),
+                watermark_font_size=req.watermark_font_size
+                if req.watermark_font_size is not None
+                else getattr(settings, "watermark_font_size", 26),
+                watermark_color=req.watermark_color
+                if req.watermark_color is not None
+                else getattr(settings, "watermark_color", "white"),
+                watermark_speed=req.watermark_speed
+                if req.watermark_speed is not None
+                else getattr(settings, "watermark_speed", 40),
+                watermark_motion=req.watermark_motion
+                if req.watermark_motion is not None
+                else getattr(settings, "watermark_motion", "bounce"),
+                smart_flip=req.smart_flip
+                if req.smart_flip is not None
+                else getattr(settings, "smart_flip", False),
+                micro_zoom=req.micro_zoom
+                if req.micro_zoom is not None
+                else getattr(settings, "micro_zoom", False),
+                color_filter=req.color_filter
+                if req.color_filter is not None
+                else getattr(settings, "color_filter", "none"),
+                reframe_mode=req.reframe_mode
+                or state.get("reframe_mode")
+                or getattr(settings, "video_reframe_mode", "blur"),
+                mask_method=getattr(req, "mask_method", None)
+                or render_opts.get("mask_method")
+                or getattr(settings, "mask_method", "blur"),
+                inpaint_engine=getattr(req, "inpaint_engine", None)
+                or render_opts.get("inpaint_engine")
+                or getattr(settings, "inpaint_engine", "lama_onnx"),
+                inpaint_device=getattr(req, "inpaint_device", None)
+                or render_opts.get("inpaint_device")
+                or getattr(settings, "inpaint_device", "auto"),
                 inpaint_model_path=getattr(settings, "inpaint_model_path", None),
-                frame_banner_enabled=req.frame_banner_enabled if req.frame_banner_enabled is not None else getattr(settings, "frame_banner_enabled", False),
-                frame_banner_color=req.frame_banner_color if req.frame_banner_color is not None else getattr(settings, "frame_banner_color", "#000000"),
-                frame_banner_height_ratio=req.frame_banner_height_ratio if req.frame_banner_height_ratio is not None else getattr(settings, "frame_banner_height_ratio", 0.16),
-                frame_header_text=req.frame_header_text if req.frame_header_text is not None else getattr(settings, "frame_header_text", ""),
-                frame_header_font_size=req.frame_header_font_size if req.frame_header_font_size is not None else getattr(settings, "frame_header_font_size", 32),
-                frame_header_color=req.frame_header_color if req.frame_header_color is not None else getattr(settings, "frame_header_color", "#FFFFFF"),
-                frame_footer_text=req.frame_footer_text if req.frame_footer_text is not None else getattr(settings, "frame_footer_text", ""),
-                frame_footer_font_size=req.frame_footer_font_size if req.frame_footer_font_size is not None else getattr(settings, "frame_footer_font_size", 24),
-                frame_footer_color=req.frame_footer_color if req.frame_footer_color is not None else getattr(settings, "frame_footer_color", "#FFD54A"),
-                randomize_metadata=req.randomize_metadata if req.randomize_metadata is not None else getattr(settings, "randomize_metadata", True),
+                frame_banner_enabled=req.frame_banner_enabled
+                if req.frame_banner_enabled is not None
+                else getattr(settings, "frame_banner_enabled", False),
+                frame_banner_color=req.frame_banner_color
+                if req.frame_banner_color is not None
+                else getattr(settings, "frame_banner_color", "#000000"),
+                frame_banner_height_ratio=req.frame_banner_height_ratio
+                if req.frame_banner_height_ratio is not None
+                else getattr(settings, "frame_banner_height_ratio", 0.16),
+                frame_header_text=req.frame_header_text
+                if req.frame_header_text is not None
+                else getattr(settings, "frame_header_text", ""),
+                frame_header_font_size=req.frame_header_font_size
+                if req.frame_header_font_size is not None
+                else getattr(settings, "frame_header_font_size", 32),
+                frame_header_color=req.frame_header_color
+                if req.frame_header_color is not None
+                else getattr(settings, "frame_header_color", "#FFFFFF"),
+                frame_footer_text=req.frame_footer_text
+                if req.frame_footer_text is not None
+                else getattr(settings, "frame_footer_text", ""),
+                frame_footer_font_size=req.frame_footer_font_size
+                if req.frame_footer_font_size is not None
+                else getattr(settings, "frame_footer_font_size", 24),
+                frame_footer_color=req.frame_footer_color
+                if req.frame_footer_color is not None
+                else getattr(settings, "frame_footer_color", "#FFD54A"),
+                randomize_metadata=req.randomize_metadata
+                if req.randomize_metadata is not None
+                else getattr(settings, "randomize_metadata", True),
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
         else:
             # Luồng wizard dừng trước khi sinh phụ đề — xuất chỉ-âm-thanh
             # vẫn phải có tệp .srt trong thư mục kết quả.
-            refresh_subtitles(segments, work_dir, target, subtitle_style,
-                              merge_dir=merge_dir, settings=settings)
+            refresh_subtitles(
+                segments, work_dir, target, subtitle_style, merge_dir=merge_dir, settings=settings
+            )
 
         # --- Step 8: Social post metadata ---
-        content_result = self._generate_content(target, segments, req.url,
-                                                work_dir, video_path)
+        content_result = self._generate_content(target, segments, req.url, work_dir, video_path)
 
         # --- Report + timing guide ---
         tts_results = state.get("tts_results") or []
-        elapsed = (float(state.get("elapsed_before", 0))
-                   + (time.time() - phase_start))
+        elapsed = float(state.get("elapsed_before", 0)) + (time.time() - phase_start)
         report = self._build_report(
-            target, state["folder_name"], req, state["lang_code"], segments,
-            tts_results, work_dir, state["audio_path"], merged_audio_path,
-            dubbed_video_path, content_result, elapsed,
+            target,
+            state["folder_name"],
+            req,
+            state["lang_code"],
+            segments,
+            tts_results,
+            work_dir,
+            state["audio_path"],
+            merged_audio_path,
+            dubbed_video_path,
+            content_result,
+            elapsed,
         )
 
         report_path = data_path(work_dir, "report.json", create_dir=True)
@@ -1512,9 +1813,7 @@ class DubPipeline:
         # Quality report — người dùng thấy NGAY video này còn vấn đề gì và ở
         # câu nào (chồng tiếng còn lại, câu bị dồn trễ/nén, câu tràn budget)
         # trước khi quyết định đăng.
-        quality = self._build_quality_report(target, segments,
-                                             state.get("timing") or {},
-                                             settings)
+        quality = self._build_quality_report(target, segments, state.get("timing") or {}, settings)
         quality_path = data_path(work_dir, "quality_report.json", create_dir=True)
         with open(quality_path, "w", encoding="utf-8") as f:
             json.dump(quality, f, ensure_ascii=False, indent=2)
@@ -1527,17 +1826,18 @@ class DubPipeline:
                 f"{s['segments_total']} câu ổn — còn "
                 f"{s['segments_overlapped']} câu chồng tiếng nhẹ. Nghe thử "
                 "video; nếu khó chịu, giảm Tốc độ video trong Cài đặt rồi "
-                "chạy lại (rất nhanh vì giọng đọc đã có sẵn).")
+                "chạy lại (rất nhanh vì giọng đọc đã có sẵn)."
+            )
         elif len(quality["per_segment"]):
             logger.info(
                 f"Kiểm tra chất lượng: {s['segments_ok']}/"
                 f"{s['segments_total']} câu chuẩn, số còn lại chỉ lệch nhẹ "
-                "— nghe thử để yên tâm.")
+                "— nghe thử để yên tâm."
+            )
         else:
             logger.info("Kiểm tra chất lượng: tất cả các câu đều khớp đẹp")
 
-        timing_guide = self._build_timing_guide(target, report, segments,
-                                                tts_results)
+        timing_guide = self._build_timing_guide(target, report, segments, tts_results)
         timing_path = data_path(work_dir, "timing_guide.json")
         with open(timing_path, "w", encoding="utf-8") as f:
             json.dump(timing_guide, f, ensure_ascii=False, indent=2)
@@ -1547,15 +1847,19 @@ class DubPipeline:
         logger.info(f"PIPELINE COMPLETE ({target.name})")
         logger.info(f"  Output:    {work_dir}")
         logger.info(f"  Segments:  {report['total_segments']}")
-        logger.info(f"  Duration:  {report['total_original_duration']:.1f}s original, "
-                    f"{report['total_tts_duration']:.1f}s dub audio")
+        logger.info(
+            f"  Duration:  {report['total_original_duration']:.1f}s original, "
+            f"{report['total_tts_duration']:.1f}s dub audio"
+        )
         logger.info(f"  Adjusted:  {report['segments_speed_adjusted']} segments speed-adjusted")
         logger.info(f"  Time:      {elapsed:.1f}s")
         logger.info("=" * 60)
         mins, secs = divmod(int(elapsed), 60)
-        logger.info(f"Hoàn tất! Lồng tiếng xong {report['total_segments']} "
-                    f"câu trong {f'{mins} phút {secs} giây' if mins else f'{secs} giây'} "
-                    "— video nằm trong thư mục kết quả.")
+        logger.info(
+            f"Hoàn tất! Lồng tiếng xong {report['total_segments']} "
+            f"câu trong {f'{mins} phút {secs} giây' if mins else f'{secs} giây'} "
+            "— video nằm trong thư mục kết quả."
+        )
 
         # Tự dọn tệp trung gian nếu người dùng đã bật trong Cài đặt. Làm sau
         # cùng, khi mọi báo cáo đã ghi xong — video kết quả và phụ đề được
@@ -1565,8 +1869,7 @@ class DubPipeline:
 
             freed = clean_project(work_dir)
             if freed:
-                logger.info(f"Đã tự dọn tệp trung gian, giải phóng "
-                            f"{freed / (1024 ** 2):.0f} MB.")
+                logger.info(f"Đã tự dọn tệp trung gian, giải phóng {freed / (1024**2):.0f} MB.")
 
         rep.emit("done", "done", detail=work_dir)
         return DubResult(status="completed", work_dir=work_dir, report=report)
@@ -1577,7 +1880,10 @@ class DubPipeline:
         return self.settings.vi_output_dir()
 
     def _setup_hold(
-        self, segments: list[dict], target: TargetLang, work_dir: str,
+        self,
+        segments: list[dict],
+        target: TargetLang,
+        work_dir: str,
         video_duration_s: float,
     ) -> DubResult | None:
         """Giữ chỗ Vox cho lượt chạy — gọi ngay sau ASR, mọi luồng.
@@ -1600,8 +1906,12 @@ class DubPipeline:
           cũ (trừ Vox theo từng lượt, không mã hóa) kèm cảnh báo.
         """
         from autodub.saas_client import (
-            InsufficientCreditError, OfflineError, SaasError, get_client,
-            is_configured)
+            InsufficientCreditError,
+            OfflineError,
+            SaasError,
+            get_client,
+            is_configured,
+        )
         from autodub.text.translate_common import HOLD
         from autodub.text.translate_saas import run_id_for
 
@@ -1615,47 +1925,54 @@ class DubPipeline:
         mins, secs = divmod(int(video_duration_s), 60)
         try:
             data = get_client().create_hold(
-                run_id, len(segments), video_duration_s,
-                auto_translate=auto, metadata=meta)
+                run_id, len(segments), video_duration_s, auto_translate=auto, metadata=meta
+            )
         except InsufficientCreditError as e:
             self._reporter.emit("translate", "error", detail="Không đủ Vox")
             logger.warning(
                 f"Không đủ Vox cho video này: cần giữ chỗ {e.required:,} Vox "
                 f"(ví còn {e.balance:,}). Nạp thêm rồi chạy lại — phần đã "
-                "nghe-chép được dùng lại, không mất công.")
-            return DubResult(status="credit_blocked", work_dir=work_dir,
-                             report={"balance": e.balance,
-                                     "required": e.required,
-                                     "sentences": len(segments),
-                                     "duration_s": video_duration_s})
+                "nghe-chép được dùng lại, không mất công."
+            )
+            return DubResult(
+                status="credit_blocked",
+                work_dir=work_dir,
+                report={
+                    "balance": e.balance,
+                    "required": e.required,
+                    "sentences": len(segments),
+                    "duration_s": video_duration_s,
+                },
+            )
         except SaasError as e:
             if getattr(e, "code", "") == "HOLD_FINISHED":
                 # Hold đã tự chốt sau 48h — giá đã trả đủ từ lúc giữ chỗ.
                 # Lấy lại khóa (get_hold vẫn trả khi committed) và giải mã
                 # file cũ để lượt chạy này dùng tiếp phần đã trả tiền.
-                logger.warning("Lượt trả phí trước đã tự chốt (quá 48 giờ) — "
-                               "dùng lại phần đã dịch, không tính phí lần "
-                               "hai; chạy tiếp kiểu thường")
+                logger.warning(
+                    "Lượt trả phí trước đã tự chốt (quá 48 giờ) — "
+                    "dùng lại phần đã dịch, không tính phí lần "
+                    "hai; chạy tiếp kiểu thường"
+                )
                 self._unlock_after_commit(work_dir, run_id)
                 return None
             if getattr(e, "code", "") == "HOLD_DISABLED":
-                logger.warning(f"Không giữ chỗ Vox được ({e}) — chuyển sang "
-                               "trừ Vox theo từng lượt như cũ")
+                logger.warning(
+                    f"Không giữ chỗ Vox được ({e}) — chuyển sang trừ Vox theo từng lượt như cũ"
+                )
                 return None
             logger.warning(f"Giữ chỗ Vox lỗi ({e}) — trừ theo từng lượt như cũ")
             return None
         except OfflineError as e:
             # Chưa vào tới bước dịch nên chưa cần fail-closed — bước dịch sẽ
             # tự báo nếu lúc đó vẫn mất mạng.
-            logger.warning(f"Không kết nối được máy chủ ({e}) — "
-                           "trừ Vox theo từng lượt như cũ")
+            logger.warning(f"Không kết nối được máy chủ ({e}) — trừ Vox theo từng lượt như cũ")
             return None
 
         hold = data.get("hold") or {}
         key = str(hold.get("encKeyHex") or "")
         if not key:
-            logger.warning("Máy chủ không trả khóa mã hóa — trừ Vox theo "
-                           "từng lượt như cũ")
+            logger.warning("Máy chủ không trả khóa mã hóa — trừ Vox theo từng lượt như cũ")
             return None
         HOLD.set(run_id, key)
 
@@ -1667,11 +1984,13 @@ class DubPipeline:
             logger.info(
                 f"Video này tốn {est:,} Vox ({len(segments)} câu thoại, "
                 f"{dur_txt}) — ví còn {balance:,} Vox. Giá đã chốt, chạy lại "
-                "hay dịch nhiều lượt cũng không tính thêm.")
+                "hay dịch nhiều lượt cũng không tính thêm."
+            )
         else:
             logger.info(
                 f"Dùng lại lượt đã trả phí của lần chạy trước ({est:,} Vox) "
-                "— không tính phí lần hai.")
+                "— không tính phí lần hai."
+            )
         return None
 
     def _money_note_for_manual(self) -> str:
@@ -1689,11 +2008,12 @@ class DubPipeline:
             return ""
         est = int(getattr(self, "_hold_estimate", 0) or 0)
         if not est:
-            return ("Phần dịch tay dưới đây không tốn thêm Vox — giá của "
-                    "video này đã chốt từ đầu.")
-        return (f"Video này đã tính {est:,} Vox từ đầu và giá không đổi nữa. "
-                "Phần bạn dịch tay dưới đây không tốn thêm đồng nào, chạy "
-                "lại cũng không bị tính lần hai.")
+            return "Phần dịch tay dưới đây không tốn thêm Vox — giá của video này đã chốt từ đầu."
+        return (
+            f"Video này đã tính {est:,} Vox từ đầu và giá không đổi nữa. "
+            "Phần bạn dịch tay dưới đây không tốn thêm đồng nào, chạy "
+            "lại cũng không bị tính lần hai."
+        )
 
     @staticmethod
     def _unlock_after_commit(work_dir: str, hold_id: str) -> None:
@@ -1710,20 +2030,25 @@ class DubPipeline:
             return
         try:
             from autodub.saas_client import get_client
+
             hold = get_client().get_hold(hold_id).get("hold") or {}
             key = str(hold.get("encKeyHex") or "")
             if key:
                 done = securestore.unlock_all(work_dir, key)
                 if done:
-                    logger.info(f"Đã mở khóa {len(done)} file trung gian "
-                                "của lần chạy trước")
-        except Exception as e:  # noqa: BLE001 — mở khóa hỏng thì làm lại
-            logger.warning(f"Không mở khóa được file lần chạy trước ({e}) — "
-                           "phần đó sẽ được làm lại, không tính phí lần hai")
+                    logger.info(f"Đã mở khóa {len(done)} file trung gian của lần chạy trước")
+        except Exception as e:
+            logger.warning(
+                f"Không mở khóa được file lần chạy trước ({e}) — "
+                "phần đó sẽ được làm lại, không tính phí lần hai"
+            )
 
     def _auto_translate(
-        self, segments: list[dict], target: TargetLang,
-        source_lang: str, work_dir: str | None = None,
+        self,
+        segments: list[dict],
+        target: TargetLang,
+        source_lang: str,
+        work_dir: str | None = None,
     ) -> list[dict] | None:
         """Dịch qua máy chủ VoxDub, hoặc trả về None để chuyển sang dịch tay.
 
@@ -1747,6 +2072,7 @@ class DubPipeline:
             logger.info("Bật dịch qua Google AI Studio (trình duyệt) — Phương thức dịch thứ 2")
             try:
                 from autodub.text.translate_browser import translate_segments_browser
+
                 ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
                 return translate_segments_browser(
                     segments, target, source_lang, settings, rep, checkpoint_path=ckpt
@@ -1766,9 +2092,12 @@ class DubPipeline:
             or settings.openai_api_key.strip()
         )
         if has_direct_key:
-            logger.info("Phát hiện Google Gemini API Key — Dịch trực tiếp từ máy khách qua Gemini SRT Engine (không qua máy chủ trung gian)")
+            logger.info(
+                "Phát hiện Google Gemini API Key — Dịch trực tiếp từ máy khách qua Gemini SRT Engine (không qua máy chủ trung gian)"
+            )
             try:
                 from autodub.text.translate_direct import translate_segments_direct
+
                 ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
                 return translate_segments_direct(
                     segments, target, source_lang, settings, rep, checkpoint_path=ckpt
@@ -1781,22 +2110,30 @@ class DubPipeline:
                 return None
 
         from autodub.saas_client import is_configured
+
         if not is_configured():
             # Chạy thuần trên máy: không có máy chủ dịch nào được cấu hình.
             # Trả None để pipeline rẽ sang dịch tay (TRANSLATE_PENDING.txt).
             logger.info("Chưa cấu hình máy chủ dịch — chuyển sang dịch tay")
             return None
 
+        from autodub.media.audio import FALLBACKS
         from autodub.saas_client import (
-            DeviceBlockedError, InsufficientCreditError, MaintenanceError,
-            OfflineError, SaasError)
+            DeviceBlockedError,
+            InsufficientCreditError,
+            MaintenanceError,
+            OfflineError,
+            SaasError,
+        )
         from autodub.text.translate_common import USAGE
         from autodub.text.translate_saas import (
-            analyze_transcript, apply_analysis, run_id_for, translate_segments)
+            analyze_transcript,
+            apply_analysis,
+            run_id_for,
+            translate_segments,
+        )
 
-        from autodub.media.audio import FALLBACKS
-
-        USAGE.reset()      # đếm Vox của riêng video này, từ phân tích trở đi
+        USAGE.reset()  # đếm Vox của riêng video này, từ phân tích trở đi
         FALLBACKS.reset()  # các câu phải dùng bản dự phòng, cũng của riêng nó
         run_id = run_id_for(segments, target)
 
@@ -1805,6 +2142,7 @@ class DubPipeline:
         title = ""
         if work_dir:
             from autodub.workdir import load_video_meta
+
             title = str(load_video_meta(work_dir).get("title", "")).strip()
 
         rep.emit("translate", "start", detail="VoxDub Cloud")
@@ -1816,21 +2154,21 @@ class DubPipeline:
             effective = settings
             if settings.translate_analysis:
                 cache = data_path(work_dir, "video_context.json") if work_dir else None
-                analysis = analyze_transcript(segments, source_lang,
-                                              video_title=title,
-                                              cache_path=cache)
+                analysis = analyze_transcript(
+                    segments, source_lang, video_title=title, cache_path=cache
+                )
                 effective = apply_analysis(settings, analysis)
             if title and not effective.translate_video_title:
                 import dataclasses
-                effective = dataclasses.replace(effective,
-                                                translate_video_title=title)
+
+                effective = dataclasses.replace(effective, translate_video_title=title)
 
             # Sổ tạm theo lô: rớt mạng ở lô 40/50 thì lần chạy lại chỉ gửi
             # nốt 10 lô cuối. Dịch trọn vẹn thì sổ tự xóa.
-            ckpt = (data_path(work_dir, "translate_checkpoint.json")
-                    if work_dir else None)
-            result = translate_segments(segments, target, source_lang,
-                                        effective, rep, checkpoint_path=ckpt)
+            ckpt = data_path(work_dir, "translate_checkpoint.json") if work_dir else None
+            result = translate_segments(
+                segments, target, source_lang, effective, rep, checkpoint_path=ckpt
+            )
         except PipelineCancelled:
             raise
         except (InsufficientCreditError, DeviceBlockedError, MaintenanceError):
@@ -1847,7 +2185,7 @@ class DubPipeline:
             logger.warning(f"Dịch tự động lỗi ({e}) — chuyển sang dịch tay")
             rep.emit("translate", "error", detail=str(e))
             return None
-        except Exception as e:      # lỗi lạ: vẫn còn đường dịch tay
+        except Exception as e:  # lỗi lạ: vẫn còn đường dịch tay
             logger.warning(f"Dịch tự động lỗi ({e}) — chuyển sang dịch tay")
             rep.emit("translate", "error", detail=str(e))
             return None
@@ -1856,8 +2194,8 @@ class DubPipeline:
         # lại đúng các câu đó. Hỏng thì giữ nguyên bản lượt đầu.
         try:
             from autodub.text.translate_review import review_translations
-            result = review_translations(result, target, source_lang,
-                                         effective, run_id=run_id)
+
+            result = review_translations(result, target, source_lang, effective, run_id=run_id)
         except PipelineCancelled:
             raise
         except Exception as e:
@@ -1865,8 +2203,9 @@ class DubPipeline:
 
         usage = _usage_snapshot()
         if usage["vox"]:
-            logger.info(f"Lượt dịch này tốn {usage['vox']:,} Vox "
-                        f"(còn lại {usage['balance_after']:,})")
+            logger.info(
+                f"Lượt dịch này tốn {usage['vox']:,} Vox (còn lại {usage['balance_after']:,})"
+            )
         return result
 
     def _load_translation(
@@ -1883,6 +2222,7 @@ class DubPipeline:
             # nhận biết; file thường đọc như open() bình thường.
             from autodub import securestore
             from autodub.text.translate_common import HOLD
+
             raw_data = securestore.read_json_secure(path, HOLD.key)
         except securestore.SecureStoreError as e:
             # File thường mà JSON hỏng → lỗi sửa-tay quen thuộc; chỉ file
@@ -1904,30 +2244,41 @@ class DubPipeline:
         if isinstance(raw_data, dict):
             # Tự động trích xuất tiêu đề, mô tả, hashtag từ bản dịch AI Studio
             social_meta = {
-                k: raw_data[k] for k in ("title", "description", "hashtags", "tiktok", "facebook")
+                k: raw_data[k]
+                for k in ("title", "description", "hashtags", "tiktok", "facebook")
                 if k in raw_data
             }
             if social_meta.get("title"):
                 try:
                     from autodub.content.generator import _write_post_file
                     from autodub.workdir import youtube_dir
+
                     work_dir = os.path.dirname(os.path.dirname(os.path.abspath(path)))
                     yt_dir = youtube_dir(work_dir, create=True)
                     meta_path = os.path.join(yt_dir, "youtube_metadata.json")
                     with open(meta_path, "w", encoding="utf-8") as f:
                         json.dump(social_meta, f, ensure_ascii=False, indent=2)
                     _write_post_file(os.path.join(yt_dir, "youtube_post.txt"), social_meta)
-                    logger.info(f"Đã tự động trích xuất tiêu đề, mô tả, hashtag từ bản dịch: «{str(social_meta.get('title'))[:50]}»")
+                    logger.info(
+                        f"Đã tự động trích xuất tiêu đề, mô tả, hashtag từ bản dịch: «{str(social_meta.get('title'))[:50]}»"
+                    )
                 except Exception as ex:
                     logger.warning(f"Không thể lưu metadata trích xuất: {ex}")
-            segments = raw_data.get("segments") or raw_data.get("data") or raw_data.get("translations") or []
+            segments = (
+                raw_data.get("segments")
+                or raw_data.get("data")
+                or raw_data.get("translations")
+                or []
+            )
         elif isinstance(raw_data, list):
             segments = raw_data
         else:
             segments = []
 
         if not isinstance(segments, list) or not segments:
-            raise ValueError(f"{path} must be a non-empty JSON array of segments (or an object with a 'segments' array)")
+            raise ValueError(
+                f"{path} must be a non-empty JSON array of segments (or an object with a 'segments' array)"
+            )
 
         # Phục hồi timing nếu AI Studio lược bỏ start/end/duration
         orig_map = {s.get("id"): s for s in original_segments}
@@ -1943,9 +2294,9 @@ class DubPipeline:
         # missing start/end/duration would otherwise crash with a bare
         # KeyError — possibly AFTER an expensive TTS pass already ran.
         bad_timing = [
-            s.get("id", i + 1) for i, s in enumerate(segments)
-            if not all(isinstance(s.get(k), (int, float))
-                       for k in ("start", "end", "duration"))
+            s.get("id", i + 1)
+            for i, s in enumerate(segments)
+            if not all(isinstance(s.get(k), (int, float)) for k in ("start", "end", "duration"))
         ]
         if bad_timing:
             raise ValueError(
@@ -1956,8 +2307,11 @@ class DubPipeline:
                 f"the '{target.text_field}' field."
             )
 
-        missing = [s.get("id", i + 1) for i, s in enumerate(segments)
-                   if not str(s.get(target.text_field, "")).strip()]
+        missing = [
+            s.get("id", i + 1)
+            for i, s in enumerate(segments)
+            if not str(s.get(target.text_field, "")).strip()
+        ]
         if missing:
             raise ValueError(
                 f"{path}: {len(missing)} segment(s) missing the '{target.text_field}' "
@@ -1975,13 +2329,13 @@ class DubPipeline:
         # guarantee is re-applied here for every path into the pipeline.
         # Slots too: hand-made files (and pre-slot work dirs) lack them.
         from autodub.text.translate_hint import annotate_slots, ensure_terminal_punct
+
         annotate_slots(segments)
         orig_spk = {s.get("id"): s.get("speaker_id", 0) for s in original_segments}
         for seg in segments:
             if "speaker_id" not in seg:
                 seg["speaker_id"] = orig_spk.get(seg.get("id"), 0)
-            seg[target.text_field] = ensure_terminal_punct(
-                str(seg[target.text_field]))
+            seg[target.text_field] = ensure_terminal_punct(str(seg[target.text_field]))
         return segments
 
     def _resolve_video(self, work_dir: str, url: str | None, file_path: str | None) -> str:
@@ -1999,19 +2353,20 @@ class DubPipeline:
         def _remember(path: str) -> str:
             try:
                 with open(marker, "w", encoding="utf-8") as f:
-                    json.dump({"file_path": os.path.abspath(path)}, f,
-                              ensure_ascii=False, indent=2)
+                    json.dump({"file_path": os.path.abspath(path)}, f, ensure_ascii=False, indent=2)
             except OSError:
                 pass  # marker is a convenience, never fail the run over it
             # File ngoài work_dir có thể mang kèm data/video_meta.json (title)
             # — batch prefetch tải vào thư mục riêng rồi đưa qua file_path.
             # Chép meta vào work_dir để bước dịch/metadata đọc được ngay.
             try:
-                src_meta = os.path.join(os.path.dirname(os.path.abspath(path)),
-                                        "data", "video_meta.json")
+                src_meta = os.path.join(
+                    os.path.dirname(os.path.abspath(path)), "data", "video_meta.json"
+                )
                 dst_meta = data_path(work_dir, "video_meta.json")
                 if os.path.isfile(src_meta) and not os.path.exists(dst_meta):
                     import shutil
+
                     shutil.copyfile(src_meta, dst_meta)
             except OSError:
                 pass
@@ -2043,6 +2398,7 @@ class DubPipeline:
 
         if url:
             from autodub.media.downloader import download_video
+
             return download_video(url, work_dir)
 
         raise RuntimeError(
@@ -2063,12 +2419,12 @@ class DubPipeline:
         if bg_mode == "demucs":
             logger.info("=" * 60)
             logger.info("STEP 2.5: Separating vocals from original audio (Demucs)")
-            logger.info("Đang tách giọng nói gốc ra khỏi nhạc nền — "
-                        "mất vài phút với video dài...")
+            logger.info("Đang tách giọng nói gốc ra khỏi nhạc nền — mất vài phút với video dài...")
             rep.emit("separate", "start")
             # Keep the input's own layout: HQ path stays 44.1k stereo,
             # legacy path stays at the ASR rate (mono).
             import wave as _wave
+
             rate, ch = self.settings.audio_sample_rate, 1
             try:
                 with _wave.open(audio_path, "rb") as w:
@@ -2076,14 +2432,17 @@ class DubPipeline:
             except (OSError, EOFError, _wave.Error):
                 pass
             from autodub.media.vocal_separator import separate_vocals
-            sep = separate_vocals(audio_path, data_dir(work_dir, create=True),
-                                  sample_rate=rate, channels=ch,
-                                  demucs_cache=self._demucs_cache)
+
+            sep = separate_vocals(
+                audio_path,
+                data_dir(work_dir, create=True),
+                sample_rate=rate,
+                channels=ch,
+                demucs_cache=self._demucs_cache,
+            )
             background_path = sep.get("no_vocals")
             if background_path is None:
-                logger.warning(
-                    "Vocal separation unavailable — dubbed audio will use a silent base"
-                )
+                logger.warning("Vocal separation unavailable — dubbed audio will use a silent base")
                 rep.emit("separate", "error", detail="separation failed, silent base")
             else:
                 rep.emit("separate", "done", detail=background_path)
@@ -2092,8 +2451,7 @@ class DubPipeline:
         if bg_mode == "duck":
             logger.info("=" * 60)
             logger.info(
-                f"STEP 2.5: Ducking original audio by {bg_duck_db:+.1f} dB "
-                "(no vocal separation)"
+                f"STEP 2.5: Ducking original audio by {bg_duck_db:+.1f} dB (no vocal separation)"
             )
             rep.emit("separate", "done", detail=f"duck {bg_duck_db:+.1f} dB")
             return audio_path, bg_duck_db
@@ -2136,9 +2494,15 @@ class DubPipeline:
                 if f.endswith(".wav"):
                     os.remove(os.path.join(seg_dir, f))
             for d in os.listdir(data_dir(work_dir)):
-                if d.startswith(("segments_fit", "segments_slow",
-                                 "segments_speed", "segments_post",
-                                 "segments_timed")):
+                if d.startswith(
+                    (
+                        "segments_fit",
+                        "segments_slow",
+                        "segments_speed",
+                        "segments_post",
+                        "segments_timed",
+                    )
+                ):
                     shutil.rmtree(data_path(work_dir, d), ignore_errors=True)
 
         if current != self.RENDER_MODE:
@@ -2146,8 +2510,12 @@ class DubPipeline:
                 f.write(self.RENDER_MODE)
 
     def _synthesize_segments(
-        self, target: TargetLang, voice: str | None,
-        segments: list[dict], seg_dir: str, synth=None,
+        self,
+        target: TargetLang,
+        voice: str | None,
+        segments: list[dict],
+        seg_dir: str,
+        synth=None,
         speaker_voices: dict[int, str] | None = None,
     ) -> list[dict]:
         """Step 5: per-segment TTS with caching (resume-safe), fanned out over
@@ -2175,8 +2543,13 @@ class DubPipeline:
         # thì đọc bằng giọng đó. Mỗi giọng phụ chỉ mở MỘT tiến trình con —
         # vài câu lẻ không đáng nhân đôi RAM của cả nhóm worker.
         from autodub.speech.tts import voices as voice_catalog
+
         run_voice = voice_catalog.resolve(self.settings, voice)
-        merged_speaker_voices = dict(getattr(self.settings, "speaker_voices_map", lambda: {})() if hasattr(self.settings, "speaker_voices_map") else {})
+        merged_speaker_voices = dict(
+            getattr(self.settings, "speaker_voices_map", lambda: {})()
+            if hasattr(self.settings, "speaker_voices_map")
+            else {}
+        )
         if speaker_voices and isinstance(speaker_voices, dict):
             merged_speaker_voices.update(speaker_voices)
         extra_synths: dict[str, object] = {}
@@ -2187,7 +2560,12 @@ class DubPipeline:
             if not seg_voice and "speaker_id" in seg:
                 spk_id = seg["speaker_id"]
                 if isinstance(merged_speaker_voices, dict):
-                    seg_voice = str(merged_speaker_voices.get(spk_id, merged_speaker_voices.get(str(spk_id), "")) or "").strip()
+                    seg_voice = str(
+                        merged_speaker_voices.get(
+                            spk_id, merged_speaker_voices.get(str(spk_id), "")
+                        )
+                        or ""
+                    ).strip()
             if not seg_voice:
                 return _get_active_synth()
             name = voice_catalog.resolve(self.settings, seg_voice)
@@ -2200,8 +2578,8 @@ class DubPipeline:
                 s = extra_synths.get(name)
                 if s is None:
                     from autodub.speech.tts import get_synthesizer
-                    s = get_synthesizer(target, self.settings, name,
-                                        num_workers=1)
+
+                    s = get_synthesizer(target, self.settings, name, num_workers=1)
                     extra_synths[name] = s
                 return s
 
@@ -2209,30 +2587,34 @@ class DubPipeline:
         # Số luồng gửi việc bám theo số tiến trình con đang sống thật (một
         # tiến trình chết giữa chừng sẽ bị loại khỏi nhóm).
         rec_th = getattr(synth, "recommended_threads", None) if synth is not None else None
-        n_threads = max(1, rec_th if isinstance(rec_th, int) else min(
-            self.settings.parallel_workers,
-            self.settings.vieneu_max_workers))
+        n_threads = max(
+            1,
+            rec_th
+            if isinstance(rec_th, int)
+            else min(self.settings.parallel_workers, self.settings.vieneu_max_workers),
+        )
 
         # Đếm trước phần việc thật: câu đã có clip từ lần chạy trước thì
         # không phải đọc lại. Người dùng cần thấy "còn phải đọc bao nhiêu",
         # không phải tổng số câu — nhất là khi chạy tiếp một dự án cũ.
         cached_n = sum(
-            1 for seg in segments
+            1
+            for seg in segments
             if os.path.exists(seg_wav_path(seg_dir, seg["id"]))
             and os.path.getsize(seg_wav_path(seg_dir, seg["id"])) > 0
-            and (wav_duration_s(seg_wav_path(seg_dir, seg["id"])) or 0.0) > 0)
-        seg_voices = {str(s.get("voice", "")).strip()
-                      for s in segments if str(s.get("voice", "")).strip()}
-        n_voices = len({run_voice} | {
-            voice_catalog.resolve(self.settings, v) for v in seg_voices})
+            and (wav_duration_s(seg_wav_path(seg_dir, seg["id"])) or 0.0) > 0
+        )
+        seg_voices = {
+            str(s.get("voice", "")).strip() for s in segments if str(s.get("voice", "")).strip()
+        }
+        n_voices = len({run_voice} | {voice_catalog.resolve(self.settings, v) for v in seg_voices})
         logger.info(
             f"Giọng đọc: {run_voice}"
-            + (f" + {n_voices - 1} giọng riêng cho một số câu"
-               if n_voices > 1 else "")
+            + (f" + {n_voices - 1} giọng riêng cho một số câu" if n_voices > 1 else "")
             + f" — {total - cached_n}/{total} câu cần đọc"
-            + (f" ({cached_n} câu dùng lại của lần chạy trước)"
-               if cached_n else "")
-            + f", chạy {n_threads} luồng song song")
+            + (f" ({cached_n} câu dùng lại của lần chạy trước)" if cached_n else "")
+            + f", chạy {n_threads} luồng song song"
+        )
 
         results: list[dict | None] = [None] * total
         tracker = ProgressTracker(total, "Tạo giọng đọc (TTS)", unit="câu")
@@ -2240,6 +2622,7 @@ class DubPipeline:
         tts_cache = None
         try:
             from autodub.pipeline_cache import get_tts_cache
+
             tts_cache = get_tts_cache()
         except Exception:
             pass
@@ -2247,13 +2630,21 @@ class DubPipeline:
         def _one(seg: dict) -> dict:
             rep.check_cancelled()
             seg_path = seg_wav_path(seg_dir, seg["id"])
-            dur = (wav_duration_s(seg_path) or 0.0) if (os.path.exists(seg_path) and os.path.getsize(seg_path) > 0) else 0.0
+            dur = (
+                (wav_duration_s(seg_path) or 0.0)
+                if (os.path.exists(seg_path) and os.path.getsize(seg_path) > 0)
+                else 0.0
+            )
             seg_voice = str(seg.get("voice") or run_voice).strip()
 
             if dur <= 0 and tts_cache:
                 try:
                     if tts_cache.restore_to(seg[text_field], seg_voice, seg_path):
-                        dur = (wav_duration_s(seg_path) or 0.0) if (os.path.exists(seg_path) and os.path.getsize(seg_path) > 0) else 0.0
+                        dur = (
+                            (wav_duration_s(seg_path) or 0.0)
+                            if (os.path.exists(seg_path) and os.path.getsize(seg_path) > 0)
+                            else 0.0
+                        )
                 except Exception:
                     pass
 
@@ -2275,7 +2666,9 @@ class DubPipeline:
                         target_duration=None,
                     )
                 except Exception as tts_err:
-                    logger.warning(f"TTS câu #{seg.get('id')} gặp lỗi ({tts_err}) — tự động thử lại sau 1s...")
+                    logger.warning(
+                        f"TTS câu #{seg.get('id')} gặp lỗi ({tts_err}) — tự động thử lại sau 1s..."
+                    )
                     time.sleep(1.0)
                     try:
                         synth_out = active_s.synthesize(
@@ -2286,7 +2679,9 @@ class DubPipeline:
                     except Exception as retry_err:
                         fallback_s = _get_active_synth()
                         if fallback_s is not active_s:
-                            logger.warning(f"Giọng phụ câu #{seg.get('id')} lỗi — fallback sang giọng chính ({run_voice})...")
+                            logger.warning(
+                                f"Giọng phụ câu #{seg.get('id')} lỗi — fallback sang giọng chính ({run_voice})..."
+                            )
                             synth_out = fallback_s.synthesize(
                                 text=seg[text_field],
                                 output_path=seg_path,
@@ -2304,8 +2699,7 @@ class DubPipeline:
                         pass
             # Voice-sync: scheduler downstream đọc thời lượng TTS thật từ
             # chính segment — không phải mò lại từ file.
-            seg["tts_actual_duration"] = round(
-                float(res.get("actual_duration") or 0.0), 3)
+            seg["tts_actual_duration"] = round(float(res.get("actual_duration") or 0.0), 3)
             return res
 
         try:
@@ -2313,9 +2707,11 @@ class DubPipeline:
                 # Longest texts first: a 15 s segment picked up last would
                 # leave the other workers idle at the tail of the run. Cached
                 # segments cost nothing, so ordering by text length is fine.
-                order = sorted(range(total),
-                               key=lambda i: len(str(segments[i].get(text_field, ""))),
-                               reverse=True)
+                order = sorted(
+                    range(total),
+                    key=lambda i: len(str(segments[i].get(text_field, ""))),
+                    reverse=True,
+                )
                 futures = {pool.submit(_one, segments[i]): i for i in order}
                 try:
                     for fut in as_completed(futures):
@@ -2326,7 +2722,7 @@ class DubPipeline:
                         seg_txt = str(seg_item.get(text_field, "")).strip()
                         preview = (seg_txt[:28] + "...") if len(seg_txt) > 28 else seg_txt
                         status_tag = " (cache)" if result.get("rate_applied") == "cached" else ""
-                        detail = f"Câu #{seg_item.get('id', i+1)}: \"{preview}\" [{result.get('actual_duration', 0.0):.1f}s{status_tag}]"
+                        detail = f'Câu #{seg_item.get("id", i + 1)}: "{preview}" [{result.get("actual_duration", 0.0):.1f}s{status_tag}]'
                         should_log, msg = tracker.step(1, detail=detail)
                         rep.emit("tts", "progress", current=int(tracker.done), total=total)
                         if should_log or result.get("speed_adjusted"):
@@ -2347,11 +2743,13 @@ class DubPipeline:
                     try:
                         extra.close()
                     except Exception as e:
-                        logger.warning(
-                            f"Không đóng được synth giọng phụ: {e}")
-            if (created_here and self._synth_cache is None
-                    and synth_instance[0] is not None
-                    and hasattr(synth_instance[0], "close")):
+                        logger.warning(f"Không đóng được synth giọng phụ: {e}")
+            if (
+                created_here
+                and self._synth_cache is None
+                and synth_instance[0] is not None
+                and hasattr(synth_instance[0], "close")
+            ):
                 try:
                     synth_instance[0].close()
                 finally:
@@ -2360,8 +2758,7 @@ class DubPipeline:
         rep.emit("tts", "done", current=total, total=total)
         return results
 
-    def _apply_voice_speed(self, segments: list[dict], seg_dir: str,
-                           work_dir: str) -> str:
+    def _apply_voice_speed(self, segments: list[dict], seg_dir: str, work_dir: str) -> str:
         """Apply the user's VOICE_SPEED uniformly to every clip (LEGACY).
 
         Voice-sync: chỉ chạy khi ``voice_speed_legacy`` bật — mặc định scheduler
@@ -2373,18 +2770,21 @@ class DubPipeline:
         speed = self.settings.voice_speed
         if abs(speed - 1.0) < 0.005:
             return seg_dir
-        logger.info(
-            f"Chỉnh tốc độ giọng đọc {speed:.2f}x cho tất cả các câu "
-            "(theo Cài đặt)"
-        )
+        logger.info(f"Chỉnh tốc độ giọng đọc {speed:.2f}x cho tất cả các câu (theo Cài đặt)")
         from autodub.media.audio import slow_segments
+
         dst = data_path(work_dir, f"segments_speed{speed:.2f}".replace(".", "_"))
-        return slow_segments(segments, seg_dir, dst, speed,
-                             max_workers=min(8, self.settings.parallel_workers))
+        return slow_segments(
+            segments, seg_dir, dst, speed, max_workers=min(8, self.settings.parallel_workers)
+        )
 
     def _generate_content(
-        self, target: TargetLang, segments: list[dict],
-        source_url: str | None, work_dir: str, video_path: str | None = None,
+        self,
+        target: TargetLang,
+        segments: list[dict],
+        source_url: str | None,
+        work_dir: str,
+        video_path: str | None = None,
     ) -> dict:
         """Bước 8: tiêu đề, mô tả và hashtag cho mạng xã hội.
 
@@ -2402,8 +2802,7 @@ class DubPipeline:
 
         logger.info("=" * 60)
         logger.info("STEP 8: Generating social metadata")
-        logger.info("Đang viết tiêu đề, mô tả và hashtag cho "
-                    "YouTube/TikTok/Facebook...")
+        logger.info("Đang viết tiêu đề, mô tả và hashtag cho YouTube/TikTok/Facebook...")
         rep.emit("content", "start")
 
         from autodub.saas_client import InsufficientCreditError
@@ -2412,6 +2811,7 @@ class DubPipeline:
             from autodub.content.generator import generate_content
             from autodub.text.translate_saas import run_id_for
             from autodub.workdir import load_video_meta
+
             content_result = generate_content(
                 segments=segments,
                 source_url=source_url,
@@ -2422,8 +2822,7 @@ class DubPipeline:
                 # Cùng transcript ⇒ cùng job_id ⇒ chạy lại không tính phí lần hai.
                 job_id=f"post-{run_id_for(segments, _POST_TARGET)}",
             )
-            logger.info("Đã viết xong phần đăng bài "
-                        "(xem thư mục youtube trong dự án)")
+            logger.info("Đã viết xong phần đăng bài (xem thư mục youtube trong dự án)")
             rep.emit("content", "done")
         except InsufficientCreditError:
             rep.emit("content", "error", detail="Không đủ Vox")
@@ -2434,12 +2833,22 @@ class DubPipeline:
         return content_result
 
     def _build_report(
-        self, target: TargetLang, folder_name: str, req: DubRequest,
-        lang_code: str, segments: list[dict], tts_results: list[dict],
-        work_dir: str, audio_path: str, merged_audio_path: str,
-        dubbed_video_path: str | None, content_result: dict, elapsed: float,
+        self,
+        target: TargetLang,
+        folder_name: str,
+        req: DubRequest,
+        lang_code: str,
+        segments: list[dict],
+        tts_results: list[dict],
+        work_dir: str,
+        audio_path: str,
+        merged_audio_path: str,
+        dubbed_video_path: str | None,
+        content_result: dict,
+        elapsed: float,
     ) -> dict:
         from autodub.speech.tts import voices as voice_catalog
+
         return {
             "session_id": folder_name,
             "source_url": req.url,
@@ -2466,8 +2875,9 @@ class DubPipeline:
         }
 
     @staticmethod
-    def _build_quality_report(target: TargetLang, segments: list[dict],
-                              timing_report, settings=None) -> dict:
+    def _build_quality_report(
+        target: TargetLang, segments: list[dict], timing_report, settings=None
+    ) -> dict:
         """quality_report.json — tổng hợp mọi vấn đề còn lại sau render.
 
         Nguồn: TimingReport của bước đặt timeline mềm + kiểm tra budget dịch.
@@ -2513,12 +2923,14 @@ class DubPipeline:
             if seg.get("id") in post_fallback:
                 issues["postprocess_fallback"] = True
             if issues:
-                per_segment.append({
-                    "id": seg.get("id"),
-                    "start": seg.get("start"),
-                    "text": text[:120],
-                    **issues,
-                })
+                per_segment.append(
+                    {
+                        "id": seg.get("id"),
+                        "start": seg.get("start"),
+                        "text": text[:120],
+                        **issues,
+                    }
+                )
 
         return {
             "summary": {
@@ -2537,17 +2949,21 @@ class DubPipeline:
             # người dùng trả tiền theo con số này nhưng không thấy nó ở đâu
             # khác. Video dịch tay hoặc chạy lại từ cache thì toàn số 0.
             "translate_usage": _usage_snapshot(),
-            "hint": ("Câu 'overlap_prev_s' là chồng tiếng còn lại — rút gọn "
-                     "bản dịch câu đó trong tab Chỉnh sửa, hoặc hạ "
-                     "VIDEO_SPEED rồi chạy lại. Câu 'over_budget_chars' nên "
-                     "được rút gọn để đọc thong thả hơn."),
+            "hint": (
+                "Câu 'overlap_prev_s' là chồng tiếng còn lại — rút gọn "
+                "bản dịch câu đó trong tab Chỉnh sửa, hoặc hạ "
+                "VIDEO_SPEED rồi chạy lại. Câu 'over_budget_chars' nên "
+                "được rút gọn để đọc thong thả hơn."
+            ),
             "per_segment": per_segment,
         }
 
     @staticmethod
     def _build_timing_guide(
-        target: TargetLang, report: dict,
-        segments: list[dict], tts_results: list[dict],
+        target: TargetLang,
+        report: dict,
+        segments: list[dict],
+        tts_results: list[dict],
     ) -> dict:
         """Timing guide JSON showing per-segment original vs dub duration.
 
@@ -2564,7 +2980,8 @@ class DubPipeline:
                 "original_duration": report["total_original_duration"],
                 f"{lang}_duration": report["total_tts_duration"],
                 "ratio": round(report["total_tts_duration"] / report["total_original_duration"], 2)
-                         if report["total_original_duration"] > 0 else 0,
+                if report["total_original_duration"] > 0
+                else 0,
                 "segments_need_edit": 0,
                 "segments_ok": 0,
             },
@@ -2585,21 +3002,24 @@ class DubPipeline:
                 status = "TOO_SHORT"
                 need_edit += 1
 
-            guide["segments"].append({
-                "id": seg["id"],
-                "text_original": seg.get("text", ""),
-                target.text_field: seg.get(target.text_field, ""),
-                "start": seg["start"],
-                "end": seg["end"],
-                "original_duration": seg["duration"],
-                f"{lang}_duration": tts.get("actual_duration", 0.0),
-                "diff_seconds": diff,
-                "speed_adjusted": tts.get("speed_adjusted", False),
-                "rate_applied": tts.get("rate_applied", ""),
-                "status": status,
-                "edit_hint": f"{lang.upper()} {'dài' if diff > 0 else 'ngắn'} hơn {abs(diff):.1f}s"
-                             if status != "OK" else "OK",
-            })
+            guide["segments"].append(
+                {
+                    "id": seg["id"],
+                    "text_original": seg.get("text", ""),
+                    target.text_field: seg.get(target.text_field, ""),
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "original_duration": seg["duration"],
+                    f"{lang}_duration": tts.get("actual_duration", 0.0),
+                    "diff_seconds": diff,
+                    "speed_adjusted": tts.get("speed_adjusted", False),
+                    "rate_applied": tts.get("rate_applied", ""),
+                    "status": status,
+                    "edit_hint": f"{lang.upper()} {'dài' if diff > 0 else 'ngắn'} hơn {abs(diff):.1f}s"
+                    if status != "OK"
+                    else "OK",
+                }
+            )
 
         guide["summary"]["segments_need_edit"] = need_edit
         guide["summary"]["segments_ok"] = report["total_segments"] - need_edit
@@ -2632,8 +3052,7 @@ def export_committed_project(
 
     lock = securestore.read_lock(work_dir)
     if not lock:
-        raise RuntimeError(
-            f"Dự án không ở trạng thái chờ xuất (thiếu marker khóa): {work_dir}")
+        raise RuntimeError(f"Dự án không ở trạng thái chờ xuất (thiếu marker khóa): {work_dir}")
     hold_id = str(lock.get("hold_id") or "")
     if not hold_id:
         raise RuntimeError("Marker khóa hỏng (thiếu hold_id) — chạy lại video")
@@ -2642,8 +3061,7 @@ def export_committed_project(
     data = get_client().commit_hold(hold_id)
     key = str(data.get("encKeyHex") or "")
     if not key:
-        raise RuntimeError("Máy chủ không trả khóa giải mã khi chốt hold — "
-                           "liên hệ hỗ trợ")
+        raise RuntimeError("Máy chủ không trả khóa giải mã khi chốt hold — liên hệ hỗ trợ")
     charged = int(data.get("chargedVox") or 0)
     balance = int(data.get("balance") or 0)
     if data.get("replayed"):
@@ -2664,7 +3082,8 @@ def export_committed_project(
     except (OSError, json.JSONDecodeError) as e:
         raise RuntimeError(
             f"Không đọc được trạng thái xuất ({e}) — chạy lại video để dựng "
-            "lại (phần đã dịch không tính phí lần hai)") from e
+            "lại (phần đã dịch không tính phí lần hai)"
+        ) from e
 
     from autodub.media.audio import FALLBACKS
 
@@ -2674,15 +3093,14 @@ def export_committed_project(
     HOLD.set(hold_id, key)
     USAGE.reset()
     USAGE.add(charged, balance)  # thẻ tổng kết hiện đúng số Vox của video này
-    FALLBACKS.reset()          # lượt dựng lại này tự đếm fallback của nó
+    FALLBACKS.reset()  # lượt dựng lại này tự đếm fallback của nó
 
-    pipeline = DubPipeline(settings, progress=progress,
-                           cancel_event=cancel_event)
+    pipeline = DubPipeline(settings, progress=progress, cancel_event=cancel_event)
     target = get_target(str(state.get("target") or "vi"))
     try:
         result = pipeline._export_phase(state, work_dir, target)
     finally:
-        HOLD.clear()           # hold đã xong việc — không rớt sang lượt sau
+        HOLD.clear()  # hold đã xong việc — không rớt sang lượt sau
 
     # Trạng thái xuất đã dùng xong — dọn để marker/resume không hiểu nhầm.
     try:

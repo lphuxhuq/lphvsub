@@ -1,9 +1,13 @@
-import os
 import logging
-from autodub.utils import (
-    setup_logging, ensure_dir, format_timestamp, seg_wav_path, ffmpeg_escape_path,
-)
+import os
 
+from autodub.utils import (
+    ensure_dir,
+    ffmpeg_escape_path,
+    format_timestamp,
+    seg_wav_path,
+    setup_logging,
+)
 
 
 def test_setup_logging_returns_logger():
@@ -74,4 +78,3 @@ def test_ffmpeg_escape_path_single_quotes():
     path = r"D:\Project\O'Brien's Video\test.srt"
     expected = r"D\:/Project/O'\''Brien'\''s Video/test.srt"
     assert ffmpeg_escape_path(path) == expected
-

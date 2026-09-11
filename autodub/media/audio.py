@@ -1,15 +1,15 @@
 """Audio processing: extraction from video, uniform voice speed, dub mixing."""
+
 import os
 import shutil
 import subprocess
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 from pydub import AudioSegment
 
-from autodub.resources import FFMPEG_SLOTS, FFMPEG_AUDIO_SLOTS
-from autodub.utils import setup_logging, ensure_dir, ffmpeg_timeout_s, seg_wav_path, ProgressTracker
+from autodub.resources import FFMPEG_AUDIO_SLOTS, FFMPEG_SLOTS
+from autodub.utils import ProgressTracker, ensure_dir, ffmpeg_timeout_s, seg_wav_path, setup_logging
 
 logger = setup_logging("autodub.audio")
 
@@ -51,6 +51,7 @@ def _seg_id_from_path(path: str):
     digits = name.rpartition("_")[2]
     return int(digits) if digits.isdigit() else name
 
+
 # Trần thời gian cho ffmpeg trên MỘT segment (vài giây audio) — 120 s là
 # rộng rãi gấp trăm lần bình thường; quá mức đó chắc chắn là treo.
 _SEG_TIMEOUT_S = 120
@@ -84,12 +85,12 @@ def apply_atempo(src: str, dst: str, speed: float) -> bool:
     try:
         with FFMPEG_SLOTS:
             result = subprocess.run(
-                ["ffmpeg", "-y", "-i", src,
-                 "-filter:a", f"atempo={speed:.3f}", tmp],
-                capture_output=True, text=True, timeout=_SEG_TIMEOUT_S,
+                ["ffmpeg", "-y", "-i", src, "-filter:a", f"atempo={speed:.3f}", tmp],
+                capture_output=True,
+                text=True,
+                timeout=_SEG_TIMEOUT_S,
             )
-        failed = (result.returncode != 0 or not os.path.exists(tmp)
-                  or os.path.getsize(tmp) == 0)
+        failed = result.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) == 0
         err = result.stderr[:200] if failed else ""
     except subprocess.TimeoutExpired:
         failed, err = True, f"ffmpeg treo quá {_SEG_TIMEOUT_S}s"
@@ -105,8 +106,9 @@ def apply_atempo(src: str, dst: str, speed: float) -> bool:
     return True
 
 
-def extract_audio(video_path: str, output_path: str, sample_rate: int = 16000,
-                  channels: int = 1) -> str:
+def extract_audio(
+    video_path: str, output_path: str, sample_rate: int = 16000, channels: int = 1
+) -> str:
     """Extract PCM audio from a video file at the given rate/channel layout.
 
     Two call sites, two profiles: 16 kHz mono for ASR (what Whisper wants),
@@ -118,11 +120,16 @@ def extract_audio(video_path: str, output_path: str, sample_rate: int = 16000,
         raise FileNotFoundError(f"Video not found: {video_path}")
 
     cmd = [
-        "ffmpeg", "-i", video_path,
+        "ffmpeg",
+        "-i",
+        video_path,
         "-vn",
-        "-ar", str(sample_rate),
-        "-ac", str(channels),
-        "-acodec", "pcm_s16le",
+        "-ar",
+        str(sample_rate),
+        "-ac",
+        str(channels),
+        "-acodec",
+        "pcm_s16le",
         "-y",
         output_path,
     ]
@@ -130,10 +137,9 @@ def extract_audio(video_path: str, output_path: str, sample_rate: int = 16000,
     logger.info(f"Extracting audio: {video_path} → {output_path}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=ffmpeg_timeout_s(None))
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"FFmpeg treo khi tách audio từ {video_path}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=ffmpeg_timeout_s(None))
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"FFmpeg treo khi tách audio từ {video_path}") from e
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg failed: {result.stderr}")
 
@@ -144,8 +150,7 @@ def extract_audio(video_path: str, output_path: str, sample_rate: int = 16000,
     return output_path
 
 
-def extract_audio_dual(video_path: str, asr_path: str, hq_path: str,
-                       asr_rate: int = 16000) -> None:
+def extract_audio_dual(video_path: str, asr_path: str, hq_path: str, asr_rate: int = 16000) -> None:
     """Rút CẢ HAI bản audio (16 kHz mono ASR + 44.1 kHz stereo nền) trong
     MỘT lệnh ffmpeg — video chỉ bị giải mã một lần thay vì hai.
 
@@ -155,26 +160,45 @@ def extract_audio_dual(video_path: str, asr_path: str, hq_path: str,
         raise FileNotFoundError(f"Video not found: {video_path}")
 
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
-        "-vn", "-ar", str(asr_rate), "-ac", "1", "-acodec", "pcm_s16le",
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_path,
+        "-vn",
+        "-ar",
+        str(asr_rate),
+        "-ac",
+        "1",
+        "-acodec",
+        "pcm_s16le",
         asr_path,
-        "-vn", "-ar", "44100", "-ac", "2", "-acodec", "pcm_s16le",
+        "-vn",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-acodec",
+        "pcm_s16le",
         hq_path,
     ]
     logger.info(f"Extracting audio (1 pass, 2 outputs): {video_path}")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=ffmpeg_timeout_s(None))
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=ffmpeg_timeout_s(None))
     except subprocess.TimeoutExpired:
         result = None
-    ok = (result is not None and result.returncode == 0
-          and os.path.exists(asr_path) and os.path.getsize(asr_path) > 0
-          and os.path.exists(hq_path) and os.path.getsize(hq_path) > 0)
+    ok = (
+        result is not None
+        and result.returncode == 0
+        and os.path.exists(asr_path)
+        and os.path.getsize(asr_path) > 0
+        and os.path.exists(hq_path)
+        and os.path.getsize(hq_path) > 0
+    )
     if not ok:
         for p in (asr_path, hq_path):
             if os.path.exists(p):
                 os.remove(p)
-        err = ("ffmpeg treo" if result is None else result.stderr[:200])
+        err = "ffmpeg treo" if result is None else result.stderr[:200]
         raise RuntimeError(f"Dual audio extract failed: {err}")
 
 
@@ -194,8 +218,9 @@ def slow_segments(
     # và video mất tiếng âm thầm. Kẹp lại và báo rõ.
     factor = min(2.0, max(0.5, slow_factor))
     if factor != slow_factor:
-        logger.warning(f"VOICE_SPEED={slow_factor} ngoài khoảng "
-                       f"[0.5, 2.0] của atempo — dùng {factor}")
+        logger.warning(
+            f"VOICE_SPEED={slow_factor} ngoài khoảng [0.5, 2.0] của atempo — dùng {factor}"
+        )
 
     def _slow_one(seg: dict) -> None:
         src = seg_wav_path(src_dir, seg["id"])
@@ -204,26 +229,28 @@ def slow_segments(
         dst = os.path.join(dst_dir, os.path.basename(src))
         # Resume-safe: đầu ra còn mới hơn nguồn thì khỏi chạy lại ffmpeg —
         # chạy lại video 900 câu không tốn thêm 900 lệnh atempo vô ích.
-        if (os.path.exists(dst) and os.path.getsize(dst) > 0
-                and os.path.getmtime(dst) >= os.path.getmtime(src)):
+        if (
+            os.path.exists(dst)
+            and os.path.getsize(dst) > 0
+            and os.path.getmtime(dst) >= os.path.getmtime(src)
+        ):
             return
         try:
             with FFMPEG_SLOTS:
                 result = subprocess.run(
-                    ["ffmpeg", "-y", "-i", src,
-                     "-filter:a", f"atempo={factor}", dst],
-                    capture_output=True, text=True, timeout=_SEG_TIMEOUT_S,
+                    ["ffmpeg", "-y", "-i", src, "-filter:a", f"atempo={factor}", dst],
+                    capture_output=True,
+                    text=True,
+                    timeout=_SEG_TIMEOUT_S,
                 )
-            failed = (result.returncode != 0 or not os.path.exists(dst)
-                      or os.path.getsize(dst) == 0)
+            failed = result.returncode != 0 or not os.path.exists(dst) or os.path.getsize(dst) == 0
             err = result.stderr[:120] if failed else ""
         except subprocess.TimeoutExpired:
             failed, err = True, f"treo quá {_SEG_TIMEOUT_S}s"
         if failed:
             # Giữ nguyên tốc độ gốc còn hơn mất hẳn clip: các bước sau coi
             # file thiếu là "segment missing" và video bị câm đoạn đó.
-            logger.error(f"atempo lỗi trên {os.path.basename(src)} — "
-                         f"giữ tốc độ gốc ({err})")
+            logger.error(f"atempo lỗi trên {os.path.basename(src)} — giữ tốc độ gốc ({err})")
             FALLBACKS.add("atempo_failed", seg["id"])
             shutil.copyfile(src, dst)
 
@@ -239,14 +266,16 @@ _VOICE_FADE_MS = 15
 # Trim khoảng lặng đầu clip TTS: CapCut trả về 0-2s im lặng (breath/pause
 # render) trước tiếng nói — không trim thì giọng Việt vào trễ từng câu so
 # với động tác miệng, nghe như mất đồng bộ.
-_LEAD_TRIM_THRESHOLD = 0.01   # ~ -40 dBFS, RMS cửa sổ 20 ms
-_LEAD_TRIM_SUSTAIN_S = 0.05   # phải đạt ngưỡng LIÊN TỤC (bỏ qua click lẻ)
-_LEAD_TRIM_GUARD_S = 0.18     # đệm an toàn 180ms giữ lại trước tiếng nói thật (chống nuốt âm xát/vô thanh)
+_LEAD_TRIM_THRESHOLD = 0.01  # ~ -40 dBFS, RMS cửa sổ 20 ms
+_LEAD_TRIM_SUSTAIN_S = 0.05  # phải đạt ngưỡng LIÊN TỤC (bỏ qua click lẻ)
+_LEAD_TRIM_GUARD_S = (
+    0.18  # đệm an toàn 180ms giữ lại trước tiếng nói thật (chống nuốt âm xát/vô thanh)
+)
 
 
-def lead_silence_s(samples, rate: int,
-                   threshold: float = _LEAD_TRIM_THRESHOLD,
-                   window_s: float = 0.02) -> float:
+def lead_silence_s(
+    samples, rate: int, threshold: float = _LEAD_TRIM_THRESHOLD, window_s: float = 0.02
+) -> float:
     """Số giây cần BỎ ở đầu clip để sát tiếng nói (đã trừ guard, ≥ 0).
 
     Quét RMS cửa sổ 20 ms: chỗ đầu tiên giữ mức ≥ threshold liên tục
@@ -259,8 +288,7 @@ def lead_silence_s(samples, rate: int,
     frames = len(samples) // win
     if frames < 1:
         return 0.0
-    rms = np.sqrt((samples[:frames * win].reshape(frames, win) ** 2)
-                  .mean(axis=1))
+    rms = np.sqrt((samples[: frames * win].reshape(frames, win) ** 2).mean(axis=1))
     need = max(1, int(round(_LEAD_TRIM_SUSTAIN_S / window_s)))
     above = (rms >= threshold).astype(np.int32)
     conv = np.convolve(above, np.ones(need, dtype=np.int32))
@@ -271,9 +299,9 @@ def lead_silence_s(samples, rate: int,
     return max(0.0, round(speech_s - _LEAD_TRIM_GUARD_S, 3))
 
 
-def postprocess_voice_clip(src: str, dst: str,
-                           target_lufs: float = -16.0,
-                           speed: float = 1.0) -> bool:
+def postprocess_voice_clip(
+    src: str, dst: str, target_lufs: float = -16.0, speed: float = 1.0
+) -> bool:
     """Broadcast-clean one TTS clip: highpass, loudness, fades.
 
     One ffmpeg pass per clip:
@@ -298,13 +326,16 @@ def postprocess_voice_clip(src: str, dst: str,
     trim_s = 0.0
     try:
         import wave as _wave
+
         with _wave.open(src, "rb") as w:
             src_rate = w.getframerate()
             n_ch = w.getnchannels()
             import numpy as np
-            data = (np.frombuffer(w.readframes(w.getnframes()),
-                                  dtype=np.int16).astype(np.float32)
-                    / 32768.0)
+
+            data = (
+                np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
+                / 32768.0
+            )
         if n_ch > 1:
             data = data.reshape(-1, n_ch).mean(axis=1)
         trim_s = lead_silence_s(data, src_rate)
@@ -336,19 +367,31 @@ def postprocess_voice_clip(src: str, dst: str,
     try:
         with FFMPEG_AUDIO_SLOTS:
             result = subprocess.run(
-                ["ffmpeg", "-y", "-ss", f"{trim_s:.3f}", "-i", src,
-                 "-filter:a", filters,
-                 "-ar", str(src_rate), "-acodec", "pcm_s16le", tmp],
-                capture_output=True, text=True, timeout=_SEG_TIMEOUT_S,
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    f"{trim_s:.3f}",
+                    "-i",
+                    src,
+                    "-filter:a",
+                    filters,
+                    "-ar",
+                    str(src_rate),
+                    "-acodec",
+                    "pcm_s16le",
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=_SEG_TIMEOUT_S,
             )
-        failed = (result.returncode != 0 or not os.path.exists(tmp)
-                  or os.path.getsize(tmp) == 0)
+        failed = result.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) == 0
         err = result.stderr[:120] if failed else ""
     except subprocess.TimeoutExpired:
         failed, err = True, f"treo quá {_SEG_TIMEOUT_S}s"
     if failed:
-        logger.warning(f"Hậu kỳ giọng lỗi trên {os.path.basename(src)} — "
-                       f"giữ clip thô ({err})")
+        logger.warning(f"Hậu kỳ giọng lỗi trên {os.path.basename(src)} — giữ clip thô ({err})")
         FALLBACKS.add("postprocess_failed", _seg_id_from_path(src))
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -359,11 +402,15 @@ def postprocess_voice_clip(src: str, dst: str,
     return True
 
 
-def postprocess_voice_clips(segments: list[dict], src_dir: str, dst_dir: str,
-                            target_lufs: float = -16.0,
-                            max_workers: int | None = None,
-                            speed: float = 1.0,
-                            on_done=None) -> str:
+def postprocess_voice_clips(
+    segments: list[dict],
+    src_dir: str,
+    dst_dir: str,
+    target_lufs: float = -16.0,
+    max_workers: int | None = None,
+    speed: float = 1.0,
+    on_done=None,
+) -> str:
     """Post-process every segment clip into ``dst_dir`` (parallel ffmpeg).
 
     Skips clips whose processed output already exists and is newer than the
@@ -376,8 +423,11 @@ def postprocess_voice_clips(segments: list[dict], src_dir: str, dst_dir: str,
         if not os.path.exists(src):
             return
         dst = os.path.join(dst_dir, os.path.basename(src))
-        if (os.path.exists(dst) and os.path.getsize(dst) > 0
-                and os.path.getmtime(dst) >= os.path.getmtime(src)):
+        if (
+            os.path.exists(dst)
+            and os.path.getsize(dst) > 0
+            and os.path.getmtime(dst) >= os.path.getmtime(src)
+        ):
             return
         postprocess_voice_clip(src, dst, target_lufs, speed=speed)
 
@@ -424,11 +474,15 @@ _DUCK_ATTACK_S = 0.08
 _DUCK_RELEASE_S = 0.22
 
 
-def _duck_envelope(n: int, b0: int, rate: int,
-                   intervals: list[tuple[float, float]],
-                   duck_db: float,
-                   attack_s: float = _DUCK_ATTACK_S,
-                   release_s: float = _DUCK_RELEASE_S):
+def _duck_envelope(
+    n: int,
+    b0: int,
+    rate: int,
+    intervals: list[tuple[float, float]],
+    duck_db: float,
+    attack_s: float = _DUCK_ATTACK_S,
+    release_s: float = _DUCK_RELEASE_S,
+):
     """Gain multiplier (n,) cho một block nhạc nền: 1.0 ngoài khoảng duck,
     ``10^(duck_db/20)`` trong khoảng.
 
@@ -449,7 +503,7 @@ def _duck_envelope(n: int, b0: int, rate: int,
         i_lo = max(0, int((s - att - t0) * rate))
         i_hi = min(n, int((e + rel - t0) * rate) + 1)
         idx = np.arange(i_lo, i_hi, dtype=np.float32) / rate + t0
-        
+
         # Attack slope (trước câu thoại: s - att -> s)
         # Core segment (trong câu thoại: s -> e)
         # Release slope (sau câu thoại: e -> e + rel)
@@ -485,21 +539,32 @@ def _decode_resampled(path: str, rate: int, ch: int):
 
     try:
         result = subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", path,
-             "-f", "s16le", "-ar", str(rate), "-ac", str(ch), "-"],
-            capture_output=True, timeout=_SEG_TIMEOUT_S,
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-i",
+                path,
+                "-f",
+                "s16le",
+                "-ar",
+                str(rate),
+                "-ac",
+                str(ch),
+                "-",
+            ],
+            capture_output=True,
+            timeout=_SEG_TIMEOUT_S,
         )
         if result.returncode == 0 and result.stdout:
-            return (np.frombuffer(result.stdout, dtype=np.int16)
-                    .astype(np.int32).reshape(-1, ch))
+            return np.frombuffer(result.stdout, dtype=np.int16).astype(np.int32).reshape(-1, ch)
     except (subprocess.TimeoutExpired, OSError):
         pass
-    logger.warning(f"ffmpeg decode lỗi trên {os.path.basename(path)} — "
-                   "dùng pydub")
-    seg_audio = (AudioSegment.from_wav(path)
-                 .set_frame_rate(rate).set_channels(ch).set_sample_width(2))
-    return np.array(seg_audio.get_array_of_samples(),
-                    dtype=np.int32).reshape(-1, ch)
+    logger.warning(f"ffmpeg decode lỗi trên {os.path.basename(path)} — dùng pydub")
+    seg_audio = (
+        AudioSegment.from_wav(path).set_frame_rate(rate).set_channels(ch).set_sample_width(2)
+    )
+    return np.array(seg_audio.get_array_of_samples(), dtype=np.int32).reshape(-1, ch)
 
 
 def _soft_limit(block):
@@ -518,8 +583,7 @@ def _soft_limit(block):
         return block
     v = block[over].astype(np.float32)
     mag = np.abs(v)
-    block[over] = (np.sign(v) * (T + (M - T) * np.tanh(
-        (mag - T) / (M - T)))).astype(np.int32)
+    block[over] = (np.sign(v) * (T + (M - T) * np.tanh((mag - T) / (M - T)))).astype(np.int32)
     return block
 
 
@@ -569,7 +633,6 @@ def merge_segments(
 
     import numpy as np
 
-    total_ms = int(total_duration * 1000)
     rate = _MIN_MERGE_RATE
 
     # Normalise the background on disk: target rate, gain, padded/cut to the
@@ -578,17 +641,28 @@ def merge_segments(
     bg_wave = None
     ch = 1
     if background_path and os.path.exists(background_path):
-        filters = [f"aresample={rate}",
-                   f"apad=whole_dur={total_duration}",
-                   f"atrim=end={total_duration}"]
+        filters = [
+            f"aresample={rate}",
+            f"apad=whole_dur={total_duration}",
+            f"atrim=end={total_duration}",
+        ]
         if background_gain_db:
             filters.insert(0, f"volume={background_gain_db}dB")
         try:
             result = subprocess.run(
-                ["ffmpeg", "-y", "-i", background_path,
-                 "-filter:a", ",".join(filters),
-                 "-acodec", "pcm_s16le", bg_tmp],
-                capture_output=True, text=True,
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    background_path,
+                    "-filter:a",
+                    ",".join(filters),
+                    "-acodec",
+                    "pcm_s16le",
+                    bg_tmp,
+                ],
+                capture_output=True,
+                text=True,
                 timeout=ffmpeg_timeout_s(total_duration),
             )
             ok = result.returncode == 0 and os.path.getsize(bg_tmp) > 0
@@ -599,8 +673,7 @@ def merge_segments(
             bg_wave = wave.open(bg_tmp, "rb")
             ch = bg_wave.getnchannels()
         else:
-            logger.warning(f"Background normalise failed, using silent base: "
-                           f"{err}")
+            logger.warning(f"Background normalise failed, using silent base: {err}")
     elif background_path:
         logger.warning(f"Background not found: {background_path}; using silent base")
 
@@ -612,6 +685,7 @@ def merge_segments(
     valid_sfx_cuts: list[float] = []
     if auto_sfx_enabled and scene_cuts:
         from autodub.media.sfx import generate_sfx
+
         raw_sfx = generate_sfx(preset=sfx_preset, sample_rate=rate, gain_db=sfx_volume_db)
         if ch == 2:
             sfx_arr = np.repeat(raw_sfx[:, None], 2, axis=1).astype(np.int32)
@@ -624,7 +698,9 @@ def merge_segments(
                 valid_sfx_cuts.append(t_cut)
                 last_t = t_cut
         if valid_sfx_cuts:
-            logger.info(f"Kích hoạt Auto Scene Cut SFX ({sfx_preset}) tại {len(valid_sfx_cuts)} điểm chuyển cảnh")
+            logger.info(
+                f"Kích hoạt Auto Scene Cut SFX ({sfx_preset}) tại {len(valid_sfx_cuts)} điểm chuyển cảnh"
+            )
 
     # Sort segments by start; the block loop walks this list with a window.
     seg_index: list[tuple[float, float, dict]] = []
@@ -644,14 +720,16 @@ def merge_segments(
     last_audio_end = float("-inf")
     for s_start, s_end, seg in seg_index:
         dur = s_end - s_start
-        actual_start = max(s_start, last_audio_end + 0.010) if last_audio_end > float("-inf") else s_start
+        actual_start = (
+            max(s_start, last_audio_end + 0.010) if last_audio_end > float("-inf") else s_start
+        )
         actual_end = actual_start + dur
         adjusted_seg_index.append((actual_start, actual_end, seg))
         last_audio_end = actual_end
     seg_index = adjusted_seg_index
 
     # Chọn nguồn duck: speech segment tiếng gốc (dub mode) > giọng VI (demucs).
-    if (speech_intervals and speech_duck_db < 0 and bg_wave is not None):
+    if speech_intervals and speech_duck_db < 0 and bg_wave is not None:
         duck_intervals = [tuple(iv) for iv in speech_intervals if iv[1] > iv[0]]
         duck_db = speech_duck_db
     elif duck_voice_db and duck_voice_db < 0 and bg_wave is not None:
@@ -669,34 +747,39 @@ def merge_segments(
     # id, xóa ngay khi block đã đi qua hết segment (RAM giữ tối đa vài
     # segment đang chồng lên block hiện tại). Kết quả byte-identical.
     seg_cache: dict = {}
-    tracker = ProgressTracker(total_duration if total_duration > 0 else 1.0, "Hòa trộn âm thanh", unit="s", min_log_interval=2.5)
+    tracker = ProgressTracker(
+        total_duration if total_duration > 0 else 1.0,
+        "Hòa trộn âm thanh",
+        unit="s",
+        min_log_interval=2.5,
+    )
 
     try:
         for b0 in range(0, total_frames, block_frames):
             b1 = min(b0 + block_frames, total_frames)
             cur_s = b1 / rate
-            should_log, msg = tracker.update_to(cur_s, detail=f"Khung audio {cur_s:.1f}s/{total_duration:.1f}s")
+            should_log, msg = tracker.update_to(
+                cur_s, detail=f"Khung audio {cur_s:.1f}s/{total_duration:.1f}s"
+            )
             if should_log:
                 logger.info(f"  {msg}")
             n = b1 - b0
             if bg_wave is not None:
                 raw = bg_wave.readframes(n)
                 block = np.frombuffer(raw, dtype=np.int16).astype(np.int32)
-                if len(block) < n * ch:   # background shorter than expected
-                    block = np.concatenate(
-                        [block, np.zeros(n * ch - len(block), dtype=np.int32)])
+                if len(block) < n * ch:  # background shorter than expected
+                    block = np.concatenate([block, np.zeros(n * ch - len(block), dtype=np.int32)])
                 block = block.reshape(-1, ch)
                 if duck_intervals:
-                    env = _duck_envelope(n, b0, rate, duck_intervals,
-                                         duck_db, duck_attack_s,
-                                         duck_release_s)
+                    env = _duck_envelope(
+                        n, b0, rate, duck_intervals, duck_db, duck_attack_s, duck_release_s
+                    )
                     block = (block * env[:, None]).astype(np.int32)
             else:
                 block = np.zeros((n, ch), dtype=np.int32)
 
             t0, t1 = b0 / rate, b1 / rate
-            for sid in [sid for sid, (_, cached_end) in seg_cache.items()
-                        if cached_end <= t0]:
+            for sid in [sid for sid, (_, cached_end) in seg_cache.items() if cached_end <= t0]:
                 del seg_cache[sid]
             for seg_start, seg_end, seg in seg_index:
                 if seg_end <= t0:
@@ -716,7 +799,7 @@ def merge_segments(
                 ge = min(start_f + len(arr), b1)
                 if ge <= gs:
                     continue
-                block[gs - b0:ge - b0] += arr[gs - start_f:ge - start_f]
+                block[gs - b0 : ge - b0] += arr[gs - start_f : ge - start_f]
 
             # Hòa trộn âm thanh chuyển cảnh SFX tại các điểm scene cuts
             if sfx_arr is not None and valid_sfx_cuts:
@@ -731,11 +814,9 @@ def merge_segments(
                     gs = max(cut_start_f, b0)
                     ge = min(cut_end_f, b1)
                     if ge > gs:
-                        block[gs - b0:ge - b0] += sfx_arr[gs - cut_start_f:ge - cut_start_f]
+                        block[gs - b0 : ge - b0] += sfx_arr[gs - cut_start_f : ge - cut_start_f]
 
-            out.writeframes(
-                np.clip(_soft_limit(block), -32768, 32767)
-                .astype(np.int16).tobytes())
+            out.writeframes(np.clip(_soft_limit(block), -32768, 32767).astype(np.int16).tobytes())
     finally:
         out.close()
         if bg_wave is not None:

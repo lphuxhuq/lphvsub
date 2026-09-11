@@ -30,7 +30,7 @@ Qua kiểm tra lệnh FFmpeg thực tế và giám sát tiến trình (`PID 4576
 - **Cơ chế cũ**: Khi tính toán kích thước canvas đích từ video gốc 16:9 (`1920x1080`):
   ```python
   th = int(round(video_w / target_ratio))  # 1920 / (9/16) = 3414 px!
-  tw = int(round(th * target_ratio))      # 1920 px
+  tw = int(round(th * target_ratio))  # 1920 px
   ```
 - **Nút thắt**: Thay vì xuất ra chuẩn dọc TikTok/Reels Full-HD là **1080x1920** (2.07 triệu pixels/frame), công thức trên đã vô tình tạo ra khung hình **1920x3414 (hơn 6.55 triệu pixels/frame - gấp 3.2 lần bình thường)**.
 - **Hệ quả**: Khung hình khổng lồ 3.4K làm quá tải cả bộ render phụ đề ASS (`libass`) lẫn băng thông của bộ mã hóa NVENC, khiến tốc độ chỉ lẹt đẹt ở mức **4.x – 5.x**.

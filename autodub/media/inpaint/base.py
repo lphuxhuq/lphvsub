@@ -1,10 +1,11 @@
-"""Lớp cơ sở (Base Class) và các hàm tiện ích cho AI Inpainting Subtitle Remover.
-"""
+"""Lớp cơ sở (Base Class) và các hàm tiện ích cho AI Inpainting Subtitle Remover."""
+
 from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
+
 import numpy as np
 
 from autodub.utils import setup_logging

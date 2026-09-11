@@ -12,6 +12,7 @@ Model TTS được huấn luyện trên transcript gần như không có chữ s
 
 Chỉ dùng cho giọng đọc — phụ đề vẫn giữ nguyên chữ số.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,13 +21,33 @@ import unicodedata
 _DIGITS = ("không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín")
 
 _UNIT_WORDS = {
-    "g": "gigabyte", "gb": "gigabyte", "mb": "megabyte", "kb": "kilobyte",
-    "tb": "terabyte", "ghz": "gigahertz", "mhz": "megahertz", "hz": "héc",
-    "w": "oát", "kw": "kilô oát", "%": "phần trăm", "km": "kilômét",
-    "cm": "xentimét", "mm": "milimét", "kg": "kilôgam", "fps": "ép pê ét",
-    "m": "mét", "m2": "mét vuông", "m3": "mét khối", "km/h": "kilômét trên giờ",
-    "k": "nghìn", "tr": "triệu", "usd": "đô la", "vnd": "đồng", "vnđ": "đồng",
-    "đ": "đồng", "củ": "triệu",
+    "g": "gigabyte",
+    "gb": "gigabyte",
+    "mb": "megabyte",
+    "kb": "kilobyte",
+    "tb": "terabyte",
+    "ghz": "gigahertz",
+    "mhz": "megahertz",
+    "hz": "héc",
+    "w": "oát",
+    "kw": "kilô oát",
+    "%": "phần trăm",
+    "km": "kilômét",
+    "cm": "xentimét",
+    "mm": "milimét",
+    "kg": "kilôgam",
+    "fps": "ép pê ét",
+    "m": "mét",
+    "m2": "mét vuông",
+    "m3": "mét khối",
+    "km/h": "kilômét trên giờ",
+    "k": "nghìn",
+    "tr": "triệu",
+    "usd": "đô la",
+    "vnd": "đồng",
+    "vnđ": "đồng",
+    "đ": "đồng",
+    "củ": "triệu",
 }
 
 # Các từ viết tắt phổ biến trong video / công nghệ / đời sống
@@ -88,19 +109,19 @@ def number_to_words(n: int) -> str:
     """Số nguyên không âm thành chữ tiếng Việt (tới hàng tỷ tỷ)."""
     if n == 0:
         return _DIGITS[0]
-    groups: list[int] = []           # [đơn vị, nghìn, triệu, tỷ, ...]
+    groups: list[int] = []  # [đơn vị, nghìn, triệu, tỷ, ...]
     while n:
         n, g = divmod(n, 1000)
         groups.append(g)
     names = ("", " nghìn", " triệu", " tỷ", " nghìn tỷ", " triệu tỷ", " tỷ tỷ")
-    if len(groups) > len(names):     # >10^21 — không gặp trong thực tế
+    if len(groups) > len(names):  # >10^21 — không gặp trong thực tế
         return _digit_by_digit("".join(str(g).zfill(3) for g in reversed(groups)).lstrip("0"))
     parts: list[str] = []
     for i in range(len(groups) - 1, -1, -1):
         g = groups[i]
         if g == 0:
             continue
-        force = i < len(groups) - 1    # nhóm giữa: đọc 'không trăm lẻ...'
+        force = i < len(groups) - 1  # nhóm giữa: đọc 'không trăm lẻ...'
         parts.append(_three_digits(g, force_hundred=force) + names[i])
     return " ".join(parts)
 
@@ -118,21 +139,22 @@ def _read_number(num: str) -> str:
         # đọc từng chữ số sẽ sai ("hai không không không").
         if len(num) <= 5 and not num.endswith("00"):
             return _digit_by_digit(num)
-    if num.startswith("0"):          # 090..., 007 — luôn đọc từng số
+    if num.startswith("0"):  # 090..., 007 — luôn đọc từng số
         return _digit_by_digit(num)
     return number_to_words(int(num))
 
 
-_UNIT_ALTS = "|".join(sorted((k for k in _UNIT_WORDS if k != "%"),
-                             key=len, reverse=True))
-_NUM_UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(" + _UNIT_ALTS + r")\b",
-                          re.IGNORECASE)
+_UNIT_ALTS = "|".join(sorted((k for k in _UNIT_WORDS if k != "%"), key=len, reverse=True))
+_NUM_UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(" + _UNIT_ALTS + r")\b", re.IGNORECASE)
 _DECIMAL_RE = re.compile(r"(\d+)[.,](\d+)")
 _GROUPED_RE = re.compile(r"(\d{1,3})(?:\.(\d{3}))+(?!\d)")
 _INT_RE = re.compile(r"\d+")
 
 # Loại bỏ thẻ phụ đề phi thoại
-_AUDIO_TAGS_RE = re.compile(r"\[(âm nhạc|nhạc|tiếng cười|thở dài|vỗ tay|tiếng chuông|music|applause|laughter|gasp)\]|\((âm nhạc|nhạc|tiếng cười|thở dài|vỗ tay|tiếng chuông|cười|thở dài)\)|\*(vỗ tay|cười|thở dài)\*", re.IGNORECASE)
+_AUDIO_TAGS_RE = re.compile(
+    r"\[(âm nhạc|nhạc|tiếng cười|thở dài|vỗ tay|tiếng chuông|music|applause|laughter|gasp)\]|\((âm nhạc|nhạc|tiếng cười|thở dài|vỗ tay|tiếng chuông|cười|thở dài)\)|\*(vỗ tay|cười|thở dài)\*",
+    re.IGNORECASE,
+)
 
 
 def normalize_vi_text(text: str) -> str:
@@ -154,16 +176,28 @@ def normalize_vi_text(text: str) -> str:
     text = _GROUPED_RE.sub(lambda m: m.group(0).replace(".", ""), text)
 
     # 5. Thời gian: 10h30 -> 10 giờ 30 phút, 8h -> 8 giờ
-    text = re.sub(r"\b(\d{1,2})h(\d{1,2})\b", lambda m: f"{_read_number(m.group(1))} giờ {_read_number(m.group(2))} phút", text)
+    text = re.sub(
+        r"\b(\d{1,2})h(\d{1,2})\b",
+        lambda m: f"{_read_number(m.group(1))} giờ {_read_number(m.group(2))} phút",
+        text,
+    )
     text = re.sub(r"\b(\d{1,2})h\b", lambda m: f"{_read_number(m.group(1))} giờ", text)
-    text = re.sub(r"\b(\d{1,2}):(\d{2})\b", lambda m: f"{_read_number(m.group(1))} giờ {_read_number(m.group(2))} phút", text)
+    text = re.sub(
+        r"\b(\d{1,2}):(\d{2})\b",
+        lambda m: f"{_read_number(m.group(1))} giờ {_read_number(m.group(2))} phút",
+        text,
+    )
 
     # 6. Thứ hạng: top 1, Top 10 -> tốp một, tốp mười, No.1 -> số một
     text = re.sub(r"\b(top|Top|TOP)\s*(\d+)\b", lambda m: f"tốp {_read_number(m.group(2))}", text)
     text = re.sub(r"\b(No|no|Số)\.?\s*(\d+)\b", lambda m: f"số {_read_number(m.group(2))}", text)
 
     # 7. Dải số: 1-2, 1–2 -> 1 đến 2
-    text = re.sub(r"\b(\d+)\s*[-–—]\s*(\d+)\b", lambda m: f"{_read_number(m.group(1))} đến {_read_number(m.group(2))}", text)
+    text = re.sub(
+        r"\b(\d+)\s*[-–—]\s*(\d+)\b",
+        lambda m: f"{_read_number(m.group(1))} đến {_read_number(m.group(2))}",
+        text,
+    )
 
     # 8. Phân số: 1/2, 3/4 -> một phần hai, ba phần tư
     def _fraction(m: re.Match) -> str:
@@ -171,6 +205,7 @@ def normalize_vi_text(text: str) -> str:
         den = m.group(2)
         den_str = "hai" if den == "2" else ("tư" if den == "4" else _read_number(den))
         return f"{_read_number(num)} phần {den_str}"
+
     text = re.sub(r"\b(\d+)/(\d+)\b", _fraction, text)
 
     # 9. Số + Tên đơn vị (100k, 32MB, 3.5GHz, 90%, 50.000đ)
@@ -184,6 +219,7 @@ def normalize_vi_text(text: str) -> str:
         else:
             spoken = _read_number(num)
         return f"{spoken} {unit_word}"
+
     text = _NUM_UNIT_RE.sub(_unit, text)
     text = re.sub(r"(\d+)\s*%", lambda m: f"{_read_number(m.group(1))} phần trăm", text)
 
@@ -194,12 +230,19 @@ def normalize_vi_text(text: str) -> str:
     # 11. Thập phân còn lại
     def _dec(m: re.Match) -> str:
         return f"{_read_number(m.group(1))} phẩy {_digit_by_digit(m.group(2))}"
+
     text = _DECIMAL_RE.sub(_dec, text)
 
     # 12. Số nguyên còn lại
     text = _INT_RE.sub(lambda m: _read_number(m.group()), text)
 
     # 13. Ký tự toán học & biểu tượng
-    text = text.replace("@", " a còng ").replace("&", " và ").replace("+", " cộng ").replace("=", " bằng ").replace("~", " khoảng ")
+    text = (
+        text.replace("@", " a còng ")
+        .replace("&", " và ")
+        .replace("+", " cộng ")
+        .replace("=", " bằng ")
+        .replace("~", " khoảng ")
+    )
 
     return re.sub(r"\s+", " ", text).strip()

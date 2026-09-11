@@ -6,13 +6,14 @@ có trong venv chính nên đọc thẳng từ Windows API qua ctypes; máy POSI
 chạy test trên CI) dùng os.sysconf. Mọi hàm trả ``None`` khi không đọc được —
 bên gọi phải coi None là "không rõ" và giữ mặc định an toàn.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 from functools import lru_cache
 
-_BYTES_PER_GB = 1024 ** 3
+_BYTES_PER_GB = 1024**3
 
 
 def _windows_memory_status():
@@ -81,6 +82,7 @@ def gpu_vram_status_gb() -> tuple[float, float] | None:
     # 1. Thử qua PyTorch nếu torch có sẵn và hỗ trợ CUDA
     try:
         import torch
+
         if torch.cuda.is_available():
             free_bytes, total_bytes = torch.cuda.mem_get_info()
             return total_bytes / _BYTES_PER_GB, free_bytes / _BYTES_PER_GB
@@ -90,11 +92,13 @@ def gpu_vram_status_gb() -> tuple[float, float] | None:
     # 2. Thử qua nvidia-smi trên Windows / Linux
     try:
         import subprocess
+
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total,memory.free",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            ["nvidia-smi", "--query-gpu=memory.total,memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
             creationflags=flags,
         )
         if out.returncode == 0 and out.stdout.strip():
@@ -114,4 +118,3 @@ def available_vram_gb() -> float | None:
     """VRAM khả dụng (GB); None nếu máy không có card NVIDIA / CUDA."""
     status = gpu_vram_status_gb()
     return status[1] if status is not None else None
-

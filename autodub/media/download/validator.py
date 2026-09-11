@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ValidationResult:
     """Detailed result from media validation check."""
+
     valid: bool
-    error_message: Optional[str] = None
+    error_message: str | None = None
     duration: float = 0.0
     width: int = 0
     height: int = 0
@@ -30,13 +31,13 @@ class ValidationResult:
     has_video: bool = False
     has_audio: bool = False
     format_name: str = ""
-    raw_info: Optional[Dict[str, Any]] = None
+    raw_info: dict[str, Any] | None = None
 
 
 class MediaValidator:
     """Validates container integrity, streams, and duration using ffprobe."""
 
-    def __init__(self, ffprobe_bin: Optional[str] = None, timeout_seconds: float = 15.0):
+    def __init__(self, ffprobe_bin: str | None = None, timeout_seconds: float = 15.0):
         self.ffprobe_bin = ffprobe_bin or shutil.which("ffprobe") or "ffprobe"
         self.timeout_seconds = timeout_seconds
 
@@ -83,9 +84,12 @@ class MediaValidator:
         # Probe file via ffprobe
         cmd = [
             self.ffprobe_bin,
-            "-v", "error",
-            "-show_entries", "format=duration,size,format_name:stream=codec_type,codec_name,width,height,r_frame_rate,channels",
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration,size,format_name:stream=codec_type,codec_name,width,height,r_frame_rate,channels",
+            "-of",
+            "json",
             str(path),
         ]
 

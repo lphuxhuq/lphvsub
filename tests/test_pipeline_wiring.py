@@ -1,24 +1,22 @@
-import json
 import os
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
+
 from autodub.config import Settings
-from autodub.pipeline import DubPipeline, DubRequest
+from autodub.pipeline import DubPipeline
 
 
 def test_pipeline_step3_ocr_fusion_wiring(tmp_path):
     pipeline = DubPipeline(Settings(ocr_enabled=True))
 
-    mock_segments = [
-        {"id": 1, "start": 0.5, "end": 2.0, "text": "你为什么不告诉"}
-    ]
+    mock_segments = [{"id": 1, "start": 0.5, "end": 2.0, "text": "你为什么不告诉"}]
     mock_ocr = [
         {"text": "你为什么不告诉我", "start_time": 0.4, "end_time": 2.1, "confidence": 0.95}
     ]
 
-    with patch("autodub.media.ocr.detect_hardsub", return_value=True), \
-         patch("autodub.media.ocr.run_selective_ocr", return_value=mock_ocr):
-
+    with (
+        patch("autodub.media.ocr.detect_hardsub", return_value=True),
+        patch("autodub.media.ocr.run_selective_ocr", return_value=mock_ocr),
+    ):
         work_dir = str(tmp_path)
         os.makedirs(os.path.join(work_dir, "data"), exist_ok=True)
 
@@ -38,12 +36,14 @@ def test_pipeline_step3_ocr_fusion_wiring(tmp_path):
 
 def test_pipeline_save_transcript_is_module_level():
     import autodub.pipeline as p
+
     assert hasattr(p, "save_transcript")
     assert callable(p.save_transcript)
 
 
 def test_pipeline_run_impl_does_not_shadow_save_transcript():
     from autodub.pipeline import DubPipeline
+
     code = DubPipeline._run_impl.__code__
     assert "save_transcript" not in code.co_varnames, (
         "save_transcript must not be a local variable in _run_impl to avoid UnboundLocalError on resume"
@@ -51,6 +51,3 @@ def test_pipeline_run_impl_does_not_shadow_save_transcript():
     assert "save_transcript" in code.co_names, (
         "save_transcript must be resolved via module globals in _run_impl"
     )
-
-
-

@@ -8,6 +8,7 @@ Chỉ hỗ trợ tệp WAV dạng PCM 16 hoặc 32 bit — đúng loại mà lõ
 Định dạng khác trả về danh sách rỗng và giao diện sẽ hiện một dải phẳng mờ
 kèm chú giải. Tuyệt đối không vẽ dạng sóng giả.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,7 +20,7 @@ import numpy as np
 CACHE_NAME = "waveform_peaks.json"
 DEFAULT_BUCKETS = 4000
 
-_CHUNK_BYTES = 1024 * 1024        # đọc mỗi lần 1 MB
+_CHUNK_BYTES = 1024 * 1024  # đọc mỗi lần 1 MB
 _SUPPORTED_WIDTHS = {2: np.int16, 4: np.int32}
 _CACHE_VERSION = 1
 
@@ -84,8 +85,7 @@ def _cache_path(wav_path: str, cache_name: str | None = None) -> str:
     return os.path.join(os.path.dirname(wav_path), cache_name or CACHE_NAME)
 
 
-def _read_cache(wav_path: str, buckets: int,
-                cache_name: str | None = None) -> list[float] | None:
+def _read_cache(wav_path: str, buckets: int, cache_name: str | None = None) -> list[float] | None:
     """Đọc bộ nhớ đệm nếu nó còn khớp với tệp âm thanh hiện tại."""
     path = _cache_path(wav_path, cache_name)
     if not os.path.isfile(path):
@@ -93,11 +93,12 @@ def _read_cache(wav_path: str, buckets: int,
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        if (data.get("version") != _CACHE_VERSION
-                or data.get("src") != os.path.basename(wav_path)
-                or data.get("n") != buckets
-                or abs(float(data.get("mtime", 0))
-                       - os.path.getmtime(wav_path)) > 1e-6):
+        if (
+            data.get("version") != _CACHE_VERSION
+            or data.get("src") != os.path.basename(wav_path)
+            or data.get("n") != buckets
+            or abs(float(data.get("mtime", 0)) - os.path.getmtime(wav_path)) > 1e-6
+        ):
             return None
         peaks = data.get("peaks")
         return [float(v) for v in peaks] if isinstance(peaks, list) else None
@@ -105,25 +106,32 @@ def _read_cache(wav_path: str, buckets: int,
         return None
 
 
-def _write_cache(wav_path: str, buckets: int, peaks: list[float],
-                 cache_name: str | None = None) -> None:
+def _write_cache(
+    wav_path: str, buckets: int, peaks: list[float], cache_name: str | None = None
+) -> None:
     """Ghi bộ nhớ đệm; hỏng thì bỏ qua vì đây chỉ là thứ giúp chạy nhanh hơn."""
     try:
-        with open(_cache_path(wav_path, cache_name), "w",
-                  encoding="utf-8") as f:
-            json.dump({
-                "version": _CACHE_VERSION,
-                "src": os.path.basename(wav_path),
-                "mtime": os.path.getmtime(wav_path),
-                "n": buckets,
-                "peaks": [round(v, 4) for v in peaks],
-            }, f)
+        with open(_cache_path(wav_path, cache_name), "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "version": _CACHE_VERSION,
+                    "src": os.path.basename(wav_path),
+                    "mtime": os.path.getmtime(wav_path),
+                    "n": buckets,
+                    "peaks": [round(v, 4) for v in peaks],
+                },
+                f,
+            )
     except OSError:
         pass
 
 
-def peaks(wav_path: str, buckets: int = DEFAULT_BUCKETS,
-          use_cache: bool = True, cache_name: str | None = None) -> list[float]:
+def peaks(
+    wav_path: str,
+    buckets: int = DEFAULT_BUCKETS,
+    use_cache: bool = True,
+    cache_name: str | None = None,
+) -> list[float]:
     """Biên độ lớn nhất của từng đoạn, quy về khoảng từ 0 tới 1.
 
     Trả về danh sách rỗng khi tệp không đọc được hoặc không phải WAV dạng
@@ -156,8 +164,7 @@ def _compute_peaks(wav_path: str, buckets: int) -> list[float]:
         return []
 
 
-def _scan(source, dtype, width: int, channels: int,
-          frames: int, buckets: int) -> list[float]:
+def _scan(source, dtype, width: int, channels: int, frames: int, buckets: int) -> list[float]:
     """Đọc theo khối và dồn vào các ô, không nạp cả tệp vào bộ nhớ."""
     totals = np.zeros(buckets, dtype=np.float64)
     frames_per_chunk = max(1, _CHUNK_BYTES // (width * channels))
@@ -177,8 +184,9 @@ def _scan(source, dtype, width: int, channels: int,
             break
         amplitude = np.abs(samples.astype(np.float64))
         # Mỗi mẫu thuộc về ô nào trên trục thời gian
-        indices = ((np.arange(position, position + read_frames)
-                    * buckets) // frames).astype(np.int64)
+        indices = ((np.arange(position, position + read_frames) * buckets) // frames).astype(
+            np.int64
+        )
         np.maximum.at(totals, indices, amplitude)
         position += read_frames
 

@@ -7,11 +7,12 @@ Silhouette Score auto-K estimation) to assign speaker_id (0, 1, ...) to ASR segm
 
 Operates completely offline without HuggingFace authentication tokens or PyTorch.
 """
+
 from __future__ import annotations
 
-import os
 import wave
 from dataclasses import dataclass, field
+
 import numpy as np
 from scipy import fft, signal
 from sklearn.cluster import AgglomerativeClustering
@@ -23,23 +24,24 @@ from autodub.utils import setup_logging
 logger = setup_logging("autodub.diarization")
 
 # --- Acoustic & Clustering Hyperparameters ---
-FRAME_S: float = 0.025            # 25 ms analysis frame (400 samples @ 16kHz)
-HOP_S: float = 0.010              # 10 ms frame shift (160 samples @ 16kHz)
-N_FFT: int = 512                  # Real FFT point size
-N_MELS: int = 26                  # Mel filterbank channels
-N_MFCC: int = 13                  # MFCC coefficient count
-FMIN_HZ: float = 60.0             # Minimum human pitch search
-FMAX_HZ: float = 400.0            # Maximum human pitch search
-ABS_ENERGY_FLOOR: float = 0.005   # Minimum RMS energy threshold for speech
+FRAME_S: float = 0.025  # 25 ms analysis frame (400 samples @ 16kHz)
+HOP_S: float = 0.010  # 10 ms frame shift (160 samples @ 16kHz)
+N_FFT: int = 512  # Real FFT point size
+N_MELS: int = 26  # Mel filterbank channels
+N_MFCC: int = 13  # MFCC coefficient count
+FMIN_HZ: float = 60.0  # Minimum human pitch search
+FMAX_HZ: float = 400.0  # Maximum human pitch search
+ABS_ENERGY_FLOOR: float = 0.005  # Minimum RMS energy threshold for speech
 DISTANCE_THRESHOLD: float = 0.30  # Max cosine distance for single-speaker classification
-SILHOUETTE_THRESHOLD: float = 0.20 # Min silhouette score for multi-speaker split
-MAX_SPEAKERS_DEFAULT: int = 4     # Default upper bound on auto-detected speakers
-MIN_SPEECH_DURATION: float = 0.15 # Minimum segment duration to extract voiceprint
+SILHOUETTE_THRESHOLD: float = 0.20  # Min silhouette score for multi-speaker split
+MAX_SPEAKERS_DEFAULT: int = 4  # Default upper bound on auto-detected speakers
+MIN_SPEECH_DURATION: float = 0.15  # Minimum segment duration to extract voiceprint
 
 
 @dataclass
 class DiarizationResult:
     """Structured result of speaker diarization."""
+
     speaker_ids: list[int]
     num_speakers: int
     confidence: float
@@ -65,6 +67,7 @@ def _get_mel_filterbank(sr: int = 16000, n_fft: int = 512, n_mels: int = 26) -> 
             fb[m - 1, f_m:f_m_plus] = (f_m_plus - np.arange(f_m, f_m_plus)) / (f_m_plus - f_m)
     return fb
 
+
 _CACHED_MEL_FB = _get_mel_filterbank()
 
 
@@ -74,7 +77,7 @@ def _compute_deltas(feat: np.ndarray, n: int = 2) -> np.ndarray:
     if n_frames <= 1:
         return np.zeros_like(feat)
     deltas = np.zeros_like(feat)
-    denom = 2 * sum(i ** 2 for i in range(1, n + 1))
+    denom = 2 * sum(i**2 for i in range(1, n + 1))
     for t in range(n_frames):
         num = np.zeros(n_feats, dtype=np.float32)
         for i in range(1, n + 1):
@@ -96,7 +99,7 @@ def estimate_frame_f0(
     if len(frame) == 0:
         return 0.0
     x = frame - np.mean(frame)
-    energy = np.sum(x ** 2)
+    energy = np.sum(x**2)
     if energy < 1e-7:
         return 0.0
 
@@ -107,10 +110,10 @@ def estimate_frame_f0(
     if min_lag >= max_lag:
         return 0.0
 
-    corr = signal.correlate(x, x, mode="full")[len(x) - 1:]
+    corr = signal.correlate(x, x, mode="full")[len(x) - 1 :]
     norm_corr = corr / energy
 
-    search_region = norm_corr[min_lag:max_lag + 1]
+    search_region = norm_corr[min_lag : max_lag + 1]
     if len(search_region) == 0:
         return 0.0
     peak_idx = int(np.argmax(search_region))
@@ -134,18 +137,22 @@ def extract_acoustic_embedding(audio_clip: np.ndarray, sr: int = 16000) -> np.nd
 
     # Frame slicing
     n_frames = 1 + (len(audio_clip) - frame_len) // hop_len
-    frames = np.lib.stride_tricks.sliding_window_view(audio_clip[: (n_frames - 1) * hop_len + frame_len], frame_len)[::hop_len]
-    
+    frames = np.lib.stride_tricks.sliding_window_view(
+        audio_clip[: (n_frames - 1) * hop_len + frame_len], frame_len
+    )[::hop_len]
+
     # Windowing
     win = signal.windows.hann(frame_len, sym=False)
     w_frames = frames * win
 
     # FFT & Power spectrum
     spec = np.abs(fft.rfft(w_frames, n=N_FFT))
-    power_spec = (spec ** 2) / N_FFT
+    power_spec = (spec**2) / N_FFT
 
     # Mel filterbank
-    fb = _CACHED_MEL_FB if (sr == 16000 and N_FFT == 512) else _get_mel_filterbank(sr, N_FFT, N_MELS)
+    fb = (
+        _CACHED_MEL_FB if (sr == 16000 and N_FFT == 512) else _get_mel_filterbank(sr, N_FFT, N_MELS)
+    )
     mel_spec = np.dot(power_spec, fb.T)
     log_mel = np.log(np.maximum(mel_spec, 1e-6))
 
@@ -179,10 +186,15 @@ def extract_acoustic_embedding(audio_clip: np.ndarray, sr: int = 16000) -> np.nd
     cum_p = np.cumsum(power_spec, axis=1)
     rolloff_idx = np.argmax(cum_p >= 0.85 * tot_p, axis=1)
     rolloffs = freqs[rolloff_idx]
-    spec_features = np.array([
-        float(np.mean(centroids)), float(np.std(centroids)),
-        float(np.mean(rolloffs)), float(np.std(rolloffs)),
-    ], dtype=np.float32)
+    spec_features = np.array(
+        [
+            float(np.mean(centroids)),
+            float(np.std(centroids)),
+            float(np.mean(rolloffs)),
+            float(np.std(rolloffs)),
+        ],
+        dtype=np.float32,
+    )
 
     # Subband Energy Ratios (6 dims)
     band1 = np.sum(power_spec[:, : N_FFT // 8], axis=1)
@@ -190,23 +202,38 @@ def extract_acoustic_embedding(audio_clip: np.ndarray, sr: int = 16000) -> np.nd
     band3 = np.sum(power_spec[:, N_FFT // 4 :], axis=1)
     tot_b = band1 + band2 + band3 + 1e-9
     r1, r2, r3 = band1 / tot_b, band2 / tot_b, band3 / tot_b
-    subband_features = np.array([
-        float(np.mean(r1)), float(np.std(r1)),
-        float(np.mean(r2)), float(np.std(r2)),
-        float(np.mean(r3)), float(np.std(r3)),
-    ], dtype=np.float32)
+    subband_features = np.array(
+        [
+            float(np.mean(r1)),
+            float(np.std(r1)),
+            float(np.mean(r2)),
+            float(np.std(r2)),
+            float(np.mean(r3)),
+            float(np.std(r3)),
+        ],
+        dtype=np.float32,
+    )
 
     # RMS Dynamics (8 dims)
-    rms = np.sqrt(np.mean(frames ** 2, axis=1) + 1e-9)
-    rms_feats = np.array([
-        float(np.mean(rms)), float(np.std(rms)),
-        float(np.percentile(rms, 10)), float(np.percentile(rms, 25)),
-        float(np.percentile(rms, 50)), float(np.percentile(rms, 75)),
-        float(np.percentile(rms, 90)), float(np.max(rms) - np.min(rms)),
-    ], dtype=np.float32)
+    rms = np.sqrt(np.mean(frames**2, axis=1) + 1e-9)
+    rms_feats = np.array(
+        [
+            float(np.mean(rms)),
+            float(np.std(rms)),
+            float(np.percentile(rms, 10)),
+            float(np.percentile(rms, 25)),
+            float(np.percentile(rms, 50)),
+            float(np.percentile(rms, 75)),
+            float(np.percentile(rms, 90)),
+            float(np.max(rms) - np.min(rms)),
+        ],
+        dtype=np.float32,
+    )
 
     # Assemble 100 dims
-    raw_emb = np.hstack([mfcc_features, f0_features, spec_features, subband_features, rms_feats]).astype(np.float32)
+    raw_emb = np.hstack(
+        [mfcc_features, f0_features, spec_features, subband_features, rms_feats]
+    ).astype(np.float32)
     norm = np.linalg.norm(raw_emb)
     return raw_emb / (norm + 1e-9)
 
@@ -244,7 +271,9 @@ def load_audio_mono16k(audio_path: str) -> tuple[np.ndarray, int]:
     return data, sr
 
 
-def _bandpass_filter(data: np.ndarray, sr: int = 16000, low: float = 80.0, high: float = 7500.0) -> np.ndarray:
+def _bandpass_filter(
+    data: np.ndarray, sr: int = 16000, low: float = 80.0, high: float = 7500.0
+) -> np.ndarray:
     """Lọc dải thông âm thanh để loại bỏ tạp âm ù tần số thấp và rít cao tần."""
     if len(data) < 64:
         return data
@@ -257,7 +286,6 @@ def _bandpass_filter(data: np.ndarray, sr: int = 16000, low: float = 80.0, high:
         return filtered.astype(np.float32)
     except Exception:
         return data
-
 
 
 def estimate_num_speakers(
@@ -318,12 +346,16 @@ def cluster_speaker_embeddings(
     clustering = AgglomerativeClustering(n_clusters=k, metric="cosine", linkage="average")
     raw_labels = clustering.fit_predict(emb_matrix)
 
-    durations = segment_durations if segment_durations and len(segment_durations) == n else [1.0] * n
+    durations = (
+        segment_durations if segment_durations and len(segment_durations) == n else [1.0] * n
+    )
     cluster_durations: dict[int, float] = {}
     for lbl, dur in zip(raw_labels, durations):
         cluster_durations[lbl] = cluster_durations.get(lbl, 0.0) + dur
 
-    sorted_clusters = sorted(cluster_durations.keys(), key=lambda c: (cluster_durations[c], -c), reverse=True)
+    sorted_clusters = sorted(
+        cluster_durations.keys(), key=lambda c: (cluster_durations[c], -c), reverse=True
+    )
     cluster_mapping = {orig_id: new_id for new_id, orig_id in enumerate(sorted_clusters)}
     return [cluster_mapping[lbl] for lbl in raw_labels]
 
@@ -416,7 +448,11 @@ def diarize_segments(
     if num_speakers is not None and num_speakers >= 1:
         k = min(num_speakers, len(out_segments))
     else:
-        dist_thresh = getattr(settings, "diarization_threshold", DISTANCE_THRESHOLD) if settings else DISTANCE_THRESHOLD
+        dist_thresh = (
+            getattr(settings, "diarization_threshold", DISTANCE_THRESHOLD)
+            if settings
+            else DISTANCE_THRESHOLD
+        )
         k, _ = estimate_num_speakers(
             emb_matrix,
             min_speakers=1,

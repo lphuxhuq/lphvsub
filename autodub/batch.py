@@ -12,6 +12,7 @@ Progress is persisted to ``batch_state.json`` inside the output directory after
 every video, so an interrupted batch can be resumed by pasting the same list
 again: videos already marked ``success`` are skipped automatically.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,8 +20,8 @@ import os
 import re
 import shutil
 import threading
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 from autodub.config import Settings
 from autodub.pipeline import DubPipeline, DubRequest
@@ -40,16 +41,17 @@ _SPLIT_RE = re.compile(r"[|,;\t]|\s{2,}")
 @dataclass
 class BatchItem:
     """One video in a batch: a URL or a local file, plus per-video options."""
+
     url: str | None = None
     file_path: str | None = None
     voice: str | None = None
-    blur_regions: list = None          # per-video blur rectangles (or None)
-    subtitle_mode: str | None = None   # per-video override (or None = template)
+    blur_regions: list = None  # per-video blur rectangles (or None)
+    subtitle_mode: str | None = None  # per-video override (or None = template)
     subtitle_style: dict | None = None  # per-video style (or None = template)
-    logo_opts: dict | None = None      # per-video logo options (or None = template)
-    watermark_opts: dict | None = None # per-video watermark options (or None = template)
-    reframe_opts: dict | None = None   # per-video reframe options (or None = template)
-    sfx_opts: dict | None = None       # per-video sfx options (or None = template)
+    logo_opts: dict | None = None  # per-video logo options (or None = template)
+    watermark_opts: dict | None = None  # per-video watermark options (or None = template)
+    reframe_opts: dict | None = None  # per-video reframe options (or None = template)
+    sfx_opts: dict | None = None  # per-video sfx options (or None = template)
     ref: object = None  # backend-specific handle (state dict entry)
 
     @property
@@ -98,12 +100,11 @@ class _Prefetcher:
         self._depth = max(1, int(depth))
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
-        self._queue: dict[int, BatchItem] = {}   # index -> item chờ tải
+        self._queue: dict[int, BatchItem] = {}  # index -> item chờ tải
         self._events: dict[int, threading.Event] = {}
         self._results: dict[int, dict] = {}
 
-    def ensure_window(self, current_index: int,
-                      items: list[BatchItem]) -> None:
+    def ensure_window(self, current_index: int, items: list[BatchItem]) -> None:
         """Lên lịch tải ``current+1 .. current+depth`` (bỏ qua file local)."""
         with self._lock:
             # Mục đã đi qua mà chưa kịp tải → bỏ; đánh thức ai đang chờ nó.
@@ -112,18 +113,16 @@ class _Prefetcher:
                 ev = self._events.pop(idx, None)
                 if ev is not None:
                     ev.set()
-            for idx in range(current_index + 1,
-                             min(current_index + 1 + self._depth,
-                                 len(items))):
+            for idx in range(current_index + 1, min(current_index + 1 + self._depth, len(items))):
                 item = items[idx]
-                if (not item.url or item.file_path
-                        or idx in self._queue or idx in self._events):
+                if not item.url or item.file_path or idx in self._queue or idx in self._events:
                     continue
                 self._queue[idx] = item
                 self._events[idx] = threading.Event()
             if self._queue and self._worker is None:
                 self._worker = threading.Thread(
-                    target=self._work, daemon=True, name="batch-prefetch")
+                    target=self._work, daemon=True, name="batch-prefetch"
+                )
                 self._worker.start()
 
     def _work(self) -> None:
@@ -132,16 +131,17 @@ class _Prefetcher:
                 if not self._queue:
                     self._worker = None
                     return
-                idx = min(self._queue)   # luôn tải theo thứ tự video
+                idx = min(self._queue)  # luôn tải theo thứ tự video
                 item = self._queue.pop(idx)
                 ev = self._events[idx]
             try:
                 from autodub.media.downloader import download_video
+
                 dest = os.path.join(self._root, str(idx))
                 path = download_video(item.url, dest)
                 with self._lock:
                     self._results[idx] = {"path": path}
-            except Exception as e:  # noqa: BLE001 — video này sẽ tải lại bình thường
+            except Exception as e:
                 logger.warning(f"Tải trước thất bại ({item.label}): {e}")
                 with self._lock:
                     self._results[idx] = {"error": str(e)}
@@ -153,7 +153,7 @@ class _Prefetcher:
         with self._lock:
             ev = self._events.get(index)
         if ev is None:
-            return None   # không được lên lịch (file local / ngoài cửa sổ)
+            return None  # không được lên lịch (file local / ngoài cửa sổ)
         if not ev.wait(timeout):
             logger.warning("Tải trước quá lâu — video sẽ tự tải lại")
             return None
@@ -165,8 +165,7 @@ class _Prefetcher:
         """Dọn file đã tải trước vào work_dir của video (best-effort)."""
         try:
             if os.path.isfile(prefetched) and os.path.isdir(work_dir):
-                target = os.path.join(work_dir,
-                                      os.path.basename(prefetched))
+                target = os.path.join(work_dir, os.path.basename(prefetched))
                 if not os.path.exists(target):
                     shutil.move(prefetched, target)
                 parent = os.path.dirname(prefetched)
@@ -175,8 +174,8 @@ class _Prefetcher:
                 meta = os.path.join(parent, "data", "video_meta.json")
                 if os.path.isfile(meta):
                     from autodub.workdir import data_path
-                    meta_target = data_path(work_dir, "video_meta.json",
-                                            create_dir=True)
+
+                    meta_target = data_path(work_dir, "video_meta.json", create_dir=True)
                     if not os.path.exists(meta_target):
                         shutil.move(meta, meta_target)
                     else:
@@ -201,7 +200,7 @@ class _Prefetcher:
             if os.path.isdir(self._root) and not os.listdir(self._root):
                 os.rmdir(self._root)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong batch.py", exc_info=True)
 
 
 def parse_lines(text: str | Iterable[str]) -> list[BatchItem]:
@@ -242,7 +241,9 @@ def _build_item_request(
     resume_dir: str | None = None,
 ) -> DubRequest:
     """Tạo DubRequest cho một video trong batch, hòa trộn tùy chỉnh riêng của video đó."""
-    sub_style = item.subtitle_style if item.subtitle_style is not None else req_template.subtitle_style
+    sub_style = (
+        item.subtitle_style if item.subtitle_style is not None else req_template.subtitle_style
+    )
     blur_regs = item.blur_regions if item.blur_regions is not None else req_template.blur_regions
 
     logo_p = getattr(req_template, "logo_path", None)
@@ -251,9 +252,13 @@ def _build_item_request(
     logo_op = getattr(req_template, "logo_opacity", 0.85)
     logo_mot = getattr(req_template, "logo_motion", "static")
     if item.logo_opts:
-        if item.logo_opts.get("enabled", True) and (item.logo_opts.get("path") or item.logo_opts.get("logo_path")):
+        if item.logo_opts.get("enabled", True) and (
+            item.logo_opts.get("path") or item.logo_opts.get("logo_path")
+        ):
             logo_p = item.logo_opts.get("path") or item.logo_opts.get("logo_path") or ""
-            logo_pos = item.logo_opts.get("position") or item.logo_opts.get("logo_position") or logo_pos
+            logo_pos = (
+                item.logo_opts.get("position") or item.logo_opts.get("logo_position") or logo_pos
+            )
             logo_sc = item.logo_opts.get("scale") or item.logo_opts.get("logo_scale") or logo_sc
             logo_op = item.logo_opts.get("opacity") or item.logo_opts.get("logo_opacity") or logo_op
             logo_mot = item.logo_opts.get("motion") or item.logo_opts.get("logo_motion") or logo_mot
@@ -266,12 +271,32 @@ def _build_item_request(
     wm_fs = getattr(req_template, "watermark_font_size", 26)
     wm_sp = getattr(req_template, "watermark_speed", 40)
     if item.watermark_opts:
-        if item.watermark_opts.get("enabled", True) and (item.watermark_opts.get("text") or item.watermark_opts.get("watermark_text")):
-            wm_t = item.watermark_opts.get("text") or item.watermark_opts.get("watermark_text") or ""
-            wm_mot = item.watermark_opts.get("motion") or item.watermark_opts.get("watermark_motion") or wm_mot
-            wm_op = item.watermark_opts.get("opacity") or item.watermark_opts.get("watermark_opacity") or wm_op
-            wm_fs = item.watermark_opts.get("font_size") or item.watermark_opts.get("watermark_font_size") or wm_fs
-            wm_sp = item.watermark_opts.get("speed") or item.watermark_opts.get("watermark_speed") or wm_sp
+        if item.watermark_opts.get("enabled", True) and (
+            item.watermark_opts.get("text") or item.watermark_opts.get("watermark_text")
+        ):
+            wm_t = (
+                item.watermark_opts.get("text") or item.watermark_opts.get("watermark_text") or ""
+            )
+            wm_mot = (
+                item.watermark_opts.get("motion")
+                or item.watermark_opts.get("watermark_motion")
+                or wm_mot
+            )
+            wm_op = (
+                item.watermark_opts.get("opacity")
+                or item.watermark_opts.get("watermark_opacity")
+                or wm_op
+            )
+            wm_fs = (
+                item.watermark_opts.get("font_size")
+                or item.watermark_opts.get("watermark_font_size")
+                or wm_fs
+            )
+            wm_sp = (
+                item.watermark_opts.get("speed")
+                or item.watermark_opts.get("watermark_speed")
+                or wm_sp
+            )
         elif not item.watermark_opts.get("enabled", True):
             wm_t = None
 
@@ -330,6 +355,7 @@ def _copy_to_export_dir(report: dict | None, export_dir: str | None) -> None:
     dubbed = report.get("dubbed_video") or ""
     if dubbed and os.path.isfile(dubbed):
         import shutil
+
         title = report.get("title") or os.path.splitext(os.path.basename(dubbed))[0]
         safe_title = "".join(c for c in title if c not in '<>:"/\\|?*').strip()
         if not safe_title:
@@ -365,8 +391,10 @@ def _run_items(
     # req_template.output_dir có thể None — dùng default của pipeline để
     # thư mục _prefetch nằm cạnh các work_dir.
     from autodub.languages import get_target
-    prefetch_root = (req_template.output_dir
-                     or pipeline.default_output_dir(get_target(req_template.target)))
+
+    prefetch_root = req_template.output_dir or pipeline.default_output_dir(
+        get_target(req_template.target)
+    )
     # FakePipeline của test không có settings — depth 2 là mặc định hợp lý.
     pf_settings = getattr(pipeline, "settings", None)
     prefetcher = _Prefetcher(
@@ -393,7 +421,9 @@ def _run_items(
                 prev_dir = item.ref.get("work_dir") or ""
                 if prev_dir and os.path.isdir(prev_dir):
                     resume_dir = prev_dir
-            req = _build_item_request(item, req_template, file_path=prefetched, resume_dir=resume_dir)
+            req = _build_item_request(
+                item, req_template, file_path=prefetched, resume_dir=resume_dir
+            )
             result = pipeline.run(req)
             if result.status != "completed":
                 # Vietnamese-first: this string lands in the batch table and
@@ -401,15 +431,19 @@ def _run_items(
                 reasons = {
                     "translate_pending": (
                         "Video chờ bản dịch tay — mở video này ở trang Tạo "
-                        "dự án để dịch rồi chạy tiếp."),
+                        "dự án để dịch rồi chạy tiếp."
+                    ),
                     "credit_blocked": (
                         "Không đủ Vox cho video này — nạp thêm rồi chạy lại; "
-                        "phần đã nghe-chép được dùng lại, chưa bị trừ Vox."),
+                        "phần đã nghe-chép được dùng lại, chưa bị trừ Vox."
+                    ),
                 }
-                raise RuntimeError(reasons.get(
-                    result.status,
-                    f"Pipeline dừng ở trạng thái {result.status} "
-                    f"(work_dir={result.work_dir})."))
+                raise RuntimeError(
+                    reasons.get(
+                        result.status,
+                        f"Pipeline dừng ở trạng thái {result.status} (work_dir={result.work_dir}).",
+                    )
+                )
             summary.success += 1
             logger.info(f"[{i + 1}/{len(items)}] SUCCESS → {result.report['session_id']}")
             if prefetched:
@@ -463,7 +497,7 @@ def _load_state(state_path: str) -> dict[str, dict]:
         with open(state_path, encoding="utf-8") as f:
             data = json.load(f)
         return {v["video_url"]: v for v in data.get("videos", []) if v.get("video_url")}
-    except Exception as e:  # noqa: BLE001 — a corrupt state file must not block a run
+    except Exception as e:
         logger.warning(f"Ignoring unreadable {STATE_FILENAME}: {e}")
         return {}
 
@@ -480,9 +514,10 @@ def _run_items_concurrent(
 ) -> BatchSummary:
     """Xử lý đồng thời nhiều video trong danh sách bằng ThreadPoolExecutor với continuous prefetching."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
     summary = BatchSummary(total=len(items))
     lock = threading.Lock()
-    
+
     # Setup prefetcher
     prefetch_root = req_template.output_dir or settings.output_dir
     prefetcher = _Prefetcher(prefetch_root, depth=max(2, concurrency))
@@ -496,7 +531,7 @@ def _run_items_concurrent(
                 on_start(item)
             if observer:
                 observer(idx, len(items), item, "start", "")
-        
+
         prefetched = prefetcher.take(idx)
         logger.info(f"[{idx + 1}/{len(items)}] [Đa luồng] Bắt đầu: {item.label}")
 
@@ -508,7 +543,9 @@ def _run_items_concurrent(
                 if prev_dir and os.path.isdir(prev_dir):
                     resume_dir = prev_dir
 
-            req = _build_item_request(item, req_template, file_path=prefetched, resume_dir=resume_dir)
+            req = _build_item_request(
+                item, req_template, file_path=prefetched, resume_dir=resume_dir
+            )
             result = pipeline.run(req)
             if result.status != "completed":
                 raise RuntimeError(f"Pipeline dừng ở trạng thái {result.status}")
@@ -522,7 +559,9 @@ def _run_items_concurrent(
                 on_result(item, result.report, None)
                 if observer:
                     observer(idx, len(items), item, "success", result.report.get("session_id", ""))
-            logger.info(f"[{idx + 1}/{len(items)}] [Đa luồng] SUCCESS → {result.report.get('session_id', '')}")
+            logger.info(
+                f"[{idx + 1}/{len(items)}] [Đa luồng] SUCCESS → {result.report.get('session_id', '')}"
+            )
             return True
         except PipelineCancelled:
             logger.info("Batch item cancelled")
@@ -569,8 +608,7 @@ def run_batch(
     export_dir: str | None = None,
 ) -> BatchSummary:
     """Dub every video in the batch."""
-    if (isinstance(lines, list) and lines
-            and all(isinstance(x, BatchItem) for x in lines)):
+    if isinstance(lines, list) and lines and all(isinstance(x, BatchItem) for x in lines):
         items = lines
     else:
         items = parse_lines(lines)
@@ -579,7 +617,8 @@ def run_batch(
         return BatchSummary()
 
     state_path = state_path or os.path.join(
-        req_template.output_dir or settings.output_dir, STATE_FILENAME)
+        req_template.output_dir or settings.output_dir, STATE_FILENAME
+    )
     previous = _load_state(state_path)
 
     pending: list[BatchItem] = []
@@ -617,7 +656,9 @@ def run_batch(
         flush()
         return BatchSummary(total=len(items), skipped=skipped)
 
-    logger.info(f"{len(pending)} video(s) to process, {skipped} already done (concurrency={concurrency})")
+    logger.info(
+        f"{len(pending)} video(s) to process, {skipped} already done (concurrency={concurrency})"
+    )
     logger.info("=" * 60)
     flush()
 
@@ -644,8 +685,13 @@ def run_batch(
     if concurrency > 1:
         try:
             summary = _run_items_concurrent(
-                pending, settings, req_template, on_result,
-                on_start=on_start, observer=observer, concurrency=concurrency,
+                pending,
+                settings,
+                req_template,
+                on_result,
+                on_start=on_start,
+                observer=observer,
+                concurrency=concurrency,
                 export_dir=export_dir,
             )
         finally:
@@ -659,19 +705,31 @@ def run_batch(
     if pipeline is None:
         if reuse_tts and len(pending) > 1:
             from autodub.speech.tts import SynthCache
+
             synth_cache = SynthCache()
         if len(pending) > 1:
             from autodub.media.vocal_separator import DemucsCache
+
             demucs_cache = DemucsCache()
             from autodub.speech.transcriber import WhisperCache
+
             whisper_cache = WhisperCache()
-        pipeline = DubPipeline(settings, synth_cache=synth_cache,
-                               demucs_cache=demucs_cache,
-                               whisper_cache=whisper_cache)
+        pipeline = DubPipeline(
+            settings,
+            synth_cache=synth_cache,
+            demucs_cache=demucs_cache,
+            whisper_cache=whisper_cache,
+        )
     try:
-        summary = _run_items(pending, pipeline, req_template, on_result,
-                             on_start=on_start, observer=observer,
-                             export_dir=export_dir)
+        summary = _run_items(
+            pending,
+            pipeline,
+            req_template,
+            on_result,
+            on_start=on_start,
+            observer=observer,
+            export_dir=export_dir,
+        )
     finally:
         flush()
         if synth_cache is not None:
@@ -682,4 +740,3 @@ def run_batch(
             whisper_cache.close()
     summary.skipped = skipped
     return summary
-

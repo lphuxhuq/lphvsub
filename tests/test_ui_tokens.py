@@ -4,6 +4,7 @@ Mọi mã hex chỉ được phép xuất hiện trong `autodub_gui/tokens.py`. 
 chưa chuyển đổi được liệt kê tạm trong `_LEGACY_ALLOWED`, và danh sách này
 phải rỗng khi kết thúc Giai đoạn 8.
 """
+
 from __future__ import annotations
 
 import re
@@ -32,8 +33,7 @@ _LEGACY_ALLOWED = {
 
 def _gui_files() -> list[Path]:
     """Mọi tệp Python trong thư mục giao diện, bỏ qua thư mục biên dịch tạm."""
-    return sorted(p for p in _GUI.rglob("*.py")
-                  if "__pycache__" not in p.parts)
+    return sorted(p for p in _GUI.rglob("*.py") if "__pycache__" not in p.parts)
 
 
 def test_no_hardcoded_hex_outside_tokens() -> None:
@@ -48,15 +48,13 @@ def test_no_hardcoded_hex_outside_tokens() -> None:
             if _HEX_RE.search(line):
                 offenders.append(f"autodub_gui/{rel}:{lineno}: {line.strip()}")
     if offenders:
-        pytest.fail("Mã màu hex phải nằm trong tokens.py:\n" +
-                    "\n".join(offenders))
+        pytest.fail("Mã màu hex phải nằm trong tokens.py:\n" + "\n".join(offenders))
 
 
 def test_legacy_allowlist_has_no_stale_entries() -> None:
     """Mọi tên trong danh sách miễn trừ phải là tệp còn tồn tại."""
     missing = [name for name in _LEGACY_ALLOWED if not (_GUI / name).is_file()]
-    assert not missing, (
-        f"Xóa khỏi _LEGACY_ALLOWED những tệp không còn: {missing}")
+    assert not missing, f"Xóa khỏi _LEGACY_ALLOWED những tệp không còn: {missing}"
 
 
 def test_tokens_module_defines_core_palette() -> None:
@@ -64,12 +62,30 @@ def test_tokens_module_defines_core_palette() -> None:
     from autodub_gui import tokens
 
     required = (
-        "BG_APP", "BG_SIDEBAR", "BG_MAIN", "BG_PANEL", "BG_INPUT",
-        "BORDER_SUBTLE", "BORDER_DEFAULT", "BORDER_ACTIVE",
-        "PRIMARY", "PRIMARY_HOVER", "PRIMARY_DARK",
-        "TEXT_PRIMARY", "TEXT_SECONDARY", "TEXT_MUTED", "TEXT_DISABLED",
-        "SUCCESS", "WARNING", "DANGER", "PROCESSING",
-        "WAVEFORM", "PLAYHEAD", "RADIUS_MD", "SP_4", "FONT_STACK",
+        "BG_APP",
+        "BG_SIDEBAR",
+        "BG_MAIN",
+        "BG_PANEL",
+        "BG_INPUT",
+        "BORDER_SUBTLE",
+        "BORDER_DEFAULT",
+        "BORDER_ACTIVE",
+        "PRIMARY",
+        "PRIMARY_HOVER",
+        "PRIMARY_DARK",
+        "TEXT_PRIMARY",
+        "TEXT_SECONDARY",
+        "TEXT_MUTED",
+        "TEXT_DISABLED",
+        "SUCCESS",
+        "WARNING",
+        "DANGER",
+        "PROCESSING",
+        "WAVEFORM",
+        "PLAYHEAD",
+        "RADIUS_MD",
+        "SP_4",
+        "FONT_STACK",
     )
     for name in required:
         assert hasattr(tokens, name), f"tokens.py thiếu {name}"
@@ -111,9 +127,19 @@ def test_tokens_surface_and_elevation_system() -> None:
     from autodub_gui import tokens
 
     surfaces = (
-        "BG_APP", "BG_SIDEBAR", "BG_MAIN", "BG_PANEL", "BG_PANEL_HOVER",
-        "BG_ELEVATED", "BG_INPUT", "BG_INPUT_DISABLED", "BG_BUTTON",
-        "BG_BUTTON_PRESSED", "BG_VIDEO", "BG_SELECTED", "BG_SELECTED_SOFT",
+        "BG_APP",
+        "BG_SIDEBAR",
+        "BG_MAIN",
+        "BG_PANEL",
+        "BG_PANEL_HOVER",
+        "BG_ELEVATED",
+        "BG_INPUT",
+        "BG_INPUT_DISABLED",
+        "BG_BUTTON",
+        "BG_BUTTON_PRESSED",
+        "BG_VIDEO",
+        "BG_SELECTED",
+        "BG_SELECTED_SOFT",
     )
     for name in surfaces:
         assert hasattr(tokens, name), f"tokens.py thiếu token bề mặt: {name}"
@@ -156,4 +182,3 @@ def test_stylesheet_covers_all_core_states() -> None:
     assert "QLineEdit:disabled" in css
     assert "QScrollBar:vertical" in css
     assert "QComboBox QAbstractItemView" in css
-

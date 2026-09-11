@@ -182,6 +182,7 @@ class BaseInpaintEngine(ABC):
         """Thực hiện xóa phụ đề trên video và ghi ra output_path."""
         pass
 
+
 def inpaint_video_with_cache(
     video_path: str,
     regions: list[dict],

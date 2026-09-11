@@ -25,7 +25,12 @@ dependencies = [
 [project.optional-dependencies]
 demucs = ["demucs>=4.0.0", "soundfile>=0.13.0"]
 content = ["google-genai>=1.0.0"]
-dev = ["pytest>=8.0.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-qt>=4.4.0",
+    "ruff>=0.6.0",
+    "pre-commit>=3.7.0",
+]
 
 [project.gui-scripts]
 autodub-gui = "autodub_gui.app:main"
@@ -35,3 +40,124 @@ include = ["autodub*", "autodub_gui*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    ".venv-asr",
+    ".venv-gpu",
+    ".venv-vieneu",
+    ".venv-whisper",
+    "build",
+    "dist",
+    "website",
+    "control_server",
+]
+
+[tool.ruff.lint]
+# Bắt đầu thực dụng: an toàn cho codebase lớn đang sống, không break existing.
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes — undefined names, unused imports/vars
+    "I",    # isort — import order
+    "B",    # flake8-bugbear — bug patterns thật
+    "UP",   # pyupgrade — syntax hiện đại
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff rules
+]
+ignore = [
+    "E501",  # line too long — đã có line-length=100 check format; nội dung tiếng Việt dài
+    "B008",  # function call in default arg — dùng hợp lệ cho dataclass-style
+    "SIM108", # ternary thay if-else — cứ để if-else rõ nghĩa tiếng Việt
+    "RUF001", # ambiguous unicode char — tiếng Việt có dấu là bình thường
+    "RUF002", # ambiguous unicode trong docstring tiếng Việt
+    "RUF003", # ambiguous unicode trong comment tiếng Việt
+    "RUF012", # mutable class attrs — Qt widgets pattern phổ biến
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "B011",   # assert False dùng trong pytest đôi khi hợp lệ
+    "F841",   # biến bỏ qua có chủ ý khi test side-effect
+    "RUF059", # unpack bỏ qua có chủ ý
+    "B017",   # assertRaises(Exception) trong pytest hợp lệ
+    "E402",   # fixtures import sau app setup
+    "SIM115", # open thủ công cho mock/fixture
+    "B905",   # zip() không strict — dữ liệu test cố định
+    "RUF046", # cast int cho clarity
+    "E731",   # lambda trong test closure
+    "SIM117", # nested with cho mock patch
+    "UP031",  # printf format trong test
+    "RUF007", # zip() thay pairwise — code test cũ đọc tự nhiên hơn
+    "RUF034", # if-else redundant trong assert
+    "RUF015", # slice [0] rõ hơn next()
+    "B007",   # loop var không dùng khi test index
+    "E741",   # biến 1 chữ `l` trong comprehension test
+]
+"scripts/*" = [
+    "I",      # scripts standalone chạy độc lập
+    "E402",   # sys.path setup trước import
+    "F841",
+    "RUF059",
+    "B905",
+    "RUF046",
+    "SIM115",
+    "B007",
+    "E741",
+    "SIM102",
+    "RUF007",
+    "SIM103",
+    "W291",
+    "SIM105",
+    "E731",   # lambda trong test closure
+    "SIM117", # nested with cho mock patch
+    "UP031",  # printf format trong test
+    "RUF034", # if-else redundant trong assert
+    "RUF015", # slice [0] rõ hơn next()
+]
+"autodub/tools/gemini_srt_ui/app.py" = [
+    "E402",   # Flask app lazy import pattern
+    "B905",
+    "SIM115",
+    "RUF046",
+    "F841",
+    "B007",
+    "E741",
+    "SIM102",
+    "RUF007",
+    "SIM103",
+    "SIM105",
+    "RUF059",
+]
+"autodub_gui/*" = [
+    "E402",   # Qt import ordering với lazy init pattern
+    "SIM115", # Qt file handling pattern
+    "B905",
+    "RUF046",
+    "B007",
+    "E741",
+    "SIM102",
+    "RUF007",
+    "SIM103",
+    "SIM105",
+    "RUF059",
+]
+"autodub/*" = [
+    "E402",   # lazy import cho subprocess/venv patterns có chủ ý
+    "SIM115",
+    "B905",
+    "RUF046",
+    "B007",
+    "E741",
+    "SIM102",
+    "RUF007",
+    "SIM103",
+    "SIM105",
+    "RUF059",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

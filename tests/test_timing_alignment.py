@@ -1,7 +1,9 @@
 """Comprehensive test suite for timing alignment and sync engine (autodub.media.timing & autodub.media.retime)."""
+
 import pytest
-from autodub.media.timing import plan_voice_placements, TimingReport
-from autodub.media.retime import rescale_segments, rescale_blur_regions
+
+from autodub.media.retime import rescale_blur_regions, rescale_segments
+from autodub.media.timing import plan_voice_placements
 
 
 def test_empty_segments():
@@ -32,8 +34,7 @@ def test_consecutive_extreme_overlaps_detail_logging():
     ]
     durations = [4.0, 4.0, 4.0, 4.0]
     placements, report = plan_voice_placements(
-        segs, durations, max_start_drift_s=0.15, min_gap_s=0.1,
-        max_speed=1.1
+        segs, durations, max_start_drift_s=0.15, min_gap_s=0.1, max_speed=1.1
     )
 
     assert report.segments_total == 4
@@ -70,10 +71,17 @@ def test_rescale_segments_scales_speech_fields():
     # làm chậm, không thì scheduler đặt giọng theo mốc cũ → lệch hình.
     scale = 1.0 / 0.92
     segs = [
-        {"id": 1, "start": 0.2, "end": 4.4, "duration": 4.2,
-         "speech_start": 0.156, "speech_end": 4.396,
-         "speech_duration": 4.24,
-         "vad_start": 0.2, "vad_end": 4.4},
+        {
+            "id": 1,
+            "start": 0.2,
+            "end": 4.4,
+            "duration": 4.2,
+            "speech_start": 0.156,
+            "speech_end": 4.396,
+            "speech_duration": 4.24,
+            "vad_start": 0.2,
+            "vad_end": 4.4,
+        },
         {"id": 2, "start": 5.3, "end": 6.4, "duration": 1.1},  # transcript cũ
     ]
     rescale_segments(segs, scale)
@@ -92,9 +100,17 @@ def test_voice_placements_follow_rescaled_speech_timeline():
     # Regression av-desync-videospeed: VIDEO_SPEED=0.92 — dub onset phải là
     # speech_start ĐÃ rescale (~0.170), không rơi về 0.156 của timeline gốc.
     scale = 1.0 / 0.92
-    segs = [{"id": 1, "start": 0.2, "end": 4.4, "duration": 4.2,
-             "speech_start": 0.156, "speech_end": 4.396,
-             "speech_duration": 4.24}]
+    segs = [
+        {
+            "id": 1,
+            "start": 0.2,
+            "end": 4.4,
+            "duration": 4.2,
+            "speech_start": 0.156,
+            "speech_end": 4.396,
+            "speech_duration": 4.24,
+        }
+    ]
     rescale_segments(segs, scale)
     placements, _report = plan_voice_placements(segs, [3.218])
     assert placements[0]["start"] == pytest.approx(0.156 * scale, abs=0.002)
@@ -114,9 +130,15 @@ def test_rescale_blur_regions():
 
 def test_voice_placements_stretch_opt_in():
     """VOICE_FIT_STRETCH: clip ngắn hơn slot được kéo dài chặn 0.90, mặc định thì không."""
-    seg = {"id": 1, "start": 0.2, "end": 4.4, "duration": 4.2,
-           "speech_start": 0.156, "speech_end": 4.396,
-           "speech_duration": 4.24}
+    seg = {
+        "id": 1,
+        "start": 0.2,
+        "end": 4.4,
+        "duration": 4.2,
+        "speech_start": 0.156,
+        "speech_end": 4.396,
+        "speech_duration": 4.24,
+    }
 
     placements_off, rep_off = plan_voice_placements([dict(seg)], [3.218])
     assert placements_off[0]["atempo"] == 1.0
@@ -124,8 +146,8 @@ def test_voice_placements_stretch_opt_in():
     assert rep_off.segments_stretched == 0
 
     placements_on, rep_on = plan_voice_placements(
-        [dict(seg)], [3.218], min_speed=0.90, max_speed=1.15,
-        allow_stretch=True)
+        [dict(seg)], [3.218], min_speed=0.90, max_speed=1.15, allow_stretch=True
+    )
     # 3.218/4.24 = 0.759 → chặn tại floor 0.90 (đọc chậm thêm ~11%)
     assert abs(placements_on[0]["atempo"] - 0.90) < 0.001
     assert placements_on[0]["adjustment"] == "stretch"

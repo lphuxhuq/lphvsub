@@ -1,9 +1,10 @@
 """Kiểm tra tích hợp tự động nạp file SRT từ dự án sang Web Gemini SRT Translator."""
+
 import os
 import tempfile
-import pytest
-from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
+
 from autodub.tools.gemini_srt_ui.app import create_app
+from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
 
 
 def test_open_project_srt():
@@ -11,7 +12,9 @@ def test_open_project_srt():
     with tempfile.TemporaryDirectory() as tmpdir:
         srt_file = os.path.join(tmpdir, "transcript_original.srt")
         with open(srt_file, "w", encoding="utf-8") as f:
-            f.write("1\n00:00:01,000 --> 00:00:03,000\nXin chao the gioi\n\n2\n00:00:03,500 --> 00:00:05,000\nThu nghiem\n\n")
+            f.write(
+                "1\n00:00:01,000 --> 00:00:03,000\nXin chao the gioi\n\n2\n00:00:03,500 --> 00:00:05,000\nThu nghiem\n\n"
+            )
 
         url = mgr.open_project_srt(srt_file, work_dir=tmpdir, open_browser=False)
         assert "?preload=" in url

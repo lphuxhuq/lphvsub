@@ -3,6 +3,7 @@
 Sử dụng:
     python -m autodub.tools.gemini_srt_ui [--port 5050] [--no-browser] [--host 127.0.0.1]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,9 +23,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Gemini SRT Translator Pro — Dịch vụ Web dịch phụ đề AI chuyên nghiệp"
     )
-    parser.add_argument("--port", type=int, default=5050, help="Cổng mạng của máy chủ (mặc định: 5050)")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Địa chỉ máy chủ (mặc định: 127.0.0.1)")
-    parser.add_argument("--no-browser", action="store_true", help="Không tự động mở trình duyệt web")
+    parser.add_argument(
+        "--port", type=int, default=5050, help="Cổng mạng của máy chủ (mặc định: 5050)"
+    )
+    parser.add_argument(
+        "--host", type=str, default="127.0.0.1", help="Địa chỉ máy chủ (mặc định: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--no-browser", action="store_true", help="Không tự động mở trình duyệt web"
+    )
 
     args = parser.parse_args()
 

@@ -4,12 +4,13 @@ Designed so any frontend (CLI today, GUI later) can observe pipeline progress
 through a plain callback and cancel through a ``threading.Event`` — no
 framework coupling in the core.
 """
+
 from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from autodub.utils import setup_logging
 
@@ -17,25 +18,25 @@ logger = setup_logging("autodub.progress")
 
 # Pipeline step identifiers, in execution order
 STEPS = (
-    "acquire",      # download video / use local file
-    "extract",      # extract original audio
-    "separate",     # Demucs vocal separation / ducking
-    "asr",          # speech-to-text
-    "translate",    # load translation (or stop with hint)
-    "tts",          # per-segment synthesis
+    "acquire",  # download video / use local file
+    "extract",  # extract original audio
+    "separate",  # Demucs vocal separation / ducking
+    "asr",  # speech-to-text
+    "translate",  # load translation (or stop with hint)
+    "tts",  # per-segment synthesis
     "merge_audio",  # slow-down / fit / mix with background
     "merge_video",  # remux dub audio into video
-    "content",      # thumbnails + YouTube metadata
+    "content",  # thumbnails + YouTube metadata
     "done",
 )
 
 
 @dataclass
 class ProgressEvent:
-    step: str                 # one of STEPS
-    status: str               # "start" | "progress" | "done" | "skip" | "error"
+    step: str  # one of STEPS
+    status: str  # "start" | "progress" | "done" | "skip" | "error"
     detail: str = ""
-    current: int = 0          # e.g. segment index during TTS
+    current: int = 0  # e.g. segment index during TTS
     total: int = 0
 
 
@@ -68,8 +69,9 @@ class ProgressReporter:
         self._last_progress: dict[str, float] = {}
         self._throttle_lock = threading.Lock()
 
-    def emit(self, step: str, status: str, detail: str = "",
-             current: int = 0, total: int = 0) -> None:
+    def emit(
+        self, step: str, status: str, detail: str = "", current: int = 0, total: int = 0
+    ) -> None:
         if not self._callback:
             return
         if status == "progress" and not (total and current >= total):

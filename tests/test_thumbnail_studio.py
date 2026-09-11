@@ -1,11 +1,12 @@
 import json
 import os
+
 import pytest
 from PIL import Image
 from PySide6.QtWidgets import QApplication
 
-from autodub_gui.thumbnail_dialog import ThumbnailStudioDialog
 from autodub_gui.pages.editor_panels import ExportPanel
+from autodub_gui.thumbnail_dialog import ThumbnailStudioDialog
 
 
 @pytest.fixture(scope="session")
@@ -97,7 +98,7 @@ def test_thumbnail_studio_save_both_aspects(qapp, tmp_path):
     with Image.open(out_9_16) as im9:
         assert im9.size == (720, 1280)
 
-    with open(meta_path, "r", encoding="utf-8") as f:
+    with open(meta_path, encoding="utf-8") as f:
         meta_data = json.load(f)
     assert meta_data["top_title"] == "XUYÊN KHÔNG CỔ ĐẠI"
     assert meta_data["bottom_title"] == "TƯ DUY LÀM GIÀU"
@@ -161,13 +162,15 @@ def test_thumbnail_studio_detect_from_link_meta(qapp, tmp_path):
 
     # Giả lập video_meta.json chứa link Bilibili có ?p=17
     with open(os.path.join(data_d, "video_meta.json"), "w", encoding="utf-8") as f:
-        json.dump({
-            "source_url": "https://www.bilibili.com/video/BV1xx411c7mD?p=17",
-            "title": "Đấu Phá Thương Khung Phần 5",
-        }, f)
+        json.dump(
+            {
+                "source_url": "https://www.bilibili.com/video/BV1xx411c7mD?p=17",
+                "title": "Đấu Phá Thương Khung Phần 5",
+            },
+            f,
+        )
 
     dlg = ThumbnailStudioDialog(work_dir=work_dir)
     dlg._detect_badge_now()
     assert dlg.input_badge.text() == "TẬP 17"
     dlg.close()
-

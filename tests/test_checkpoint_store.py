@@ -1,6 +1,7 @@
 """Kiểm thử cho module autodub/checkpoint_store.py."""
-import os
+
 import pytest
+
 from autodub import checkpoint_store
 
 
@@ -97,6 +98,7 @@ def test_apply_checkpoint_to_env(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("OLD_KEY=val\n", encoding="utf-8")
     from autodub_gui import env_store
+
     monkeypatch.setattr(env_store, "ENV_PATH", str(env_file))
 
     ckpt = {

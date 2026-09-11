@@ -84,10 +84,9 @@ def init_file_logging() -> str:
     # delay=True: chưa ghi dòng nào thì chưa tạo tệp (mở app rồi tắt ngay
     # không để lại tệp rỗng).
     handler = TimedRotatingFileHandler(
-        path, when="midnight", backupCount=LOG_RETENTION_DAYS,
-        encoding="utf-8", delay=True)
-    handler.setFormatter(logging.Formatter(
-        "[%(asctime)s] %(name)s - %(levelname)s - %(message)s"))
+        path, when="midnight", backupCount=LOG_RETENTION_DAYS, encoding="utf-8", delay=True
+    )
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(name)s - %(levelname)s - %(message)s"))
     root = logging.getLogger("autodub")
     root.setLevel(logging.INFO)
     root.addHandler(handler)
@@ -136,8 +135,7 @@ def bundled_font_files() -> list[str]:
     if not os.path.isdir(d):
         return []
     return sorted(
-        os.path.join(d, f) for f in os.listdir(d)
-        if f.lower().endswith((".ttf", ".otf", ".ttc"))
+        os.path.join(d, f) for f in os.listdir(d) if f.lower().endswith((".ttf", ".otf", ".ttc"))
     )
 
 
@@ -314,5 +312,3 @@ class ProgressTracker:
                 f"{self.step_name} hoàn tất: {total_str} {self.unit} "
                 f"trong {format_eta(elapsed)} (trung bình {speed_str})"
             )
-
-

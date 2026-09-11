@@ -1,6 +1,8 @@
 import os
+
 from pydub import AudioSegment
 from pydub.generators import Sine
+
 from autodub.media.audio import merge_segments
 
 
@@ -56,8 +58,7 @@ def test_merge_segments_uses_background(tmp_path):
     output_path = str(tmp_path / "merged.wav")
     segments = [{"id": 1, "start": 1.0, "end": 1.5, "duration": 0.5}]
 
-    merge_segments(segments, seg_dir, output_path, total_duration=4.0,
-                   background_path=bg_path)
+    merge_segments(segments, seg_dir, output_path, total_duration=4.0, background_path=bg_path)
 
     merged = AudioSegment.from_wav(output_path)
     assert abs(len(merged) / 1000.0 - 4.0) < 0.1
@@ -76,8 +77,7 @@ def test_merge_segments_pads_short_background(tmp_path):
     _save_tone(bg_path, freq=110, duration_ms=1000)  # shorter than total_duration
 
     output_path = str(tmp_path / "merged.wav")
-    merge_segments([], seg_dir, output_path, total_duration=3.0,
-                   background_path=bg_path)
+    merge_segments([], seg_dir, output_path, total_duration=3.0, background_path=bg_path)
 
     merged = AudioSegment.from_wav(output_path)
     assert abs(len(merged) / 1000.0 - 3.0) < 0.1
@@ -88,8 +88,13 @@ def test_merge_segments_missing_background_falls_back(tmp_path):
     os.makedirs(seg_dir)
     output_path = str(tmp_path / "merged.wav")
 
-    merge_segments([], seg_dir, output_path, total_duration=2.0,
-                   background_path=str(tmp_path / "does_not_exist.wav"))
+    merge_segments(
+        [],
+        seg_dir,
+        output_path,
+        total_duration=2.0,
+        background_path=str(tmp_path / "does_not_exist.wav"),
+    )
 
     merged = AudioSegment.from_wav(output_path)
     assert abs(len(merged) / 1000.0 - 2.0) < 0.1
@@ -105,10 +110,15 @@ def test_merge_segments_applies_background_gain(tmp_path):
     full_output = str(tmp_path / "full.wav")
     quiet_output = str(tmp_path / "quiet.wav")
 
-    merge_segments([], seg_dir, full_output, total_duration=3.0,
-                   background_path=bg_path)
-    merge_segments([], seg_dir, quiet_output, total_duration=3.0,
-                   background_path=bg_path, background_gain_db=-12.0)
+    merge_segments([], seg_dir, full_output, total_duration=3.0, background_path=bg_path)
+    merge_segments(
+        [],
+        seg_dir,
+        quiet_output,
+        total_duration=3.0,
+        background_path=bg_path,
+        background_gain_db=-12.0,
+    )
 
     full = AudioSegment.from_wav(full_output)
     quiet = AudioSegment.from_wav(quiet_output)
@@ -128,12 +138,17 @@ def test_merge_segments_with_auto_sfx(tmp_path):
     scene_cuts = [2.0, 5.0]
 
     res = merge_segments(
-        segments, seg_dir, output_path, total_duration=8.0,
-        scene_cuts=scene_cuts, auto_sfx_enabled=True, sfx_preset="whoosh", sfx_volume_db=-10.0
+        segments,
+        seg_dir,
+        output_path,
+        total_duration=8.0,
+        scene_cuts=scene_cuts,
+        auto_sfx_enabled=True,
+        sfx_preset="whoosh",
+        sfx_volume_db=-10.0,
     )
     assert os.path.exists(res)
     audio = AudioSegment.from_wav(res)
     assert abs(len(audio) / 1000.0 - 8.0) < 0.1
     # Ensure audio has energy at scene cut points
     assert audio.dBFS > -60.0
-

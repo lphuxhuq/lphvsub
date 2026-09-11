@@ -1,14 +1,13 @@
 """Unit tests cho Acoustic Alignment Confidence và Fallback Routing."""
+
 import math
 import struct
 import wave
-from pathlib import Path
-import pytest
 
 from autodub.speech.acoustic_align import (
     AcousticAlignmentResult,
-    analyze_acoustic_alignment,
     acoustic_word_times,
+    analyze_acoustic_alignment,
 )
 
 

@@ -2,6 +2,7 @@
 
 The pipeline is stubbed — no download, no ASR, no TTS.
 """
+
 import json
 import os
 
@@ -12,8 +13,8 @@ from autodub.config import Settings
 from autodub.pipeline import DubRequest
 from autodub.progress import PipelineCancelled
 
-
 # ------------------------------------------------------------ parse_lines --- #
+
 
 def test_parse_plain_urls():
     items = parse_lines("https://a.com/1\nhttps://a.com/2\n")
@@ -31,13 +32,16 @@ def test_parse_skips_blanks_and_comments():
     assert [i.url for i in items] == ["https://a.com/1", "https://a.com/2"]
 
 
-@pytest.mark.parametrize("line,voice", [
-    ("https://a.com/1 | Trúc Ly", "Trúc Ly"),
-    ("https://a.com/1|Phạm Tuyên", "Phạm Tuyên"),
-    ("https://a.com/1, Minh Đức", "Minh Đức"),
-    ("https://a.com/1\tEmma", "Emma"),
-    ("https://a.com/1  Ngọc Linh", "Ngọc Linh"),
-])
+@pytest.mark.parametrize(
+    "line,voice",
+    [
+        ("https://a.com/1 | Trúc Ly", "Trúc Ly"),
+        ("https://a.com/1|Phạm Tuyên", "Phạm Tuyên"),
+        ("https://a.com/1, Minh Đức", "Minh Đức"),
+        ("https://a.com/1\tEmma", "Emma"),
+        ("https://a.com/1  Ngọc Linh", "Ngọc Linh"),
+    ],
+)
 def test_parse_voice_override(line, voice):
     """Tên giọng đi sau liên kết, phân tách bằng | , ; tab hoặc hai dấu cách."""
     items = parse_lines(line)
@@ -75,6 +79,7 @@ def test_parse_empty_input():
 
 # --------------------------------------------------------------- run_batch --- #
 
+
 class FakePipeline:
     """Records the requests it receives and replays scripted outcomes."""
 
@@ -93,19 +98,24 @@ class FakePipeline:
         if isinstance(outcome, Exception):
             raise outcome
         if outcome == "stalled":
-            return type("R", (), {"status": "translation_pending",
-                                  "work_dir": "wd", "report": None})()
-        return type("R", (), {
-            "status": "completed",
-            "work_dir": "wd",
-            "report": {
-                "session_id": f"sess_{len(self.seen)}",
-                "total_segments": 2,
-                "total_original_duration": 4.0,
-                "total_tts_duration": 4.1,
-                "processing_time_seconds": 1.0,
+            return type(
+                "R", (), {"status": "translation_pending", "work_dir": "wd", "report": None}
+            )()
+        return type(
+            "R",
+            (),
+            {
+                "status": "completed",
+                "work_dir": "wd",
+                "report": {
+                    "session_id": f"sess_{len(self.seen)}",
+                    "total_segments": 2,
+                    "total_original_duration": 4.0,
+                    "total_tts_duration": 4.1,
+                    "processing_time_seconds": 1.0,
+                },
             },
-        })()
+        )()
 
 
 @pytest.fixture
@@ -124,8 +134,7 @@ def test_runs_every_url_and_writes_state(env):
     settings, template, state_path = env
     pipe = FakePipeline()
 
-    summary = run_batch("https://a.com/1\nhttps://a.com/2",
-                        settings, template, pipeline=pipe)
+    summary = run_batch("https://a.com/1\nhttps://a.com/2", settings, template, pipeline=pipe)
 
     assert (summary.total, summary.success, summary.failed) == (2, 2, 0)
     assert [r.url for r in pipe.seen] == ["https://a.com/1", "https://a.com/2"]
@@ -138,8 +147,7 @@ def test_per_line_voice_overrides_template(env):
     settings, template, _ = env
     pipe = FakePipeline()
 
-    run_batch("https://a.com/1\nhttps://a.com/2 | Trúc Ly",
-              settings, template, pipeline=pipe)
+    run_batch("https://a.com/1\nhttps://a.com/2 | Trúc Ly", settings, template, pipeline=pipe)
 
     assert [r.voice for r in pipe.seen] == ["Phạm Tuyên", "Trúc Ly"]
 
@@ -148,8 +156,7 @@ def test_failure_is_recorded_and_batch_continues(env):
     settings, template, state_path = env
     pipe = FakePipeline({"https://a.com/1": RuntimeError("tải lỗi")})
 
-    summary = run_batch("https://a.com/1\nhttps://a.com/2",
-                        settings, template, pipeline=pipe)
+    summary = run_batch("https://a.com/1\nhttps://a.com/2", settings, template, pipeline=pipe)
 
     assert (summary.success, summary.failed) == (1, 1)
     videos = read_state(state_path)["videos"]
@@ -173,8 +180,7 @@ def test_resume_skips_completed_urls(env):
     run_batch("https://a.com/1", settings, template, pipeline=FakePipeline())
 
     pipe2 = FakePipeline()
-    summary = run_batch("https://a.com/1\nhttps://a.com/2",
-                        settings, template, pipeline=pipe2)
+    summary = run_batch("https://a.com/1\nhttps://a.com/2", settings, template, pipeline=pipe2)
 
     assert [r.url for r in pipe2.seen] == ["https://a.com/2"]
     assert (summary.skipped, summary.success) == (1, 1)
@@ -185,8 +191,7 @@ def test_retry_done_reprocesses_everything(env):
     run_batch("https://a.com/1", settings, template, pipeline=FakePipeline())
 
     pipe2 = FakePipeline()
-    summary = run_batch("https://a.com/1", settings, template,
-                        pipeline=pipe2, retry_done=True)
+    summary = run_batch("https://a.com/1", settings, template, pipeline=pipe2, retry_done=True)
 
     assert [r.url for r in pipe2.seen] == ["https://a.com/1"]
     assert (summary.skipped, summary.success) == (0, 1)
@@ -194,8 +199,12 @@ def test_retry_done_reprocesses_everything(env):
 
 def test_failed_urls_are_retried_on_resume(env):
     settings, template, _ = env
-    run_batch("https://a.com/1", settings, template,
-              pipeline=FakePipeline({"https://a.com/1": RuntimeError("x")}))
+    run_batch(
+        "https://a.com/1",
+        settings,
+        template,
+        pipeline=FakePipeline({"https://a.com/1": RuntimeError("x")}),
+    )
 
     pipe2 = FakePipeline()
     run_batch("https://a.com/1", settings, template, pipeline=pipe2)
@@ -209,8 +218,9 @@ def test_failed_video_records_work_dir_for_resume(env, tmp_path):
     settings, template, state_path = env
     crash_dir = tmp_path / "20260101000000_vi"
     crash_dir.mkdir()
-    pipe = FakePipeline({"https://a.com/1": RuntimeError("đứt mạng")},
-                        work_dirs={"https://a.com/1": str(crash_dir)})
+    pipe = FakePipeline(
+        {"https://a.com/1": RuntimeError("đứt mạng")}, work_dirs={"https://a.com/1": str(crash_dir)}
+    )
 
     run_batch("https://a.com/1", settings, template, pipeline=pipe)
     assert read_state(state_path)["videos"][0]["work_dir"] == str(crash_dir)
@@ -224,8 +234,7 @@ def test_missing_work_dir_falls_back_to_fresh_run(env, tmp_path):
     """Thư mục dở dang đã bị xóa tay → chạy lại như video mới, không đổ lỗi."""
     settings, template, _ = env
     gone = str(tmp_path / "da_xoa")
-    pipe = FakePipeline({"https://a.com/1": RuntimeError("x")},
-                        work_dirs={"https://a.com/1": gone})
+    pipe = FakePipeline({"https://a.com/1": RuntimeError("x")}, work_dirs={"https://a.com/1": gone})
     run_batch("https://a.com/1", settings, template, pipeline=pipe)
 
     pipe2 = FakePipeline()
@@ -260,28 +269,34 @@ def test_cancel_aborts_batch_without_marking_failure(env):
     pipe = FakePipeline({"https://a.com/2": PipelineCancelled("stop")})
 
     with pytest.raises(PipelineCancelled):
-        run_batch("https://a.com/1\nhttps://a.com/2\nhttps://a.com/3",
-                  settings, template, pipeline=pipe)
+        run_batch(
+            "https://a.com/1\nhttps://a.com/2\nhttps://a.com/3", settings, template, pipeline=pipe
+        )
 
     videos = read_state(state_path)["videos"]
     assert videos[0]["status"] == "success"
-    assert videos[1]["status"] == "processing"   # left mid-flight, resumable
+    assert videos[1]["status"] == "processing"  # left mid-flight, resumable
     assert videos[2]["status"] == "waiting"
-    assert len(pipe.seen) == 2                   # never reached the third URL
+    assert len(pipe.seen) == 2  # never reached the third URL
 
 
 def test_observer_receives_events(env):
     settings, template, _ = env
     events = []
 
-    run_batch("https://a.com/1", settings, template, pipeline=FakePipeline(),
-              observer=lambda i, t, item, st, d: events.append((i, t, item.url, st)))
+    run_batch(
+        "https://a.com/1",
+        settings,
+        template,
+        pipeline=FakePipeline(),
+        observer=lambda i, t, item, st, d: events.append((i, t, item.url, st)),
+    )
 
-    assert events == [(0, 1, "https://a.com/1", "start"),
-                      (0, 1, "https://a.com/1", "success")]
+    assert events == [(0, 1, "https://a.com/1", "start"), (0, 1, "https://a.com/1", "success")]
 
 
 # ------------------------------------------------------------ _Prefetcher --- #
+
 
 def _fake_download_video(url, dest):
     """Tải giả: ghi file vào dest và trả đường dẫn (không đụng mạng)."""
@@ -303,8 +318,8 @@ def test_prefetcher_sliding_window_depth_two(tmp_path, monkeypatch):
 
     pf.ensure_window(0, items)
     assert pf.take(1, timeout=10) is not None
-    assert pf.take(2, timeout=10) is not None   # depth 2 → sẵn cả item 2
-    assert pf.take(3) is None                   # ngoài cửa sổ: chưa lên lịch
+    assert pf.take(2, timeout=10) is not None  # depth 2 → sẵn cả item 2
+    assert pf.take(3) is None  # ngoài cửa sổ: chưa lên lịch
     pf.cleanup()
 
 
@@ -319,7 +334,7 @@ def test_prefetcher_depth_one_legacy(tmp_path, monkeypatch):
 
     pf.ensure_window(0, items)
     assert pf.take(1, timeout=10) is not None
-    assert pf.take(2) is None                   # depth 1 → item 2 không có
+    assert pf.take(2) is None  # depth 1 → item 2 không có
     pf.cleanup()
 
 
@@ -335,14 +350,16 @@ def test_prefetcher_skips_local_files(tmp_path, monkeypatch):
         return _fake_download_video(url, dest)
 
     monkeypatch.setattr(downloader, "download_video", _record)
-    items = [batch.BatchItem(url="https://a.com/0"),
-             batch.BatchItem(file_path="C:/x/local.mp4"),
-             batch.BatchItem(url="https://a.com/2")]
+    items = [
+        batch.BatchItem(url="https://a.com/0"),
+        batch.BatchItem(file_path="C:/x/local.mp4"),
+        batch.BatchItem(url="https://a.com/2"),
+    ]
     pf = batch._Prefetcher(str(tmp_path), depth=2)
 
     pf.ensure_window(0, items)
-    assert pf.take(1) is None                   # file local → không lên lịch
-    assert pf.take(2, timeout=10) is not None   # chỉ item có URL được tải
+    assert pf.take(1) is None  # file local → không lên lịch
+    assert pf.take(2, timeout=10) is not None  # chỉ item có URL được tải
     assert called == ["https://a.com/2"]
     pf.cleanup()
 
@@ -350,6 +367,7 @@ def test_prefetcher_skips_local_files(tmp_path, monkeypatch):
 def test_batch_concurrency(env, monkeypatch):
     """Kiểm tra xử lý đồng thời danh sách nhiều link qua concurrency > 1."""
     import threading
+
     settings, template, state_path = env
     from autodub.media import downloader
     from autodub.pipeline import DubResult
@@ -366,7 +384,9 @@ def test_batch_concurrency(env, monkeypatch):
         def run(self, req):
             with lock:
                 called_urls.append(req.url)
-            return DubResult(status="completed", work_dir="/tmp/test", report={"session_id": "test_sess"})
+            return DubResult(
+                status="completed", work_dir="/tmp/test", report={"session_id": "test_sess"}
+            )
 
     monkeypatch.setattr("autodub.batch.DubPipeline", ConcurrentMockPipeline)
 
@@ -375,5 +395,9 @@ def test_batch_concurrency(env, monkeypatch):
 
     assert summary.total == 4
     assert summary.success == 4
-    assert set(called_urls) == {"https://a.com/1", "https://a.com/2", "https://a.com/3", "https://a.com/4"}
-
+    assert set(called_urls) == {
+        "https://a.com/1",
+        "https://a.com/2",
+        "https://a.com/3",
+        "https://a.com/4",
+    }

@@ -1,8 +1,10 @@
 import os
 import wave
+
 import numpy as np
-import pytest
-from autodub.speech.tts_trimmer import trim_tts_silence, compute_speech_extents
+
+from autodub.speech.tts_trimmer import compute_speech_extents, trim_tts_silence
+
 
 def test_compute_speech_extents():
     rate = 16000
@@ -16,13 +18,16 @@ def test_compute_speech_extents():
     assert 0.17 <= start_s <= 0.21
     assert 0.59 <= end_s <= 0.63
 
+
 def test_trim_tts_silence(tmp_path):
     rate = 16000
     lead_silence = np.zeros(int(0.25 * rate), dtype=np.int16)
-    audio = (np.sin(2 * np.pi * 440 * np.linspace(0, 0.5, int(0.5 * rate))) * 16000).astype(np.int16)
+    audio = (np.sin(2 * np.pi * 440 * np.linspace(0, 0.5, int(0.5 * rate))) * 16000).astype(
+        np.int16
+    )
     tail_silence = np.zeros(int(0.25 * rate), dtype=np.int16)
     full = np.concatenate([lead_silence, audio, tail_silence])
-    
+
     in_wav = str(tmp_path / "raw.wav")
     out_wav = str(tmp_path / "trimmed.wav")
     with wave.open(in_wav, "wb") as w:
@@ -30,12 +35,12 @@ def test_trim_tts_silence(tmp_path):
         w.setsampwidth(2)
         w.setframerate(rate)
         w.writeframes(full.tobytes())
-        
+
     out_path, lead_s, tail_s = trim_tts_silence(in_wav, out_wav, margin_s=0.03)
     assert os.path.exists(out_path)
     assert 0.20 <= lead_s <= 0.25
     assert 0.20 <= tail_s <= 0.25
-    
+
     # Kiểm tra thời lượng file sau khi trim
     with wave.open(out_path, "rb") as w:
         trimmed_dur = w.getnframes() / float(w.getframerate())

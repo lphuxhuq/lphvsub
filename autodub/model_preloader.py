@@ -6,14 +6,13 @@ Giúp tải và làm ấm (pre-warm) trước các mô hình AI trong luồng n�
 3. Demucs: khởi động worker --serve trong .venv-gpu, sau đó tự trả VRAM về CPU.
 (Các model khác như VieNeu-TTS, LaMa ONNX được nạp on-demand khi có tác vụ yêu cầu).
 """
+
 from __future__ import annotations
 
-import os
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from autodub.config import Settings
-from autodub.resources import GPU_LOCK
 from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.model_preloader")
@@ -47,6 +46,7 @@ class GlobalModelPool:
         with self._lock:
             if self._paraformer_cache is None:
                 from autodub.speech.paraformer_transcriber import ParaformerCache
+
                 self._paraformer_cache = ParaformerCache()
             return self._paraformer_cache
 
@@ -54,6 +54,7 @@ class GlobalModelPool:
         with self._lock:
             if self._whisper_cache is None:
                 from autodub.speech.transcriber import WhisperCache
+
                 self._whisper_cache = WhisperCache()
             return self._whisper_cache
 
@@ -61,6 +62,7 @@ class GlobalModelPool:
         with self._lock:
             if self._demucs_cache is None:
                 from autodub.media.vocal_separator import DemucsCache
+
                 self._demucs_cache = DemucsCache()
             return self._demucs_cache
 
@@ -68,6 +70,7 @@ class GlobalModelPool:
         with self._lock:
             if self._synth_cache is None:
                 from autodub.speech.tts import SynthCache
+
                 self._synth_cache = SynthCache()
             return self._synth_cache
 
@@ -75,6 +78,7 @@ class GlobalModelPool:
         with self._lock:
             if self._lama_engine is None:
                 from autodub.media.inpaint.lama_onnx import LaMaOnnxEngine
+
                 self._lama_engine = LaMaOnnxEngine()
             return self._lama_engine
 
@@ -82,6 +86,7 @@ class GlobalModelPool:
         with self._lock:
             if self._align_model is None:
                 from autodub.speech.align import _create_whisper_align_model
+
                 self._align_model = _create_whisper_align_model()
             return self._align_model
 
@@ -91,7 +96,11 @@ class GlobalModelPool:
 
     def is_all_ready(self) -> bool:
         with self._lock:
-            active = [self._status[k] for k in ("paraformer", "whisper", "demucs") if self._status.get(k) != "unsupported"]
+            active = [
+                self._status[k]
+                for k in ("paraformer", "whisper", "demucs")
+                if self._status.get(k) != "unsupported"
+            ]
             return len(active) > 0 and all(v in ("ready", "skipped") for v in active)
 
     def preload_all_async(
@@ -109,7 +118,9 @@ class GlobalModelPool:
             self._cancel_event.clear()
 
         def _worker():
-            logger.info("Bắt đầu tiến trình nạp trước các model AI (Paraformer, Whisper, Demucs)...")
+            logger.info(
+                "Bắt đầu tiến trình nạp trước các model AI (Paraformer, Whisper, Demucs)..."
+            )
 
             if self._cancel_event.is_set():
                 with self._lock:
@@ -162,6 +173,7 @@ class GlobalModelPool:
             # 3. DEMUCS: Khởi động worker phục vụ tách nhạc nền (GPU worker)
             # -------------------------------------------------------------
             from autodub.media.vocal_separator import gpu_venv_python
+
             if gpu_venv_python():
                 try:
                     self._set_status("demucs", "loading", on_step)
@@ -199,7 +211,7 @@ class GlobalModelPool:
             try:
                 cb(key, val)
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong model_preloader.py", exc_info=True)
 
     def close_all(self) -> None:
         """Đóng toàn bộ session và dừng mọi tiến trình worker khi thoát ứng dụng."""
@@ -241,6 +253,7 @@ class GlobalModelPool:
             if self._align_model is not None:
                 try:
                     from autodub.speech.align import unload_align_model
+
                     unload_align_model()
                 except Exception as e:
                     logger.warning(f"Unload align model lỗi ({e})")

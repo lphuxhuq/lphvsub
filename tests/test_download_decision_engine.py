@@ -1,16 +1,12 @@
 """Tests for DownloadDecisionEngine."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from autodub.media.download.contract import (
     DownloadRequest,
     DownloadResult,
     ErrorType,
     Platform,
-    PreflightResult,
 )
 from autodub.media.download.decision_engine import DownloadDecisionEngine
 from autodub.media.download.validator import ValidationResult
@@ -21,7 +17,7 @@ def test_decision_engine_cancellation():
     req = DownloadRequest(
         url="https://www.bilibili.com/video/BV1xx411c7mD",
         output_dir="tmp",
-        cancel_event=True, # immediately cancelled
+        cancel_event=True,  # immediately cancelled
     )
     res = engine.execute(req)
     assert not res.success
@@ -75,7 +71,7 @@ def test_decision_engine_routes_to_bilibili(tmp_path):
     (tmp_path / "bili.mp4").write_bytes(b"DATA" * 50)
 
     engine = DownloadDecisionEngine(bilibili_engine=mock_bili)
-    engine.cache.lookup = MagicMock(return_value=None) # Cache miss
+    engine.cache.lookup = MagicMock(return_value=None)  # Cache miss
 
     req = DownloadRequest(
         url="https://www.bilibili.com/video/BV1xx411c7mD",

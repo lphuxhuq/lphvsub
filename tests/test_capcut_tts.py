@@ -4,6 +4,7 @@ Hồi quy nguy hiểm nhất là giọng CapCut bị chặn oan trên máy chưa
 đó chính là lý do tồn tại của engine này. Các bài ở đây khóa chặt điều đó.
 Không bài nào gọi mạng.
 """
+
 from __future__ import annotations
 
 import json
@@ -13,16 +14,15 @@ import pytest
 
 from autodub.config import ConfigError, Settings
 from autodub.languages import get_target
-from autodub.speech.tts import capcut_catalog, capcut_vi, get_synthesizer
-from autodub.speech.tts import voices
+from autodub.speech.tts import capcut_catalog, capcut_vi, get_synthesizer, voices
 
 
 @pytest.fixture(autouse=True)
 def isolated_device(tmp_path, monkeypatch):
     """Mọi bài dùng hồ sơ thiết bị trong tmp và không chờ van tiết lưu."""
     monkeypatch.setattr(
-        capcut_catalog, "device_file",
-        lambda: str(tmp_path / "device" / "capcut_device.json"))
+        capcut_catalog, "device_file", lambda: str(tmp_path / "device" / "capcut_device.json")
+    )
     monkeypatch.setattr(capcut_vi, "_profile", None)
     monkeypatch.setattr(capcut_vi, "_rotations", 0)
     monkeypatch.setattr(capcut_vi, "_throttle", lambda: None)
@@ -42,6 +42,7 @@ def write_custom(settings, presets: dict) -> None:
 
 
 # ------------------------------------------------------------- danh mục --- #
+
 
 def test_catalog_has_every_vietnamese_voice_with_a_usable_id():
     entries = capcut_catalog.entries()
@@ -69,6 +70,7 @@ def test_default_capcut_voice_actually_exists():
 
 
 # ------------------------------------------------------------ device id --- #
+
 
 @pytest.fixture
 def device_home():
@@ -113,6 +115,7 @@ def test_device_id_follows_the_fingerprint(device_home, monkeypatch):
 
 # ---------------------------------------------------------- định tuyến --- #
 
+
 def test_capcut_voice_works_without_vieneu_installed(settings):
     """Ca kiểm thử quan trọng nhất: CapCut phải độc lập hoàn toàn với VieNeu."""
     assert settings.vieneu_configured() is False
@@ -123,8 +126,7 @@ def test_capcut_voice_works_without_vieneu_installed(settings):
 
 
 def test_offline_voice_still_requires_vieneu(settings):
-    write_custom(settings, {"Hoàng Nam": {"gender": "male",
-                                          "source": "library"}})
+    write_custom(settings, {"Hoàng Nam": {"gender": "male", "source": "library"}})
     with pytest.raises(ConfigError):
         get_synthesizer(get_target("vi"), settings, "Hoàng Nam")
 
@@ -144,6 +146,7 @@ def test_constructing_with_a_non_capcut_name_is_rejected(settings):
 
 
 # ---------------------------------------------------------- tổng hợp ----- #
+
 
 def test_sanitize_strips_cjk_and_caps_length():
     from autodub.speech.tts.capcut_vi import sanitize_capcut_text
@@ -190,8 +193,7 @@ def test_blank_line_never_calls_the_network(settings, tmp_path, monkeypatch):
     assert os.path.isfile(out)
 
 
-def test_network_failure_retries_then_raises_with_a_way_out(settings,
-                                                            monkeypatch):
+def test_network_failure_retries_then_raises_with_a_way_out(settings, monkeypatch):
     """Hết lượt thử phải ném lỗi có hướng xử lý, không nuốt lỗi im lặng."""
     from autodub.speech.tts import capcut_vi
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
@@ -239,8 +241,9 @@ def test_a_transient_failure_is_survived(settings, monkeypatch):
 
 # --------------------------------------------------------- bị chặn ------- #
 
-_SHARK = ("No task returned from API: {'ret': '-6', "
-          "'errmsg': 'shark block only', 'svr_time': 1786158435}")
+_SHARK = (
+    "No task returned from API: {'ret': '-6', 'errmsg': 'shark block only', 'svr_time': 1786158435}"
+)
 
 
 def _blocking_client(synth, monkeypatch, ok_after=None, block_if=None):
@@ -296,8 +299,7 @@ def test_shark_block_switches_to_a_new_device_id(settings, monkeypatch):
     assert devices[0] != devices[1], "phải gửi lại bằng định danh khác"
 
 
-def test_shark_block_gives_up_instead_of_rotating_forever(settings,
-                                                          monkeypatch):
+def test_shark_block_gives_up_instead_of_rotating_forever(settings, monkeypatch):
     """Chặn dai dẳng thì dừng sớm với lời khuyên, không đổi ID vô hạn."""
     from autodub.speech.tts.capcut_vi import CapCutSynthesizer
 
@@ -372,6 +374,7 @@ def test_system_busy_retries_without_hard_cooldown(settings, monkeypatch):
 
 def test_device_pool_generates_diverse_devices():
     from autodub.speech.tts.capcut_device_pool import generate_fake_device, get_device_pool
+
     dev1 = generate_fake_device(template_idx=0)
     dev2 = generate_fake_device(template_idx=10)
 
@@ -388,6 +391,7 @@ def test_device_pool_generates_diverse_devices():
 
 def test_device_pool_cooldown_and_auto_replacement():
     from autodub.speech.tts.capcut_device_pool import CapCutDevicePool
+
     pool = CapCutDevicePool(size=8)
     dev = pool.get_device(0)
     rep = pool.report_block(dev, cooldown_seconds=60.0)
@@ -429,9 +433,11 @@ def test_query_tts_task_rate_limit_3100_retries_and_succeeds(monkeypatch):
     from autodub.speech.tts.capcut_api.exceptions import CapCutAPIError
 
     client = CapCutClient(device={"device_id": "1234567890123456789"})
-    monkeypatch.setattr(client, "create_tts_task", lambda *a, **k: {
-        "data": {"tasks": [{"id": "task_1", "token": "tok_1"}]}
-    })
+    monkeypatch.setattr(
+        client,
+        "create_tts_task",
+        lambda *a, **k: {"data": {"tasks": [{"id": "task_1", "token": "tok_1"}]}},
+    )
 
     attempts = 0
 
@@ -442,15 +448,13 @@ def test_query_tts_task_rate_limit_3100_retries_and_succeeds(monkeypatch):
             raise CapCutAPIError("query_tts_task ret=3100: task rate limit", status_code=200)
         return {
             "data": {
-                "tasks": [{
-                    "status": "success",
-                    "speech_url": "https://example.invalid/done.mp3"
-                }]
+                "tasks": [{"status": "success", "speech_url": "https://example.invalid/done.mp3"}]
             }
         }
 
     monkeypatch.setattr(client, "query_tts_task", mock_query)
     import time
+
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
     task = client.generate_speech("câu kiểm tra", wait=True)
@@ -460,6 +464,6 @@ def test_query_tts_task_rate_limit_3100_retries_and_succeeds(monkeypatch):
 
 def test_is_rate_limited_matches_3100():
     from autodub.speech.tts.capcut_vi import _is_rate_limited
+
     e = Exception("query_tts_task ret=3100: task rate limit")
     assert _is_rate_limited(e) is True
-

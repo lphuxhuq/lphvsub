@@ -6,12 +6,14 @@ Tối ưu hóa:
 2. Streaming FFmpeg Pipes: Đọc và ghi frame tuần tự qua stdin/stdout để không ngốn RAM.
 3. Hỗ trợ đa nền tảng: CUDA (NVIDIA), DirectML (AMD/Intel) và CPU.
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
 import threading
-from typing import Callable
+from collections.abc import Callable
+
 import numpy as np
 
 from autodub.media.inpaint.base import (
@@ -75,9 +77,7 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             try:
                 import onnxruntime as ort
             except ImportError:
-                logger.warning(
-                    "Chưa cài đặt onnxruntime — chuyển sang Inpainting OpenCV Telea."
-                )
+                logger.warning("Chưa cài đặt onnxruntime — chuyển sang Inpainting OpenCV Telea.")
                 self._session = None
                 return
 
@@ -88,12 +88,16 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 if "CUDAExecutionProvider" in available_providers:
                     providers.append("CUDAExecutionProvider")
                 else:
-                    logger.warning("Yêu cầu CUDA nhưng không tìm thấy CUDAExecutionProvider — fallback CPU.")
+                    logger.warning(
+                        "Yêu cầu CUDA nhưng không tìm thấy CUDAExecutionProvider — fallback CPU."
+                    )
             elif target_device == "directml":
                 if "DmlExecutionProvider" in available_providers:
                     providers.append("DmlExecutionProvider")
                 else:
-                    logger.warning("Yêu cầu DirectML nhưng không tìm thấy DmlExecutionProvider — fallback CPU.")
+                    logger.warning(
+                        "Yêu cầu DirectML nhưng không tìm thấy DmlExecutionProvider — fallback CPU."
+                    )
             elif target_device == "cpu":
                 providers.append("CPUExecutionProvider")
             else:  # "auto"
@@ -104,8 +108,11 @@ class LaMaOnnxEngine(BaseInpaintEngine):
 
             providers.append("CPUExecutionProvider")
 
-            logger.info(f"Khởi tạo LaMa ONNX Session với providers: {providers} (đang nạp weights, chờ chút)...")
+            logger.info(
+                f"Khởi tạo LaMa ONNX Session với providers: {providers} (đang nạp weights, chờ chút)..."
+            )
             import time
+
             t_init_start = time.time()
             so = ort.SessionOptions()
             so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -181,7 +188,11 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             if getattr(self, "_cached_mask_key", None) == mask_key:
                 mask_tensor = self._cached_mask_tensor
             else:
-                cur_mask = cv2.resize((mask > 0).astype(np.uint8) * 255, (fixed_w, fixed_h), interpolation=cv2.INTER_NEAREST)
+                cur_mask = cv2.resize(
+                    (mask > 0).astype(np.uint8) * 255,
+                    (fixed_w, fixed_h),
+                    interpolation=cv2.INTER_NEAREST,
+                )
                 mask_f = (cur_mask > 0).astype(np.float32)
                 mask_tensor = mask_f[np.newaxis, np.newaxis, :, :].astype(np.float32)
                 self._cached_mask_key = mask_key
@@ -251,7 +262,7 @@ class LaMaOnnxEngine(BaseInpaintEngine):
 
         # Blend: chỉ lấy pixel từ out_bgr ở những nơi mask > 0 để bảo toàn 100% chi tiết vùng không xóa
         result = frame_bgr.copy()
-        mask_binary = (mask[:h, :w] > 0)
+        mask_binary = mask[:h, :w] > 0
         result[mask_binary] = out_bgr[mask_binary]
 
         return result
@@ -270,11 +281,17 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             return video_path
 
         from autodub.media.retime import probe_video_info
+
         orig_dur, fps_str = probe_video_info(video_path)
-        fps = float(eval(fps_str)) if fps_str and "/" in fps_str else (float(fps_str) if fps_str else 30.0)
+        fps = (
+            float(eval(fps_str))
+            if fps_str and "/" in fps_str
+            else (float(fps_str) if fps_str else 30.0)
+        )
 
         # Đọc width, height
         from autodub.media.video import probe_dimensions
+
         width, height = probe_dimensions(video_path)
 
         total_frames = max(1, int(round(orig_dur * fps)))
@@ -295,34 +312,52 @@ class LaMaOnnxEngine(BaseInpaintEngine):
 
         # Lệnh FFmpeg giải mã frame BGR
         dec_cmd = [
-            "ffmpeg", "-y",
-            "-i", video_path,
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
             "-",
         ]
 
         # Lệnh FFmpeg mã hóa video kết quả
         enc_cmd = [
-            "ffmpeg", "-y",
-            "-f", "rawvideo",
-            "-pix_fmt", "bgr24",
-            "-s", f"{width}x{height}",
-            "-r", f"{fps:.3f}",
-            "-i", "-",
-            "-i", video_path,
-            "-map", "0:v",
-            "-map", "1:a?",
-            "-c:v", "libx264",
-            "-crf", "17",
-            "-preset", "fast",
-            "-c:a", "copy",
-            "-pix_fmt", "yuv420p",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{width}x{height}",
+            "-r",
+            f"{fps:.3f}",
+            "-i",
+            "-",
+            "-i",
+            video_path,
+            "-map",
+            "0:v",
+            "-map",
+            "1:a?",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "17",
+            "-preset",
+            "fast",
+            "-c:a",
+            "copy",
+            "-pix_fmt",
+            "yuv420p",
             output_path,
         ]
 
-        from collections import deque
         import threading
+        from collections import deque
 
         dec_stderr_tail: deque[str] = deque(maxlen=30)
         enc_stderr_tail: deque[str] = deque(maxlen=30)
@@ -335,21 +370,29 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                     for line in iter(stream.readline, b""):
                         if not line:
                             break
-                        decoded = line.decode("utf-8", errors="replace").rstrip() if isinstance(line, (bytes, bytearray)) else str(line).rstrip()
+                        decoded = (
+                            line.decode("utf-8", errors="replace").rstrip()
+                            if isinstance(line, (bytes, bytearray))
+                            else str(line).rstrip()
+                        )
                         if decoded:
                             tail.append(decoded)
                 else:
                     for line in stream:
-                        decoded = line.decode("utf-8", errors="replace").rstrip() if isinstance(line, (bytes, bytearray)) else str(line).rstrip()
+                        decoded = (
+                            line.decode("utf-8", errors="replace").rstrip()
+                            if isinstance(line, (bytes, bytearray))
+                            else str(line).rstrip()
+                        )
                         if decoded:
                             tail.append(decoded)
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong lama_onnx.py", exc_info=True)
             finally:
                 try:
                     stream.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong lama_onnx.py", exc_info=True)
 
         dec_proc = subprocess.Popen(
             dec_cmd,
@@ -364,13 +407,18 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             bufsize=frame_bytes * 4,
         )
 
-        t_dec_err = threading.Thread(target=_drain_stderr, args=(dec_proc.stderr, dec_stderr_tail), daemon=True)
-        t_enc_err = threading.Thread(target=_drain_stderr, args=(enc_proc.stderr, enc_stderr_tail), daemon=True)
+        t_dec_err = threading.Thread(
+            target=_drain_stderr, args=(dec_proc.stderr, dec_stderr_tail), daemon=True
+        )
+        t_enc_err = threading.Thread(
+            target=_drain_stderr, args=(enc_proc.stderr, enc_stderr_tail), daemon=True
+        )
         t_dec_err.start()
         t_enc_err.start()
 
         frame_idx = 0
         import time
+
         t_start_inpaint = time.time()
         prev_patch = None
         prev_clean_patch = None
@@ -382,7 +430,9 @@ class LaMaOnnxEngine(BaseInpaintEngine):
 
                 if enc_proc.poll() is not None:
                     enc_err = "\n".join(enc_stderr_tail)
-                    raise RuntimeError(f"FFmpeg encoder thoát bất thường (code {enc_proc.returncode}):\n{enc_err}")
+                    raise RuntimeError(
+                        f"FFmpeg encoder thoát bất thường (code {enc_proc.returncode}):\n{enc_err}"
+                    )
 
                 raw_frame = dec_proc.stdout.read(frame_bytes)
                 if not raw_frame or len(raw_frame) < frame_bytes:
@@ -395,7 +445,11 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 patch = frame[ry : ry + rh, rx : rx + rw]
 
                 # Tái sử dụng kết quả nếu patch giống hệt frame trước (tiết kiệm GPU với freeze-frame, slides, 24->30fps judder)
-                if prev_patch is not None and prev_clean_patch is not None and np.array_equal(patch, prev_patch):
+                if (
+                    prev_patch is not None
+                    and prev_clean_patch is not None
+                    and np.array_equal(patch, prev_patch)
+                ):
                     clean_patch = prev_clean_patch
                 else:
                     clean_patch = self.inpaint_frame(patch, roi_mask)
@@ -408,9 +462,11 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 # Ghi vào encoder pipe
                 try:
                     enc_proc.stdin.write(frame.tobytes())
-                except (BrokenPipeError, OSError):
+                except (BrokenPipeError, OSError) as e:
                     enc_err = "\n".join(enc_stderr_tail)
-                    raise RuntimeError(f"FFmpeg encoder pipe bị đứt (code {enc_proc.returncode}):\n{enc_err}")
+                    raise RuntimeError(
+                        f"FFmpeg encoder pipe bị đứt (code {enc_proc.returncode}):\n{enc_err}"
+                    ) from e
 
                 frame_idx += 1
                 if frame_idx == 1 or frame_idx % 30 == 0 or frame_idx == total_frames:
@@ -432,18 +488,18 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 try:
                     dec_proc.kill()
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong lama_onnx.py", exc_info=True)
             if dec_proc.stdout:
                 try:
                     dec_proc.stdout.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong lama_onnx.py", exc_info=True)
 
             if enc_proc.stdin:
                 try:
                     enc_proc.stdin.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong lama_onnx.py", exc_info=True)
             try:
                 enc_proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
@@ -460,8 +516,10 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 try:
                     os.remove(output_path)
                 except OSError:
-                    pass
-            raise RuntimeError(f"FFmpeg inpaint encoder thất bại (exit {enc_proc.returncode}):\n{enc_err}")
+                    logger.debug("Bỏ qua lỗi OSError trong lama_onnx.py", exc_info=True)
+            raise RuntimeError(
+                f"FFmpeg inpaint encoder thất bại (exit {enc_proc.returncode}):\n{enc_err}"
+            )
 
         if progress_cb:
             progress_cb(1.0, "[AI-INPAINT] Hoàn tất xóa phụ đề bằng AI.")

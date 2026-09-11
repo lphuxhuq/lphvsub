@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from autodub.media.download.bilibili_engine import BilibiliDownloader
 from autodub.media.download.cache import DownloadCache
@@ -18,7 +18,6 @@ from autodub.media.download.contract import (
 from autodub.media.download.douyin_engine import DouyinDownloader
 from autodub.media.download.performance_store import PerformanceStore
 from autodub.media.download.preflight import PlatformDetector, PreflightAnalyzer
-from autodub.media.download.retry import ErrorClassifier
 from autodub.media.download.validator import MediaValidator
 
 logger = logging.getLogger(__name__)
@@ -29,12 +28,12 @@ class DownloadDecisionEngine:
 
     def __init__(
         self,
-        preflight: Optional[PreflightAnalyzer] = None,
-        cache: Optional[DownloadCache] = None,
-        bilibili_engine: Optional[BilibiliDownloader] = None,
-        douyin_engine: Optional[DouyinDownloader] = None,
-        validator: Optional[MediaValidator] = None,
-        perf_store: Optional[PerformanceStore] = None,
+        preflight: PreflightAnalyzer | None = None,
+        cache: DownloadCache | None = None,
+        bilibili_engine: BilibiliDownloader | None = None,
+        douyin_engine: DouyinDownloader | None = None,
+        validator: MediaValidator | None = None,
+        perf_store: PerformanceStore | None = None,
     ):
         self.validator = validator or MediaValidator()
         self.preflight = preflight or PreflightAnalyzer()
@@ -43,14 +42,16 @@ class DownloadDecisionEngine:
         self.douyin = douyin_engine or DouyinDownloader(validator=self.validator)
         self.perf_store = perf_store or PerformanceStore()
 
-    def _download_generic_ytdlp(self, request: DownloadRequest, target_path: Path) -> DownloadResult:
+    def _download_generic_ytdlp(
+        self, request: DownloadRequest, target_path: Path
+    ) -> DownloadResult:
         """Generic fallback download using yt-dlp wrapper."""
         import yt_dlp
 
         start_time = time.time()
         logger.info(f"Generic download via yt-dlp: {request.url}")
 
-        ydl_opts: Dict[str, Any] = {
+        ydl_opts: dict[str, Any] = {
             "outtmpl": str(target_path.parent / f"{target_path.stem}.%(ext)s"),
             "format": "bestvideo+bestaudio/best" if not request.audio_only else "bestaudio/best",
             "merge_output_format": "mp4",
@@ -64,9 +65,15 @@ class DownloadDecisionEngine:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(request.url, download=True)
             candidates = list(target_path.parent.glob(f"{target_path.stem}.*"))
-            final_file = target_path if target_path.exists() else (candidates[0] if candidates else target_path)
+            final_file = (
+                target_path
+                if target_path.exists()
+                else (candidates[0] if candidates else target_path)
+            )
 
-        val = self.validator.validate(final_file, require_video=not request.audio_only, require_audio=True)
+        val = self.validator.validate(
+            final_file, require_video=not request.audio_only, require_audio=True
+        )
         elapsed = time.time() - start_time
         avg_speed = val.file_size / elapsed if elapsed > 0 else 0.0
 
@@ -171,7 +178,7 @@ class DownloadDecisionEngine:
         return result
 
 
-_DEFAULT_ENGINE: Optional[DownloadDecisionEngine] = None
+_DEFAULT_ENGINE: DownloadDecisionEngine | None = None
 
 
 def get_decision_engine() -> DownloadDecisionEngine:

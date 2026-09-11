@@ -3,6 +3,7 @@
 ``FFmpegDownloadWorker`` — tải FFmpeg static build từ GitHub về ``<app_root>/bin/``.
 ``SetupScriptWorker``    — chạy scripts/setup_*.py và stream stdout ra GUI.
 """
+
 from __future__ import annotations
 
 import io
@@ -16,11 +17,12 @@ import zipfile
 from PySide6.QtCore import QThread, Signal
 
 from autodub.utils import app_root
-from autodub_gui.status_text import STATUS_ERROR, STATUS_OK
+from autodub_gui.status_text import STATUS_OK
 
 # --------------------------------------------------------------------------- #
 # Helper
 # --------------------------------------------------------------------------- #
+
 
 def _patch_path(bin_dir: str) -> None:
     """Thêm bin_dir vào PATH của tiến trình hiện tại (idempotent)."""
@@ -44,7 +46,9 @@ def _probe_python(cmd: list[str]) -> str:
     try:
         out = subprocess.run(
             [*cmd, "-c", "import sys; print(sys.executable)"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
             creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -81,20 +85,20 @@ def _find_python() -> str:
 
     raise RuntimeError(
         "Không tìm thấy Python 3.10–3.12 trên máy. Hãy cài Python 3.12 từ "
-        "python.org (nhớ tích 'Add python.exe to PATH') rồi bấm Thử lại.")
+        "python.org (nhớ tích 'Add python.exe to PATH') rồi bấm Thử lại."
+    )
 
 
 def _find_script(rel_path: str) -> str:
     """Tìm file script trong thư mục app hoặc thư mục bundle (_internal/data)."""
     root = app_root()
     for subdir in ("", "_internal", "data"):
-        candidate = (os.path.join(root, subdir, rel_path)
-                     if subdir else os.path.join(root, rel_path))
+        candidate = os.path.join(root, subdir, rel_path) if subdir else os.path.join(root, rel_path)
         if os.path.isfile(candidate):
             return candidate
     raise FileNotFoundError(
-        f"Không tìm thấy script '{rel_path}'. "
-        "Hãy chạy từ thư mục chứa mã nguồn ứng dụng.")
+        f"Không tìm thấy script '{rel_path}'. Hãy chạy từ thư mục chứa mã nguồn ứng dụng."
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -106,18 +110,18 @@ _FFMPEG_URL = (
     "https://github.com/BtbN/ffmpeg-builds/releases/download/latest/"
     "ffmpeg-master-latest-win64-gpl.zip"
 )
-_CHUNK = 65536   # 64 KB mỗi lần đọc
+_CHUNK = 65536  # 64 KB mỗi lần đọc
 
 
 class FFmpegDownloadWorker(QThread):
     """Tải FFmpeg về <app_root>/bin/, giải nén, patch PATH."""
 
-    progress = Signal(int)   # 0–100
-    log      = Signal(str)   # dòng log hiển thị trong wizard
+    progress = Signal(int)  # 0–100
+    log = Signal(str)  # dòng log hiển thị trong wizard
     finished_ok = Signal()
-    failed      = Signal(str)
+    failed = Signal(str)
 
-    def run(self) -> None:  # noqa: C901
+    def run(self) -> None:
         try:
             bin_dir = os.path.join(app_root(), "bin")
             ffmpeg_exe = os.path.join(bin_dir, "ffmpeg.exe")
@@ -160,12 +164,11 @@ class FFmpegDownloadWorker(QThread):
                     buf.write(chunk)
                     downloaded += len(chunk)
                     if total:
-                        pct = int(downloaded / total * 75)   # tải = 0–75%
+                        pct = int(downloaded / total * 75)  # tải = 0–75%
                         self.progress.emit(pct)
                         mb = downloaded / 1_048_576
                         total_mb = total / 1_048_576
-                        self.log.emit(
-                            f"Đang tải: {mb:.1f} / {total_mb:.0f} MB")
+                        self.log.emit(f"Đang tải: {mb:.1f} / {total_mb:.0f} MB")
 
             self.log.emit("Tải xong. Đang giải nén...")
             self.progress.emit(76)
@@ -203,7 +206,7 @@ class FFmpegDownloadWorker(QThread):
             self.progress.emit(100)
             self.finished_ok.emit()
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self.failed.emit(str(exc))
 
 
@@ -213,8 +216,8 @@ class FFmpegDownloadWorker(QThread):
 
 # Số dòng ước tính mỗi script sinh ra — dùng để tính tiến độ xấp xỉ
 _SCRIPT_LINES_ESTIMATE = {
-    "setup_vieneu.py":    35,
-    "setup_whisper.py":   25,
+    "setup_vieneu.py": 35,
+    "setup_whisper.py": 25,
     "setup_paraformer.py": 30,
 }
 
@@ -222,19 +225,19 @@ _SCRIPT_LINES_ESTIMATE = {
 class SetupScriptWorker(QThread):
     """Chạy scripts/setup_*.py và stream stdout ra GUI."""
 
-    progress    = Signal(int)   # 0–100
-    log         = Signal(str)   # dòng log
+    progress = Signal(int)  # 0–100
+    log = Signal(str)  # dòng log
     finished_ok = Signal()
-    failed      = Signal(str)
+    failed = Signal(str)
 
     def __init__(self, script_rel: str, parent=None):
         super().__init__(parent)
-        self._script_rel = script_rel   # ví dụ: "scripts/setup_vieneu.py"
+        self._script_rel = script_rel  # ví dụ: "scripts/setup_vieneu.py"
 
     def run(self) -> None:
         try:
             script_path = _find_script(self._script_rel)
-            python_exe  = _find_python()
+            python_exe = _find_python()
 
             script_name = os.path.basename(self._script_rel)
             total_lines = _SCRIPT_LINES_ESTIMATE.get(script_name, 30)
@@ -273,9 +276,7 @@ class SetupScriptWorker(QThread):
                 self.finished_ok.emit()
             else:
                 err = "\n".join(tail[-20:]) if tail else "Không có output."
-                self.failed.emit(
-                    f"Script kết thúc với mã lỗi {proc.returncode}:\n{err}")
+                self.failed.emit(f"Script kết thúc với mã lỗi {proc.returncode}:\n{err}")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self.failed.emit(str(exc))
-

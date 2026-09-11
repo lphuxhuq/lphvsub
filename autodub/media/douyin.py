@@ -11,19 +11,20 @@ missing or the direct download fails.
 yt-dlp cannot handle Douyin at all (the detail endpoint needs an `a_bogus`
 signature it can't generate), which is why this module exists.
 """
+
 import json
 import os
 import re
 import subprocess
 import time
 import urllib.parse
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
 
 import requests
 
-from autodub.utils import setup_logging, ensure_dir
+from autodub.utils import ensure_dir, setup_logging
 
 logger = setup_logging("autodub.downloader_douyin")
 
@@ -49,7 +50,9 @@ _VIDEO_MIME_RE = re.compile(r"mime_type=video_mp4")
 _ROUTER_DATA_RE = re.compile(r"window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
 _SSR_DATA_RE = re.compile(r"window\._SSR_DATA\s*=\s*(\{.*?\})\s*</script>", re.DOTALL)
 _RENDER_DATA_RE = re.compile(r'<script id="RENDER_DATA"[^>]*>(.*?)</script>', re.DOTALL)
-_UNIVERSAL_DATA_RE = re.compile(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', re.DOTALL)
+_UNIVERSAL_DATA_RE = re.compile(
+    r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>', re.DOTALL
+)
 
 # ID patterns seen across douyin URL shapes (canonical, share page, modal route)
 _ID_PATTERNS = (
@@ -66,21 +69,21 @@ def extract_clean_url(text: str) -> str:
     if not text:
         return ""
     raw = str(text).strip()
-    
+
     # 1. Tìm URL có http/https
     m = re.search(r"https?://[^\s<>\"']+", raw)
     if m:
         return m.group(0).rstrip(".,;!?/")
-        
+
     # 2. Tìm domain douyin.com hoặc iesdouyin.com không có scheme
     m_domain = re.search(r"(?:[a-zA-Z0-9-]+\.)?douyin\.com/[^\s<>\"']+", raw)
     if m_domain:
         return "https://" + m_domain.group(0).rstrip(".,;!?/")
-        
+
     m_ies = re.search(r"(?:[a-zA-Z0-9-]+\.)?iesdouyin\.com/[^\s<>\"']+", raw)
     if m_ies:
         return "https://" + m_ies.group(0).rstrip(".,;!?/")
-        
+
     return raw
 
 
@@ -92,8 +95,12 @@ def is_douyin_url(url: str) -> bool:
         clean = "https://" + clean
     try:
         host = urllib.parse.urlparse(clean).netloc.lower()
-        return (host == "douyin.com" or host.endswith(".douyin.com")
-                or host == "iesdouyin.com" or host.endswith(".iesdouyin.com"))
+        return (
+            host == "douyin.com"
+            or host.endswith(".douyin.com")
+            or host == "iesdouyin.com"
+            or host.endswith(".iesdouyin.com")
+        )
     except Exception:
         return False
 
@@ -142,6 +149,7 @@ def resolve_video_id(url: str) -> str | None:
 # --------------------------------------------------------------------------- #
 # Primary path: API / share-page JSON → direct no-watermark MP4
 # --------------------------------------------------------------------------- #
+
 
 def _deep_find_play_addr(obj, depth: int = 0) -> dict | None:
     """Recursively search any nested dict/list for a 'play_addr' with a uri."""
@@ -202,8 +210,12 @@ def _fetch_share_info(video_id: str) -> dict | None:
     try:
         resp = requests.get(
             api_url,
-            headers={"User-Agent": _MOBILE_UA, "Referer": _IES_REFERER, "Accept": "application/json"},
-            timeout=10
+            headers={
+                "User-Agent": _MOBILE_UA,
+                "Referer": _IES_REFERER,
+                "Accept": "application/json",
+            },
+            timeout=10,
         )
         if resp.status_code == 200 and resp.text.strip():
             data = resp.json()
@@ -300,21 +312,26 @@ def _download_play_url(play_url: str, uri: str, dest: Path) -> int:
     """Download the MP4 via direct play URL or snssdk aweme play endpoint (no watermark)."""
     headers = {"User-Agent": _MOBILE_UA, "Referer": _REFERER}
     part = Path(str(dest) + ".part")
-    
+
     urls_to_try = []
     if play_url:
         urls_to_try.append(play_url)
     if uri:
         quoted = urllib.parse.quote(str(uri), safe="")
-        urls_to_try.append(f"https://aweme.snssdk.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0")
-        urls_to_try.append(f"https://api.amemv.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0")
+        urls_to_try.append(
+            f"https://aweme.snssdk.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0"
+        )
+        urls_to_try.append(
+            f"https://api.amemv.com/aweme/v1/play/?video_id={quoted}&ratio=1080p&line=0"
+        )
 
     last_exc = None
     for candidate_url in urls_to_try:
         size = 0
         try:
-            with requests.get(candidate_url, headers=headers, stream=True,
-                              allow_redirects=True, timeout=120) as r:
+            with requests.get(
+                candidate_url, headers=headers, stream=True, allow_redirects=True, timeout=120
+            ) as r:
                 r.raise_for_status()
                 content_type = r.headers.get("Content-Type", "").lower()
                 if "html" in content_type:
@@ -341,6 +358,7 @@ def _download_play_url(play_url: str, uri: str, dest: Path) -> int:
 # --------------------------------------------------------------------------- #
 # Fallback path: Playwright stream sniffing on the share page
 # --------------------------------------------------------------------------- #
+
 
 def _bitrate_of(url: str) -> int:
     qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
@@ -388,7 +406,9 @@ def _extract_via_playwright(
                         vid_obj = detail.get("video") or {}
                         bit_rates = vid_obj.get("bit_rate") or []
                         if bit_rates:
-                            sorted_br = sorted(bit_rates, key=lambda b: b.get("bit_rate", 0), reverse=True)
+                            sorted_br = sorted(
+                                bit_rates, key=lambda b: b.get("bit_rate", 0), reverse=True
+                            )
                             for br in sorted_br:
                                 for play_u in br.get("play_addr", {}).get("url_list", []):
                                     if play_u and play_u not in captured["progressive"]:
@@ -427,7 +447,11 @@ def _extract_via_playwright(
                     }
                     return '';
                 }""")
-                if dom_src and _CDN_HOST_RE.search(dom_src) and dom_src not in captured["progressive"]:
+                if (
+                    dom_src
+                    and _CDN_HOST_RE.search(dom_src)
+                    and dom_src not in captured["progressive"]
+                ):
                     captured["progressive"].append(dom_src)
                     break
             except Exception:
@@ -443,6 +467,7 @@ def _extract_via_playwright(
     used_pool = False
     try:
         from autodub.media.download.browser_pool import get_browser_pool
+
         pool = get_browser_pool()
         with pool.borrow_page(user_agent=_UA) as page:
             _drive_page(page)
@@ -511,9 +536,7 @@ def _extract_via_playwright(
             "video_url": max(captured["progressive"], key=_bitrate_of),
         }
 
-    raise RuntimeError(
-        f"Không bắt được luồng phát video từ trang Douyin (canonical={canonical})"
-    )
+    raise RuntimeError(f"Không bắt được luồng phát video từ trang Douyin (canonical={canonical})")
 
 
 def _download_stream(
@@ -549,7 +572,7 @@ def _download_stream(
                                 pct = base_pct + (ratio * weight)
                                 mb_s = size / (1024 * 1024)
                                 mb_tot = total_size / (1024 * 1024)
-                                msg = f"Đang tải {label} Douyin: {mb_s:.1f}MB / {mb_tot:.1f}MB ({int(ratio*100)}%) - {speed:.1f} MB/s"
+                                msg = f"Đang tải {label} Douyin: {mb_s:.1f}MB / {mb_tot:.1f}MB ({int(ratio * 100)}%) - {speed:.1f} MB/s"
                             else:
                                 pct = base_pct + 0.5 * weight
                                 mb_s = size / (1024 * 1024)
@@ -566,16 +589,20 @@ def _download_stream(
 
 def _ffmpeg_mux(video_path: Path, audio_path: Path, output_path: Path) -> None:
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-i", str(audio_path),
-        "-c", "copy",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-i",
+        str(audio_path),
+        "-c",
+        "copy",
         str(output_path),
     ]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("ffmpeg mux treo quá 600s")
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("ffmpeg mux treo quá 600s") from e
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg mux failed: {proc.stderr[-500:]}")
 
@@ -584,12 +611,17 @@ def _ffprobe_duration(path: Path) -> float:
     try:
         out = subprocess.check_output(
             [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=nokey=1:noprint_wrappers=1",
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=nokey=1:noprint_wrappers=1",
                 str(path),
             ],
-            text=True, timeout=60,
+            text=True,
+            timeout=60,
         )
         return float(out.strip())
     except Exception as e:
@@ -597,7 +629,13 @@ def _ffprobe_duration(path: Path) -> float:
         return 0.0
 
 
-def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, initial_url: str | None = None, progress_cb: Callable[[float, str], None] | None = None) -> dict:
+def _download_via_playwright(
+    video_id: str,
+    out_dir: Path,
+    final_path: Path,
+    initial_url: str | None = None,
+    progress_cb: Callable[[float, str], None] | None = None,
+) -> dict:
     """Fallback: sniff CDN streams with a headless browser.
 
     Tries multiple URLs in order of specificity:
@@ -607,13 +645,19 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, ini
     4. Mobile share page
     """
     urls_to_try = []
-    if initial_url and "douyin.com" in initial_url and not initial_url.startswith("https://v.douyin.com"):
+    if (
+        initial_url
+        and "douyin.com" in initial_url
+        and not initial_url.startswith("https://v.douyin.com")
+    ):
         urls_to_try.append(initial_url)
-    urls_to_try.extend([
-        f"https://www.douyin.com/video/{video_id}",
-        f"https://www.douyin.com/discover?modal_id={video_id}",
-        f"https://www.iesdouyin.com/share/video/{video_id}/",
-    ])
+    urls_to_try.extend(
+        [
+            f"https://www.douyin.com/video/{video_id}",
+            f"https://www.douyin.com/discover?modal_id={video_id}",
+            f"https://www.iesdouyin.com/share/video/{video_id}/",
+        ]
+    )
     # Deduplicate while preserving order
     seen = set()
     deduped = []
@@ -632,16 +676,41 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, ini
 
             if info["mode"] == "progressive":
                 logger.info(f"Downloading progressive MP4 id={video_id}")
-                size = _download_stream(info["video_url"], final_path, progress_cb=progress_cb, label="video", weight=0.85, base_pct=0.10)
+                size = _download_stream(
+                    info["video_url"],
+                    final_path,
+                    progress_cb=progress_cb,
+                    label="video",
+                    weight=0.85,
+                    base_pct=0.10,
+                )
                 logger.info(f"Stream downloaded: {size:,}B")
             else:
                 tmp_video = out_dir / f"_tmp_{video_id}.video.mp4"
                 tmp_audio = out_dir / f"_tmp_{video_id}.audio.m4a"
                 try:
                     logger.info(f"Downloading DASH video+audio in parallel id={video_id}")
-                    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="douyin-dash") as pool:
-                        v_fut = pool.submit(_download_stream, info["video_url"], tmp_video, progress_cb, "video", 0.75, 0.10)
-                        a_fut = pool.submit(_download_stream, info["audio_url"], tmp_audio, progress_cb, "audio", 0.10, 0.85)
+                    with ThreadPoolExecutor(
+                        max_workers=2, thread_name_prefix="douyin-dash"
+                    ) as pool:
+                        v_fut = pool.submit(
+                            _download_stream,
+                            info["video_url"],
+                            tmp_video,
+                            progress_cb,
+                            "video",
+                            0.75,
+                            0.10,
+                        )
+                        a_fut = pool.submit(
+                            _download_stream,
+                            info["audio_url"],
+                            tmp_audio,
+                            progress_cb,
+                            "audio",
+                            0.10,
+                            0.85,
+                        )
                         v_size = v_fut.result()
                         a_size = a_fut.result()
                     logger.info(f"Streams downloaded: video={v_size:,}B audio={a_size:,}B")
@@ -663,8 +732,7 @@ def _download_via_playwright(video_id: str, out_dir: Path, final_path: Path, ini
             logger.warning(f"Playwright fallback failed for {page_url}: {exc}")
 
     raise RuntimeError(
-        f"Tất cả các phương thức tải Douyin đều thất bại cho video {video_id}. "
-        f"Lỗi cuối: {last_exc}"
+        f"Tất cả các phương thức tải Douyin đều thất bại cho video {video_id}. Lỗi cuối: {last_exc}"
     )
 
 
@@ -705,7 +773,7 @@ def download_douyin(
                 mb_t = d.get("total_bytes", 0) / (1024 * 1024)
                 speed = d.get("speed_mb", 0.0)
                 if mb_t > 0:
-                    msg = f"Đang tải Douyin: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct*100)}%) - {speed:.1f} MB/s"
+                    msg = f"Đang tải Douyin: {mb_d:.1f}MB / {mb_t:.1f}MB ({int(pct * 100)}%) - {speed:.1f} MB/s"
                 else:
                     msg = f"Đang tải Douyin: {mb_d:.1f}MB - {speed:.1f} MB/s"
             progress_cb(min(1.0, max(0.0, pct)), msg)
@@ -730,7 +798,9 @@ def download_douyin(
                 "duration": res.duration,
                 "filepath": str(res.path),
             }
-        logger.info(f"DouyinDownloader returned unsuccessful ({res.error_message}), falling back to legacy...")
+        logger.info(
+            f"DouyinDownloader returned unsuccessful ({res.error_message}), falling back to legacy..."
+        )
     except Exception as e:
         logger.warning(f"DouyinDownloader error ({e}), falling back to legacy...")
 
@@ -763,7 +833,9 @@ def download_douyin(
 
     # --- Fallback: Playwright stream sniffing (share page, id-verified) ---
     if not downloaded:
-        info = _download_via_playwright(video_id, out_dir, final_path, initial_url=clean_url, progress_cb=progress_cb)
+        info = _download_via_playwright(
+            video_id, out_dir, final_path, initial_url=clean_url, progress_cb=progress_cb
+        )
         title = title or info.get("title", "")
 
     duration = _ffprobe_duration(final_path)

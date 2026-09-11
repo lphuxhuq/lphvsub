@@ -1,11 +1,10 @@
 import json
 import os
-import pytest
+
 from autodub.config import Settings
 from autodub.content.generator import (
-    generate_social_metadata,
-    generate_social_metadata_direct,
     generate_content,
+    generate_social_metadata,
 )
 from autodub.languages import get_target
 from autodub.pipeline import DubPipeline
@@ -24,23 +23,23 @@ def test_generate_social_metadata_direct_with_api_key(monkeypatch):
             "alternative_titles": ["Cách Nấu Phở Bò Đậm Đà", "Bí Mật Nồi Nước Dùng Phở Bò"],
             "description": "Hướng dẫn chi tiết cách nấu phở bò đậm đà chuẩn vị.",
             "tags": ["phở bò", "nấu ăn", "món ngon"],
-            "hashtags": ["#phobo", "#monngon", "#reviewphim"]
+            "hashtags": ["#phobo", "#monngon", "#reviewphim"],
         },
         "youtube_shorts": {
             "title": "Bí Quyết Nấu Nước Dùng Phở Bò Bất Bại #Shorts",
             "description": "Bí quyết giúp nồi nước dùng trong vắt, đậm đà!",
-            "hashtags": ["#shorts", "#phobo", "#trending"]
+            "hashtags": ["#shorts", "#phobo", "#trending"],
         },
         "tiktok": {
             "title": "Nấu phở bò chuẩn vị tại nhà cực dễ!",
             "description": "Bạn có thích ăn phở bò tái nạm không?",
-            "hashtags": ["#fyp", "#xuhuong", "#food"]
+            "hashtags": ["#fyp", "#xuhuong", "#food"],
         },
         "facebook": {
             "title": "Ai mê phở bò thì vào xem ngay nhé!",
             "description": "Cùng học bí quyết nấu phở bò gia truyền ngon đỉnh cao.",
-            "hashtags": ["#reels", "#trending", "#monngon"]
-        }
+            "hashtags": ["#reels", "#trending", "#monngon"],
+        },
     }
 
     calls = []
@@ -73,8 +72,9 @@ def test_generate_social_metadata_direct_with_api_key(monkeypatch):
     assert meta["tiktok"]["description"] == "Bạn có thích ăn phở bò tái nạm không?"
 
     assert meta["facebook"]["title"] == "Ai mê phở bò thì vào xem ngay nhé!"
-    assert meta["facebook"]["description"] == "Cùng học bí quyết nấu phở bò gia truyền ngon đỉnh cao."
-
+    assert (
+        meta["facebook"]["description"] == "Cùng học bí quyết nấu phở bò gia truyền ngon đỉnh cao."
+    )
 
 
 def test_pipeline_load_translation_extracts_ai_studio_metadata(tmp_path):
@@ -89,16 +89,27 @@ def test_pipeline_load_translation_extracts_ai_studio_metadata(tmp_path):
         "hashtags": ["#meovat", "#lifehacks", "#shorts"],
         "tiktok": {
             "title": "5 mẹo vặt này bạn nhất định phải biết!",
-            "hashtags": ["#fyp", "#meovat", "#trending"]
+            "hashtags": ["#fyp", "#meovat", "#trending"],
         },
-        "facebook": {
-            "title": "Mẹo hay cuộc sống cực đơn giản!",
-            "hashtags": ["#reels", "#meohay"]
-        },
+        "facebook": {"title": "Mẹo hay cuộc sống cực đơn giản!", "hashtags": ["#reels", "#meohay"]},
         "segments": [
-            {"id": 1, "text": "第一个技巧", "text_vi": "Mẹo đầu tiên.", "start": 0.0, "end": 2.5, "duration": 2.5},
-            {"id": 2, "text": "第二个技巧", "text_vi": "Mẹo thứ hai.", "start": 2.5, "end": 5.0, "duration": 2.5}
-        ]
+            {
+                "id": 1,
+                "text": "第一个技巧",
+                "text_vi": "Mẹo đầu tiên.",
+                "start": 0.0,
+                "end": 2.5,
+                "duration": 2.5,
+            },
+            {
+                "id": 2,
+                "text": "第二个技巧",
+                "text_vi": "Mẹo thứ hai.",
+                "start": 2.5,
+                "end": 5.0,
+                "duration": 2.5,
+            },
+        ],
     }
 
     transcript_path = os.path.join(data_dir, "transcript_vi.json")
@@ -109,7 +120,7 @@ def test_pipeline_load_translation_extracts_ai_studio_metadata(tmp_path):
     target = get_target("vi")
     orig_segs = [
         {"id": 1, "text": "第一个技巧", "start": 0.0, "end": 2.5, "duration": 2.5},
-        {"id": 2, "text": "第二个技巧", "start": 2.5, "end": 5.0, "duration": 2.5}
+        {"id": 2, "text": "第二个技巧", "start": 2.5, "end": 5.0, "duration": 2.5},
     ]
 
     segs = pipeline._load_translation(transcript_path, orig_segs, target)
@@ -123,11 +134,11 @@ def test_pipeline_load_translation_extracts_ai_studio_metadata(tmp_path):
     assert os.path.exists(yt_meta_path)
     assert os.path.exists(yt_post_path)
 
-    with open(yt_meta_path, "r", encoding="utf-8") as f:
+    with open(yt_meta_path, encoding="utf-8") as f:
         saved = json.load(f)
     assert saved["title"] == "Top 5 Mẹo Vặt Cuộc Sống Siêu Hữu Ích"
 
-    with open(yt_post_path, "r", encoding="utf-8") as f:
+    with open(yt_post_path, encoding="utf-8") as f:
         content = f.read()
     assert "Top 5 Mẹo Vặt Cuộc Sống Siêu Hữu Ích" in content
     assert "#meovat" in content
@@ -140,7 +151,9 @@ def test_generate_content_reuses_existing_metadata(tmp_path):
 
     meta_file = os.path.join(out_dir, "youtube_metadata.json")
     with open(meta_file, "w", encoding="utf-8") as f:
-        json.dump({"title": "Tiêu đề có sẵn từ trước", "hashtags": ["#tag1"]}, f, ensure_ascii=False)
+        json.dump(
+            {"title": "Tiêu đề có sẵn từ trước", "hashtags": ["#tag1"]}, f, ensure_ascii=False
+        )
 
     segs = [{"id": 1, "text": "hi", "text_vi": "chào"}]
     res = generate_content(segs, source_url=None, output_dir=out_dir)
@@ -159,7 +172,7 @@ def test_generate_social_metadata_browser(monkeypatch):
         "description": "Tóm tắt bộ phim cực hay.",
         "hashtags": ["#reviewphim", "#shorts"],
         "tiktok": {"title": "Phim hay đỉnh chóp!", "hashtags": ["#fyp"]},
-        "facebook": {"title": "Xem ngay thôi!", "hashtags": ["#reels"]}
+        "facebook": {"title": "Xem ngay thôi!", "hashtags": ["#reels"]},
     }
 
     def _mock_translate_batch(self, sys_prompt, user_prompt, **kwargs):
@@ -206,13 +219,16 @@ def test_pipeline_generate_content_with_video_path(tmp_path):
         f.write(b"mock video data")
 
     segments = [{"id": 1, "text": "你好", "text_vi": "Xin chào"}]
-    res = pipeline._generate_content(target, segments, "https://example.com", work_dir, video_path=video_file)
+    res = pipeline._generate_content(
+        target, segments, "https://example.com", work_dir, video_path=video_file
+    )
     assert isinstance(res, dict)
 
 
 def test_generate_social_metadata_scrubs_cjk():
     """Khi tiêu đề gốc hoặc AI trả về chứa tiếng Trung, hàm tự động loại bỏ và dùng tiếng Việt."""
     from autodub.content.generator import _clean_social_metadata, _has_cjk
+
     assert _has_cjk("【亮剑】李云龙大闹黑云寨") is True
     assert _has_cjk("Review Phim Hay Nhất") is False
 
@@ -220,7 +236,9 @@ def test_generate_social_metadata_scrubs_cjk():
         "title": "【亮剑】李云龙大闹黑云寨",
         "description": "这是李云龙的精彩片段。",
     }
-    cleaned = _clean_social_metadata(raw_meta, "Lý Vân Long chỉ huy trận đánh đỉnh cao tại Hắc Vân Trại.")
+    cleaned = _clean_social_metadata(
+        raw_meta, "Lý Vân Long chỉ huy trận đánh đỉnh cao tại Hắc Vân Trại."
+    )
     assert _has_cjk(cleaned["title"]) is False
     assert _has_cjk(cleaned["description"]) is False
     assert "Lý Vân Long" in cleaned["title"] or len(cleaned["title"]) > 5
@@ -231,6 +249,7 @@ def test_generate_social_metadata_scrubs_cjk():
 def test_write_post_file_comprehensive(tmp_path):
     """Kiểm tra file youtube_post.txt được tạo ra đầy đủ, rõ ràng các mục."""
     from autodub.content.generator import _write_post_file
+
     post_file = str(tmp_path / "youtube_post.txt")
     meta = {
         "title": "Bí Mật Đằng Sau Trận Đánh Lịch Sử",
@@ -239,11 +258,15 @@ def test_write_post_file_comprehensive(tmp_path):
         "tags": ["review phim", "phim hay", "lich su"],
         "hashtags": ["#shorts", "#reviewphim"],
         "tiktok": {"title": "Caption TikTok hay", "hashtags": ["#fyp", "#xuhuong"]},
-        "facebook": {"title": "Caption FB hay", "description": "Chi tiết FB", "hashtags": ["#reels"]},
+        "facebook": {
+            "title": "Caption FB hay",
+            "description": "Chi tiết FB",
+            "hashtags": ["#reels"],
+        },
     }
     _write_post_file(post_file, meta)
     assert os.path.exists(post_file)
-    with open(post_file, "r", encoding="utf-8") as f:
+    with open(post_file, encoding="utf-8") as f:
         txt = f.read()
     assert "YOUTUBE" in txt
     assert "TIKTOK" in txt
@@ -251,6 +274,3 @@ def test_write_post_file_comprehensive(tmp_path):
     assert "TIÊU ĐỀ CHÍNH" in txt
     assert "DANH SÁCH THẺ TỪ KHÓA" in txt
     assert "Bí Mật Đằng Sau Trận Đánh Lịch Sử" in txt
-
-
-

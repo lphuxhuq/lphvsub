@@ -3,17 +3,24 @@
 Có kiểm tra riêng cho lỗi cũ: mã trước đây đọc `dub_report.json` ở gốc thư
 mục, trong khi lõi xử lý ghi ra `data/report.json`.
 """
+
 from __future__ import annotations
 
 import json
 import os
 
-import pytest
-
 from autodub_gui import projects
 from autodub_gui.projects import (
-    STATUS_COMPLETED, STATUS_FAILED, STATUS_PENDING, STATUS_PROCESSING,
-    STATUS_QUEUED, Project, filter_projects, load_project, read_report, scan,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_PROCESSING,
+    STATUS_QUEUED,
+    Project,
+    filter_projects,
+    load_project,
+    read_report,
+    scan,
     summarize,
 )
 
@@ -27,8 +34,9 @@ _REPORT = {
 }
 
 
-def _make_work_dir(base, name="20260804112214_vi", *, legacy=False,
-                   report=None, source_name="video gốc.mp4"):
+def _make_work_dir(
+    base, name="20260804112214_vi", *, legacy=False, report=None, source_name="video gốc.mp4"
+):
     """Dựng một thư mục dự án giả đủ tệp cần thiết."""
     work = base / name
     data = work if legacy else work / "data"
@@ -40,7 +48,8 @@ def _make_work_dir(base, name="20260804112214_vi", *, legacy=False,
         target.write_text(json.dumps(payload), encoding="utf-8")
     if source_name:
         (data / "source_video.json").write_text(
-            json.dumps({"file_path": str(work / source_name)}), encoding="utf-8")
+            json.dumps({"file_path": str(work / source_name)}), encoding="utf-8"
+        )
     return work
 
 
@@ -49,6 +58,7 @@ def _finish(work):
 
 
 # -- Đọc bản tóm tắt ---------------------------------------------------
+
 
 def test_report_read_from_data_folder(tmp_path) -> None:
     """Tên tệp đúng là data/report.json — đây là lỗi cũ đã được sửa."""
@@ -75,6 +85,7 @@ def test_report_corrupted_json_is_ignored(tmp_path) -> None:
 
 
 # -- Thông tin từng dự án ----------------------------------------------
+
 
 def test_title_from_source_video_name(tmp_path) -> None:
     work = _make_work_dir(tmp_path)
@@ -103,15 +114,16 @@ def test_duration_and_segments_read_from_report(tmp_path) -> None:
 def test_duration_falls_back_to_quality_report(tmp_path) -> None:
     work = _make_work_dir(tmp_path, report={})
     (work / "data" / "quality_report.json").write_text(
-        json.dumps({"summary": {"video_duration_seconds": 99.5}}),
-        encoding="utf-8")
+        json.dumps({"summary": {"video_duration_seconds": 99.5}}), encoding="utf-8"
+    )
     assert load_project(str(work)).duration_s == 99.5
 
 
 def test_segments_counted_from_transcript_when_report_empty(tmp_path) -> None:
     work = _make_work_dir(tmp_path, report={})
     (work / "data" / "transcript_vi.json").write_text(
-        json.dumps([{"id": 1}, {"id": 2}, {"id": 3}]), encoding="utf-8")
+        json.dumps([{"id": 1}, {"id": 2}, {"id": 3}]), encoding="utf-8"
+    )
     assert load_project(str(work)).segments == 3
 
 
@@ -122,6 +134,7 @@ def test_size_counts_whole_tree(tmp_path) -> None:
 
 
 # -- Năm trạng thái ----------------------------------------------------
+
 
 def test_status_completed_when_output_exists(tmp_path) -> None:
     work = _make_work_dir(tmp_path)
@@ -166,6 +179,7 @@ def test_status_queued_when_nothing_started(tmp_path) -> None:
 
 
 # -- Quét cả thư mục ---------------------------------------------------
+
 
 def test_scan_finds_projects_newest_first(tmp_path) -> None:
     first = _make_work_dir(tmp_path, "20260101000000_vi")
@@ -216,12 +230,13 @@ def test_scan_legacy_layout_still_works(tmp_path) -> None:
 
 # -- Thống kê và lọc ---------------------------------------------------
 
+
 def test_summarize_counts_and_rate() -> None:
     items = [
-        Project("a", "a", "A", STATUS_COMPLETED, "Hoàn thành",
-                processing_s=3600, size_bytes=1024 ** 3),
-        Project("b", "b", "B", STATUS_COMPLETED, "Hoàn thành",
-                processing_s=1800),
+        Project(
+            "a", "a", "A", STATUS_COMPLETED, "Hoàn thành", processing_s=3600, size_bytes=1024**3
+        ),
+        Project("b", "b", "B", STATUS_COMPLETED, "Hoàn thành", processing_s=1800),
         Project("c", "c", "C", STATUS_FAILED, "Lỗi"),
     ]
     stats = summarize(items)
@@ -245,16 +260,13 @@ def test_filter_by_query_and_status() -> None:
     ]
     assert len(filter_projects(items, query="phim")) == 2
     assert len(filter_projects(items, status=STATUS_COMPLETED)) == 2
-    assert len(filter_projects(items, query="phim",
-                               status=STATUS_COMPLETED)) == 1
+    assert len(filter_projects(items, query="phim", status=STATUS_COMPLETED)) == 1
 
 
 def test_filter_sorts_by_requested_key() -> None:
     items = [
-        Project("a", "a", "B", STATUS_COMPLETED, "Hoàn thành",
-                created_at=1, duration_s=10),
-        Project("b", "b", "A", STATUS_COMPLETED, "Hoàn thành",
-                created_at=2, duration_s=99),
+        Project("a", "a", "B", STATUS_COMPLETED, "Hoàn thành", created_at=1, duration_s=10),
+        Project("b", "b", "A", STATUS_COMPLETED, "Hoàn thành", created_at=2, duration_s=99),
     ]
     assert [p.title for p in filter_projects(items, sort_key="newest")] == ["A", "B"]
     assert [p.title for p in filter_projects(items, sort_key="oldest")] == ["B", "A"]

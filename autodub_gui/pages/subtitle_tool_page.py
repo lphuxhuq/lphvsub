@@ -3,6 +3,7 @@
 Tách phần Phụ đề của trang Cài đặt ra thành trang riêng. Gồm mọi mục về
 màu sắc, kích thước, vị trí, cách ngắt dòng và hiệu ứng karaoke.
 """
+
 from __future__ import annotations
 
 from autodub_gui.pages import settings_fields as spec
@@ -14,8 +15,7 @@ class SubtitleToolPage(ToolPage):
 
     TAB = spec.TAB_SUBTITLE
     TITLE = "Phụ đề"
-    SUBTITLE = ("Tùy chỉnh kiểu chữ, màu sắc, vị trí và cách hiển thị phụ đề "
-                "trên video.")
+    SUBTITLE = "Tùy chỉnh kiểu chữ, màu sắc, vị trí và cách hiển thị phụ đề trên video."
     EXPANDED = {"Mặc định", "Kiểu chữ"}
     SAVE_LABEL = "Lưu cấu hình phụ đề"
     SAVED_TOAST = "Đã lưu cấu hình phụ đề."

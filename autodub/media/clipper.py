@@ -7,7 +7,6 @@ và mã hóa video chất lượng cao bằng FFmpeg.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import subprocess
@@ -17,7 +16,7 @@ from autodub.media.subtitle import (
     build_aspect_ratio_filter,
     escape_subtitles_path,
 )
-from autodub.utils import ffmpeg_timeout_s, setup_logging
+from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.media.clipper")
 
@@ -48,7 +47,7 @@ def _seconds_to_ass_time(seconds: float) -> str:
 
 def slice_ass_subtitles(ass_text: str, start_time: float, end_time: float) -> str:
     """Cắt và dịch chuyển timestamp các dòng thoại ASS nằm trong khoảng [start_time, end_time].
-    
+
     Các câu thoại bên ngoài khoảng thời gian sẽ bị loại bỏ.
     Các câu thoại bên trong sẽ được trừ đi `start_time` để đồng bộ hoàn hảo với video clip cắt con.
     """
@@ -126,22 +125,30 @@ def build_short_export_command(
     cmd = [
         "ffmpeg",
         "-y",
-        "-ss", f"{start_time:.2f}",
-        "-t", f"{duration:.2f}",
-        "-i", source_video,
+        "-ss",
+        f"{start_time:.2f}",
+        "-t",
+        f"{duration:.2f}",
+        "-i",
+        source_video,
     ]
 
     has_separate_audio = source_audio and os.path.exists(source_audio)
     if has_separate_audio:
-        cmd.extend([
-            "-ss", f"{start_time:.2f}",
-            "-t", f"{duration:.2f}",
-            "-i", source_audio,
-        ])
+        cmd.extend(
+            [
+                "-ss",
+                f"{start_time:.2f}",
+                "-t",
+                f"{duration:.2f}",
+                "-i",
+                source_audio,
+            ]
+        )
 
     # Xây dựng Video Filtergraph
     filter_chains = []
-    
+
     # 1. Aspect Ratio / Reframe
     reframe_spec = build_aspect_ratio_filter(
         aspect_preset, video_w, video_h, reframe_mode=reframe_mode
@@ -164,15 +171,23 @@ def build_short_export_command(
     else:
         cmd.extend(["-map", "0:v:0", "-map", "0:a:0?"])
 
-    cmd.extend([
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "20",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-movflags", "+faststart",
-        output_path,
-    ])
+    cmd.extend(
+        [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+    )
 
     return cmd
 
@@ -212,8 +227,7 @@ def export_short_clip(
 
     proc = subprocess.run(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",

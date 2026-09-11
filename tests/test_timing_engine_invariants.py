@@ -11,7 +11,6 @@ Guarantees:
   * multiple speakers
   * very short segments
 """
-import pytest
 
 from autodub.media.timing import plan_voice_placements
 
@@ -23,13 +22,17 @@ def _assert_invariants(placements):
         start = p["start"]
         usable_end = p["usable_end"]
         available = p["available"]
-        
+
         # Invariant 1: usable_end is strictly greater than start
-        assert usable_end > start, f"Segment {i} violated invariant: usable_end ({usable_end}) <= start ({start})"
-        
+        assert usable_end > start, (
+            f"Segment {i} violated invariant: usable_end ({usable_end}) <= start ({start})"
+        )
+
         # Invariant 2: available slot is strictly positive
-        assert available is not None and available > 0, f"Segment {i} available slot must be > 0, got {available}"
-        
+        assert available is not None and available > 0, (
+            f"Segment {i} available slot must be > 0, got {available}"
+        )
+
         # Invariant 3: tempo factor is positive and finite
         assert p["atempo"] > 0, f"Segment {i} tempo must be > 0, got {p['atempo']}"
 

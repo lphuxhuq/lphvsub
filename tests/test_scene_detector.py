@@ -1,6 +1,6 @@
-import pytest
-from autodub.media.scene_detector import parse_scene_cut_timestamps, find_next_scene_boundary
+from autodub.media.scene_detector import find_next_scene_boundary, parse_scene_cut_timestamps
 from autodub.media.timing import plan_voice_placements
+
 
 def test_parse_scene_cut_timestamps():
     sample_ffmpeg_output = """
@@ -14,11 +14,13 @@ def test_parse_scene_cut_timestamps():
     assert abs(cuts[1] - 4.004) < 0.001
     assert abs(cuts[2] - 8.34167) < 0.001
 
+
 def test_find_next_scene_boundary():
     cuts = [2.5, 5.0, 9.0]
     assert find_next_scene_boundary(1.0, cuts) == 2.5
     assert find_next_scene_boundary(2.6, cuts) == 5.0
     assert find_next_scene_boundary(9.5, cuts) is None
+
 
 def test_plan_voice_placements_with_scene_cuts():
     # Clip start 1.0, speech duration 2.0s (tới 3.0s). Có scene cut ở 3.2s.
@@ -26,7 +28,7 @@ def test_plan_voice_placements_with_scene_cuts():
     segments = [{"start": 1.0, "end": 3.0, "speech_duration": 2.0}]
     durations = [2.4]
     scene_cuts = [3.1]
-    
+
     placements, report = plan_voice_placements(
         segments, durations, scene_cuts=scene_cuts, max_speed=1.25
     )
@@ -37,7 +39,8 @@ def test_plan_voice_placements_with_scene_cuts():
 
 
 def test_snap_to_scene_boundaries_left_and_right_edge():
-    from autodub.media.scene_detector import snap_to_scene_boundaries, find_prev_scene_boundary
+    from autodub.media.scene_detector import find_prev_scene_boundary, snap_to_scene_boundaries
+
     cuts = [0.0, 5.0, 10.0, 15.0]
 
     assert find_prev_scene_boundary(5.2, cuts) == 5.0
@@ -57,4 +60,3 @@ def test_snap_to_scene_boundaries_left_and_right_edge():
     s3, e3 = snap_to_scene_boundaries(8.00, 10.15, cuts)
     assert s3 == 8.00
     assert e3 == 9.98  # Đã clamp trước scene cut
-

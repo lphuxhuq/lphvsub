@@ -5,30 +5,33 @@ của file WAV để dò chính xác các đỉnh phát âm (voice bursts) và k
 từ đó chia mốc chữ theo đúng nhịp nói thật thay vì chia đều phẳng một cách máy móc.
 Hỗ trợ tính toán độ tin cậy (confidence) để định tuyến tối ưu giữa Acoustic và Whisper.
 """
+
 from __future__ import annotations
 
 import os
 import wave
 from dataclasses import dataclass
+
 import numpy as np
 
 from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.acoustic_align")
 
-FRAME_S = 0.010       # Khung 10ms
+FRAME_S = 0.010  # Khung 10ms
 ENERGY_THRESH = 0.08  # 8% đỉnh năng lượng
-ABS_FLOOR = 0.003     # Sàn tối thiểu
+ABS_FLOOR = 0.003  # Sàn tối thiểu
 
 
 @dataclass
 class AcousticAlignmentResult:
     """Kết quả căn chỉnh mốc chữ theo phổ năng lượng âm thanh."""
+
     words: list[tuple[str, float, float]]
-    confidence: float   # 0.0 -> 1.0
+    confidence: float  # 0.0 -> 1.0
     start: float
     end: float
-    method: str         # "acoustic_high_conf" | "acoustic_low_conf"
+    method: str  # "acoustic_high_conf" | "acoustic_low_conf"
     active_dur: float = 0.0
 
 
@@ -54,7 +57,9 @@ def analyze_acoustic_alignment(
             (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
             for i, w in enumerate(words)
         ]
-        return AcousticAlignmentResult(fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_no_file")
+        return AcousticAlignmentResult(
+            fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_no_file"
+        )
 
     try:
         with wave.open(wav_path, "rb") as w:
@@ -70,7 +75,9 @@ def analyze_acoustic_alignment(
                 (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
                 for i, w in enumerate(words)
             ]
-            return AcousticAlignmentResult(fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_bad_format")
+            return AcousticAlignmentResult(
+                fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_bad_format"
+            )
 
         raw_int16 = np.frombuffer(data, dtype=np.int16)
         if channels > 1:
@@ -85,10 +92,12 @@ def analyze_acoustic_alignment(
                 (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
                 for i, w in enumerate(words)
             ]
-            return AcousticAlignmentResult(fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_too_short")
+            return AcousticAlignmentResult(
+                fallback_words, 0.20, clip_start, clip_start + clip_dur, "acoustic_too_short"
+            )
 
-        frames = arr[:n_frames_calc * frame_len].reshape(n_frames_calc, frame_len)
-        rms = np.sqrt(np.mean(frames ** 2, axis=1))
+        frames = arr[: n_frames_calc * frame_len].reshape(n_frames_calc, frame_len)
+        rms = np.sqrt(np.mean(frames**2, axis=1))
 
         peak = float(np.max(rms)) if len(rms) > 0 else 0.0
         thresh = max(ABS_FLOOR, peak * ENERGY_THRESH)
@@ -100,7 +109,9 @@ def analyze_acoustic_alignment(
                 (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
                 for i, w in enumerate(words)
             ]
-            return AcousticAlignmentResult(fallback_words, 0.15, clip_start, clip_start + clip_dur, "acoustic_low_conf")
+            return AcousticAlignmentResult(
+                fallback_words, 0.15, clip_start, clip_start + clip_dur, "acoustic_low_conf"
+            )
 
         # Tìm các vùng năng lượng hoạt động
         active = np.where(rms >= thresh)[0]
@@ -110,7 +121,9 @@ def analyze_acoustic_alignment(
                 (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
                 for i, w in enumerate(words)
             ]
-            return AcousticAlignmentResult(fallback_words, 0.10, clip_start, clip_start + clip_dur, "acoustic_low_conf")
+            return AcousticAlignmentResult(
+                fallback_words, 0.10, clip_start, clip_start + clip_dur, "acoustic_low_conf"
+            )
 
         active_start_s = active[0] * FRAME_S
         active_end_s = (active[-1] + 1) * FRAME_S
@@ -145,9 +158,8 @@ def analyze_acoustic_alignment(
             score += 0.05
 
         confidence = round(min(0.99, max(0.05, score)), 2)
-        is_high_conf = (
-            confidence >= 0.70
-            and ((clip_dur <= 1.20 and n_words <= 4) or (clip_dur <= 1.80 and n_words <= 2))
+        is_high_conf = confidence >= 0.70 and (
+            (clip_dur <= 1.20 and n_words <= 4) or (clip_dur <= 1.80 and n_words <= 2)
         )
         method = "acoustic_high_conf" if is_high_conf else "acoustic_low_conf"
 
@@ -174,7 +186,9 @@ def analyze_acoustic_alignment(
             (w, round(clip_start + i * step, 3), round(clip_start + (i + 1) * step, 3))
             for i, w in enumerate(words)
         ]
-        return AcousticAlignmentResult(fallback_words, 0.10, clip_start, clip_start + clip_dur, "acoustic_low_conf")
+        return AcousticAlignmentResult(
+            fallback_words, 0.10, clip_start, clip_start + clip_dur, "acoustic_low_conf"
+        )
 
 
 def acoustic_word_times(

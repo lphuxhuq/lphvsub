@@ -3,20 +3,25 @@
 Giao diện quản lý và khởi chạy công cụ dịch SRT đa luồng với Google Gemini AI,
 tự động đồng bộ khóa API từ VoxDub Studio và mở trình duyệt web tương tác.
 """
+
 from __future__ import annotations
 
 import os
-from typing import Callable, Optional
+from collections.abc import Callable
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
+from autodub.tools.gemini_srt_ui.server_manager import GeminiSrtServerManager
 from autodub_gui import tokens
 from autodub_gui.pages import BasePage
 from autodub_gui.system_open import open_folder, open_url
-from autodub.tools.gemini_srt_ui.server_manager import GeminiSrtServerManager
 from autodub_gui.ui.badges import StatusBadge
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 from autodub_gui.ui.cards import Card
@@ -29,7 +34,7 @@ _PAGE_MARGIN = tokens.SP_6
 class GeminiSrtPage(BasePage):
     """Trang công cụ điều khiển Gemini SRT Translator Pro."""
 
-    def __init__(self, settings_getter: Callable, parent: Optional[QWidget] = None):
+    def __init__(self, settings_getter: Callable, parent: QWidget | None = None):
         super().__init__(parent)
         self._settings_getter = settings_getter
         self.server_manager = GeminiSrtServerManager()
@@ -62,7 +67,9 @@ class GeminiSrtPage(BasePage):
         hero_layout.setSpacing(tokens.SP_2)
 
         title = QLabel("Gemini SRT Translator Pro")
-        title.setStyleSheet(f"font-size: {tokens.FS_PAGE_TITLE}px; font-weight: 700; color: {tokens.TEXT_PRIMARY};")
+        title.setStyleSheet(
+            f"font-size: {tokens.FS_PAGE_TITLE}px; font-weight: 700; color: {tokens.TEXT_PRIMARY};"
+        )
         desc = QLabel(
             "Hệ thống dịch phụ đề và video/audio chuyên sâu sử dụng Google Gemini AI "
             "với Multi-Key Pooling, Hậu xử lý chống sót chữ (Auto CJK) và Trình chỉnh sửa phụ đề trực tiếp."
@@ -81,7 +88,9 @@ class GeminiSrtPage(BasePage):
 
         srv_header = QHBoxLayout()
         srv_title = QLabel("Trạng thái Máy chủ Dịch thuật")
-        srv_title.setStyleSheet(f"font-size: {tokens.FS_SECTION}px; font-weight: 600; color: {tokens.TEXT_PRIMARY};")
+        srv_title.setStyleSheet(
+            f"font-size: {tokens.FS_SECTION}px; font-weight: 600; color: {tokens.TEXT_PRIMARY};"
+        )
 
         self.status_badge = StatusBadge("Đang kiểm tra...", "neutral")
         srv_header.addWidget(srv_title)
@@ -90,11 +99,15 @@ class GeminiSrtPage(BasePage):
         srv_layout.addLayout(srv_header)
 
         self.url_label = QLabel("Địa chỉ: Đang khởi động...")
-        self.url_label.setStyleSheet(f"font-size: {tokens.FS_BODY}px; color: {tokens.TEXT_SECONDARY}; font-family: {tokens.FONT_MONO};")
+        self.url_label.setStyleSheet(
+            f"font-size: {tokens.FS_BODY}px; color: {tokens.TEXT_SECONDARY}; font-family: {tokens.FONT_MONO};"
+        )
         srv_layout.addWidget(self.url_label)
 
         self.keys_info_label = QLabel("")
-        self.keys_info_label.setStyleSheet(f"font-size: {tokens.FS_LABEL}px; color: {tokens.TEXT_MUTED};")
+        self.keys_info_label.setStyleSheet(
+            f"font-size: {tokens.FS_LABEL}px; color: {tokens.TEXT_MUTED};"
+        )
         srv_layout.addWidget(self.keys_info_label)
 
         # Buttons
@@ -124,21 +137,37 @@ class GeminiSrtPage(BasePage):
         feat_layout.setSpacing(tokens.SP_3)
 
         feat_title = QLabel("Tính năng nổi bật")
-        feat_title.setStyleSheet(f"font-size: {tokens.FS_SECTION}px; font-weight: 600; color: {tokens.TEXT_PRIMARY};")
+        feat_title.setStyleSheet(
+            f"font-size: {tokens.FS_SECTION}px; font-weight: 600; color: {tokens.TEXT_PRIMARY};"
+        )
         feat_layout.addWidget(feat_title)
 
         features = [
-            ("Multi-Key Pooling thông minh", "Nạp nhiều API Key cùng lúc, tự động xoay vòng và chia luồng song song tránh giới hạn hạn mức (Rate limit 429)."),
-            ("Tự động hậu xử lý CJK", "Tự động phát hiện và dịch bù các câu còn sót tiếng Trung/Nhật/Hàn sau khi dịch file."),
-            ("Trình chỉnh sửa phụ đề trực quan", "Chỉnh sửa trực tiếp trên trình duyệt, đo lường tốc độ đọc CPS và xuất phụ đề theo chuẩn mong muốn."),
-            ("Dịch hàng loạt & Xuất ZIP", "Kéo thả nhiều file SRT/ASS/VTT hoặc Video/Audio, dịch tự động theo hàng đợi và tải trọn bộ bằng 1 click."),
+            (
+                "Multi-Key Pooling thông minh",
+                "Nạp nhiều API Key cùng lúc, tự động xoay vòng và chia luồng song song tránh giới hạn hạn mức (Rate limit 429).",
+            ),
+            (
+                "Tự động hậu xử lý CJK",
+                "Tự động phát hiện và dịch bù các câu còn sót tiếng Trung/Nhật/Hàn sau khi dịch file.",
+            ),
+            (
+                "Trình chỉnh sửa phụ đề trực quan",
+                "Chỉnh sửa trực tiếp trên trình duyệt, đo lường tốc độ đọc CPS và xuất phụ đề theo chuẩn mong muốn.",
+            ),
+            (
+                "Dịch hàng loạt & Xuất ZIP",
+                "Kéo thả nhiều file SRT/ASS/VTT hoặc Video/Audio, dịch tự động theo hàng đợi và tải trọn bộ bằng 1 click.",
+            ),
         ]
 
         for f_title, f_desc in features:
             item_box = QVBoxLayout()
             item_box.setSpacing(2)
             t_lbl = QLabel(f_title)
-            t_lbl.setStyleSheet(f"font-size: {tokens.FS_CARD_TITLE}px; font-weight: 600; color: {tokens.PRIMARY};")
+            t_lbl.setStyleSheet(
+                f"font-size: {tokens.FS_CARD_TITLE}px; font-weight: 600; color: {tokens.PRIMARY};"
+            )
             d_lbl = QLabel(f_desc)
             d_lbl.setWordWrap(True)
             d_lbl.setStyleSheet(f"font-size: {tokens.FS_LABEL}px; color: {tokens.TEXT_SECONDARY};")
@@ -167,9 +196,13 @@ class GeminiSrtPage(BasePage):
         cfg = GeminiSrtServerManager.get_voxdub_config()
         key_count = len(cfg.get("api_keys", []))
         if key_count > 0:
-            self.keys_info_label.setText(f"Đã đồng bộ {key_count} Gemini API Key từ cấu hình VoxDub Studio.")
+            self.keys_info_label.setText(
+                f"Đã đồng bộ {key_count} Gemini API Key từ cấu hình VoxDub Studio."
+            )
         else:
-            self.keys_info_label.setText("Chưa tìm thấy API Key trong cài đặt VoxDub. Bạn có thể thêm key trên giao diện web.")
+            self.keys_info_label.setText(
+                "Chưa tìm thấy API Key trong cài đặt VoxDub. Bạn có thể thêm key trên giao diện web."
+            )
 
     def _open_web_ui(self) -> None:
         url = self._ensure_server_running()

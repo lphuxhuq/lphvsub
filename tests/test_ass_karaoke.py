@@ -1,8 +1,8 @@
 """Tests for karaoke subtitles: chunking, timing estimation, ASS output,
 and the word-mapping half of forced alignment (no model needed).
 """
+
 import math
-import os
 import struct
 import wave
 
@@ -17,8 +17,8 @@ from autodub.text.ass_karaoke import (
     estimate_word_times,
 )
 
-
 # ------------------------------------------------------------ estimation --- #
+
 
 def test_estimate_covers_full_duration():
     words = estimate_word_times("xin chào các bạn nhé", 10.0, 2.5)
@@ -45,6 +45,7 @@ def test_estimate_empty_and_zero_duration():
 
 # --------------------------------------------------------------- chunking -- #
 
+
 def _mk(words):
     return [(w, i * 0.4, (i + 1) * 0.4) for i, w in enumerate(words)]
 
@@ -69,10 +70,11 @@ def test_chunk_clamps_n():
 
 # --------------------------------------------------------------- ASS text -- #
 
+
 def test_ass_time_format():
     assert _ass_time(0) == "0:00:00.00"
     assert _ass_time(3661.239) == "1:01:01.24"
-    assert _ass_time(-5) == "0:00:00.00"   # kẹp không âm
+    assert _ass_time(-5) == "0:00:00.00"  # kẹp không âm
 
 
 def test_escape_strips_override_braces():
@@ -85,14 +87,16 @@ def _write_tone(path, dur, rate=24000):
         w.setsampwidth(2)
         w.setframerate(rate)
         n = int(dur * rate)
-        w.writeframes(struct.pack(
-            f"<{n}h",
-            *[int(8000 * math.sin(2 * math.pi * 440 * i / rate))
-              for i in range(n)]))
+        w.writeframes(
+            struct.pack(
+                f"<{n}h", *[int(8000 * math.sin(2 * math.pi * 440 * i / rate)) for i in range(n)]
+            )
+        )
 
 
 class _NoAlignSettings:
     """Ước lượng thuần — không đụng model Whisper trong test."""
+
     karaoke_alignment = False
 
 
@@ -102,16 +106,18 @@ def test_build_karaoke_ass_end_to_end(tmp_path):
     _write_tone(str(seg_dir / "seg_00001.wav"), 2.0)
     _write_tone(str(seg_dir / "seg_00002.wav"), 1.5)
     segments = [
-        {"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0,
-         "text_vi": "xin chào các bạn nhé."},
-        {"id": 2, "start": 3.0, "end": 4.5, "duration": 1.5,
-         "text_vi": "hẹn gặp lại."},
+        {"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0, "text_vi": "xin chào các bạn nhé."},
+        {"id": 2, "start": 3.0, "end": 4.5, "duration": 1.5, "text_vi": "hẹn gặp lại."},
     ]
     out = str(tmp_path / "kara.ass")
-    style = {"display": "karaoke", "words_per_cue": 3, "effect": "pop",
-             "font": "Arial", "font_size": 22}
-    build_karaoke_ass(segments, str(seg_dir), out, style,
-                      settings=_NoAlignSettings())
+    style = {
+        "display": "karaoke",
+        "words_per_cue": 3,
+        "effect": "pop",
+        "font": "Arial",
+        "font_size": 22,
+    }
+    build_karaoke_ass(segments, str(seg_dir), out, style, settings=_NoAlignSettings())
     text = open(out, encoding="utf-8-sig").read()
     assert "[Script Info]" in text
     assert "Style: Kara,Arial,22," in text
@@ -128,12 +134,15 @@ def test_build_karaoke_effect_karaoke_uses_k_tags(tmp_path):
     seg_dir = tmp_path / "segs"
     seg_dir.mkdir()
     _write_tone(str(seg_dir / "seg_00001.wav"), 2.0)
-    segments = [{"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0,
-                 "text_vi": "một hai ba bốn"}]
+    segments = [{"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0, "text_vi": "một hai ba bốn"}]
     out = str(tmp_path / "k.ass")
-    build_karaoke_ass(segments, str(seg_dir), out,
-                      {"display": "karaoke", "effect": "karaoke"},
-                      settings=_NoAlignSettings())
+    build_karaoke_ass(
+        segments,
+        str(seg_dir),
+        out,
+        {"display": "karaoke", "effect": "karaoke"},
+        settings=_NoAlignSettings(),
+    )
     text = open(out, encoding="utf-8-sig").read()
     assert "\\k" in text
 
@@ -141,17 +150,18 @@ def test_build_karaoke_effect_karaoke_uses_k_tags(tmp_path):
 def test_build_karaoke_skips_missing_clip(tmp_path):
     seg_dir = tmp_path / "segs"
     seg_dir.mkdir()  # không có wav nào
-    segments = [{"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0,
-                 "text_vi": "vẫn ra caption."}]
+    segments = [{"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0, "text_vi": "vẫn ra caption."}]
     out = str(tmp_path / "k.ass")
-    build_karaoke_ass(segments, str(seg_dir), out,
-                      {"display": "karaoke"}, settings=_NoAlignSettings())
+    build_karaoke_ass(
+        segments, str(seg_dir), out, {"display": "karaoke"}, settings=_NoAlignSettings()
+    )
     # thiếu wav → dùng end-start làm thời lượng, vẫn sinh event
     text = open(out, encoding="utf-8-sig").read()
     assert "Dialogue:" in text
 
 
 # --------------------------------------------------------------- mapping --- #
+
 
 def test_map_words_one_to_one():
     asr = [("xin", 0.1, 0.4), ("chào", 0.4, 0.8)]
@@ -216,8 +226,9 @@ def test_build_karaoke_ass_with_precomputed_word_times(tmp_path):
 
     # merge_dir không tồn tại vẫn phải build thành công vì đã có precomputed word_times
     fake_merge_dir = str(tmp_path / "non_existent_dir")
-    build_karaoke_ass(segments, fake_merge_dir, str(out_file), style={"effect": "pop"},
-                      word_times=word_times)
+    build_karaoke_ass(
+        segments, fake_merge_dir, str(out_file), style={"effect": "pop"}, word_times=word_times
+    )
 
     assert out_file.exists()
     content = out_file.read_text(encoding="utf-8-sig")
@@ -253,4 +264,3 @@ def test_render_karaoke_events_strictly_no_overlap():
         start_nxt, _ = times[i + 1]
         # End of current dialogue must be <= start of next dialogue
         assert end_cur <= start_nxt
-

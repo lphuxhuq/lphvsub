@@ -2,6 +2,7 @@
 
 Tách riêng để vừa dùng được trong widget vừa kiểm thử được bằng pytest.
 """
+
 from __future__ import annotations
 
 import datetime

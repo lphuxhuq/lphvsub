@@ -1,7 +1,9 @@
 import pytest
 from PySide6.QtWidgets import QApplication
-from autodub_gui.pages.gemini_srt_page import GeminiSrtPage
+
 from autodub.config import Settings
+from autodub_gui.pages.gemini_srt_page import GeminiSrtPage
+
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -9,6 +11,7 @@ def qapp():
     if app is None:
         app = QApplication([])
     return app
+
 
 def test_gemini_srt_page_construct(qapp):
     page = GeminiSrtPage(Settings.load)

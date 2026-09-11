@@ -1,6 +1,8 @@
 """Kiểm thử tính năng hiển thị metadata và các nút sao chép trên ExportPanel."""
+
 import pytest
 from PySide6.QtWidgets import QApplication
+
 from autodub_gui.pages.editor_panels import ExportPanel
 
 
@@ -14,10 +16,7 @@ def test_export_panel_social_metadata_rendering(qapp):
     assert panel.video_meta_info is not None
     assert panel.video_meta_info.isHidden()
 
-    meta = {
-        "title": "Tóm Tắt Phim Mới Nhất",
-        "hashtags": ["#reviewphim", "#shorts", "#trending"]
-    }
+    meta = {"title": "Tóm Tắt Phim Mới Nhất", "hashtags": ["#reviewphim", "#shorts", "#trending"]}
     panel.set_social_metadata(meta, "video_tap_1.mp4")
 
     assert not panel.video_meta_info.isHidden()

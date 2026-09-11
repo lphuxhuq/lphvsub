@@ -8,6 +8,7 @@ lại sau mỗi việc chạy xong.
 Ẩn hoàn toàn khi máy chủ tắt hệ thống credit (``creditEnabled=false``) — lúc
 đó mọi thứ miễn phí và một con số vô nghĩa chỉ gây bối rối.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
@@ -20,7 +21,7 @@ from autodub_gui.ui.style import clear_background
 class _BalanceWorker(QThread):
     """Đọc số dư ở luồng nền — gọi mạng trên luồng giao diện làm app đứng."""
 
-    ready = Signal(int, bool)     # balance, ok
+    ready = Signal(int, bool)  # balance, ok
 
     def run(self) -> None:
         from autodub.saas_client import SaasError, get_client
@@ -93,8 +94,9 @@ class CreditWidget(QWidget):
         else:
             # Mất mạng: giữ nguyên con số cũ và nói rõ nó có thể đã cũ, thay
             # vì hiện 0 Vox làm người dùng tưởng mình vừa mất sạch.
-            self.setToolTip("Chưa đọc lại được số dư (mất kết nối). "
-                            "Con số hiển thị là lần đọc gần nhất.")
+            self.setToolTip(
+                "Chưa đọc lại được số dư (mất kết nối). Con số hiển thị là lần đọc gần nhất."
+            )
 
     # -- Hiển thị ------------------------------------------------------
 
@@ -106,11 +108,13 @@ class CreditWidget(QWidget):
         self.setStyleSheet(
             f"CreditWidget {{ background: {background}; "
             f"border: 1px solid {border}; "
-            f"border-radius: {tokens.RADIUS_MD}px; }}")
+            f"border-radius: {tokens.RADIUS_MD}px; }}"
+        )
         self._label.setStyleSheet(
             f"color: {color}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
 
-    def mouseReleaseEvent(self, event) -> None:   # noqa: N802 — Qt đặt tên
+    def mouseReleaseEvent(self, event) -> None:
         self.clicked.emit()
         super().mouseReleaseEvent(event)

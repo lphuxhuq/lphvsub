@@ -8,6 +8,7 @@ Tạo dự án.
 Phần tính phần trăm và quản lý nhật ký là Python thuần nên kiểm thử được
 bằng pytest mà không cần dựng cửa sổ.
 """
+
 from __future__ import annotations
 
 import time
@@ -46,9 +47,9 @@ STEP_LABELS: dict[str, str] = {
 # Thứ tự chạy, dùng để cộng dồn trọng số các bước đã qua.
 STEP_ORDER: tuple[str, ...] = tuple(STEP_WEIGHTS)
 
-MAX_ACTIVITIES = 200          # giữ trong bộ nhớ
-DEFAULT_FEED_LIMIT = 20       # số dòng hiện trong cửa sổ chuông
-_MIN_SAMPLES_FOR_ETA = 3      # dưới ngưỡng này thì ước lượng còn quá nhiễu
+MAX_ACTIVITIES = 200  # giữ trong bộ nhớ
+DEFAULT_FEED_LIMIT = 20  # số dòng hiện trong cửa sổ chuông
+_MIN_SAMPLES_FOR_ETA = 3  # dưới ngưỡng này thì ước lượng còn quá nhiễu
 
 LEVEL_INFO = "info"
 LEVEL_SUCCESS = "success"
@@ -56,8 +57,7 @@ LEVEL_WARNING = "warning"
 LEVEL_ERROR = "error"
 
 
-def step_percent(done_steps, current_step: str = "",
-                 current: int = 0, total: int = 0) -> int:
+def step_percent(done_steps, current_step: str = "", current: int = 0, total: int = 0) -> int:
     """Phần trăm hoàn thành của cả quá trình.
 
     Bằng tổng trọng số các bước đã xong, cộng thêm phần đã chạy được của
@@ -85,14 +85,14 @@ def estimate_eta(elapsed: float, current: int, total: int) -> float:
 class ActiveJob:
     """Một việc đang chạy: lồng tiếng, xử lý hàng loạt, xuất lại hoặc tải về."""
 
-    kind: str                      # "dub" | "batch" | "rebuild" | "download"
+    kind: str  # "dub" | "batch" | "rebuild" | "download"
     title: str
     work_dir: str = ""
     step: str = ""
     step_label: str = ""
     percent: int = 0
     eta_s: float = 0.0
-    thumbnail: object | None = None    # QPixmap, để nguyên kiểu tự do
+    thumbnail: object | None = None  # QPixmap, để nguyên kiểu tự do
     started_at: float = 0.0
     done_steps: set[str] = field(default_factory=set)
     step_started_at: float = 0.0
@@ -112,9 +112,9 @@ class Activity:
 class RunRegistry(QObject):
     """Sổ đăng ký dùng chung. Chỉ tạo một thể hiện duy nhất cho cả ứng dụng."""
 
-    job_changed = Signal()            # việc đang chạy thay đổi, hoặc đã kết thúc
-    activity_added = Signal(object)   # một Activity mới
-    unread_changed = Signal(int)      # số thông báo chưa đọc
+    job_changed = Signal()  # việc đang chạy thay đổi, hoặc đã kết thúc
+    activity_added = Signal(object)  # một Activity mới
+    unread_changed = Signal(int)  # số thông báo chưa đọc
 
     def __init__(self) -> None:
         super().__init__()
@@ -129,8 +129,8 @@ class RunRegistry(QObject):
             # Không được đè việc đang chạy — mất luôn nút Dừng của nó.
             # Các trang phải kiểm tra is_busy() trước; đây là lưới an toàn.
             self.add_activity(
-                LEVEL_WARNING,
-                f"Bắt đầu «{job.title}» khi «{self._job.title}» chưa xong")
+                LEVEL_WARNING, f"Bắt đầu «{job.title}» khi «{self._job.title}» chưa xong"
+            )
         job.started_at = job.started_at or time.time()
         job.step_started_at = time.monotonic()
         job.done_steps = set()
@@ -196,8 +196,7 @@ class RunRegistry(QObject):
     # -- Nhật ký hoạt động ---------------------------------------------
     def add_activity(self, level: str, text: str, work_dir: str = "") -> Activity:
         """Thêm một dòng vào nhật ký và báo cho chuông thông báo."""
-        activity = Activity(ts=time.time(), level=level, text=text,
-                            work_dir=work_dir)
+        activity = Activity(ts=time.time(), level=level, text=text, work_dir=work_dir)
         self._activities.append(activity)
         if len(self._activities) > MAX_ACTIVITIES:
             del self._activities[:-MAX_ACTIVITIES]

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from PySide6.QtWidgets import QApplication
 
 from autodub.config import Settings
@@ -149,9 +150,11 @@ def test_pipeline_export_phase_preserves_ai_options(mock_refresh, mock_merge_vid
         "session_id": "test_folder",
         "source_url": "",
     }
-    with patch.object(pipeline, "_generate_content", return_value={}), \
-         patch.object(pipeline, "_build_report", return_value=dummy_report), \
-         patch.object(pipeline, "_build_timing_guide", return_value={}):
+    with (
+        patch.object(pipeline, "_generate_content", return_value={}),
+        patch.object(pipeline, "_build_report", return_value=dummy_report),
+        patch.object(pipeline, "_build_timing_guide", return_value={}),
+    ):
         pipeline._export_phase(state, str(tmp_path), target)
 
     mock_merge_video.assert_called_once()
@@ -209,9 +212,11 @@ def test_pipeline_export_phase_defaults_boxblur(mock_refresh, mock_merge_video, 
         "session_id": "test_folder",
         "source_url": "",
     }
-    with patch.object(pipeline, "_generate_content", return_value={}), \
-         patch.object(pipeline, "_build_report", return_value=dummy_report), \
-         patch.object(pipeline, "_build_timing_guide", return_value={}):
+    with (
+        patch.object(pipeline, "_generate_content", return_value={}),
+        patch.object(pipeline, "_build_report", return_value=dummy_report),
+        patch.object(pipeline, "_build_timing_guide", return_value={}),
+    ):
         pipeline._export_phase(state, str(tmp_path), target)
 
     mock_merge_video.assert_called_once()
@@ -219,4 +224,3 @@ def test_pipeline_export_phase_defaults_boxblur(mock_refresh, mock_merge_video, 
     assert kwargs["mask_method"] == "blur"
     assert kwargs["inpaint_engine"] == "lama_onnx"
     assert kwargs["inpaint_device"] == "auto"
-

@@ -1,14 +1,10 @@
-import os
-import time
-import wave
-import struct
-import math
 import logging
+import os
+import struct
+import wave
 from unittest.mock import MagicMock, patch
 
-import pytest
 from autodub.config import Settings
-from autodub.utils import ProgressTracker
 
 
 def _create_dummy_wav(path, duration_s=1.0, rate=24000):
@@ -22,9 +18,9 @@ def _create_dummy_wav(path, duration_s=1.0, rate=24000):
 
 def test_tts_progress_tracking(tmp_path, caplog):
     """Kiểm tra khâu TTS có live progress tracking, số câu, ETA và summary."""
+    from autodub.languages import get_target
     from autodub.pipeline import DubPipeline
     from autodub.progress import ProgressReporter
-    from autodub.languages import get_target
 
     seg_dir = str(tmp_path / "segs")
     os.makedirs(seg_dir, exist_ok=True)
@@ -40,18 +36,16 @@ def test_tts_progress_tracking(tmp_path, caplog):
     pipeline._reporter = ProgressReporter()
 
     mock_synth = MagicMock()
-    mock_synth.synthesize.return_value = MagicMock(to_dict=lambda: {"actual_duration": 1.5, "speed_adjusted": False, "rate_applied": "normal"})
+    mock_synth.synthesize.return_value = MagicMock(
+        to_dict=lambda: {"actual_duration": 1.5, "speed_adjusted": False, "rate_applied": "normal"}
+    )
     mock_synth.recommended_threads = 2
 
     caplog.set_level(logging.INFO, logger="autodub.pipeline")
 
     target = get_target("vi")
     results = pipeline._synthesize_segments(
-        target=target,
-        voice="male",
-        segments=segments,
-        seg_dir=seg_dir,
-        synth=mock_synth
+        target=target, voice="male", segments=segments, seg_dir=seg_dir, synth=mock_synth
     )
 
     assert len(results) == 3
@@ -99,7 +93,9 @@ def test_soft_timing_atempo_progress(tmp_path, caplog):
         wav_path = os.path.join(src_dir, f"seg_{i:05d}.wav")
         # File âm thanh 2.0 giây nhưng slot chỉ 1.0 giây -> buộc phải atempo
         _create_dummy_wav(wav_path, 2.0)
-        segments.append({"id": i, "start": float(i * 1.5), "end": float(i * 1.5 + 1.0), "duration": 1.0})
+        segments.append(
+            {"id": i, "start": float(i * 1.5), "end": float(i * 1.5 + 1.0), "duration": 1.0}
+        )
 
     caplog.set_level(logging.INFO, logger="autodub.timing")
 
@@ -131,7 +127,9 @@ def test_whisper_inprocess_progress(tmp_path, caplog):
         segs = _transcribe_whisper(wav_path, "vi", Settings(), whisper_cache=None)
 
     assert len(segs) == 2
-    log_text = "\n".join([rec.message for rec in caplog.records if rec.name == "autodub.transcriber"])
+    log_text = "\n".join(
+        [rec.message for rec in caplog.records if rec.name == "autodub.transcriber"]
+    )
     assert "Nhận dạng giọng nói (ASR):" in log_text
     assert "5.0/5.0 s (100.0%)" in log_text
     assert "Nhận dạng giọng nói (ASR) hoàn tất: 5.0 s" in log_text
@@ -151,6 +149,7 @@ def test_merge_video_ffmpeg_progress(tmp_path, caplog):
     _create_dummy_wav(audio_path, 10.0)
 
     progress_events = []
+
     def on_progress(ratio, msg):
         progress_events.append((ratio, msg))
 
@@ -166,12 +165,18 @@ def test_merge_video_ffmpeg_progress(tmp_path, caplog):
     mock_proc.wait.return_value = 0
     mock_proc.communicate.return_value = ("", "")
 
-    with patch("autodub.media.video.probe_duration_s", return_value=10.0), \
-         patch("autodub.media.video.video_encoder_name", return_value="CPU (libx264)"), \
-         patch("autodub.media.video.subprocess.Popen", return_value=mock_proc):
-        merge_video(video_path, audio_path, output_path, progress_cb=on_progress, randomize_metadata=False)
+    with (
+        patch("autodub.media.video.probe_duration_s", return_value=10.0),
+        patch("autodub.media.video.video_encoder_name", return_value="CPU (libx264)"),
+        patch("autodub.media.video.subprocess.Popen", return_value=mock_proc),
+    ):
+        merge_video(
+            video_path, audio_path, output_path, progress_cb=on_progress, randomize_metadata=False
+        )
 
-    log_text = "\n".join([rec.message for rec in caplog.records if rec.name == "autodub.video_merger"])
+    log_text = "\n".join(
+        [rec.message for rec in caplog.records if rec.name == "autodub.video_merger"]
+    )
     assert "Xuất video & ghép phụ đề:" in log_text
     assert "10.0/10.0 s (100.0%)" in log_text
     assert "Xuất video & ghép phụ đề hoàn tất: 10.0 s" in log_text

@@ -28,6 +28,7 @@ rỗng bị coi như trống), decode thẳng cửa sổ không qua VAD — có 
 segment thật mang cờ "rescan" (pipeline chính sẽ sort lại theo mốc thời
 gian và thu hẹp biên bằng RMS).
 """
+
 import argparse
 import json
 import os
@@ -39,13 +40,13 @@ _GAP_RESCAN_MAX_S = 30.0
 
 
 def _die(proto_out, msg: str) -> None:
-    print(json.dumps({"error": msg}, ensure_ascii=False),
-          file=proto_out, flush=True)
+    print(json.dumps({"error": msg}, ensure_ascii=False), file=proto_out, flush=True)
     sys.exit(1)
 
 
-def uncovered_spans(n_samples: int, ok_spans: list[tuple[int, int]],
-                    min_samples: int) -> list[tuple[int, int]]:
+def uncovered_spans(
+    n_samples: int, ok_spans: list[tuple[int, int]], min_samples: int
+) -> list[tuple[int, int]]:
     """Khoảng sample KHÔNG thuộc chunk nào decode thành công, dài ≥ min.
 
     Chunk decode rỗng không tính là "đã phủ" — vùng của nó được gộp vào
@@ -69,7 +70,7 @@ def _read_wav(path: str):
 
     with wave.open(path, "rb") as f:
         if f.getsampwidth() != 2:
-            raise ValueError(f"expected 16-bit PCM, got {f.getsampwidth()*8}-bit")
+            raise ValueError(f"expected 16-bit PCM, got {f.getsampwidth() * 8}-bit")
         rate = f.getframerate()
         channels = f.getnchannels()
         data = f.readframes(f.getnframes())
@@ -79,9 +80,9 @@ def _read_wav(path: str):
     return samples, rate
 
 
-def padded_range(seg_start: int, seg_end: int, prev_end: int,
-                 next_start: int, n_samples: int,
-                 pad_samples: int) -> tuple[int, int]:
+def padded_range(
+    seg_start: int, seg_end: int, prev_end: int, next_start: int, n_samples: int, pad_samples: int
+) -> tuple[int, int]:
     """Khoảng sample dùng để decode: VAD chunk ``[seg_start, seg_end)`` mở
     rộng hai bên ``pad_samples``, clamp vào ``[0, n_samples)`` và vào biên
     GỐC của hai chunk kề (``prev_end``/``next_start``).
@@ -91,8 +92,7 @@ def padded_range(seg_start: int, seg_end: int, prev_end: int,
     không có audio nào bị bỏ qua.
     """
     s = max(0, seg_start - pad_samples, prev_end)
-    e = min(n_samples, seg_end + pad_samples,
-            max(next_start, s + 1))
+    e = min(n_samples, seg_end + pad_samples, max(next_start, s + 1))
     return s, e
 
 
@@ -132,7 +132,7 @@ def process_audio(
     chunks: list[tuple[int, int]] = []
     i = 0
     while i < len(samples):
-        vad.accept_waveform(samples[i:i + window])
+        vad.accept_waveform(samples[i : i + window])
         i += window
         while not vad.empty():
             seg = vad.front
@@ -145,13 +145,11 @@ def process_audio(
         vad.pop()
 
     # Pass 2: decode từng chunk với padding clamp theo hai chunk kề.
-    ok_spans: list[tuple[int, int]] = []   # chunk decode RA CHỮ (đã phủ)
+    ok_spans: list[tuple[int, int]] = []  # chunk decode RA CHỮ (đã phủ)
     for idx, (orig_start, orig_end) in enumerate(chunks):
         prev_end = chunks[idx - 1][1] if idx > 0 else 0
-        next_start = chunks[idx + 1][0] if idx + 1 < len(chunks) \
-            else len(samples)
-        s, e = padded_range(orig_start, orig_end, prev_end, next_start,
-                            len(samples), pad_samples)
+        next_start = chunks[idx + 1][0] if idx + 1 < len(chunks) else len(samples)
+        s, e = padded_range(orig_start, orig_end, prev_end, next_start, len(samples), pad_samples)
         stream = recognizer.create_stream()
         stream.accept_waveform(rate, samples[s:e])
         recognizer.decode_stream(stream)
@@ -160,23 +158,42 @@ def process_audio(
             # VAD bắt được tiếng nhưng decode rỗng — báo ra ngoài thay vì
             # nuốt im lặng để phía trên (suspect detection) còn biết mà xử lý.
             n_empty += 1
-            print(json.dumps({"empty": True,
-                              "start": round(orig_start / rate, 3),
-                              "end": round(orig_end / rate, 3)}),
-                  file=proto_out, flush=True)
+            print(
+                json.dumps(
+                    {
+                        "empty": True,
+                        "start": round(orig_start / rate, 3),
+                        "end": round(orig_end / rate, 3),
+                    }
+                ),
+                file=proto_out,
+                flush=True,
+            )
             continue
         ok_spans.append((orig_start, orig_end))
         if punct is not None:
             try:
                 text = punct.add_punctuation(text)
             except Exception as e_punct:
-                print(f"add_punctuation failed ({e_punct}) — keeping raw "
-                      "text", file=sys.stderr, flush=True)
+                print(
+                    f"add_punctuation failed ({e_punct}) — keeping raw text",
+                    file=sys.stderr,
+                    flush=True,
+                )
         n_segments += 1
-        print(json.dumps({"seg": True, "text": text,
-                          "start": round(orig_start / rate, 3),
-                          "end": round(orig_end / rate, 3)},
-                         ensure_ascii=False), file=proto_out, flush=True)
+        print(
+            json.dumps(
+                {
+                    "seg": True,
+                    "text": text,
+                    "start": round(orig_start / rate, 3),
+                    "end": round(orig_end / rate, 3),
+                },
+                ensure_ascii=False,
+            ),
+            file=proto_out,
+            flush=True,
+        )
 
     # Pass 3 (gap-rescan): quét lại khoảng trống ≥ gap-min giây mà không
     # chunk nào phủ — decode thẳng KHÔNG qua VAD. Biên cửa sổ thô; pipeline
@@ -187,7 +204,7 @@ def process_audio(
         recovered = 0
         for s, e in uncovered_spans(len(samples), ok_spans, min_gap):
             if e - s > max_span:
-                e = s + max_span   # outro/nhạc dài — chỉ quét 30 giây đầu
+                e = s + max_span  # outro/nhạc dài — chỉ quét 30 giây đầu
             stream = recognizer.create_stream()
             stream.accept_waveform(rate, samples[s:e])
             recognizer.decode_stream(stream)
@@ -198,22 +215,40 @@ def process_audio(
                 try:
                     text = punct.add_punctuation(text)
                 except Exception as e_punct:
-                    print(f"add_punctuation failed ({e_punct}) — keeping "
-                          "raw text", file=sys.stderr, flush=True)
+                    print(
+                        f"add_punctuation failed ({e_punct}) — keeping raw text",
+                        file=sys.stderr,
+                        flush=True,
+                    )
             recovered += 1
             n_segments += 1
-            print(json.dumps({"seg": True, "text": text,
-                              "start": round(s / rate, 3),
-                              "end": round(e / rate, 3),
-                              "rescan": True},
-                             ensure_ascii=False), file=proto_out, flush=True)
+            print(
+                json.dumps(
+                    {
+                        "seg": True,
+                        "text": text,
+                        "start": round(s / rate, 3),
+                        "end": round(e / rate, 3),
+                        "rescan": True,
+                    },
+                    ensure_ascii=False,
+                ),
+                file=proto_out,
+                flush=True,
+            )
         if recovered:
-            print(f"gap-rescan: phát hiện thêm {recovered} đoạn thoại trong "
-                  "khoảng trống mà VAD bỏ sót", file=sys.stderr, flush=True)
+            print(
+                f"gap-rescan: phát hiện thêm {recovered} đoạn thoại trong "
+                "khoảng trống mà VAD bỏ sót",
+                file=sys.stderr,
+                flush=True,
+            )
 
-    print(json.dumps({"done": True, "num_segments": n_segments,
-                      "num_empty": n_empty}),
-          file=proto_out, flush=True)
+    print(
+        json.dumps({"done": True, "num_segments": n_segments, "num_empty": n_empty}),
+        file=proto_out,
+        flush=True,
+    )
     return n_segments, n_empty
 
 
@@ -226,20 +261,31 @@ def main() -> None:
     sys.stdout = sys.stderr
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--serve", action="store_true",
-                        help="Chế độ phục vụ bền vững (JSON qua stdin/stdout)")
+    parser.add_argument(
+        "--serve", action="store_true", help="Chế độ phục vụ bền vững (JSON qua stdin/stdout)"
+    )
     parser.add_argument("--audio", help="16 kHz mono WAV (bắt buộc khi không --serve)")
-    parser.add_argument("--model-dir", required=True,
-                        help="dir with model.int8.onnx + tokens.txt + "
-                             "silero_vad.onnx (+ punct/)")
+    parser.add_argument(
+        "--model-dir",
+        required=True,
+        help="dir with model.int8.onnx + tokens.txt + silero_vad.onnx (+ punct/)",
+    )
     parser.add_argument("--num-threads", type=int, default=4)
     parser.add_argument("--no-punct", action="store_true")
-    parser.add_argument("--vad-pad", type=float, default=0.3,
-                        help="giây đệm hai bên mỗi VAD chunk trước khi decode")
-    parser.add_argument("--no-gap-rescan", action="store_true",
-                        help="tắt pass 3 quét lại khoảng trống bắt lời VAD bỏ sót")
-    parser.add_argument("--gap-min", type=float, default=1.0,
-                        help="khoảng trống tối thiểu (giây) để quét lại ở pass 3")
+    parser.add_argument(
+        "--vad-pad", type=float, default=0.3, help="giây đệm hai bên mỗi VAD chunk trước khi decode"
+    )
+    parser.add_argument(
+        "--no-gap-rescan",
+        action="store_true",
+        help="tắt pass 3 quét lại khoảng trống bắt lời VAD bỏ sót",
+    )
+    parser.add_argument(
+        "--gap-min",
+        type=float,
+        default=1.0,
+        help="khoảng trống tối thiểu (giây) để quét lại ở pass 3",
+    )
     args = parser.parse_args()
 
     if not args.serve and not args.audio:
@@ -278,12 +324,16 @@ def main() -> None:
         try:
             punct_cfg = sherpa_onnx.OfflinePunctuationConfig(
                 model=sherpa_onnx.OfflinePunctuationModelConfig(
-                    ct_transformer=punct_model,
-                    num_threads=max(1, args.num_threads)))
+                    ct_transformer=punct_model, num_threads=max(1, args.num_threads)
+                )
+            )
             punct = sherpa_onnx.OfflinePunctuation(punct_cfg)
         except Exception as e:
-            print(f"punctuation model failed to load ({e}) — continuing "
-                  "without punctuation", file=sys.stderr, flush=True)
+            print(
+                f"punctuation model failed to load ({e}) — continuing without punctuation",
+                file=sys.stderr,
+                flush=True,
+            )
 
     if args.serve:
         print(json.dumps({"ready": True}), file=proto_out, flush=True)
@@ -295,8 +345,11 @@ def main() -> None:
                 req = json.loads(line)
                 audio_path = req.get("audio")
                 if not audio_path or not os.path.isfile(audio_path):
-                    print(json.dumps({"error": f"audio file not found: {audio_path}"}),
-                          file=proto_out, flush=True)
+                    print(
+                        json.dumps({"error": f"audio file not found: {audio_path}"}),
+                        file=proto_out,
+                        flush=True,
+                    )
                     continue
                 pad = float(req.get("vad_pad", args.vad_pad))
                 no_rescan = bool(req.get("no_gap_rescan", args.no_gap_rescan))
@@ -313,8 +366,7 @@ def main() -> None:
                     sherpa_onnx=sherpa_onnx,
                 )
             except Exception as e:
-                print(json.dumps({"error": f"{type(e).__name__}: {e}"}),
-                      file=proto_out, flush=True)
+                print(json.dumps({"error": f"{type(e).__name__}: {e}"}), file=proto_out, flush=True)
         return
 
     # One-shot mode

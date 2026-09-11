@@ -63,14 +63,12 @@ def rescale_segments(segments: list[dict], scale: float) -> None:
         seg["start"] = round(float(seg["start"]) * scale, 3)
         seg["end"] = round(float(seg["end"]) * scale, 3)
         seg["duration"] = round(seg["end"] - seg["start"], 3)
-        for a, b in (("speech_start", "speech_end"),
-                     ("vad_start", "vad_end")):
+        for a, b in (("speech_start", "speech_end"), ("vad_start", "vad_end")):
             if a in seg and b in seg:
                 seg[a] = round(float(seg[a]) * scale, 3)
                 seg[b] = round(float(seg[b]) * scale, 3)
         if "speech_duration" in seg:
-            seg["speech_duration"] = round(
-                float(seg["speech_duration"]) * scale, 3)
+            seg["speech_duration"] = round(float(seg["speech_duration"]) * scale, 3)
 ```
 
 (Comment guard trong code: các field `dub_*` không tồn tại ở thời điểm

@@ -12,6 +12,7 @@ Các bước đều resume-safe — chạy lại sẽ bỏ qua phần đã xong:
   3. Tải model Whisper về models/whisper/ (smoke test kéo về lần đầu)
   4. Smoke test: nhận dạng 1 file 2 giây → installed_ok.json
 """
+
 import json
 import os
 import subprocess
@@ -22,8 +23,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_DIR = os.path.join(PROJECT_ROOT, ".venv-whisper")
-VENV_PY = os.path.join(VENV_DIR, "Scripts" if os.name == "nt" else "bin",
-                       "python.exe" if os.name == "nt" else "python")
+VENV_PY = os.path.join(
+    VENV_DIR, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+)
 MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "whisper")
 MARKER = os.path.join(MODEL_DIR, "installed_ok.json")
 
@@ -32,12 +34,10 @@ MARKER = os.path.join(MODEL_DIR, "installed_ok.json")
 _WHISPER_SPEC = "faster-whisper<2.0"
 
 # Worker script của app — dùng để smoke test
-WORKER = os.path.join(PROJECT_ROOT, "autodub", "speech",
-                      "asr_whisper_worker.py")
+WORKER = os.path.join(PROJECT_ROOT, "autodub", "speech", "asr_whisper_worker.py")
 if not os.path.isfile(WORKER):
     for _d in ("data", "_internal"):
-        _c = os.path.join(PROJECT_ROOT, _d, "autodub", "speech",
-                          "asr_whisper_worker.py")
+        _c = os.path.join(PROJECT_ROOT, _d, "autodub", "speech", "asr_whisper_worker.py")
         if os.path.isfile(_c):
             WORKER = _c
             break
@@ -46,12 +46,12 @@ if not os.path.isfile(WORKER):
 def log(msg: str) -> None:
     print(f"[setup-whisper] {msg}", flush=True)
 
+
 def _cuda_dll_dir() -> str:
     """Return the CUDA DLL directory installed by the optional GPU venv."""
     if os.name != "nt":
         return ""
-    lib_dir = os.path.join(PROJECT_ROOT, ".venv-gpu", "Lib",
-                           "site-packages", "torch", "lib")
+    lib_dir = os.path.join(PROJECT_ROOT, ".venv-gpu", "Lib", "site-packages", "torch", "lib")
     return lib_dir if os.path.isdir(lib_dir) else ""
 
 
@@ -64,14 +64,12 @@ def step_venv() -> None:
 
 
 def step_install() -> None:
-    probe = subprocess.run([VENV_PY, "-c", "import faster_whisper"],
-                           capture_output=True)
+    probe = subprocess.run([VENV_PY, "-c", "import faster_whisper"], capture_output=True)
     if probe.returncode == 0:
         log("faster-whisper đã cài — bỏ qua")
         return
     log("cài faster-whisper (ctranslate2, CPU/GPU) ...")
-    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet",
-                    _WHISPER_SPEC], check=True)
+    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet", _WHISPER_SPEC], check=True)
 
 
 def step_smoke() -> None:
@@ -94,11 +92,18 @@ def step_smoke() -> None:
 
     log("chạy smoke test (tải model lần đầu có thể mất vài phút) ...")
     try:
-        cmd = [VENV_PY, WORKER,
-               "--audio",     smoke_wav,
-               "--model",     "medium",
-               "--language",  "zh",
-               "--model-dir", MODEL_DIR]
+        cmd = [
+            VENV_PY,
+            WORKER,
+            "--audio",
+            smoke_wav,
+            "--model",
+            "medium",
+            "--language",
+            "zh",
+            "--model-dir",
+            MODEL_DIR,
+        ]
         cuda_dll_dir = _cuda_dll_dir()
         if cuda_dll_dir:
             cmd += ["--cuda-dll-dir", cuda_dll_dir]
@@ -122,12 +127,16 @@ def step_smoke() -> None:
     if not ok:
         raise SystemExit(
             f"!! smoke test thất bại (exit {proc.returncode}):\n"
-            f"{proc.stdout[-500:]}\n{proc.stderr[-300:]}")
+            f"{proc.stdout[-500:]}\n{proc.stderr[-300:]}"
+        )
 
     with open(MARKER, "w", encoding="utf-8") as f:
-        json.dump({"ok": True, "model": "medium",
-                   "backend": "faster-whisper"}, f,
-                  ensure_ascii=False, indent=2)
+        json.dump(
+            {"ok": True, "model": "medium", "backend": "faster-whisper"},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
     log("smoke test PASS")
 
 

@@ -4,6 +4,7 @@ Giữ clip sai tốc độ thay vì bỏ clip là cố ý (thiếu clip → vide
 Nhưng người dùng nghe thấy chất lượng tệ mà không có dòng nào giải thích thì
 không sửa được gì — nên mỗi lần rơi vào nhánh dự phòng phải vào sổ.
 """
+
 import os
 import threading
 from unittest import mock
@@ -31,8 +32,9 @@ def test_apply_atempo_failure_copies_source_and_counts(tmp_path):
     os.makedirs(os.path.dirname(dst))
     _make_wav(src)
 
-    with mock.patch("autodub.media.audio.subprocess.run",
-                    return_value=mock.Mock(returncode=1, stderr="boom")):
+    with mock.patch(
+        "autodub.media.audio.subprocess.run", return_value=mock.Mock(returncode=1, stderr="boom")
+    ):
         assert audio.apply_atempo(src, dst, 1.2) is False
 
     # Clip vẫn phải tồn tại — thiếu file là mất tiếng cả câu.
@@ -62,8 +64,9 @@ def test_atempo_timeout_is_counted_too(tmp_path):
     dst = str(tmp_path / "out3.wav")
     _make_wav(src)
 
-    with mock.patch("autodub.media.audio.subprocess.run",
-                    side_effect=subprocess.TimeoutExpired("ffmpeg", 120)):
+    with mock.patch(
+        "autodub.media.audio.subprocess.run", side_effect=subprocess.TimeoutExpired("ffmpeg", 120)
+    ):
         assert audio.apply_atempo(src, dst, 1.5) is False
     assert audio.FALLBACKS.snapshot()["atempo_failed"] == [3]
 
@@ -74,8 +77,9 @@ def test_postprocess_failure_keeps_raw_clip_and_counts(tmp_path):
     os.makedirs(os.path.dirname(dst))
     _make_wav(src, duration_ms=800)
 
-    with mock.patch("autodub.media.audio.subprocess.run",
-                    return_value=mock.Mock(returncode=1, stderr="boom")):
+    with mock.patch(
+        "autodub.media.audio.subprocess.run", return_value=mock.Mock(returncode=1, stderr="boom")
+    ):
         assert audio.postprocess_voice_clip(src, dst) is False
 
     assert os.path.exists(dst)
@@ -88,8 +92,9 @@ def test_slow_segments_failure_counts_by_segment_id(tmp_path):
     os.makedirs(src_dir)
     _make_wav(os.path.join(src_dir, "seg_00011.wav"))
 
-    with mock.patch("autodub.media.audio.subprocess.run",
-                    return_value=mock.Mock(returncode=1, stderr="boom")):
+    with mock.patch(
+        "autodub.media.audio.subprocess.run", return_value=mock.Mock(returncode=1, stderr="boom")
+    ):
         audio.slow_segments([{"id": 11}], src_dir, dst_dir, 0.9)
 
     assert os.path.exists(os.path.join(dst_dir, "seg_00011.wav"))
@@ -98,12 +103,12 @@ def test_slow_segments_failure_counts_by_segment_id(tmp_path):
 
 def test_ledger_is_thread_safe():
     """Các pool ffmpeg ghi song song — mất mục nào là báo cáo sai."""
+
     def worker(base: int):
         for i in range(50):
             audio.FALLBACKS.add("atempo_failed", base + i)
 
-    threads = [threading.Thread(target=worker, args=(t * 100,))
-               for t in range(8)]
+    threads = [threading.Thread(target=worker, args=(t * 100,)) for t in range(8)]
     for t in threads:
         t.start()
     for t in threads:

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from autodub.media.download.cache import DownloadCache
 from autodub.media.download.performance_store import PerformanceStore
 from autodub.media.download.validator import MediaValidator, ValidationResult
@@ -13,11 +11,37 @@ def test_performance_store(tmp_path):
     db_file = tmp_path / "perf.db"
     store = PerformanceStore(db_path=db_file)
 
-    store.record_metric(platform="bilibili", host="cdn-fast.bili.com", bytes_transferred=10_000_000, duration=1.0, success=True)
-    store.record_metric(platform="bilibili", host="cdn-fast.bili.com", bytes_transferred=10_000_000, duration=1.0, success=True)
+    store.record_metric(
+        platform="bilibili",
+        host="cdn-fast.bili.com",
+        bytes_transferred=10_000_000,
+        duration=1.0,
+        success=True,
+    )
+    store.record_metric(
+        platform="bilibili",
+        host="cdn-fast.bili.com",
+        bytes_transferred=10_000_000,
+        duration=1.0,
+        success=True,
+    )
 
-    store.record_metric(platform="bilibili", host="cdn-slow.bili.com", bytes_transferred=1_000_000, duration=1.0, success=True)
-    store.record_metric(platform="bilibili", host="cdn-slow.bili.com", bytes_transferred=0, duration=0.5, success=False, error_type="rate_limit", status_code=429)
+    store.record_metric(
+        platform="bilibili",
+        host="cdn-slow.bili.com",
+        bytes_transferred=1_000_000,
+        duration=1.0,
+        success=True,
+    )
+    store.record_metric(
+        platform="bilibili",
+        host="cdn-slow.bili.com",
+        bytes_transferred=0,
+        duration=0.5,
+        success=False,
+        error_type="rate_limit",
+        status_code=429,
+    )
 
     fast_score = store.get_health_score("bilibili", "cdn-fast.bili.com")
     assert fast_score == 100.0

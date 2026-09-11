@@ -1,5 +1,5 @@
 import random
-import pytest
+
 from autodub.text.fusion import fuse
 
 
@@ -15,24 +15,28 @@ def test_fusion_invariants_property_test():
         cur_t = 0.5
         for i in range(num_asr):
             dur = random.uniform(0.5, 3.0)
-            asr_segs.append({
-                "id": i + 1,
-                "start": round(cur_t, 3),
-                "end": round(cur_t + dur, 3),
-                "text": f"语音文本{i}"
-            })
+            asr_segs.append(
+                {
+                    "id": i + 1,
+                    "start": round(cur_t, 3),
+                    "end": round(cur_t + dur, 3),
+                    "text": f"语音文本{i}",
+                }
+            )
             cur_t += dur + random.uniform(0.1, 1.0)
 
         ocr_segs = []
         for j in range(num_ocr):
             ostart = random.uniform(0.0, cur_t)
             odur = random.uniform(0.5, 2.0)
-            ocr_segs.append({
-                "start_time": round(ostart, 3),
-                "end_time": round(ostart + odur, 3),
-                "text": f"字幕文字{j}",
-                "confidence": round(random.uniform(0.5, 0.99), 2)
-            })
+            ocr_segs.append(
+                {
+                    "start_time": round(ostart, 3),
+                    "end_time": round(ostart + odur, 3),
+                    "text": f"字幕文字{j}",
+                    "confidence": round(random.uniform(0.5, 0.99), 2),
+                }
+            )
 
         fused, report = fuse(asr_segs, ocr_segs)
 

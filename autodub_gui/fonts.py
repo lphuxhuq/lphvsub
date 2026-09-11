@@ -12,6 +12,7 @@ Phông được nạp theo từng tệp và ghi nhớ tệp đã nạp, nên g�
 cũng không tạo bản trùng. Người dùng thả tệp phông mới vào thư mục rồi mở lại
 cửa sổ là thấy ngay, không cần khởi động lại ứng dụng.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,8 +44,9 @@ def load_app_fonts() -> list[str]:
     for path in bundled_font_files():
         if path not in _loaded:
             font_id = QFontDatabase.addApplicationFont(path)
-            _loaded[path] = (list(QFontDatabase.applicationFontFamilies(font_id))
-                             if font_id >= 0 else [])
+            _loaded[path] = (
+                list(QFontDatabase.applicationFontFamilies(font_id)) if font_id >= 0 else []
+            )
         families.extend(_loaded[path])
     seen: set[str] = set()
     unique: list[str] = []
@@ -62,7 +64,7 @@ def supports_vietnamese(family: str) -> bool:
     """
     try:
         return QFontDatabase.Vietnamese in QFontDatabase.writingSystems(family)
-    except Exception:  # noqa: BLE001 — không xác định được thì đừng dọa người dùng
+    except Exception:
         return True
 
 
@@ -82,8 +84,7 @@ def font_choices() -> list[tuple[str, str]]:
     """
     choices: list[tuple[str, str]] = []
     for family in app_font_families():
-        label = (family if supports_vietnamese(family)
-                 else family + NO_VIETNAMESE_SUFFIX)
+        label = family if supports_vietnamese(family) else family + NO_VIETNAMESE_SUFFIX
         choices.append((label, family))
     return choices
 

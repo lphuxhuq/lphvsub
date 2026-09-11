@@ -21,7 +21,7 @@ def test_load_cookie_file(tmp_path):
         "# Netscape HTTP Cookie File\n"
         ".bilibili.com\tTRUE\t/\tTRUE\t2147483647\tSESSDATA\tabc123456789xyz\n"
         ".douyin.com\tTRUE\t/\tTRUE\t2147483647\tttwid\t1234567890\n",
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     jar = mgr.load_cookie_file(cookie_file)
@@ -50,7 +50,7 @@ def test_create_session_with_cookies(tmp_path):
     cookie_file.write_text(
         "# Netscape HTTP Cookie File\n"
         ".bilibili.com\tTRUE\t/\tTRUE\t2147483647\tSESSDATA\tvalid_sessdata_string_xyz\n",
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     session = mgr.create_session(platform=Platform.BILIBILI, cookie_file=cookie_file)

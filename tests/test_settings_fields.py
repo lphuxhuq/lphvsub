@@ -4,6 +4,7 @@ Rủi ro lớn nhất khi viết lại trang Cài đặt là sót một ô: ngư
 thì khóa bị sót sẽ mất giá trị cũ. Bài kiểm thử này đối chiếu tập khóa mà
 trang Cài đặt quản lý với tập khóa trong tệp cấu hình mẫu.
 """
+
 from __future__ import annotations
 
 import re
@@ -34,7 +35,8 @@ def test_every_example_key_is_editable_or_exempt() -> None:
         pytest.fail(
             "Những khóa sau có trong .env.example nhưng trang Cài đặt không "
             "chỉnh được. Hãy thêm vào FIELDS, hoặc ghi vào EXEMPT_KEYS kèm "
-            "lý do:\n  " + "\n  ".join(missing))
+            "lý do:\n  " + "\n  ".join(missing)
+        )
 
 
 def test_every_exempt_key_has_a_reason() -> None:
@@ -60,7 +62,8 @@ def test_labels_and_hints_are_accented_vietnamese() -> None:
     for item in spec.FIELDS:
         combined = (item.label + " " + item.hint).lower()
         assert any(ch in combined for ch in marks), (
-            f"{item.key}: nhãn hoặc lời giải thích chưa viết tiếng Việt có dấu")
+            f"{item.key}: nhãn hoặc lời giải thích chưa viết tiếng Việt có dấu"
+        )
 
 
 def test_every_field_belongs_to_a_known_tab() -> None:
@@ -90,8 +93,8 @@ def test_combo_default_is_one_of_the_options() -> None:
             continue
         keys = [key for _label, key in item.options]
         assert item.default in keys, (
-            f"{item.key}: giá trị mặc định {item.default!r} không có trong "
-            f"danh sách lựa chọn")
+            f"{item.key}: giá trị mặc định {item.default!r} không có trong danh sách lựa chọn"
+        )
 
 
 def test_slider_defaults_are_within_range() -> None:
@@ -101,7 +104,8 @@ def test_slider_defaults_are_within_range() -> None:
         value = float(item.default or 0)
         assert item.minimum <= value <= item.maximum, (
             f"{item.key}: giá trị mặc định {value} nằm ngoài khoảng "
-            f"{item.minimum} tới {item.maximum}")
+            f"{item.minimum} tới {item.maximum}"
+        )
 
 
 def test_video_speed_range_matches_core_clamp() -> None:

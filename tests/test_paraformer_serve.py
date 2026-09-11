@@ -1,10 +1,7 @@
 """Unit tests cho ParaformerCache và chế độ --serve."""
-import json
-import os
-import threading
-from unittest import mock
 
-import pytest
+import json
+from unittest import mock
 
 from autodub.config import Settings
 from autodub.speech.paraformer_transcriber import ParaformerCache, transcribe_paraformer
@@ -18,16 +15,18 @@ class _FakePipeProc:
         self.lines = [json.dumps({"ready": True})] + [json.dumps(r) for r in responses]
         self._line_idx = 0
         self.stderr = []
-        
+
         class _Stdout:
             def __init__(inner):
                 inner._idx = 0
+
             def readline(inner):
                 if inner._idx < len(self.lines):
                     res = self.lines[inner._idx] + "\n"
                     inner._idx += 1
                     return res
                 return ""
+
         self.stdout = _Stdout()
 
     def poll(self):
@@ -43,7 +42,9 @@ def test_paraformer_cache_ensure_success(monkeypatch):
 
     proc = _FakePipeProc([])
     monkeypatch.setattr(settings, "paraformer_configured", lambda: True)
-    monkeypatch.setattr("autodub.speech.paraformer_transcriber.subprocess.Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(
+        "autodub.speech.paraformer_transcriber.subprocess.Popen", lambda *a, **k: proc
+    )
 
     assert cache._ensure(settings) is True
     assert cache._proc is proc
@@ -64,7 +65,9 @@ def test_paraformer_cache_transcribe_success(monkeypatch, tmp_path):
 
     settings = Settings()
     monkeypatch.setattr(settings, "paraformer_configured", lambda: True)
-    monkeypatch.setattr("autodub.speech.paraformer_transcriber.subprocess.Popen", lambda *a, **k: proc)
+    monkeypatch.setattr(
+        "autodub.speech.paraformer_transcriber.subprocess.Popen", lambda *a, **k: proc
+    )
 
     cache = ParaformerCache()
     meta = {}
@@ -86,7 +89,9 @@ def test_transcribe_paraformer_uses_cache(monkeypatch, tmp_path):
 
     settings = Settings()
     mock_cache = mock.Mock(spec=ParaformerCache)
-    mock_cache.transcribe.return_value = [{"id": 1, "text": "测试", "start": 0.0, "end": 1.0, "duration": 1.0}]
+    mock_cache.transcribe.return_value = [
+        {"id": 1, "text": "测试", "start": 0.0, "end": 1.0, "duration": 1.0}
+    ]
 
     segs = transcribe_paraformer(str(dummy_wav), settings, paraformer_cache=mock_cache)
     assert segs == [{"id": 1, "text": "测试", "start": 0.0, "end": 1.0, "duration": 1.0}]

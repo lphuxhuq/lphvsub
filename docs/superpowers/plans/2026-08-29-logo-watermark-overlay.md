@@ -38,6 +38,7 @@
 ```python
 def test_build_filter_complex_with_logo_overlay():
     from autodub.media.subtitle import build_filter_complex
+
     graph = build_filter_complex(
         blur_regions=[],
         video_w=1920,
@@ -104,6 +105,7 @@ Kỳ vọng: PASS toàn bộ.
 ```python
 def test_dub_request_and_editor_with_logo():
     from autodub.pipeline import DubRequest
+
     req = DubRequest(
         logo_path="C:/path/logo.png",
         logo_position="bottom_right",

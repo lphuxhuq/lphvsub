@@ -1,4 +1,5 @@
-﻿"""Unit test cho align_texts — ASR↔OCR character alignment (TASK-4)."""
+"""Unit test cho align_texts — ASR↔OCR character alignment (TASK-4)."""
+
 from autodub.text.fusion import align_texts
 
 

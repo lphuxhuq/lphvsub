@@ -1,4 +1,5 @@
 """Tests for DubPipeline._load_translation validation."""
+
 import json
 
 import pytest

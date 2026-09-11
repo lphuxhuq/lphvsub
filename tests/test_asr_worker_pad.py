@@ -1,7 +1,8 @@
-﻿"""Unit test cho padded_range — logic đệm VAD của worker Paraformer.
+"""Unit test cho padded_range — logic đệm VAD của worker Paraformer.
 
 Pure function, không cần .venv-asr (numpy/sherpa chỉ import trong main()).
 """
+
 import pytest
 
 from autodub.speech.asr_paraformer_worker import padded_range
@@ -10,8 +11,7 @@ SR = 16000
 PAD = int(0.3 * SR)  # 4800
 
 
-def _range(seg_start, seg_end, prev_end=0, next_start=10 * SR, n=10 * SR,
-           pad=PAD):
+def _range(seg_start, seg_end, prev_end=0, next_start=10 * SR, n=10 * SR, pad=PAD):
     return padded_range(seg_start, seg_end, prev_end, next_start, n, pad)
 
 
@@ -59,14 +59,16 @@ def test_tiny_chunk_still_valid():
     assert s == 100 and e == 200
 
 
-@pytest.mark.parametrize("seg_start,seg_end,prev_end,next_start,n,pad", [
-    (0, 100, 0, 100, 100, 4800),           # chunk chiếm trọn file
-    (50000, 50001, 49000, 60000, 60000, 0),  # chunk 1 sample, pad 0
-    (0, 1, 0, 1, 1, 10),                   # file 1 sample
-    (100, 200, 100, 200, 300, 4800),       # force-split hai bên gap 0
-])
-def test_invariants_always_hold(seg_start, seg_end, prev_end, next_start,
-                               n, pad):
+@pytest.mark.parametrize(
+    "seg_start,seg_end,prev_end,next_start,n,pad",
+    [
+        (0, 100, 0, 100, 100, 4800),  # chunk chiếm trọn file
+        (50000, 50001, 49000, 60000, 60000, 0),  # chunk 1 sample, pad 0
+        (0, 1, 0, 1, 1, 10),  # file 1 sample
+        (100, 200, 100, 200, 300, 4800),  # force-split hai bên gap 0
+    ],
+)
+def test_invariants_always_hold(seg_start, seg_end, prev_end, next_start, n, pad):
     s, e = padded_range(seg_start, seg_end, prev_end, next_start, n, pad)
     assert 0 <= s < e <= n
     assert s >= prev_end
@@ -81,8 +83,7 @@ def test_no_chunk_speech_decoded_twice():
     range của chính nó — chunk kề (dù padding bao nhiêu) không decode trùng,
     và cũng không bỏ sót audio nào của chunk này."""
     # Bao gồm cặp force-split (gap = 0) và các gap dài ngắn khác nhau.
-    chunks = [(0, 320000), (320000, 352000), (500000, 640000),
-              (656000, 700000)]
+    chunks = [(0, 320000), (320000, 352000), (500000, 640000), (656000, 700000)]
     n = 900000
     ranges = []
     for idx, (cs, ce) in enumerate(chunks):
@@ -97,5 +98,4 @@ def test_no_chunk_speech_decoded_twice():
             if i == j:
                 continue
             # decode của chunk j không chạm vào speech của chunk i
-            assert e_j <= ci_start or s_j >= ci_end, \
-                f"chunk {j} decode trùng speech chunk {i}"
+            assert e_j <= ci_start or s_j >= ci_end, f"chunk {j} decode trùng speech chunk {i}"

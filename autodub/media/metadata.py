@@ -7,11 +7,11 @@ on every exported video file.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import os
 import struct
 import uuid
+from datetime import datetime, timezone
 
 
 def calculate_file_hash(file_path: str, algo: str = "md5", chunk_size: int = 65536) -> str:
@@ -68,10 +68,16 @@ def build_clean_metadata_args() -> list[str]:
     comment_id = uuid.uuid4().hex[:16]
 
     return [
-        "-map_metadata", "-1",
-        "-metadata", f"creation_time={now_utc}",
-        "-metadata", f"title=dub_{nonce}",
-        "-metadata", f"comment=id_{comment_id}",
-        "-metadata:s:v:0", "handler_name=VideoHandler",
-        "-metadata:s:a:0", "handler_name=SoundHandler",
+        "-map_metadata",
+        "-1",
+        "-metadata",
+        f"creation_time={now_utc}",
+        "-metadata",
+        f"title=dub_{nonce}",
+        "-metadata",
+        f"comment=id_{comment_id}",
+        "-metadata:s:v:0",
+        "handler_name=VideoHandler",
+        "-metadata:s:a:0",
+        "handler_name=SoundHandler",
     ]

@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 
+
 def test_gemini_srt_cli_help():
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"

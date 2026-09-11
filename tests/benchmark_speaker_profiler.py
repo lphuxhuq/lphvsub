@@ -1,7 +1,6 @@
-import os
 import time
+
 import numpy as np
-import pytest
 
 from autodub.speech.speaker_profiler import profile_speakers
 
@@ -21,6 +20,7 @@ def test_benchmark_speaker_profiler_cpu_performance(tmp_path):
     audio = 0.5 * np.sin(2 * np.pi * 140.0 * t).astype(np.float32)
 
     import wave
+
     audio_path = str(tmp_path / "bench_5min.wav")
     int16_audio = (audio * 32767).astype(np.int16)
     with wave.open(audio_path, "wb") as w:
@@ -33,13 +33,15 @@ def test_benchmark_speaker_profiler_cpu_performance(tmp_path):
     segments = []
     seg_len = 10.0
     for i in range(30):
-        segments.append({
-            "id": i + 1,
-            "speaker_id": i % 3,
-            "start": round(i * seg_len, 2),
-            "end": round((i + 1) * seg_len, 2),
-            "text": f"Câu thoại thử nghiệm {i+1}",
-        })
+        segments.append(
+            {
+                "id": i + 1,
+                "speaker_id": i % 3,
+                "start": round(i * seg_len, 2),
+                "end": round((i + 1) * seg_len, 2),
+                "text": f"Câu thoại thử nghiệm {i + 1}",
+            }
+        )
 
     # Warm-up 1 lần
     profile_speakers(audio_path, segments)
@@ -56,8 +58,10 @@ def test_benchmark_speaker_profiler_cpu_performance(tmp_path):
     median_time = float(np.median(timings))
     p95_time = float(np.percentile(timings, 95))
 
-    print(f"\n[BENCHMARK] Speaker Profiler 5-min Audio CPU Time: Median = {median_time*1000:.1f}ms, P95 = {p95_time*1000:.1f}ms")
+    print(
+        f"\n[BENCHMARK] Speaker Profiler 5-min Audio CPU Time: Median = {median_time * 1000:.1f}ms, P95 = {p95_time * 1000:.1f}ms"
+    )
 
     # Kiểm tra ràng buộc
-    assert median_time < 0.50, f"Expected median time < 500ms, got {median_time*1000:.1f}ms"
-    assert p95_time < 0.75, f"Expected p95 time < 750ms, got {p95_time*1000:.1f}ms"
+    assert median_time < 0.50, f"Expected median time < 500ms, got {median_time * 1000:.1f}ms"
+    assert p95_time < 0.75, f"Expected p95 time < 750ms, got {p95_time * 1000:.1f}ms"

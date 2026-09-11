@@ -1,10 +1,12 @@
 """Tests for URL-based project auto-resume and deduplication."""
+
 import json
 import os
 import shutil
 import tempfile
 import unittest
 
+from autodub.config import Settings
 from autodub.pipeline import (
     DubPipeline,
     DubRequest,
@@ -12,7 +14,6 @@ from autodub.pipeline import (
     find_existing_project_by_url,
     normalize_video_url,
 )
-from autodub.config import Settings
 
 
 class TestUrlHelpers(unittest.TestCase):
@@ -69,7 +70,9 @@ class TestFindExistingProjectByUrl(unittest.TestCase):
         with open(os.path.join(data_dir, "source_info.json"), "w", encoding="utf-8") as f:
             json.dump({"url": "https://www.bilibili.com/video/BV1X4t865ECX"}, f)
 
-        found = find_existing_project_by_url(self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX/?spm_id=123")
+        found = find_existing_project_by_url(
+            self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX/?spm_id=123"
+        )
         self.assertEqual(found, proj_dir)
 
     def test_find_by_source_video_json(self):
@@ -77,9 +80,17 @@ class TestFindExistingProjectByUrl(unittest.TestCase):
         data_dir = os.path.join(proj_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
         with open(os.path.join(data_dir, "source_video.json"), "w", encoding="utf-8") as f:
-            json.dump({"file_path": r"C:\tmp\video_BV1X4t865ECX.mp4", "url": "https://www.bilibili.com/video/BV1X4t865ECX"}, f)
+            json.dump(
+                {
+                    "file_path": r"C:\tmp\video_BV1X4t865ECX.mp4",
+                    "url": "https://www.bilibili.com/video/BV1X4t865ECX",
+                },
+                f,
+            )
 
-        found = find_existing_project_by_url(self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX")
+        found = find_existing_project_by_url(
+            self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX"
+        )
         self.assertEqual(found, proj_dir)
 
     def test_find_by_video_file_name(self):
@@ -88,7 +99,9 @@ class TestFindExistingProjectByUrl(unittest.TestCase):
         # Video file directly in project directory
         open(os.path.join(proj_dir, "raw_BV1X4t865ECX.mp4"), "w").close()
 
-        found = find_existing_project_by_url(self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX")
+        found = find_existing_project_by_url(
+            self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX"
+        )
         self.assertEqual(found, proj_dir)
 
     def test_not_found_different_url(self):
@@ -98,7 +111,9 @@ class TestFindExistingProjectByUrl(unittest.TestCase):
         with open(os.path.join(data_dir, "source_info.json"), "w", encoding="utf-8") as f:
             json.dump({"url": "https://www.bilibili.com/video/BV1X4t865ECX"}, f)
 
-        found = find_existing_project_by_url(self.test_dir, "https://www.bilibili.com/video/BV9999999999")
+        found = find_existing_project_by_url(
+            self.test_dir, "https://www.bilibili.com/video/BV9999999999"
+        )
         self.assertIsNone(found)
 
 

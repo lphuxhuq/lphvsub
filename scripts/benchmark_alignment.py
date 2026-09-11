@@ -6,8 +6,8 @@ Chạy đo:
 - Dataset 100 câu (hỗn hợp short/normal/long)
 Lưu kết quả vào .artifacts/benchmarks/baseline_metrics.json.
 """
+
 import json
-import os
 import shutil
 import sys
 import time
@@ -49,15 +49,17 @@ def run_benchmark_suite():
         # 1. Cold run (chưa có cache)
         stats_cold = AlignmentStats()
         t0 = time.perf_counter()
-        out_cold = align_segments(segments, str(wav_dir), "text_vi",
-                                  cache_path=cache_path, stats=stats_cold)
+        out_cold = align_segments(
+            segments, str(wav_dir), "text_vi", cache_path=cache_path, stats=stats_cold
+        )
         dur_cold = time.perf_counter() - t0
 
         # 2. Warm run (đã có cache)
         stats_warm = AlignmentStats()
         t0 = time.perf_counter()
-        out_warm = align_segments(segments, str(wav_dir), "text_vi",
-                                  cache_path=cache_path, stats=stats_warm)
+        out_warm = align_segments(
+            segments, str(wav_dir), "text_vi", cache_path=cache_path, stats=stats_warm
+        )
         dur_warm = time.perf_counter() - t0
 
         speedup_cache = (dur_cold / dur_warm) if dur_warm > 0 else 0.0

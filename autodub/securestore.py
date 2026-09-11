@@ -13,6 +13,7 @@ tiêu là đã tiêu dù có xuất hay không.
 Định dạng file: ``VOXENC1\\0`` (8 byte magic) + nonce 12 byte + ciphertext
 (GCM tag nằm cuối ciphertext theo chuẩn của ``cryptography``).
 """
+
 from __future__ import annotations
 
 import json
@@ -71,14 +72,12 @@ def decrypt_bytes(blob: bytes, key: bytes | str) -> bytes:
     key = _to_key(key)
     if not blob.startswith(MAGIC):
         raise SecureStoreError("File không phải định dạng mã hóa của VoxDub.")
-    nonce = blob[len(MAGIC):len(MAGIC) + _NONCE_LEN]
-    ciphertext = blob[len(MAGIC) + _NONCE_LEN:]
+    nonce = blob[len(MAGIC) : len(MAGIC) + _NONCE_LEN]
+    ciphertext = blob[len(MAGIC) + _NONCE_LEN :]
     try:
         return _aesgcm(key).decrypt(nonce, ciphertext, MAGIC)
-    except Exception as e:  # noqa: BLE001 — InvalidTag và mọi lỗi crypto khác
-        raise SecureStoreError(
-            "Không giải mã được file (sai khóa hoặc file đã bị sửa)."
-        ) from e
+    except Exception as e:
+        raise SecureStoreError("Không giải mã được file (sai khóa hoặc file đã bị sửa).") from e
 
 
 def _write_atomic(path: str, blob: bytes) -> None:
@@ -131,15 +130,15 @@ def read_json_secure(path: str, key: bytes | str | None = None) -> object:
     khóa, cần lấy lại khóa từ máy chủ trước).
     """
     import re
+
     with open(path, "rb") as f:
         blob = f.read()
     if blob.startswith(MAGIC):
         if key is None:
-            raise SecureStoreError(
-                "File đang được mã hóa — cần khóa giải mã từ máy chủ.")
+            raise SecureStoreError("File đang được mã hóa — cần khóa giải mã từ máy chủ.")
         blob = decrypt_bytes(blob, key)
     text = blob.decode("utf-8")
-    cleaned = re.sub(r'\[cite:\s*[\d,\s]+\]', '', text)
+    cleaned = re.sub(r"\[cite:\s*[\d,\s]+\]", "", text)
     try:
         return json.loads(cleaned)
     except (ValueError, UnicodeDecodeError) as e:
@@ -156,6 +155,7 @@ def write_json_secure(data: object, path: str, key: bytes | str | None = None) -
 
 
 # ----------------------------------------------------------- lock marker ---
+
 
 def _lock_path(work_dir: str) -> str:
     return os.path.join(work_dir, "data", LOCK_FILENAME)

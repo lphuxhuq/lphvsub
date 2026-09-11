@@ -3,25 +3,35 @@
 Tách khỏi `app.py` để mỗi tệp giữ được kích thước dễ đọc. Ở đây chỉ có phần
 hiển thị; việc điều hướng giữa các trang do `MainWindow` quyết định.
 """
+
 from __future__ import annotations
 
 import os
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QScrollArea,
-    QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
 from autodub_gui.formatting import format_relative
 from autodub_gui.run_state import (
-    LEVEL_ERROR, LEVEL_SUCCESS, LEVEL_WARNING, REGISTRY,
+    LEVEL_ERROR,
+    LEVEL_SUCCESS,
+    LEVEL_WARNING,
+    REGISTRY,
 )
 from autodub_gui.ui.avatar import InitialAvatar
 from autodub_gui.ui.buttons import GhostButton, IconButton
 from autodub_gui.ui.cards import SystemStatusCard
-from autodub_gui.ui.effects import soft_shadow
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.style import clear_background, scoped_style
 
@@ -79,14 +89,21 @@ class Sidebar(QFrame):
     settings_requested = Signal()
     account_requested = Signal()
 
-    def __init__(self, main_items: list[tuple[int, str, object]],
-                 tool_items: list[tuple[int, str, object]],
-                 second_items: list[tuple[int, str, object]],
-                 version: str, parent: QWidget | None = None):
+    def __init__(
+        self,
+        main_items: list[tuple[int, str, object]],
+        tool_items: list[tuple[int, str, object]],
+        second_items: list[tuple[int, str, object]],
+        version: str,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
-        scoped_style(self, f"background: {tokens.BG_SIDEBAR}; "
-                           f"border: none; "
-                           f"border-right: 1px solid {tokens.BORDER_SUBTLE};")
+        scoped_style(
+            self,
+            f"background: {tokens.BG_SIDEBAR}; "
+            f"border: none; "
+            f"border-right: 1px solid {tokens.BORDER_SUBTLE};",
+        )
         self._icon_only = False
         self._main_items = main_items
         self._tool_items = tool_items
@@ -130,7 +147,8 @@ class Sidebar(QFrame):
         self._version = QLabel(f"v{version}")
         self._version.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent; padding: 6px 16px;")
+            f"background: transparent; padding: 6px 16px;"
+        )
         root.addWidget(self._version)
 
         self.nav.currentRowChanged.connect(self._on_main_row)
@@ -144,10 +162,10 @@ class Sidebar(QFrame):
         # Hairline separator beneath brand area (Ethereal Glass)
         brand.setStyleSheet(
             f"QWidget {{ background: transparent; "
-            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}")
+            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}"
+        )
         row = QHBoxLayout(brand)
-        row.setContentsMargins(_DIVIDER_MARGIN, tokens.SP_5,
-                               _DIVIDER_MARGIN, tokens.SP_3)
+        row.setContentsMargins(_DIVIDER_MARGIN, tokens.SP_5, _DIVIDER_MARGIN, tokens.SP_3)
         row.setSpacing(tokens.SP_2)
         self._logo = QLabel()
         self._logo.setPixmap(icons.app_logo(_LOGO_PX))
@@ -155,20 +173,18 @@ class Sidebar(QFrame):
         self._brand_name = ElidedLabel(BRAND_NAME)
         self._brand_name.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_SECTION}px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         row.addWidget(self._logo)
         row.addWidget(self._brand_name, 1)
         return brand
 
-    def _build_list(self, items: list[tuple[int, str, object]],
-                    object_name: str) -> QListWidget:
+    def _build_list(self, items: list[tuple[int, str, object]], object_name: str) -> QListWidget:
         widget = QListWidget()
         widget.setObjectName(object_name)
         widget.setIconSize(QSize(_NAV_ICON_PX, _NAV_ICON_PX))
-        widget.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        widget.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         for _row, label, icon_fn in items:
             item = QListWidgetItem(f"  {label}")
@@ -178,8 +194,7 @@ class Sidebar(QFrame):
         height = tokens.NAV_ITEM_H * len(items) + tokens.SP_2 * len(items)
         widget.setMinimumHeight(height)
         widget.setMaximumHeight(height)
-        widget.setSizePolicy(QSizePolicy.Policy.Expanding,
-                             QSizePolicy.Policy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         return widget
 
     def _build_user_card(self) -> QWidget:
@@ -189,8 +204,7 @@ class Sidebar(QFrame):
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.setToolTip("Mở Cài đặt để đổi tên hiển thị")
         row = QHBoxLayout(card)
-        row.setContentsMargins(tokens.SP_3, tokens.SP_2,
-                               tokens.SP_3, tokens.SP_2)
+        row.setContentsMargins(tokens.SP_3, tokens.SP_2, tokens.SP_3, tokens.SP_2)
         row.setSpacing(tokens.SP_2)
         self._user_avatar = InitialAvatar(display_name(), 30)
         row.addWidget(self._user_avatar)
@@ -199,16 +213,16 @@ class Sidebar(QFrame):
         self._user_name = ElidedLabel(display_name())
         self._user_name.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         caption = QLabel("Tài khoản")
         caption.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; background: transparent;"
+        )
         col.addWidget(self._user_name)
         col.addWidget(caption)
         row.addLayout(col, 1)
-        card.mousePressEvent = (         # noqa: SLF001 — vùng bấm đơn giản
-            lambda _e: self.account_requested.emit())
+        card.mousePressEvent = lambda _e: self.account_requested.emit()
         return card
 
     def refresh_name(self) -> None:
@@ -245,9 +259,11 @@ class Sidebar(QFrame):
 
     def select_row(self, row: int) -> None:
         """Tô sáng mục tương ứng với trang đang mở, không phát tín hiệu lại."""
-        for widget, items in ((self.nav, self._main_items),
-                              (self.nav_tools, self._tool_items),
-                              (self.nav2, self._second_items)):
+        for widget, items in (
+            (self.nav, self._main_items),
+            (self.nav_tools, self._tool_items),
+            (self.nav2, self._second_items),
+        ):
             widget.blockSignals(True)
             match = next((i for i, it in enumerate(items) if it[0] == row), -1)
             widget.setCurrentRow(match)
@@ -256,7 +272,7 @@ class Sidebar(QFrame):
             widget.blockSignals(False)
 
     # -- Thu gọn khi cửa sổ hẹp ----------------------------------------
-    def resizeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._sync_footer()
 
@@ -278,8 +294,8 @@ class Sidebar(QFrame):
         available = self.height()
         show_status = available >= base
         show_user = show_status or (
-            available >= base - self.status_card.sizeHint().height()
-            - tokens.SP_2)
+            available >= base - self.status_card.sizeHint().height() - tokens.SP_2
+        )
         if show_status != self.status_card.isVisibleTo(self):
             self.status_card.setVisible(show_status)
         if show_user != self._user_card.isVisibleTo(self):
@@ -295,8 +311,9 @@ class Sidebar(QFrame):
         # Animate width — thước sidebar thay đổi theo breakpoint của sổ ứng dụng
         try:
             from autodub_gui.ui.animations import animate_width
+
             animate_width(self, width, duration=tokens.ANIM_MID)
-        except Exception:  # noqa: BLE001 — fallback instant
+        except Exception:
             self.setFixedWidth(width)
         if icon_only == self._icon_only:
             return
@@ -306,9 +323,11 @@ class Sidebar(QFrame):
         self._version.setVisible(not icon_only)
         self._tools_label.setVisible(not icon_only)
         self._system_label.setVisible(not icon_only)
-        for widget, items in ((self.nav, self._main_items),
-                              (self.nav_tools, self._tool_items),
-                              (self.nav2, self._second_items)):
+        for widget, items in (
+            (self.nav, self._main_items),
+            (self.nav_tools, self._tool_items),
+            (self.nav2, self._second_items),
+        ):
             for i, (_row, label, _icon) in enumerate(items):
                 item = widget.item(i)
                 item.setText("" if icon_only else f"  {label}")
@@ -319,7 +338,7 @@ class Sidebar(QFrame):
 class NotificationPopup(QFrame):
     """Cửa sổ nhỏ liệt kê các hoạt động gần đây khi bấm vào chuông."""
 
-    activity_opened = Signal(str)      # thư mục dự án của dòng được bấm
+    activity_opened = Signal(str)  # thư mục dự án của dòng được bấm
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent, Qt.WindowType.Popup)
@@ -337,8 +356,9 @@ class NotificationPopup(QFrame):
         # tràn ra ngoài biên và Windows từ chối cập nhật
         # ("UpdateLayeredWindowIndirect failed").
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(_POPUP_SHADOW_PAD, _POPUP_SHADOW_PAD,
-                                 _POPUP_SHADOW_PAD, _POPUP_SHADOW_PAD)
+        outer.setContentsMargins(
+            _POPUP_SHADOW_PAD, _POPUP_SHADOW_PAD, _POPUP_SHADOW_PAD, _POPUP_SHADOW_PAD
+        )
         panel = QFrame()
         panel.setObjectName("notifPanel")
         self._panel = panel
@@ -348,29 +368,29 @@ class NotificationPopup(QFrame):
             f"QFrame#notifPanel {{ background: {tokens.BG_ELEVATED}; "
             f"border: 1px solid {tokens.BORDER_DEFAULT}; "
             f"border-top: 1px solid {tokens.GLASS_BORDER}; "
-            f"border-radius: {tokens.RADIUS_LG}px; }}")
+            f"border-radius: {tokens.RADIUS_LG}px; }}"
+        )
         from autodub_gui.ui.effects import popup_shadow
+
         popup_shadow(panel)
         outer.addWidget(panel)
 
         root = QVBoxLayout(panel)
-        root.setContentsMargins(tokens.SP_3, tokens.SP_3,
-                                tokens.SP_3, tokens.SP_3)
+        root.setContentsMargins(tokens.SP_3, tokens.SP_3, tokens.SP_3, tokens.SP_3)
         root.setSpacing(tokens.SP_2)
 
         title = QLabel("Hoạt động gần đây")
         title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 700; background: transparent; border: none;")
+            f"font-weight: 700; background: transparent; border: none;"
+        )
         root.addWidget(title)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self._scroll.setStyleSheet(
-            "QScrollArea { background: transparent; border: none; }")
-        self._scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._body = QWidget()
         clear_background(self._body)
         self._body_layout = QVBoxLayout(self._body)
@@ -395,12 +415,12 @@ class NotificationPopup(QFrame):
         self._clear()
         activities = REGISTRY.activities()
         if not activities:
-            empty = QLabel("Chưa có hoạt động nào. Khi bạn chạy lồng tiếng, "
-                           "kết quả sẽ hiện ở đây.")
+            empty = QLabel("Chưa có hoạt động nào. Khi bạn chạy lồng tiếng, kết quả sẽ hiện ở đây.")
             empty.setWordWrap(True)
             empty.setStyleSheet(
                 f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; "
-                f"background: transparent; border: none;")
+                f"background: transparent; border: none;"
+            )
             self._body_layout.addWidget(empty)
             self._btn_read.setEnabled(False)
         else:
@@ -412,13 +432,12 @@ class NotificationPopup(QFrame):
         # layout đo hộ được: các dòng vừa thêm còn ở trạng thái ẩn cho tới khi
         # popup thật sự hiện, và layout bỏ qua widget ẩn. Tự cộng chiều cao
         # từng dòng theo bề ngang thật (heightForWidth xử lý chữ xuống hàng).
-        inner_w = _POPUP_W - 2 - 2 * tokens.SP_3      # trừ viền panel + lề
+        inner_w = _POPUP_W - 2 - 2 * tokens.SP_3  # trừ viền panel + lề
         content_h = self._measure_body(inner_w)
-        if content_h > _POPUP_MAX_H:                   # sẽ có thanh cuộn dọc
+        if content_h > _POPUP_MAX_H:  # sẽ có thanh cuộn dọc
             bar_w = self._scroll.verticalScrollBar().sizeHint().width()
             content_h = self._measure_body(inner_w - bar_w)
-        self._scroll.setFixedHeight(max(tokens.SP_8,
-                                        min(content_h, _POPUP_MAX_H)))
+        self._scroll.setFixedHeight(max(tokens.SP_8, min(content_h, _POPUP_MAX_H)))
 
     def _measure_body(self, width: int) -> int:
         """Tổng chiều cao các dòng nếu xếp trong bề ngang `width`."""
@@ -428,8 +447,7 @@ class NotificationPopup(QFrame):
             widget = self._body_layout.itemAt(i).widget()
             if widget is None:
                 continue
-            if widget.layout() is not None and \
-                    widget.layout().hasHeightForWidth():
+            if widget.layout() is not None and widget.layout().hasHeightForWidth():
                 h = widget.layout().heightForWidth(width)
             elif widget.hasHeightForWidth():
                 h = widget.heightForWidth(width)
@@ -449,31 +467,32 @@ class NotificationPopup(QFrame):
         dot = QLabel("●")
         dot.setStyleSheet(
             f"color: {_LEVEL_COLOR.get(activity.level, tokens.ACCENT_BLUE)}; "
-            f"font-size: 9px; background: transparent; border: none;")
+            f"font-size: 9px; background: transparent; border: none;"
+        )
         text = QLabel(activity.text)
         text.setWordWrap(True)
         # Không cho chữ dài nới rộng dòng vượt quá bề ngang popup — thiếu
         # đoạn này chữ sẽ tràn viền / bị cắt thay vì xuống hàng. Phải giữ
         # cờ heightForWidth, nếu không chiều cao sau khi bọc chữ sẽ sai.
-        policy = QSizePolicy(QSizePolicy.Policy.Ignored,
-                             QSizePolicy.Policy.Minimum)
+        policy = QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         policy.setHeightForWidth(True)
         text.setSizePolicy(policy)
         text.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent; border: none;")
+            f"background: transparent; border: none;"
+        )
         when = QLabel(format_relative(activity.ts))
         when.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent; border: none;")
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(dot, 0, Qt.AlignmentFlag.AlignTop)
         layout.addWidget(text, 1)
         layout.addWidget(when, 0, Qt.AlignmentFlag.AlignTop)
         if activity.work_dir:
             row.setCursor(Qt.CursorShape.PointingHandCursor)
             row.setToolTip("Bấm để mở dự án này trong Trình chỉnh sửa")
-            row.mousePressEvent = (          # noqa: SLF001 — gắn nhanh cho một dòng
-                lambda _e, wd=activity.work_dir: self._open(wd))
+            row.mousePressEvent = lambda _e, wd=activity.work_dir: self._open(wd)
         return row
 
     def _open(self, work_dir: str) -> None:
@@ -517,8 +536,7 @@ class NotificationButton(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self._button = IconButton(icons.bell(tokens.TEXT_SECONDARY),
-                                  "Hoạt động gần đây")
+        self._button = IconButton(icons.bell(tokens.TEXT_SECONDARY), "Hoạt động gần đây")
         self._button.clicked.connect(self.clicked.emit)
         layout.addWidget(self._button)
         self._unread = 0
@@ -533,11 +551,11 @@ class NotificationButton(QWidget):
             return
         self._unread = count
         self._button.setToolTip(
-            f"Hoạt động gần đây ({count} mục chưa đọc)" if count
-            else "Hoạt động gần đây")
+            f"Hoạt động gần đây ({count} mục chưa đọc)" if count else "Hoạt động gần đây"
+        )
         self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def paintEvent(self, event) -> None:
         super().paintEvent(event)
         if not self._unread:
             return
@@ -551,8 +569,7 @@ class NotificationButton(QWidget):
         font.setPixelSize(9)
         font.setBold(True)
         painter.setFont(font)
-        width = max(_BADGE_H,
-                    painter.fontMetrics().horizontalAdvance(text) + 6)
+        width = max(_BADGE_H, painter.fontMetrics().horizontalAdvance(text) + 6)
         geo = self._button.geometry()
         badge = QRectF(geo.right() - width + 2, geo.top(), width, _BADGE_H)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -577,7 +594,8 @@ class AppHeader(QFrame):
         self.setStyleSheet(
             f"QFrame {{ background: {tokens.BG_SIDEBAR}; "
             f"border: none; "
-            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}")
+            f"border-bottom: 1px solid {tokens.BORDER_SUBTLE}; }}"
+        )
         row = QHBoxLayout(self)
         row.setContentsMargins(28, tokens.SP_5, 28, 0)
         row.setSpacing(tokens.SP_3)
@@ -588,11 +606,13 @@ class AppHeader(QFrame):
         self.title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; "
             f"font-size: {tokens.FS_PAGE_TITLE}px; font-weight: 700; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self.subtitle = ElidedLabel("")
         self.subtitle.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         texts.addWidget(self.title)
         texts.addWidget(self.subtitle)
         row.addLayout(texts, 1)
@@ -612,8 +632,7 @@ class AppHeader(QFrame):
         self.bell.clicked.connect(self.notifications_clicked.emit)
         row.addWidget(self.bell)
 
-        help_button = IconButton(icons.help_circle(tokens.TEXT_SECONDARY),
-                                 "Mở trang Trợ giúp")
+        help_button = IconButton(icons.help_circle(tokens.TEXT_SECONDARY), "Mở trang Trợ giúp")
         help_button.clicked.connect(self.help_clicked.emit)
         row.addWidget(help_button)
 

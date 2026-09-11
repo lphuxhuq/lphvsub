@@ -1,20 +1,20 @@
-import os
-import sys
-import math
 import json
-import subprocess
-import threading
-import uuid
-import time
+import math
+import os
 import re
 import shutil
+import subprocess
+import sys
+import threading
+import time
+import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from flask import Flask, request, jsonify, send_from_directory, send_file
-from werkzeug.utils import secure_filename
 import pysubs2
+from flask import Flask, jsonify, request, send_file, send_from_directory
+from werkzeug.utils import secure_filename
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC_DIR)
@@ -33,7 +33,21 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 jobs = {}
 batch_queues = {}
 
-ALLOWED_EXTENSIONS = {"srt", "ass", "vtt", "mp4", "mkv", "avi", "mov", "mp3", "wav", "aac", "m4a", "webm", "flac"}
+ALLOWED_EXTENSIONS = {
+    "srt",
+    "ass",
+    "vtt",
+    "mp4",
+    "mkv",
+    "avi",
+    "mov",
+    "mp3",
+    "wav",
+    "aac",
+    "m4a",
+    "webm",
+    "flac",
+}
 SUBTITLE_EXTENSIONS = {".srt", ".ass", ".vtt"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".aac", ".m4a", ".flac"}
@@ -81,7 +95,7 @@ def append_log(job_id, line):
         log = jobs[job_id]["log"]
         log.append(line)
         if len(log) > JOBS_MAX_LOG_LINES:
-            del log[:len(log) - JOBS_MAX_LOG_LINES]
+            del log[: len(log) - JOBS_MAX_LOG_LINES]
 
 
 def validate_batch_files(files):
@@ -104,7 +118,9 @@ def resolve_batch_size(batch_size, total_lines, default_batch=100):
 
 
 def get_speed_preset(speed_mode):
-    return SPEED_MODES.get((speed_mode or DEFAULT_SPEED_MODE).strip().lower(), SPEED_MODES[DEFAULT_SPEED_MODE])
+    return SPEED_MODES.get(
+        (speed_mode or DEFAULT_SPEED_MODE).strip().lower(), SPEED_MODES[DEFAULT_SPEED_MODE]
+    )
 
 
 def resolve_parallel_workers(speed_mode, keys):
@@ -127,7 +143,11 @@ def _run_batch_job(item, index, key_pool):
         secondary = key_pool.next_key() if key_pool.alive_count() > 1 else None
         job_data["api_key"] = primary
         job_data["api_key2"] = secondary
-        append_log(job_id, f"Key được gán: {KeyPool.mask(primary)}" + (f" + {KeyPool.mask(secondary)}" if secondary else ""))
+        append_log(
+            job_id,
+            f"Key được gán: {KeyPool.mask(primary)}"
+            + (f" + {KeyPool.mask(secondary)}" if secondary else ""),
+        )
 
     job_data["key_pool"] = key_pool
     job_data["_batch"] = True
@@ -220,6 +240,7 @@ def load_subtitles_safe(filepath):
 
 # --- Routes -------------------------------------------------------------------
 
+
 @app.route("/")
 def index():
     response = send_from_directory(STATIC_DIR, "index.html")
@@ -233,6 +254,7 @@ def index():
 def get_voxdub_config_endpoint():
     try:
         from autodub.tools.gemini_srt_ui.server_manager import GeminiSrtServerManager
+
         cfg = GeminiSrtServerManager.get_voxdub_config()
         return jsonify({"ok": True, "config": cfg})
     except Exception as exc:
@@ -244,6 +266,7 @@ def get_voxdub_pending_project_endpoint():
     """Lấy thông tin file phụ đề từ dự án đang chờ dịch."""
     try:
         from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
+
         mgr = get_server_manager()
         preload = request.args.get("preload")
         if preload:
@@ -252,16 +275,18 @@ def get_voxdub_pending_project_endpoint():
             if os.path.exists(fpath):
                 subs = load_subtitles_safe(fpath)
                 display_name = safe_name[33:] if len(safe_name) > 33 else safe_name
-                return jsonify({
-                    "ok": True,
-                    "file": {
-                        "filename": safe_name,
-                        "original": display_name,
-                        "line_count": len(subs),
-                        "file_type": "subtitle",
-                        "work_dir": (mgr.pending_file or {}).get("work_dir", ""),
+                return jsonify(
+                    {
+                        "ok": True,
+                        "file": {
+                            "filename": safe_name,
+                            "original": display_name,
+                            "line_count": len(subs),
+                            "file_type": "subtitle",
+                            "work_dir": (mgr.pending_file or {}).get("work_dir", ""),
+                        },
                     }
-                })
+                )
         if mgr.pending_file:
             return jsonify({"ok": True, "file": mgr.pending_file})
         return jsonify({"ok": False, "file": None})
@@ -295,13 +320,15 @@ def upload_file():
     elif ext in AUDIO_EXTENSIONS:
         file_type = "audio"
 
-    return jsonify({
-        "filename": unique_name,
-        "original": filename,
-        "line_count": line_count,
-        "file_type": file_type,
-        "size_mb": round(os.path.getsize(filepath) / (1024 * 1024), 2)
-    })
+    return jsonify(
+        {
+            "filename": unique_name,
+            "original": filename,
+            "line_count": line_count,
+            "file_type": file_type,
+            "size_mb": round(os.path.getsize(filepath) / (1024 * 1024), 2),
+        }
+    )
 
 
 def extract_api_keys(raw_input):
@@ -347,6 +374,7 @@ def _test_key(key):
     """
     try:
         from google import genai
+
         client = genai.Client(api_key=key)
         for _ in client.models.list():
             break
@@ -361,7 +389,7 @@ def validate_keys(keys):
     valid = []
     invalid = []
     seen = set()
-    for k in (keys or []):
+    for k in keys or []:
         if k in seen:
             continue
         seen.add(k)
@@ -401,7 +429,8 @@ class KeyPool:
         with self._lock:
             now = time.time()
             candidates = [
-                k for k in self.keys
+                k
+                for k in self.keys
                 if k not in self._dead and self._cooldown_until.get(k, 0.0) <= now
             ]
             if not candidates:
@@ -418,8 +447,16 @@ class KeyPool:
             return
         lower = (err_str or "").lower()
         with self._lock:
-            if any(t in lower for t in ("401", "unauthenticated", "api_key_invalid",
-                                         "access_token_type_unsupported", "permission_denied")):
+            if any(
+                t in lower
+                for t in (
+                    "401",
+                    "unauthenticated",
+                    "api_key_invalid",
+                    "access_token_type_unsupported",
+                    "permission_denied",
+                )
+            ):
                 self._dead.add(key)
             elif any(t in lower for t in ("429", "resource_exhausted", "quota", "rate limit")):
                 self._cooldown_until[key] = time.time() + KEY_COOLDOWN_SECONDS
@@ -444,12 +481,17 @@ def list_models():
 
     valid_keys, invalid_results = validate_keys(keys)
     if not valid_keys:
-        return jsonify({"error": "Không có API Key hoạt động. Tất cả key đều không hợp lệ, sai định dạng hoặc hết quota."}), 400
+        return jsonify(
+            {
+                "error": "Không có API Key hoạt động. Tất cả key đều không hợp lệ, sai định dạng hoặc hết quota."
+            }
+        ), 400
 
     test_key = valid_keys[0]
 
     try:
         from google import genai
+
         client = genai.Client(api_key=test_key)
         raw_models = client.models.list()
 
@@ -483,17 +525,23 @@ def list_models():
         if not sorted_models:
             sorted_models = priority_order
 
-        return jsonify({
-            "models": sorted_models,
-            "submitted_keys_count": len(keys),
-            "valid_count": len(valid_keys),
-            "valid_keys": valid_keys,
-            "total": len(keys),
-        })
+        return jsonify(
+            {
+                "models": sorted_models,
+                "submitted_keys_count": len(keys),
+                "valid_count": len(valid_keys),
+                "valid_keys": valid_keys,
+                "total": len(keys),
+            }
+        )
 
     except Exception as e:
         err_str = str(e)
-        if "401" in err_str or "UNAUTHENTICATED" in err_str or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_str:
+        if (
+            "401" in err_str
+            or "UNAUTHENTICATED" in err_str
+            or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_str
+        ):
             msg = "API Key không hợp lệ hoặc sai loại (Lỗi 401 UNAUTHENTICATED). Key Google AI Studio chuẩn bắt đầu bằng 'AIzaSy...'. Vui lòng lấy key miễn phí tại: https://aistudio.google.com/app/apikey"
         elif "API_KEY_INVALID" in err_str or "API key not valid" in err_str or "400" in err_str:
             msg = "API Key không hợp lệ. Vui lòng kiểm tra lại trên Google AI Studio (https://aistudio.google.com/app/apikey)."
@@ -501,7 +549,12 @@ def list_models():
             msg = "API Key bị từ chối quyền truy cập (Permission Denied)."
         elif "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
             msg = "API Key đã hết hạn mức (Quota limit/Rate limit)."
-        elif "Connection" in err_str or "timeout" in err_str.lower() or "wsasend" in err_str.lower() or "wsarecv" in err_str.lower():
+        elif (
+            "Connection" in err_str
+            or "timeout" in err_str.lower()
+            or "wsasend" in err_str.lower()
+            or "wsarecv" in err_str.lower()
+        ):
             msg = "Lỗi kết nối mạng đến máy chủ Google Gemini. Vui lòng kiểm tra Internet/VPN."
         else:
             msg = f"Lỗi API: {err_str[:200]}"
@@ -509,6 +562,7 @@ def list_models():
 
 
 # --- Translation & Batch Endpoints ---------------------------------------------
+
 
 @app.route("/api/translate", methods=["POST"])
 def translate():
@@ -550,7 +604,11 @@ def batch_translate():
     keys_pool = collect_keys(data)
     valid_keys, _invalid = validate_keys(keys_pool)
     if not valid_keys:
-        return jsonify({"error": "Không có API Key hoạt động. Vui lòng kiểm tra lại key (đúng định dạng AIza... và chưa hết quota)."}), 400
+        return jsonify(
+            {
+                "error": "Không có API Key hoạt động. Vui lòng kiểm tra lại key (đúng định dạng AIza... và chưa hết quota)."
+            }
+        ), 400
     key_pool = KeyPool(valid_keys)
     key_pool.total_entered = len(keys_pool)
     speed_mode = (data.get("speed_mode") or DEFAULT_SPEED_MODE).strip().lower()
@@ -596,12 +654,14 @@ def batch_translate():
     t = threading.Thread(target=_run_batch_worker, args=(batch_id,), daemon=True)
     t.start()
 
-    return jsonify({
-        "batch_id": batch_id,
-        "total_files": len(batch_jobs),
-        "parallel_workers": parallel_workers,
-        "jobs": [{"job_id": j["job_id"], "name": j["name"]} for j in batch_jobs]
-    })
+    return jsonify(
+        {
+            "batch_id": batch_id,
+            "total_files": len(batch_jobs),
+            "parallel_workers": parallel_workers,
+            "jobs": [{"job_id": j["job_id"], "name": j["name"]} for j in batch_jobs],
+        }
+    )
 
 
 def _run_batch_worker(batch_id):
@@ -657,18 +717,22 @@ def batch_status(batch_id):
         total_lines += j.get("total_lines", 0)
         translated_lines += j.get("current_lines", 0)
 
-        jobs_summary.append({
-            "job_id": jid,
-            "name": item["name"],
-            "status": status,
-            "progress": j.get("progress", 0),
-            "output_file": j.get("output_file"),
-            "error": j.get("error"),
-            "social_metadata": get_social_metadata_safe(jid, j),
-        })
+        jobs_summary.append(
+            {
+                "job_id": jid,
+                "name": item["name"],
+                "status": status,
+                "progress": j.get("progress", 0),
+                "output_file": j.get("output_file"),
+                "error": j.get("error"),
+                "social_metadata": get_social_metadata_safe(jid, j),
+            }
+        )
 
     processed_count = completed_count + failed_count + stopped_count
-    overall_pct = int((processed_count / batch["total_files"]) * 100) if batch["total_files"] > 0 else 0
+    overall_pct = (
+        int((processed_count / batch["total_files"]) * 100) if batch["total_files"] > 0 else 0
+    )
 
     failed_files = list(batch.get("failed_files") or [])
     for item in batch["jobs"]:
@@ -677,18 +741,20 @@ def batch_status(batch_id):
             if name not in failed_files:
                 failed_files.append(name)
 
-    return jsonify({
-        "batch_id": batch_id,
-        "status": batch["status"],
-        "completed_files": completed_count,
-        "failed_files": failed_files,
-        "stopped_files": stopped_count,
-        "total_files": batch["total_files"],
-        "overall_progress": overall_pct,
-        "total_lines": total_lines,
-        "translated_lines": translated_lines,
-        "jobs": jobs_summary,
-    })
+    return jsonify(
+        {
+            "batch_id": batch_id,
+            "status": batch["status"],
+            "completed_files": completed_count,
+            "failed_files": failed_files,
+            "stopped_files": stopped_count,
+            "total_files": batch["total_files"],
+            "overall_progress": overall_pct,
+            "total_lines": total_lines,
+            "translated_lines": translated_lines,
+            "jobs": jobs_summary,
+        }
+    )
 
 
 def get_social_metadata_safe(job_id: str, job: dict | None = None) -> dict | None:
@@ -702,28 +768,45 @@ def get_social_metadata_safe(job_id: str, job: dict | None = None) -> dict | Non
     if "social_metadata" in job and isinstance(job["social_metadata"], dict):
         return job["social_metadata"]
 
-    filename = job.get("original_name") or job.get("original") or (os.path.basename(job.get("input_file_path") or "") if job.get("input_file_path") else "") or "video"
+    filename = (
+        job.get("original_name")
+        or job.get("original")
+        or (
+            os.path.basename(job.get("input_file_path") or "") if job.get("input_file_path") else ""
+        )
+        or "video"
+    )
     base_title = os.path.splitext(filename)[0] if filename else "Video"
 
     meta_candidates = []
     meta_candidates.append(os.path.join(OUTPUT_FOLDER, f"meta_{job_id}.json"))
 
-    out_file = job.get("out_file_path") or (os.path.join(OUTPUT_FOLDER, job.get("output_file")) if job.get("output_file") else None)
+    out_file = job.get("out_file_path") or (
+        os.path.join(OUTPUT_FOLDER, job.get("output_file")) if job.get("output_file") else None
+    )
     if out_file:
-        meta_candidates.append(os.path.join(os.path.dirname(out_file), "youtube", "youtube_metadata.json"))
+        meta_candidates.append(
+            os.path.join(os.path.dirname(out_file), "youtube", "youtube_metadata.json")
+        )
         meta_candidates.append(os.path.join(os.path.dirname(out_file), "youtube_metadata.json"))
-        meta_candidates.append(os.path.join(os.path.dirname(os.path.dirname(out_file)), "youtube", "youtube_metadata.json"))
+        meta_candidates.append(
+            os.path.join(
+                os.path.dirname(os.path.dirname(out_file)), "youtube", "youtube_metadata.json"
+            )
+        )
 
     input_file = job.get("input_file_path")
     if input_file:
-        meta_candidates.append(os.path.join(os.path.dirname(input_file), "youtube", "youtube_metadata.json"))
+        meta_candidates.append(
+            os.path.join(os.path.dirname(input_file), "youtube", "youtube_metadata.json")
+        )
         meta_candidates.append(os.path.join(os.path.dirname(input_file), "youtube_metadata.json"))
 
     meta_data = {}
     for cand in meta_candidates:
         if os.path.isfile(cand):
             try:
-                with open(cand, "r", encoding="utf-8") as f:
+                with open(cand, encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, dict) and (data.get("title") or data.get("hashtags")):
                     meta_data = data
@@ -752,7 +835,14 @@ def get_social_metadata_safe(job_id: str, job: dict | None = None) -> dict | Non
         clean_name = re.sub(r"[_\-]+", " ", base_title).strip()
         title = f"{clean_name.title()} — Bản Lồng Tiếng Việt"
         if not formatted_tags:
-            formatted_tags = ["#shorts", "#reviewphim", "#trending", "#viral", "#xuhuong", "#phimhay"]
+            formatted_tags = [
+                "#shorts",
+                "#reviewphim",
+                "#trending",
+                "#viral",
+                "#xuhuong",
+                "#phimhay",
+            ]
 
     if not title and not formatted_tags:
         return None
@@ -788,7 +878,7 @@ def job_status(job_id):
         current = int((progress / 100.0) * total)
 
     speed = (current / elapsed) if (elapsed > 0 and current > 0) else 0.0
-    
+
     eta = 0.0
     if job["status"] == "running":
         if speed > 0 and total > current:
@@ -823,33 +913,37 @@ def job_status(job_id):
                 duration_sec = max(0.1, (end_ms - start_ms) / 1000.0)
                 cps = round(len(trans_text) / duration_sec, 1) if trans_text else 0.0
 
-                subtitles.append({
-                    "index": idx + 1,
-                    "start": format_timestamp(start_ms),
-                    "end": format_timestamp(end_ms),
-                    "start_ms": start_ms,
-                    "end_ms": end_ms,
-                    "cps": cps,
-                    "original": orig_text,
-                    "translated": trans_text,
-                })
+                subtitles.append(
+                    {
+                        "index": idx + 1,
+                        "start": format_timestamp(start_ms),
+                        "end": format_timestamp(end_ms),
+                        "start_ms": start_ms,
+                        "end_ms": end_ms,
+                        "cps": cps,
+                        "original": orig_text,
+                        "translated": trans_text,
+                    }
+                )
 
-    return jsonify({
-        "status":        job["status"],
-        "progress":      job["progress"],
-        "current_lines": current,
-        "total_lines":   total,
-        "speed_lps":     round(speed, 1),
-        "eta_sec":       round(eta, 1),
-        "elapsed_sec":   round(elapsed, 1),
-        "prompt_tokens": job.get("prompt_tokens", 0),
-        "output_tokens": job.get("output_tokens", 0),
-        "log":           job["log"][-200:],
-        "output_file":   job["output_file"],
-        "error":         job["error"],
-        "subtitles":     subtitles,
-        "social_metadata": get_social_metadata_safe(job_id, job),
-    })
+    return jsonify(
+        {
+            "status": job["status"],
+            "progress": job["progress"],
+            "current_lines": current,
+            "total_lines": total,
+            "speed_lps": round(speed, 1),
+            "eta_sec": round(eta, 1),
+            "elapsed_sec": round(elapsed, 1),
+            "prompt_tokens": job.get("prompt_tokens", 0),
+            "output_tokens": job.get("output_tokens", 0),
+            "log": job["log"][-200:],
+            "output_file": job["output_file"],
+            "error": job["error"],
+            "subtitles": subtitles,
+            "social_metadata": get_social_metadata_safe(job_id, job),
+        }
+    )
 
 
 def _terminate_job_process(job):
@@ -1030,7 +1124,9 @@ def export_format():
         with open(out_path, "w", encoding="utf-8") as f:
             for i, ev in enumerate(subs, 1):
                 clean_text = ev.text.replace(r"\N", "\n")
-                f.write(f"[{i}] {format_timestamp(ev.start)} --> {format_timestamp(ev.end)}\n{clean_text}\n\n")
+                f.write(
+                    f"[{i}] {format_timestamp(ev.start)} --> {format_timestamp(ev.end)}\n{clean_text}\n\n"
+                )
         return send_file(out_path, as_attachment=True, download_name=out_name)
 
     out_name = f"{base_no_ext}_plain.txt"
@@ -1077,8 +1173,19 @@ def download_file(filename):
 
 # --- Translation Worker --------------------------------------------------------
 
-def _build_gst_cmd(is_sub, input_path, out_path, target_lang, model_name,
-                   description, effective_batch_size, temperature, start_line, no_context):
+
+def _build_gst_cmd(
+    is_sub,
+    input_path,
+    out_path,
+    target_lang,
+    model_name,
+    description,
+    effective_batch_size,
+    temperature,
+    start_line,
+    no_context,
+):
     cmd = [GST_EXE, "translate"]
     if is_sub:
         cmd += ["-i", input_path]
@@ -1086,9 +1193,12 @@ def _build_gst_cmd(is_sub, input_path, out_path, target_lang, model_name,
         cmd += ["-v", input_path]
 
     cmd += [
-        "-l", target_lang,
-        "-o", out_path,
-        "--model", model_name,
+        "-l",
+        target_lang,
+        "-o",
+        out_path,
+        "--model",
+        model_name,
         "--no-colors",
         "--skip-upgrade",
         "--no-resume",
@@ -1154,7 +1264,11 @@ def _run_gst_process(job_id, job, cmd, env, out_path, on_progress=None):
         if job.get("stop_requested"):
             break
         line = strip_ansi(raw_line).rstrip()
-        if not line or line.startswith("Validating token size") or line.startswith("Token size validated"):
+        if (
+            not line
+            or line.startswith("Validating token size")
+            or line.startswith("Token size validated")
+        ):
             continue
 
         m_tok = re.search(r"Prompt Tokens:\s*(\d+).*?Output Tokens:\s*(\d+)", line)
@@ -1207,7 +1321,11 @@ def _run_gst_process(job_id, job, cmd, env, out_path, on_progress=None):
         return {"ok": False, "stopped": False, "error": f"exit code {proc.returncode}: {last}"}
 
     if not os.path.exists(out_path):
-        return {"ok": False, "stopped": False, "error": "Không tìm thấy file kết quả sau khi dịch xong."}
+        return {
+            "ok": False,
+            "stopped": False,
+            "error": "Không tìm thấy file kết quả sau khi dịch xong.",
+        }
 
     return {"ok": True, "stopped": False, "error": None}
 
@@ -1221,9 +1339,20 @@ def _plan_chunk_count(total_lines, alive_keys, preset_parallel):
     return k
 
 
-def _translate_chunked(job_id, job, key_pool, orig_subs, out_path,
-                       target_lang, model_name, description, effective_batch_size,
-                       temperature, no_context, preset_parallel):
+def _translate_chunked(
+    job_id,
+    job,
+    key_pool,
+    orig_subs,
+    out_path,
+    target_lang,
+    model_name,
+    description,
+    effective_batch_size,
+    temperature,
+    no_context,
+    preset_parallel,
+):
     """Split a subtitle file into chunks, translate them in parallel with
     distinct API keys, then merge the results back in order."""
     total = len(orig_subs)
@@ -1239,20 +1368,25 @@ def _translate_chunked(job_id, job, key_pool, orig_subs, out_path,
             break
         core_end = min(total, core_start + base)
         input_start = max(0, core_start - CHUNK_OVERLAP)
-        chunks.append({
-            "i": i,
-            "core_start": core_start,
-            "core_end": core_end,
-            "input_start": input_start,
-        })
+        chunks.append(
+            {
+                "i": i,
+                "core_start": core_start,
+                "core_end": core_end,
+                "input_start": input_start,
+            }
+        )
     k = len(chunks)
 
-    append_log(job_id, f"Phân luồng song song: {total} dòng -> {k} đoạn (mỗi đoạn ~{base} dòng) dùng {k} API Keys")
+    append_log(
+        job_id,
+        f"Phân luồng song song: {total} dòng -> {k} đoạn (mỗi đoạn ~{base} dòng) dùng {k} API Keys",
+    )
 
     # Write chunk input files
     for c in chunks:
         chunk_subs = pysubs2.SSAFile()
-        for ev in orig_subs[c["input_start"]:c["core_end"]]:
+        for ev in orig_subs[c["input_start"] : c["core_end"]]:
             chunk_subs.append(ev)
         c["in_path"] = os.path.join(OUTPUT_FOLDER, f"temp_{job_id[:8]}_in{c['i']}.srt")
         c["out_path"] = os.path.join(OUTPUT_FOLDER, f"temp_{job_id[:8]}_out{c['i']}.srt")
@@ -1274,25 +1408,42 @@ def _translate_chunked(job_id, job, key_pool, orig_subs, out_path,
                 done = sum(chunk_done.values())
                 job["current_lines"] = min(total, done)
                 job["progress"] = min(100, int((done / total) * 100)) if total else 0
+
         return cb
 
     def run_chunk(c, key):
-        cmd = _build_gst_cmd(True, c["in_path"], c["out_path"], target_lang, model_name,
-                             description, effective_batch_size, temperature, None, no_context)
+        cmd = _build_gst_cmd(
+            True,
+            c["in_path"],
+            c["out_path"],
+            target_lang,
+            model_name,
+            description,
+            effective_batch_size,
+            temperature,
+            None,
+            no_context,
+        )
         env = _build_env(key, None)
-        res = _run_gst_process(job_id, job, cmd, env, c["out_path"], on_progress=make_progress_cb(c))
+        res = _run_gst_process(
+            job_id, job, cmd, env, c["out_path"], on_progress=make_progress_cb(c)
+        )
         return c, key, res
 
     results = {}
     try:
         with ThreadPoolExecutor(max_workers=k) as executor:
-            futures = [executor.submit(run_chunk, c, chunk_keys[idx]) for idx, c in enumerate(chunks)]
+            futures = [
+                executor.submit(run_chunk, c, chunk_keys[idx]) for idx, c in enumerate(chunks)
+            ]
             for fut in futures:
                 c, key, res = fut.result()
                 results[c["i"]] = (c, key, res)
                 if not res["ok"] and not res["stopped"]:
                     key_pool.mark_error(key, res["error"] or "")
-                    append_log(job_id, f"Đoạn {c['i'] + 1} lỗi (key {KeyPool.mask(key)}): {res['error']}")
+                    append_log(
+                        job_id, f"Đoạn {c['i'] + 1} lỗi (key {KeyPool.mask(key)}): {res['error']}"
+                    )
 
         if job.get("stop_requested"):
             return {"ok": False, "stopped": True, "error": None}
@@ -1312,8 +1463,11 @@ def _translate_chunked(job_id, job, key_pool, orig_subs, out_path,
             offset = c["core_start"] - c["input_start"]
             keep = c["core_end"] - c["core_start"]
             if len(out_subs) < offset + keep:
-                append_log(job_id, f"Cảnh báo: đoạn {c['i'] + 1} có {len(out_subs)} dòng, dự kiến {offset + keep}")
-            for ev in out_subs[offset:offset + keep]:
+                append_log(
+                    job_id,
+                    f"Cảnh báo: đoạn {c['i'] + 1} có {len(out_subs)} dòng, dự kiến {offset + keep}",
+                )
+            for ev in out_subs[offset : offset + keep]:
                 merged.append(ev)
 
         merged.save(out_path, encoding="utf-8")
@@ -1335,11 +1489,12 @@ def _has_cjk(text):
     if not text:
         return False
     cjk_count = sum(
-        1 for c in text
-        if (0x4E00 <= ord(c) <= 0x9FFF)    # CJK Unified Ideographs (Chinese/Japanese)
-        or (0x3400 <= ord(c) <= 0x4DBF)    # CJK Extension A
-        or (0xAC00 <= ord(c) <= 0xD7AF)    # Korean Hangul syllables
-        or (0x3040 <= ord(c) <= 0x30FF)    # Hiragana + Katakana
+        1
+        for c in text
+        if (0x4E00 <= ord(c) <= 0x9FFF)  # CJK Unified Ideographs (Chinese/Japanese)
+        or (0x3400 <= ord(c) <= 0x4DBF)  # CJK Extension A
+        or (0xAC00 <= ord(c) <= 0xD7AF)  # Korean Hangul syllables
+        or (0x3040 <= ord(c) <= 0x30FF)  # Hiragana + Katakana
     )
     return cjk_count >= 2  # at least 2 CJK chars = likely untranslated
 
@@ -1358,16 +1513,16 @@ def _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_poo
         return
 
     # Collect indices of untranslated lines
-    untranslated_idx = [
-        i for i, s in enumerate(subs)
-        if _has_cjk(s.plaintext.strip())
-    ]
+    untranslated_idx = [i for i, s in enumerate(subs) if _has_cjk(s.plaintext.strip())]
 
     if not untranslated_idx:
         return
 
     append_log(job_id, "-" * 50)
-    append_log(job_id, f"[Hậu xử lý] Phát hiện {len(untranslated_idx)} dòng còn sót chữ CJK — đang dịch lại...")
+    append_log(
+        job_id,
+        f"[Hậu xử lý] Phát hiện {len(untranslated_idx)} dòng còn sót chữ CJK — đang dịch lại...",
+    )
 
     # Re-translate in batches of 10
     BATCH = 10
@@ -1379,11 +1534,8 @@ def _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_poo
         return
 
     for start in range(0, len(untranslated_idx), BATCH):
-        chunk_idx = untranslated_idx[start:start + BATCH]
-        lines_payload = [
-            {"index": str(ci), "text": subs[ci].plaintext.strip()}
-            for ci in chunk_idx
-        ]
+        chunk_idx = untranslated_idx[start : start + BATCH]
+        lines_payload = [{"index": str(ci), "text": subs[ci].plaintext.strip()} for ci in chunk_idx]
         key = key_pool.next_key() if key_pool else None
         if not key:
             append_log(job_id, "[Hậu xử lý] Không còn API key hoạt động, dừng dịch lại.")
@@ -1394,9 +1546,10 @@ def _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_poo
                 f"Translate ONLY the 'text' field of each JSON object to {target_lang}.\n"
                 f"Return a JSON array with the same structure (keep 'index' unchanged).\n"
                 f"Do NOT add explanations. Return ONLY valid JSON.\n\n"
-                + __import__('json').dumps(lines_payload, ensure_ascii=False)
+                + __import__("json").dumps(lines_payload, ensure_ascii=False)
             )
             import json as _json
+
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -1414,7 +1567,7 @@ def _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_poo
                 if 0 <= ci < len(subs) and new_text:
                     subs[ci].text = new_text
                     translated_count += 1
-            append_log(job_id, f"[Hậu xử lý] Dịch lại dòng {[ci+1 for ci in chunk_idx]}: OK")
+            append_log(job_id, f"[Hậu xử lý] Dịch lại dòng {[ci + 1 for ci in chunk_idx]}: OK")
         except Exception as e:
             append_log(job_id, f"[Hậu xử lý] Lỗi dịch lại batch {chunk_idx}: {e}")
             key_pool.mark_error(key, str(e))
@@ -1422,12 +1575,14 @@ def _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_poo
     if translated_count > 0:
         try:
             subs.save(out_path, encoding="utf-8")
-            append_log(job_id, f"[Hậu xử lý] ✅ Đã dịch lại {translated_count} dòng sót, lưu file thành công.")
+            append_log(
+                job_id,
+                f"[Hậu xử lý] ✅ Đã dịch lại {translated_count} dòng sót, lưu file thành công.",
+            )
         except Exception as e:
             append_log(job_id, f"[Hậu xử lý] Lỗi lưu file sau khi dịch lại: {e}")
     else:
         append_log(job_id, "[Hậu xử lý] Không dịch lại được dòng nào (có thể lỗi API).")
-
 
 
 def _run_translation(job_id, data):
@@ -1449,10 +1604,10 @@ def _run_translation(job_id, data):
             key_pool.total_entered = getattr(key_pool, "total_entered", len(keys_pool))
 
         target_lang = (data.get("target_language") or "Vietnamese").strip()
-        speed_mode  = (data.get("speed_mode") or DEFAULT_SPEED_MODE).strip().lower()
-        preset      = get_speed_preset(speed_mode)
+        speed_mode = (data.get("speed_mode") or DEFAULT_SPEED_MODE).strip().lower()
+        preset = get_speed_preset(speed_mode)
 
-        model_name  = (data.get("model_name") or preset["model"]).strip()
+        model_name = (data.get("model_name") or preset["model"]).strip()
         if not model_name or model_name == "default":
             model_name = preset["model"]
 
@@ -1468,28 +1623,41 @@ def _run_translation(job_id, data):
                     elif isinstance(item, str) and item.strip():
                         glossary_lines.append(f"- {item.strip()}")
             elif isinstance(glossary_items, str):
-                glossary_lines = [f"- {l.strip()}" for l in glossary_items.splitlines() if l.strip()]
+                glossary_lines = [
+                    f"- {l.strip()}" for l in glossary_items.splitlines() if l.strip()
+                ]
 
             if glossary_lines:
-                glossary_text = "\n[BẢNG TỪ ĐIỂN THUẬT NGỮ CỐ ĐỊNH - BẮT BUỘC TUÂN THỦ]:\n" + "\n".join(glossary_lines)
-                description = (description + "\n" + glossary_text).strip() if description else glossary_text.strip()
+                glossary_text = (
+                    "\n[BẢNG TỪ ĐIỂN THUẬT NGỮ CỐ ĐỊNH - BẮT BUỘC TUÂN THỦ]:\n"
+                    + "\n".join(glossary_lines)
+                )
+                description = (
+                    (description + "\n" + glossary_text).strip()
+                    if description
+                    else glossary_text.strip()
+                )
 
-        batch_size  = str(data.get("batch_size") or "").strip()
+        batch_size = str(data.get("batch_size") or "").strip()
         temperature = str(data.get("temperature") or "").strip()
-        start_line  = str(data.get("start_line") or "").strip()
+        start_line = str(data.get("start_line") or "").strip()
         if "no_context" in data:
             no_context = bool(data.get("no_context", False))
         else:
             no_context = preset["no_context"]
         input_file_key = (data.get("input_file") or "").strip()
-        original_name  = (data.get("original_name") or "translated.srt").strip()
+        original_name = (data.get("original_name") or "translated.srt").strip()
 
         if not key_pool or key_pool.alive_count() == 0:
-            raise ValueError("Không có API Key hoạt động. Vui lòng kiểm tra lại key (đúng định dạng AIza... và chưa hết quota).")
+            raise ValueError(
+                "Không có API Key hoạt động. Vui lòng kiểm tra lại key (đúng định dạng AIza... và chưa hết quota)."
+            )
         if not input_file_key:
             raise ValueError("Chưa chọn file đầu vào")
         if not GST_EXE:
-            raise RuntimeError("Không tìm thấy gst CLI. Hãy đảm bảo gemini-srt-translator đã được cài đặt.")
+            raise RuntimeError(
+                "Không tìm thấy gst CLI. Hãy đảm bảo gemini-srt-translator đã được cài đặt."
+            )
 
         input_path = os.path.join(UPLOAD_FOLDER, input_file_key)
         if not os.path.exists(input_path):
@@ -1512,7 +1680,9 @@ def _run_translation(job_id, data):
                 append_log(job_id, f"Tổng số dòng phụ đề: {job['total_lines']} dòng")
 
         batch_arg = batch_size if batch_size.isdigit() and int(batch_size) > 0 else ""
-        effective_batch_size = resolve_batch_size(batch_arg, job["total_lines"], preset["batch_size"])
+        effective_batch_size = resolve_batch_size(
+            batch_arg, job["total_lines"], preset["batch_size"]
+        )
 
         primary = None
         secondary = None
@@ -1527,9 +1697,15 @@ def _run_translation(job_id, data):
         append_log(job_id, f"Ngôn ngữ đích: {target_lang} | Model: {model_name}")
         total_entered = getattr(key_pool, "total_entered", len(key_pool.keys))
         valid_count = key_pool.alive_count()
-        append_log(job_id, f"Chế độ: {speed_mode} | Batch size: {effective_batch_size} | Số key hợp lệ: {valid_count}/{total_entered}")
+        append_log(
+            job_id,
+            f"Chế độ: {speed_mode} | Batch size: {effective_batch_size} | Số key hợp lệ: {valid_count}/{total_entered}",
+        )
         if valid_count < total_entered:
-            append_log(job_id, f"Cảnh báo: {total_entered - valid_count} key không hoạt động/sai định dạng, đã bỏ qua.")
+            append_log(
+                job_id,
+                f"Cảnh báo: {total_entered - valid_count} key không hoạt động/sai định dạng, đã bỏ qua.",
+            )
         if glossary_items:
             append_log(job_id, f"Từ điển thuật ngữ: {len(glossary_lines)} quy tắc cố định")
         append_log(job_id, "-" * 50)
@@ -1546,9 +1722,20 @@ def _run_translation(job_id, data):
 
         if can_chunk:
             append_log(job_id, "Kích hoạt phân luồng song song (multi-key chunking)...")
-            res = _translate_chunked(job_id, job, key_pool, orig_subs, out_path,
-                                     target_lang, model_name, description, effective_batch_size,
-                                     temperature, no_context, preset["parallel"])
+            res = _translate_chunked(
+                job_id,
+                job,
+                key_pool,
+                orig_subs,
+                out_path,
+                target_lang,
+                model_name,
+                description,
+                effective_batch_size,
+                temperature,
+                no_context,
+                preset["parallel"],
+            )
             if res["stopped"]:
                 job["status"] = "stopped"
                 append_log(job_id, "Đã dừng theo yêu cầu người dùng.")
@@ -1559,9 +1746,23 @@ def _run_translation(job_id, data):
             if not primary:
                 raise ValueError("Vui lòng nhập ít nhất 1 Gemini API Key")
             if not is_batch:
-                append_log(job_id, f"Key: {KeyPool.mask(primary)}" + (f" + {KeyPool.mask(secondary)}" if secondary else ""))
-            cmd = _build_gst_cmd(is_sub, input_path, out_path, target_lang, model_name,
-                                 description, effective_batch_size, temperature, start_line, no_context)
+                append_log(
+                    job_id,
+                    f"Key: {KeyPool.mask(primary)}"
+                    + (f" + {KeyPool.mask(secondary)}" if secondary else ""),
+                )
+            cmd = _build_gst_cmd(
+                is_sub,
+                input_path,
+                out_path,
+                target_lang,
+                model_name,
+                description,
+                effective_batch_size,
+                temperature,
+                start_line,
+                no_context,
+            )
             env = _build_env(primary, secondary)
             res = _run_gst_process(job_id, job, cmd, env, out_path)
             if res["stopped"]:
@@ -1573,15 +1774,17 @@ def _run_translation(job_id, data):
                 raise RuntimeError(f"Quá trình dịch dừng lại.\nChi tiết log:\n{res['error']}")
 
         if not os.path.exists(out_path):
-            raise FileNotFoundError("Không tìm thấy file kết quả sau khi dịch xong. Vui lòng kiểm tra log.")
+            raise FileNotFoundError(
+                "Không tìm thấy file kết quả sau khi dịch xong. Vui lòng kiểm tra log."
+            )
 
         # ── Post-processing: re-translate any lines still in source language ──
         _retranslate_untranslated(job_id, out_path, target_lang, model_name, key_pool)
 
-        job["status"]        = "done"
-        job["progress"]      = 100
+        job["status"] = "done"
+        job["progress"] = 100
         job["current_lines"] = job["total_lines"]
-        job["output_file"]   = out_filename
+        job["output_file"] = out_filename
         elapsed = max(0.1, time.time() - job["start_time"])
         job["speed_lps"] = round(job["total_lines"] / elapsed, 2)
         append_log(job_id, "-" * 50)
@@ -1596,15 +1799,20 @@ def _run_translation(job_id, data):
                 segs = []
                 for idx, ev in enumerate(parsed_subs):
                     txt_clean = ev.text.replace(r"\N", "\n").strip()
-                    segs.append({
-                        "id": idx + 1,
-                        "start": ev.start / 1000.0,
-                        "end": ev.end / 1000.0,
-                        "text": txt_clean,
-                        "text_vi": txt_clean,
-                    })
-                with open(os.path.join(work_dir, "transcript_dub_vi.json"), "w", encoding="utf-8") as jf:
+                    segs.append(
+                        {
+                            "id": idx + 1,
+                            "start": ev.start / 1000.0,
+                            "end": ev.end / 1000.0,
+                            "text": txt_clean,
+                            "text_vi": txt_clean,
+                        }
+                    )
+                with open(
+                    os.path.join(work_dir, "transcript_dub_vi.json"), "w", encoding="utf-8"
+                ) as jf:
                     import json
+
                     json.dump(segs, jf, ensure_ascii=False, indent=2)
                 append_log(job_id, f"✅ Đã đồng bộ bản dịch vào thư mục dự án VoxDub: {work_dir}")
             except Exception as sync_err:
@@ -1614,10 +1822,8 @@ def _run_translation(job_id, data):
 
     except Exception as exc:
         job["status"] = "error"
-        job["error"]  = str(exc)
+        job["error"] = str(exc)
         append_log(job_id, "LỖI: " + str(exc))
-
-
 
 
 def get_static_folder() -> str:

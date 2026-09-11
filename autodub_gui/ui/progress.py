@@ -1,29 +1,29 @@
 """Thanh tiến trình mỏng và chỉ báo lưu tự động."""
+
 from __future__ import annotations
 
-from PySide6.QtCore import QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
 
 from autodub_gui import tokens
 
 _BAR_H = 5
-_DOT = "●"          # chấm tròn đặc — ký tự hình học, không phải biểu tượng cảm xúc
+_DOT = "●"  # chấm tròn đặc — ký tự hình học, không phải biểu tượng cảm xúc
 _SPIN_MS = 400
 
 # trạng thái lưu -> (màu chấm, nhãn hiển thị)
 _SAVE_STATES: dict[str, tuple[str, str]] = {
-    "idle":   (tokens.TEXT_MUTED, "Lưu tự động"),
+    "idle": (tokens.TEXT_MUTED, "Lưu tự động"),
     "saving": (tokens.PROCESSING, "Đang lưu"),
-    "saved":  (tokens.SUCCESS, "Đã lưu"),
-    "error":  (tokens.DANGER, "Lỗi lưu"),
+    "saved": (tokens.SUCCESS, "Đã lưu"),
+    "error": (tokens.DANGER, "Lỗi lưu"),
 }
 
 
 class ThinProgressBar(QProgressBar):
     """Thanh tiến trình cao 5px, không hiện số phần trăm bên trong."""
 
-    def __init__(self, parent: QWidget | None = None, *,
-                 color: str = tokens.PRIMARY):
+    def __init__(self, parent: QWidget | None = None, *, color: str = tokens.PRIMARY):
         super().__init__(parent)
         self.setTextVisible(False)
         self.setRange(0, 100)
@@ -35,12 +35,14 @@ class ThinProgressBar(QProgressBar):
     def set_color(self, color: str) -> None:
         """Đổi màu phần đã chạy cho khớp trạng thái của mục."""
         from autodub_gui.theme import _grad_h
+
         chunk_grad = _grad_h(color, tokens.ACCENT_BLUE)
         self.setStyleSheet(
             f"QProgressBar {{ background: {tokens.TRACK_BG}; border: none; "
             f"border-radius: 2px; height: 4px; }}"
             f"QProgressBar::chunk {{ background: {chunk_grad}; "
-            f"border-radius: 2px; }}")
+            f"border-radius: 2px; }}"
+        )
 
     def set_indeterminate(self, on: bool) -> None:
         """Chế độ chưa rõ phần trăm, dùng khi đang chờ tác vụ chưa đo được."""
@@ -62,7 +64,8 @@ class SaveIndicator(QWidget):
         self._text = QLabel("")
         self._text.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         layout.addWidget(self._dot)
         layout.addWidget(self._text)
         self._timer = QTimer(self)
@@ -88,8 +91,8 @@ class SaveIndicator(QWidget):
         color, label = _SAVE_STATES.get(state, _SAVE_STATES["idle"])
         self._state = state
         self._dot.setStyleSheet(
-            f"color: {color}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {color}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self._label = label
         self._text.setText(f"{label} {detail}".strip())
         self.setToolTip(detail or label)
@@ -115,7 +118,8 @@ class DownloadProgressBar(QWidget):
         self._sig_progress.connect(self._do_set_progress, Qt.ConnectionType.QueuedConnection)
         self._sig_reset.connect(self._do_reset, Qt.ConnectionType.QueuedConnection)
 
-        from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
+        from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QVBoxLayout
+
         from autodub_gui import tokens
         from autodub_gui.theme import _grad_h
 
@@ -182,5 +186,3 @@ class DownloadProgressBar(QWidget):
         self.lbl_percent.setText("0%")
         self.lbl_status.setText("")
         self.hide()
-
-

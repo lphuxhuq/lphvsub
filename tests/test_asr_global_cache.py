@@ -1,19 +1,17 @@
 import os
 from unittest import mock
-from pathlib import Path
-import pytest
 
-from autodub.pipeline import DubPipeline, DubRequest
-from autodub.config import Settings
-from autodub.languages import TargetLang
-from autodub.workdir import data_path
 import autodub.pipeline_cache as pc
+from autodub.config import Settings
+from autodub.pipeline import DubPipeline
 
 
 def _make_dummy_wav(path: str):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "wb") as f:
-        f.write(b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00")
+        f.write(
+            b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+        )
 
 
 def test_asr_cache_cross_project_reuse(tmp_path):
@@ -38,11 +36,17 @@ def test_asr_cache_cross_project_reuse(tmp_path):
     pipeline = DubPipeline(settings)
 
     # 1. First project run (Cold ASR)
-    with mock.patch("autodub.speech.transcriber.transcribe", side_effect=fake_transcribe), \
-         mock.patch.object(pipeline, "_resolve_video", return_value=str(video)), \
-         mock.patch("autodub.media.audio.extract_audio", side_effect=lambda v, a, **kw: _make_dummy_wav(a)), \
-         mock.patch("autodub.media.audio.extract_audio_dual", side_effect=lambda v, a, h, **kw: (_make_dummy_wav(a), _make_dummy_wav(h))):
-
+    with (
+        mock.patch("autodub.speech.transcriber.transcribe", side_effect=fake_transcribe),
+        mock.patch.object(pipeline, "_resolve_video", return_value=str(video)),
+        mock.patch(
+            "autodub.media.audio.extract_audio", side_effect=lambda v, a, **kw: _make_dummy_wav(a)
+        ),
+        mock.patch(
+            "autodub.media.audio.extract_audio_dual",
+            side_effect=lambda v, a, h, **kw: (_make_dummy_wav(a), _make_dummy_wav(h)),
+        ),
+    ):
         # Test step 3 specifically using the ASR cache logic
         engine = getattr(settings, "asr_engine", "whisper")
         model = getattr(settings, "whisper_model", "base")

@@ -6,6 +6,7 @@ hoặc mốc thời gian đổi. Trước đây hai nơi tự viết lấy nên 
 hai gọi chung :func:`refresh_subtitles`, nên chữ trong tệp .srt, chữ ghi vào
 video và chữ xem trước luôn là MỘT.
 """
+
 from __future__ import annotations
 
 import os
@@ -57,13 +58,18 @@ def refresh_subtitles(
     # cùng. Hỏng thì quay về phụ đề cả câu — video vẫn phải ra được.
     try:
         from autodub.text.ass_karaoke import build_karaoke_ass
+
         burn_path = build_karaoke_ass(
-            segments, merge_dir, data_path(work_dir, KARAOKE_NAME),
-            style, text_field=target.text_field, settings=settings,
+            segments,
+            merge_dir,
+            data_path(work_dir, KARAOKE_NAME),
+            style,
+            text_field=target.text_field,
+            settings=settings,
             cache_path=data_path(work_dir, "align_cache.json"),
-            progress_cb=progress_cb)
+            progress_cb=progress_cb,
+        )
         return srt_path, burn_path
     except Exception as e:
-        logger.warning(f"Không tạo được phụ đề kiểu cụm chữ ({e}) — "
-                       "dùng phụ đề hiện cả câu")
+        logger.warning(f"Không tạo được phụ đề kiểu cụm chữ ({e}) — dùng phụ đề hiện cả câu")
         return srt_path, srt_path

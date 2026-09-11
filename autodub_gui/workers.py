@@ -5,6 +5,7 @@ core pipeline are forwarded as-is (they are plain dataclasses, safe across
 threads via queued connections). A logging.Handler subclass forwards core log
 records into the GUI log panel.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,6 @@ from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 from autodub.config import Settings
 from autodub.pipeline import DubPipeline, DubRequest, DubResult
 from autodub.progress import PipelineCancelled
-
 
 # --- Lọc log cho người dùng --------------------------------------------------
 # GuiLogHandler chỉ chuyển những gì người dùng cần thấy lên khung Nhật ký.
@@ -33,8 +33,10 @@ class GuiLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            from autodub_gui.log_text import notice_for
             import time as _time
+
+            from autodub_gui.log_text import notice_for
+
             result = notice_for(record.getMessage(), record.levelno)
             if result is None:
                 return
@@ -61,10 +63,10 @@ def detach_gui_logging(handler: GuiLogHandler) -> None:
 class DubWorker(QThread):
     """Run one DubPipeline.run() in the background."""
 
-    progress = Signal(object)          # ProgressEvent
-    log = Signal(str, int)             # message, levelno
-    finished_ok = Signal(object)       # DubResult
-    failed = Signal(str)               # error message
+    progress = Signal(object)  # ProgressEvent
+    log = Signal(str, int)  # message, levelno
+    finished_ok = Signal(object)  # DubResult
+    failed = Signal(str)  # error message
     cancelled = Signal()
 
     def __init__(self, settings: Settings, request: DubRequest, parent=None):
@@ -81,10 +83,11 @@ class DubWorker(QThread):
         try:
             from autodub.model_preloader import (
                 get_global_demucs_cache,
-                get_global_whisper_cache,
-                get_global_synth_cache,
                 get_global_paraformer_cache,
+                get_global_synth_cache,
+                get_global_whisper_cache,
             )
+
             pipeline = DubPipeline(
                 self._settings,
                 progress=self.progress.emit,
@@ -98,7 +101,7 @@ class DubWorker(QThread):
             self.finished_ok.emit(result)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001 — surfaced to the user verbatim
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -113,9 +116,9 @@ class ExportWorker(QThread):
     trừ, bấm lại là chạy tiếp.
     """
 
-    progress = Signal(object)          # ProgressEvent
+    progress = Signal(object)  # ProgressEvent
     log = Signal(str, int)
-    finished_ok = Signal(object)       # DubResult
+    finished_ok = Signal(object)  # DubResult
     failed = Signal(str)
     cancelled = Signal()
 
@@ -134,13 +137,15 @@ class ExportWorker(QThread):
         handler = attach_gui_logging(self.log)
         try:
             result: DubResult = export_committed_project(
-                self._work_dir, self._settings,
+                self._work_dir,
+                self._settings,
                 progress=self.progress.emit,
-                cancel_event=self._cancel_event)
+                cancel_event=self._cancel_event,
+            )
             self.finished_ok.emit(result)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001 — surfaced to the user verbatim
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -154,15 +159,22 @@ class SaveAllWorker(QThread):
     """
 
     log = Signal(str, int)
-    seg_done = Signal(int, int, int)          # seg_id, index, total
-    finished_ok = Signal(list)                # re-synthesized seg ids
+    seg_done = Signal(int, int, int)  # seg_id, index, total
+    finished_ok = Signal(list)  # re-synthesized seg ids
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, settings: Settings, work_dir: str, edits: dict[int, str],
-                 target_key: str, voice: str | None, parent=None,
-                 force_all: bool = False,
-                 force_ids: set[int] | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        work_dir: str,
+        edits: dict[int, str],
+        target_key: str,
+        voice: str | None,
+        parent=None,
+        force_all: bool = False,
+        force_ids: set[int] | None = None,
+    ):
         super().__init__(parent)
         self._settings = settings
         self._work_dir = work_dir
@@ -196,14 +208,18 @@ class SaveAllWorker(QThread):
                 self.finished_ok.emit([])
                 return
             resynth_segments(
-                self._work_dir, changed, self._settings,
-                self._target_key, self._voice, reporter,
-                on_progress=lambda done, total, sid:
-                    self.seg_done.emit(sid, done, total))
+                self._work_dir,
+                changed,
+                self._settings,
+                self._target_key,
+                self._voice,
+                reporter,
+                on_progress=lambda done, total, sid: self.seg_done.emit(sid, done, total),
+            )
             self.finished_ok.emit(changed)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001 — surfaced to the user verbatim
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -212,16 +228,25 @@ class SaveAllWorker(QThread):
 class RebuildWorker(QThread):
     """Rebuild the final audio + video from edited segments off the UI thread."""
 
-    progress = Signal(object)          # ProgressEvent
+    progress = Signal(object)  # ProgressEvent
     log = Signal(str, int)
-    finished_ok = Signal(str)          # dubbed video path
+    finished_ok = Signal(str)  # dubbed video path
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, settings: Settings, work_dir: str, target_key: str,
-                 voice: str | None, bg_mode: str, bg_duck_db: float,
-                 subtitle_mode: str | None, blur_regions: list[dict] | None,
-                 subtitle_style: dict | None = None, parent=None):
+    def __init__(
+        self,
+        settings: Settings,
+        work_dir: str,
+        target_key: str,
+        voice: str | None,
+        bg_mode: str,
+        bg_duck_db: float,
+        subtitle_mode: str | None,
+        blur_regions: list[dict] | None,
+        subtitle_style: dict | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._settings = settings
         self._work_dir = work_dir
@@ -245,14 +270,21 @@ class RebuildWorker(QThread):
         reporter = ProgressReporter(self.progress.emit, self._cancel_event)
         try:
             out = rebuild_output(
-                self._work_dir, self._settings, self._target_key, self._voice,
-                self._bg_mode, self._bg_duck_db,
-                self._subtitle_mode, self._blur_regions,
-                self._subtitle_style, reporter)
+                self._work_dir,
+                self._settings,
+                self._target_key,
+                self._voice,
+                self._bg_mode,
+                self._bg_duck_db,
+                self._subtitle_mode,
+                self._blur_regions,
+                self._subtitle_style,
+                reporter,
+            )
             self.finished_ok.emit(out)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -267,13 +299,20 @@ class SubtitleWorker(QThread):
 
     progress = Signal(object)
     log = Signal(str, int)
-    finished_ok = Signal(str)          # đường dẫn video kết quả
+    finished_ok = Signal(str)  # đường dẫn video kết quả
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, settings: Settings, work_dir: str, target_key: str,
-                 subtitle_mode: str | None, blur_regions: list[dict] | None,
-                 subtitle_style: dict | None = None, parent=None):
+    def __init__(
+        self,
+        settings: Settings,
+        work_dir: str,
+        target_key: str,
+        subtitle_mode: str | None,
+        blur_regions: list[dict] | None,
+        subtitle_style: dict | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._settings = settings
         self._work_dir = work_dir
@@ -294,13 +333,18 @@ class SubtitleWorker(QThread):
         reporter = ProgressReporter(self.progress.emit, self._cancel_event)
         try:
             out = rebuild_subtitles(
-                self._work_dir, self._settings, self._target_key,
-                self._subtitle_mode, self._blur_regions,
-                self._subtitle_style, reporter)
+                self._work_dir,
+                self._settings,
+                self._target_key,
+                self._subtitle_mode,
+                self._blur_regions,
+                self._subtitle_style,
+                reporter,
+            )
             self.finished_ok.emit(out)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -315,13 +359,21 @@ class SegmentPreviewWorker(QThread):
     """
 
     log = Signal(str, int)
-    finished_ok = Signal(str)          # đường dẫn mp4 xem thử
+    finished_ok = Signal(str)  # đường dẫn mp4 xem thử
     failed = Signal(str)
 
-    def __init__(self, settings: Settings, work_dir: str, seg_id: int,
-                 target_key: str, bg_mode: str, bg_duck_db: float,
-                 subtitle_mode: str | None, subtitle_style: dict | None = None,
-                 parent=None):
+    def __init__(
+        self,
+        settings: Settings,
+        work_dir: str,
+        seg_id: int,
+        target_key: str,
+        bg_mode: str,
+        bg_duck_db: float,
+        subtitle_mode: str | None,
+        subtitle_style: dict | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._settings = settings
         self._work_dir = work_dir
@@ -342,12 +394,18 @@ class SegmentPreviewWorker(QThread):
         handler = attach_gui_logging(self.log)
         try:
             out = render_segment_preview(
-                self._work_dir, self._settings, self._seg_id,
-                self._target_key, self._bg_mode, self._bg_duck_db,
-                self._subtitle_mode, self._subtitle_style)
+                self._work_dir,
+                self._settings,
+                self._seg_id,
+                self._target_key,
+                self._bg_mode,
+                self._bg_duck_db,
+                self._subtitle_mode,
+                self._subtitle_style,
+            )
             if not self._cancel_event.is_set():
                 self.finished_ok.emit(out)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
         finally:
@@ -357,20 +415,28 @@ class SegmentPreviewWorker(QThread):
 class BatchWorker(QThread):
     """Run a batch of pasted URLs (one per line) in the background."""
 
-    progress = Signal(object)                    # ProgressEvent (current video)
+    progress = Signal(object)  # ProgressEvent (current video)
     item_status = Signal(int, int, str, str, str)  # index, total, url, status, detail
     log = Signal(str, int)
-    finished_ok = Signal(object)                 # BatchSummary
+    finished_ok = Signal(object)  # BatchSummary
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, settings: Settings, req_template: DubRequest,
-                 items: list, retry_done: bool = False, reuse_tts: bool = True,
-                 concurrency: int = 1, export_dir: str | None = None, parent=None):
+    def __init__(
+        self,
+        settings: Settings,
+        req_template: DubRequest,
+        items: list,
+        retry_done: bool = False,
+        reuse_tts: bool = True,
+        concurrency: int = 1,
+        export_dir: str | None = None,
+        parent=None,
+    ):
         super().__init__(None)
         self._settings = settings
         self._template = req_template
-        self._items = items          # list[BatchItem] (or pasted text lines)
+        self._items = items  # list[BatchItem] (or pasted text lines)
         self._retry_done = retry_done
         self._reuse_tts = reuse_tts
         self._concurrency = max(1, int(concurrency))
@@ -394,7 +460,9 @@ class BatchWorker(QThread):
         try:
             if self._concurrency > 1:
                 summary = run_batch(
-                    self._items, self._settings, self._template,
+                    self._items,
+                    self._settings,
+                    self._template,
                     observer=observer,
                     retry_done=self._retry_done,
                     concurrency=self._concurrency,
@@ -405,10 +473,11 @@ class BatchWorker(QThread):
 
             from autodub.model_preloader import (
                 get_global_demucs_cache,
-                get_global_whisper_cache,
-                get_global_synth_cache,
                 get_global_paraformer_cache,
+                get_global_synth_cache,
+                get_global_whisper_cache,
             )
+
             synth_cache = get_global_synth_cache() if self._reuse_tts else None
             demucs_cache = get_global_demucs_cache()
             whisper_cache = get_global_whisper_cache()
@@ -423,14 +492,19 @@ class BatchWorker(QThread):
                 whisper_cache=whisper_cache,
                 paraformer_cache=paraformer_cache,
             )
-            summary = run_batch(self._items, self._settings, self._template,
-                                pipeline=pipeline, observer=observer,
-                                retry_done=self._retry_done,
-                                export_dir=self._export_dir)
+            summary = run_batch(
+                self._items,
+                self._settings,
+                self._template,
+                pipeline=pipeline,
+                observer=observer,
+                retry_done=self._retry_done,
+                export_dir=self._export_dir,
+            )
             self.finished_ok.emit(summary)
         except PipelineCancelled:
             self.cancelled.emit()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -443,7 +517,7 @@ class ProjectScanWorker(QThread):
     chạy trên luồng giao diện sẽ làm cửa sổ đứng vài giây khi có nhiều dự án.
     """
 
-    ready = Signal(list)          # list[Project]
+    ready = Signal(list)  # list[Project]
     failed = Signal(str)
 
     def __init__(self, output_dir: str, running_dir: str = "", parent=None):
@@ -456,7 +530,7 @@ class ProjectScanWorker(QThread):
 
         try:
             self.ready.emit(scan(self._output_dir, self._running_dir))
-        except Exception as e:  # noqa: BLE001 — hiện thành màn hình lỗi
+        except Exception as e:
             self.failed.emit(str(e))
 
 
@@ -464,7 +538,7 @@ class ThumbnailWorker(QRunnable):
     """Tạo một ảnh đại diện bằng ffmpeg, chạy trong nhóm luồng dùng chung."""
 
     class Signals(QObject):
-        ready = Signal(str, str)      # khóa dự án, đường dẫn ảnh
+        ready = Signal(str, str)  # khóa dự án, đường dẫn ảnh
 
     def __init__(self, project):
         super().__init__()
@@ -477,7 +551,7 @@ class ThumbnailWorker(QRunnable):
 
         try:
             path = ensure_thumbnail(self._project)
-        except Exception:  # noqa: BLE001 — thiếu ảnh thì dùng ô giữ chỗ
+        except Exception:
             path = ""
         if path:
             self.signals.ready.emit(self._project.key, path)
@@ -490,10 +564,9 @@ class WaveformWorker(QThread):
     không được làm trên luồng giao diện.
     """
 
-    ready = Signal(list)      # danh sách biên độ từ 0 tới 1
+    ready = Signal(list)  # danh sách biên độ từ 0 tới 1
 
-    def __init__(self, wav_path: str, buckets: int = 0, parent=None,
-                 cache_name: str | None = None):
+    def __init__(self, wav_path: str, buckets: int = 0, parent=None, cache_name: str | None = None):
         super().__init__(parent)
         self._path = wav_path
         self._buckets = buckets
@@ -503,9 +576,10 @@ class WaveformWorker(QThread):
         from autodub_gui.waveform import DEFAULT_BUCKETS, peaks
 
         try:
-            self.ready.emit(peaks(self._path, self._buckets or DEFAULT_BUCKETS,
-                                  cache_name=self._cache_name))
-        except Exception:  # noqa: BLE001 — không vẽ được thì hiện dải phẳng
+            self.ready.emit(
+                peaks(self._path, self._buckets or DEFAULT_BUCKETS, cache_name=self._cache_name)
+            )
+        except Exception:
             self.ready.emit([])
 
 
@@ -516,14 +590,14 @@ class PreflightWorker(QThread):
     Kết quả là danh sách CheckResult (dataclass thuần, an toàn qua signal).
     """
 
-    ready = Signal(list)      # list[autodub.preflight.CheckResult]
+    ready = Signal(list)  # list[autodub.preflight.CheckResult]
 
     def run(self) -> None:
         from autodub.preflight import run_preflight
 
         try:
             results = run_preflight(Settings.load(override=True))
-        except Exception:  # noqa: BLE001 — không được làm sập giao diện
+        except Exception:
             results = []
         self.ready.emit(results)
 
@@ -535,7 +609,7 @@ class UpdateCheckWorker(QThread):
     chưa có bản phát hành nào thì im lặng — kiểm tra nền không được làm phiền.
     """
 
-    found = Signal(object)    # autodub.updates.UpdateInfo
+    found = Signal(object)  # autodub.updates.UpdateInfo
 
     def __init__(self, repo: str, current_version: str, parent=None):
         super().__init__(parent)
@@ -547,7 +621,7 @@ class UpdateCheckWorker(QThread):
 
         try:
             info = check_for_update(self._repo, self._current)
-        except Exception:  # noqa: BLE001 — lỗi mạng thì coi như không có bản mới
+        except Exception:
             return
         if info is not None:
             self.found.emit(info)
@@ -560,7 +634,7 @@ class SystemStatusWorker(QThread):
     tuyệt đối không được làm trên luồng giao diện.
     """
 
-    ready = Signal(dict)      # {"voice": (chữ, ổn), "translate": ..., "ffmpeg": ...}
+    ready = Signal(dict)  # {"voice": (chữ, ổn), "translate": ..., "ffmpeg": ...}
 
     def run(self) -> None:
         import shutil
@@ -572,10 +646,12 @@ class SystemStatusWorker(QThread):
             result["translate"] = self._translate_status(settings)
             ok = bool(shutil.which("ffmpeg"))
             result["ffmpeg"] = ("sẵn sàng" if ok else "chưa cài", ok)
-        except Exception as e:  # noqa: BLE001 — không được làm sập giao diện
-            result = {"voice": ("không đọc được", False),
-                      "translate": ("không đọc được", False),
-                      "ffmpeg": (str(e)[:40], False)}
+        except Exception as e:
+            result = {
+                "voice": ("không đọc được", False),
+                "translate": ("không đọc được", False),
+                "ffmpeg": (str(e)[:40], False),
+            }
         self.ready.emit(result)
 
     @staticmethod
@@ -583,8 +659,9 @@ class SystemStatusWorker(QThread):
         """Có bao nhiêu giọng dùng được — kể cả khi chưa cài VieNeu."""
         try:
             from autodub.speech.tts.voices import catalog
+
             count = len(catalog(settings))
-        except Exception:  # noqa: BLE001 — không được làm sập giao diện
+        except Exception:
             return ("không đọc được", False)
         if not count:
             return ("chưa có giọng nào", False)
@@ -609,20 +686,24 @@ class SystemStatusWorker(QThread):
         return ("chưa có API key dịch — vào Cài đặt để thêm", False)
 
 
-
 class DownloadWorker(QThread):
     """Download a list of URLs (no dubbing)."""
 
     item_status = Signal(int, int, str, str, str)  # index, total, url, status, detail
     log = Signal(str, int)
-    finished_ok = Signal(int, int)                 # success, failed
-    failed = Signal(str)                           # whole-run error (e.g. bad output dir)
+    finished_ok = Signal(int, int)  # success, failed
+    failed = Signal(str)  # whole-run error (e.g. bad output dir)
     cancelled = Signal()
 
-    def __init__(self, urls: list[str], output_dir: str,
-                 cookies_from_browser: str | None = None,
-                 cookies_file: str | None = None,
-                 max_workers: int | None = None, parent=None):
+    def __init__(
+        self,
+        urls: list[str],
+        output_dir: str,
+        cookies_from_browser: str | None = None,
+        cookies_file: str | None = None,
+        max_workers: int | None = None,
+        parent=None,
+    ):
         super().__init__(None)
         self._urls = urls
         self._output_dir = output_dir
@@ -661,20 +742,23 @@ class DownloadWorker(QThread):
                             self.item_status.emit(_idx, total, _u, "start", msg)
 
                     try:
-                        entry = download_one(url, self._output_dir,
-                                             self._cookies_browser, self._cookies_file,
-                                             progress_cb=_dl_cb)
+                        entry = download_one(
+                            url,
+                            self._output_dir,
+                            self._cookies_browser,
+                            self._cookies_file,
+                            progress_cb=_dl_cb,
+                        )
                         success += 1
                         self.item_status.emit(i, total, url, "success", entry["filepath"])
-                    except Exception as e:  # noqa: BLE001 — per-item failure
+                    except Exception as e:
                         failed += 1
                         self.item_status.emit(i, total, url, "failed", str(e)[:200])
             else:
                 # Tải song song qua thư mục isolate riêng (download_one_isolated)
                 # — _clean_broken_partials của lượt này không thể xóa .part
                 # đang dở của lượt kia như khi chung một thư mục.
-                from concurrent.futures import (ThreadPoolExecutor,
-                                                as_completed)
+                from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 def _one(i: int, url: str) -> str:
                     """Kết quả một URL: "success" | "failed" | "cancelled"."""
@@ -688,21 +772,20 @@ class DownloadWorker(QThread):
 
                     try:
                         entry = download_one_isolated(
-                            url, self._output_dir,
-                            self._cookies_browser, self._cookies_file,
-                            progress_cb=_dl_cb)
-                    except Exception as e:  # noqa: BLE001 — per-item failure
-                        self.item_status.emit(i, total, url, "failed",
-                                              str(e)[:200])
+                            url,
+                            self._output_dir,
+                            self._cookies_browser,
+                            self._cookies_file,
+                            progress_cb=_dl_cb,
+                        )
+                    except Exception as e:
+                        self.item_status.emit(i, total, url, "failed", str(e)[:200])
                         return "failed"
-                    self.item_status.emit(i, total, url, "success",
-                                          entry["filepath"])
+                    self.item_status.emit(i, total, url, "success", entry["filepath"])
                     return "success"
 
-                with ThreadPoolExecutor(max_workers=workers,
-                                        thread_name_prefix="dl-page") as pool:
-                    futures = [pool.submit(_one, i, url)
-                               for i, url in enumerate(self._urls)]
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="dl-page") as pool:
+                    futures = [pool.submit(_one, i, url) for i, url in enumerate(self._urls)]
                     saw_cancel = False
                     for fut in as_completed(futures):
                         outcome = fut.result()
@@ -716,7 +799,7 @@ class DownloadWorker(QThread):
                     self.cancelled.emit()
                     return
             self.finished_ok.emit(success, failed)
-        except Exception as e:  # noqa: BLE001 — e.g. thư mục lưu không tạo được
+        except Exception as e:
             self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
@@ -729,16 +812,15 @@ class TimelineThumbnailWorker(QThread):
     Không dùng QMediaPlayer — tránh giành surface phát.
     """
 
-    ready = Signal(list)    # list[tuple[float, str]]
+    ready = Signal(list)  # list[tuple[float, str]]
     failed = Signal(str)
 
     _THUMB_W = 90
-    _THUMB_H = 51           # 16:9
+    _THUMB_H = 51  # 16:9
     _N_FRAMES = 12
     _THUMB_DIR = "timeline_thumbs"
 
-    def __init__(self, video_path: str, duration_s: float, work_dir: str,
-                 parent=None):
+    def __init__(self, video_path: str, duration_s: float, work_dir: str, parent=None):
         super().__init__(parent)
         self._video = video_path
         self._duration = duration_s
@@ -759,33 +841,39 @@ class TimelineThumbnailWorker(QThread):
                 return
             dur = max(1.0, self._duration)
             n = self._N_FRAMES
-            thumbs_dir = data_path(
-                self._work_dir, self._THUMB_DIR, create_dir=True)
+            thumbs_dir = data_path(self._work_dir, self._THUMB_DIR, create_dir=True)
 
             results: list[tuple[float, str]] = []
             for i in range(n):
                 if self._cancel_event.is_set():
                     return
                 t = dur * (i + 0.5) / n
-                dst = __import__("os").path.join(thumbs_dir,
-                                                 f"frame_{i:03d}.jpg")
+                dst = __import__("os").path.join(thumbs_dir, f"frame_{i:03d}.jpg")
                 cmd = [
-                    "ffmpeg", "-v", "error",
-                    "-ss", f"{t:.3f}", "-i", self._video,
-                    "-frames:v", "1", "-q:v", "5",
-                    "-vf", f"scale={self._THUMB_W}:{self._THUMB_H}:force_original_aspect_ratio=decrease,"
-                           f"pad={self._THUMB_W}:{self._THUMB_H}:(ow-iw)/2:(oh-ih)/2",
-                    "-y", dst,
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-ss",
+                    f"{t:.3f}",
+                    "-i",
+                    self._video,
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "5",
+                    "-vf",
+                    f"scale={self._THUMB_W}:{self._THUMB_H}:force_original_aspect_ratio=decrease,"
+                    f"pad={self._THUMB_W}:{self._THUMB_H}:(ow-iw)/2:(oh-ih)/2",
+                    "-y",
+                    dst,
                 ]
-                flags = (subprocess.CREATE_NO_WINDOW
-                         if __import__("os").name == "nt" else 0)
-                subprocess.run(cmd, capture_output=True, timeout=10,
-                               creationflags=flags)
+                flags = subprocess.CREATE_NO_WINDOW if __import__("os").name == "nt" else 0
+                subprocess.run(cmd, capture_output=True, timeout=10, creationflags=flags)
                 if __import__("os").path.isfile(dst):
                     results.append((t, dst))
             if results and not self._cancel_event.is_set():
                 self.ready.emit(results)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
 
@@ -794,11 +882,10 @@ class ExportAudioWorker(QThread):
     """Chuyển audio_vi_full.wav thành MP3 bằng ffmpeg rồi lưu ra đường dẫn đã chọn."""
 
     log = Signal(str, int)
-    finished_ok = Signal(str)   # đường dẫn MP3 kết quả
+    finished_ok = Signal(str)  # đường dẫn MP3 kết quả
     failed = Signal(str)
 
-    def __init__(self, work_dir: str, output_path: str,
-                 bitrate: str = "192k", parent=None):
+    def __init__(self, work_dir: str, output_path: str, bitrate: str = "192k", parent=None):
         super().__init__(parent)
         self._work_dir = work_dir
         self._output_path = output_path
@@ -821,32 +908,40 @@ class ExportAudioWorker(QThread):
             if not __import__("os").path.isfile(src):
                 self.failed.emit(
                     "Chưa có tệp audio_vi_full.wav — hãy xuất video ít nhất "
-                    "một lần trước khi tải âm thanh riêng.")
+                    "một lần trước khi tải âm thanh riêng."
+                )
                 return
             cmd = [
-                "ffmpeg", "-y", "-i", src,
-                "-b:a", self._bitrate,
-                "-map_metadata", "-1",
+                "ffmpeg",
+                "-y",
+                "-i",
+                src,
+                "-b:a",
+                self._bitrate,
+                "-map_metadata",
+                "-1",
                 self._output_path,
             ]
             try:
                 result = subprocess.run(
-                    cmd, capture_output=True, text=True,
-                    encoding="utf-8", errors="replace",
-                    timeout=ffmpeg_timeout_s(wav_duration_s(src)))
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=ffmpeg_timeout_s(wav_duration_s(src)),
+                )
             except subprocess.TimeoutExpired:
                 if not self._cancel_event.is_set():
-                    self.failed.emit(
-                        "ffmpeg treo quá lâu khi chuyển sang MP3 — hãy thử lại.")
+                    self.failed.emit("ffmpeg treo quá lâu khi chuyển sang MP3 — hãy thử lại.")
                 return
             if self._cancel_event.is_set():
                 return
             if result.returncode != 0:
-                self.failed.emit(
-                    f"ffmpeg trả về lỗi:\n{result.stderr[-800:]}")
+                self.failed.emit(f"ffmpeg trả về lỗi:\n{result.stderr[-800:]}")
                 return
             self.finished_ok.emit(self._output_path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
         finally:
@@ -861,13 +956,13 @@ class PrefetchWorker(QThread):
     để xem trước ngay, không phải đợi pipeline chạy.
     """
 
-    progress = Signal(float, str)        # (pct 0.0-1.0, message)
-    finished_ok = Signal(str)            # (file_path,)
-    failed = Signal(str)                 # (error_message,)
+    progress = Signal(float, str)  # (pct 0.0-1.0, message)
+    finished_ok = Signal(str)  # (file_path,)
+    failed = Signal(str)  # (error_message,)
 
     progress_url = Signal(str, float, str)  # (url, pct, message)
-    finished_ok_url = Signal(str, str)      # (url, file_path)
-    failed_url = Signal(str, str)           # (url, error_message)
+    finished_ok_url = Signal(str, str)  # (url, file_path)
+    failed_url = Signal(str, str)  # (url, error_message)
 
     def __init__(self, url: str, output_dir: str, parent=None):
         # Tránh gán QWidget làm parent của QThread để tuân thủ Qt thread affinity
@@ -894,7 +989,7 @@ class PrefetchWorker(QThread):
             if not self._cancel_event.is_set():
                 self.finished_ok.emit(path)
                 self.finished_ok_url.emit(self._url, path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
                 self.failed_url.emit(self._url, str(e))
@@ -909,15 +1004,20 @@ class ExportSubsFileWorker(QThread):
     """Xuất phụ đề ra tệp SRT hoặc ASS độc lập (không ghép vào video)."""
 
     log = Signal(str, int)
-    finished_ok = Signal(str)   # đường dẫn tệp kết quả
+    finished_ok = Signal(str)  # đường dẫn tệp kết quả
     failed = Signal(str)
 
-    def __init__(self, segments: list[dict], work_dir: str,
-                 output_path: str, text_field: str,
-                 subtitle_style: dict | None,
-                 subs_format: str = "srt",   # "srt" | "ass"
-                 merge_dir: str | None = None,
-                 parent=None):
+    def __init__(
+        self,
+        segments: list[dict],
+        work_dir: str,
+        output_path: str,
+        text_field: str,
+        subtitle_style: dict | None,
+        subs_format: str = "srt",  # "srt" | "ass"
+        merge_dir: str | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._segments = segments
         self._work_dir = work_dir
@@ -938,20 +1038,24 @@ class ExportSubsFileWorker(QThread):
                 from autodub.text.ass_karaoke import build_karaoke_ass
                 from autodub.workdir import data_path
 
-                merge_dir = self._merge_dir or data_path(
-                    self._work_dir, "segments")
+                merge_dir = self._merge_dir or data_path(self._work_dir, "segments")
                 build_karaoke_ass(
-                    self._segments, merge_dir, self._output_path,
-                    self._style, text_field=self._text_field,
-                    cache_path=data_path(self._work_dir, "align_cache.json"))
+                    self._segments,
+                    merge_dir,
+                    self._output_path,
+                    self._style,
+                    text_field=self._text_field,
+                    cache_path=data_path(self._work_dir, "align_cache.json"),
+                )
             else:
                 from autodub.text.srt import generate_srt_styled
 
-                generate_srt_styled(self._segments, self._output_path,
-                                    self._text_field, self._style)
+                generate_srt_styled(
+                    self._segments, self._output_path, self._text_field, self._style
+                )
             if not self._cancel_event.is_set():
                 self.finished_ok.emit(self._output_path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not self._cancel_event.is_set():
                 self.failed.emit(str(e))
         finally:

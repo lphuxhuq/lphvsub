@@ -3,12 +3,13 @@
 Tách khỏi `editor_page.py` để mỗi tệp giữ được kích thước dễ đọc. Đây là một
 lớp trộn: nó chỉ chứa hành vi, còn mọi widget đều do trang chính dựng.
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
 
 from autodub_gui.dub_constants import friendly_error
-from autodub_gui.log_text import Narrator, error_line
+from autodub_gui.log_text import error_line
 from autodub_gui.run_state import REGISTRY, ActiveJob
 from autodub_gui.system_open import open_file
 from autodub_gui.ui.modal import ConfirmDialog
@@ -21,8 +22,7 @@ class VoiceAndExportMixin:
     # -- Nghe thử và đọc lại -------------------------------------------
     def _preview_voice(self, voice: str = "") -> None:
         values = self.voice_panel.values()
-        settings = replace(self._settings_provider(),
-                           voice_speed=values["voice_speed"])
+        settings = replace(self._settings_provider(), voice_speed=values["voice_speed"])
         # Khoá nút ngay khi bấm, tránh bấm liên tục khi phải chờ tổng hợp.
         # finished signal sẽ mở lại (kết nối trong editor_page._build_panels).
         self.voice_panel.picker.set_preview_enabled(False)
@@ -32,29 +32,30 @@ class VoiceAndExportMixin:
         self._flush_edits()
         # Truyền seg_id vào force_ids để buộc đọc lại dù chỉ đổi giọng,
         # không sửa chữ (save_segment_texts sẽ trả [] nhưng force_ids bù lại).
-        self._start_resynth({seg_id: self._text_of(seg_id)},
-                            force_ids={seg_id})
+        self._start_resynth({seg_id: self._text_of(seg_id)}, force_ids={seg_id})
 
     def _save_all_and_resynth(self) -> None:
         self._flush_edits()
-        edits = {int(s["id"]): str(s.get(self._state.target.text_field, ""))
-                 for s in self._segments}
+        edits = {
+            int(s["id"]): str(s.get(self._state.target.text_field, "")) for s in self._segments
+        }
         # Đổi sang giọng khác thì phải đọc lại TẤT CẢ các câu — không chỉ
         # những câu vừa sửa chữ — video mới đồng nhất một giọng.
         resynth_all = self.voice_panel.has_pending_voice_change()
         if resynth_all:
             confirmed, _ = ConfirmDialog.ask(
-                self, "Đổi giọng cho cả video",
+                self,
+                "Đổi giọng cho cả video",
                 f"Bạn vừa chọn giọng {self.voice_panel.picker.voice()}. Toàn "
                 f"bộ {len(self._segments)} câu sẽ được đọc lại bằng giọng "
                 "này để cả video cùng một giọng. Tiếp tục chứ?",
                 confirm_label="Đọc lại toàn bộ",
-                cancel_label="Khoan đã")
+                cancel_label="Khoan đã",
+            )
             if not confirmed:
                 return
         # Câu chỉ đổi giọng riêng (không sửa chữ) cũng phải đọc lại.
-        self._start_resynth(edits, resynth_all=resynth_all,
-                            force_ids=set(self._dirty_ids))
+        self._start_resynth(edits, resynth_all=resynth_all, force_ids=set(self._dirty_ids))
 
     def _text_of(self, seg_id: int) -> str:
         segment = self._segment(seg_id)
@@ -78,78 +79,117 @@ class VoiceAndExportMixin:
             soft_timing_fit=audio["soft_timing_fit"],
             timing_max_drift_s=audio["timing_max_drift_s"],
             voice_speed=voice["voice_speed"],
-            mask_method=getattr(self, "_mask_method", getattr(base_settings, "mask_method", "blur")),
-            inpaint_engine=getattr(self, "_inpaint_engine", getattr(base_settings, "inpaint_engine", "lama_onnx")),
-            inpaint_device=getattr(self, "_inpaint_device", getattr(base_settings, "inpaint_device", "auto")),
-            frame_banner_enabled=getattr(self, "_frame_banner_enabled", getattr(base_settings, "frame_banner_enabled", False)),
-            frame_banner_color=getattr(self, "_frame_banner_color", getattr(base_settings, "frame_banner_color", "#000000")),
-            frame_banner_top_text=getattr(self, "_frame_banner_top_text", getattr(base_settings, "frame_banner_top_text", "")),
-            frame_banner_top_size=getattr(self, "_frame_banner_top_size", getattr(base_settings, "frame_banner_top_size", 42)),
-            frame_banner_top_color=getattr(self, "_frame_banner_top_color", getattr(base_settings, "frame_banner_top_color", "#FFFFFF")),
-            frame_banner_bottom_text=getattr(self, "_frame_banner_bottom_text", getattr(base_settings, "frame_banner_bottom_text", "")),
-            frame_banner_bottom_size=getattr(self, "_frame_banner_bottom_size", getattr(base_settings, "frame_banner_bottom_size", 36)),
-            frame_banner_bottom_color=getattr(self, "_frame_banner_bottom_color", getattr(base_settings, "frame_banner_bottom_color", "#FFFF00")),
-            randomize_metadata=getattr(self, "_randomize_metadata", getattr(base_settings, "randomize_metadata", True)),
+            mask_method=getattr(
+                self, "_mask_method", getattr(base_settings, "mask_method", "blur")
+            ),
+            inpaint_engine=getattr(
+                self, "_inpaint_engine", getattr(base_settings, "inpaint_engine", "lama_onnx")
+            ),
+            inpaint_device=getattr(
+                self, "_inpaint_device", getattr(base_settings, "inpaint_device", "auto")
+            ),
+            frame_banner_enabled=getattr(
+                self, "_frame_banner_enabled", getattr(base_settings, "frame_banner_enabled", False)
+            ),
+            frame_banner_color=getattr(
+                self, "_frame_banner_color", getattr(base_settings, "frame_banner_color", "#000000")
+            ),
+            frame_banner_top_text=getattr(
+                self, "_frame_banner_top_text", getattr(base_settings, "frame_banner_top_text", "")
+            ),
+            frame_banner_top_size=getattr(
+                self, "_frame_banner_top_size", getattr(base_settings, "frame_banner_top_size", 42)
+            ),
+            frame_banner_top_color=getattr(
+                self,
+                "_frame_banner_top_color",
+                getattr(base_settings, "frame_banner_top_color", "#FFFFFF"),
+            ),
+            frame_banner_bottom_text=getattr(
+                self,
+                "_frame_banner_bottom_text",
+                getattr(base_settings, "frame_banner_bottom_text", ""),
+            ),
+            frame_banner_bottom_size=getattr(
+                self,
+                "_frame_banner_bottom_size",
+                getattr(base_settings, "frame_banner_bottom_size", 36),
+            ),
+            frame_banner_bottom_color=getattr(
+                self,
+                "_frame_banner_bottom_color",
+                getattr(base_settings, "frame_banner_bottom_color", "#FFFF00"),
+            ),
+            randomize_metadata=getattr(
+                self, "_randomize_metadata", getattr(base_settings, "randomize_metadata", True)
+            ),
         )
-
 
     # -- Khóa chéo ------------------------------------------------------
     def _busy_warn(self) -> bool:
         """True nếu đang đọc lại giọng hoặc đang xuất — hai việc này đụng
         cùng các tệp (dubbed_video.mp4, các đoạn giọng) nên cấm chạy chéo."""
-        if (self._resynth_worker is not None
-                and self._resynth_worker.isRunning()):
+        if self._resynth_worker is not None and self._resynth_worker.isRunning():
             TOASTS.warn("Đang đọc lại giọng, hãy đợi xong đã.")
             return True
-        if (self._rebuild_worker is not None
-                and self._rebuild_worker.isRunning()):
+        if self._rebuild_worker is not None and self._rebuild_worker.isRunning():
             TOASTS.warn("Đang xuất video, hãy đợi xong đã.")
             return True
-        if (getattr(self, "_preview_seg_worker", None) is not None
-                and self._preview_seg_worker.isRunning()):
+        if (
+            getattr(self, "_preview_seg_worker", None) is not None
+            and self._preview_seg_worker.isRunning()
+        ):
             TOASTS.warn("Đang dựng đoạn xem thử, hãy đợi xong đã.")
             return True
-        if (getattr(self, "_export_subs_file_worker", None) is not None
-                and self._export_subs_file_worker.isRunning()):
+        if (
+            getattr(self, "_export_subs_file_worker", None) is not None
+            and self._export_subs_file_worker.isRunning()
+        ):
             TOASTS.warn("Đang xuất phụ đề, hãy đợi xong đã.")
             return True
-        if (getattr(self, "_export_audio_worker", None) is not None
-                and self._export_audio_worker.isRunning()):
+        if (
+            getattr(self, "_export_audio_worker", None) is not None
+            and self._export_audio_worker.isRunning()
+        ):
             TOASTS.warn("Đang xuất âm thanh, hãy đợi xong đã.")
             return True
         return False
 
-    def _start_resynth(self, edits: dict[int, str],
-                       resynth_all: bool = False,
-                       force_ids: set[int] | None = None) -> None:
+    def _start_resynth(
+        self, edits: dict[int, str], resynth_all: bool = False, force_ids: set[int] | None = None
+    ) -> None:
         from autodub_gui.workers import SaveAllWorker
 
         if self._busy_warn():
             return
         values = self.voice_panel.values()
-        settings = replace(self._settings_provider(),
-                           voice_speed=values["voice_speed"])
+        settings = replace(self._settings_provider(), voice_speed=values["voice_speed"])
         # Đọc lại lẻ tẻ thì dùng giọng ĐANG CÓ trong video (tránh một câu nói
         # bằng giọng khác); đổi giọng cả video thì dùng giọng mới đã chọn.
-        voice = (self.voice_panel.picker.voice() if resynth_all
-                 else self.voice_panel.project_voice())
-        worker = SaveAllWorker(settings, self._work_dir, edits,
-                               self.target_key(), voice, self,
-                               force_all=resynth_all,
-                               force_ids=force_ids)
+        voice = self.voice_panel.picker.voice() if resynth_all else self.voice_panel.project_voice()
+        worker = SaveAllWorker(
+            settings,
+            self._work_dir,
+            edits,
+            self.target_key(),
+            voice,
+            self,
+            force_all=resynth_all,
+            force_ids=force_ids,
+        )
         # Chỉ coi giọng mới là "đã áp dụng" khi lần đọc lại này phủ đủ mọi
         # câu; đọc lại một câu lẻ bằng giọng mới thì video vẫn chưa đổi giọng.
         self._resynth_covers_voice = resynth_all
         worker.seg_done.connect(
-            lambda _sid, done, total: self.voice_panel.set_progress(done, total))
+            lambda _sid, done, total: self.voice_panel.set_progress(done, total)
+        )
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_resynth_done)
         worker.failed.connect(self._on_resynth_failed)
         worker.cancelled.connect(self._on_resynth_cancelled)
         self.log.setVisible(True)
         self.voice_panel.btn_resynth.set_loading(True, "Đang đọc lại")
-        worker.finished.connect(
-            lambda: self.voice_panel.btn_resynth.set_loading(False))
+        worker.finished.connect(lambda: self.voice_panel.btn_resynth.set_loading(False))
         self._resynth_worker = worker
         # Đọc lại giọng sẽ xóa dubbed_video.mp4 (bản cũ đã lỗi thời) — nhả
         # video ra trước, không thì Windows báo WinError 32 vì tệp đang mở.
@@ -174,7 +214,9 @@ class VoiceAndExportMixin:
             self._pin_project_voice(self.voice_panel.picker.voice())
         self.voice_panel.finish_progress(
             f"Đã đọc lại {len(changed)} câu. Bấm Xuất video để ghép vào phim."
-            if changed else "Không có câu nào cần đọc lại.")
+            if changed
+            else "Không có câu nào cần đọc lại."
+        )
         TOASTS.success("Đã tạo xong giọng đọc mới.")
 
     def _pin_project_voice(self, voice: str) -> None:
@@ -188,6 +230,7 @@ class VoiceAndExportMixin:
             save_render_opts(self._work_dir, opts)
             try:
                 from autodub_gui.env_store import write_env
+
                 if voice:
                     write_env({"VIENEU_VOICE": voice})
             except Exception:
@@ -205,9 +248,12 @@ class VoiceAndExportMixin:
             ConfirmDialog.show_error(self, title, advice, detail=message)
             return
         ConfirmDialog.show_error(
-            self, "Không tạo được giọng đọc",
+            self,
+            "Không tạo được giọng đọc",
             "Có lỗi ngoài dự tính khi tạo giọng. Những câu đã xong vẫn được "
-            "giữ lại, bạn có thể bấm đọc lại để tiếp tục.", detail=message)
+            "giữ lại, bạn có thể bấm đọc lại để tiếp tục.",
+            detail=message,
+        )
 
     # -- Xuất video ----------------------------------------------------
     def _open_style_dialog(self) -> None:
@@ -223,11 +269,14 @@ class VoiceAndExportMixin:
             preset = self.export_panel.preset.current_key()
             try:
                 from autodub.config import Settings
+
                 settings = Settings.load()
-                style = (settings.subtitle_style()
-                         if preset == settings.subtitle_preset
-                         else preset_style(preset))
-            except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng bộ sẵn
+                style = (
+                    settings.subtitle_style()
+                    if preset == settings.subtitle_preset
+                    else preset_style(preset)
+                )
+            except Exception:
                 style = preset_style(preset)
 
         # Lấy câu phụ đề hiện đang hiện trong player làm chữ xem trước —
@@ -239,9 +288,9 @@ class VoiceAndExportMixin:
                 seg = self._segments[0]
             if seg is not None:
                 from autodub.text.srt import subtitle_text
-                preview_text = subtitle_text(
-                    seg, self._state.target.text_field) or ""
-        except Exception:  # noqa: BLE001
+
+                preview_text = subtitle_text(seg, self._state.target.text_field) or ""
+        except Exception:
             pass
 
         logo_opts = {
@@ -273,13 +322,17 @@ class VoiceAndExportMixin:
             "bottom_size": getattr(self, "_frame_banner_bottom_size", 36),
             "bottom_color": getattr(self, "_frame_banner_bottom_color", "#FFFF00"),
         }
-        dialog = StyleDialog(video, style,
-                             list(getattr(self, "_blur_regions", [])), self,
-                             preview_text=preview_text,
-                             logo_options=logo_opts,
-                             watermark_options=wm_opts,
-                             mask_options=mask_opts,
-                             banner_options=banner_opts)
+        dialog = StyleDialog(
+            video,
+            style,
+            list(getattr(self, "_blur_regions", [])),
+            self,
+            preview_text=preview_text,
+            logo_options=logo_opts,
+            watermark_options=wm_opts,
+            mask_options=mask_opts,
+            banner_options=banner_opts,
+        )
         if not dialog.exec():
             return
         self._subtitle_style = dialog.style()
@@ -318,42 +371,62 @@ class VoiceAndExportMixin:
         self._frame_banner_bottom_size = new_banner["bottom_size"]
         self._frame_banner_bottom_color = new_banner["bottom_color"]
 
-
         if self.export_panel.subtitle.current_key() != "burn":
             self.export_panel.subtitle.set_key("burn")
-            TOASTS.info("Kiểu chữ tự chỉnh cần ghi thẳng vào hình, nên phụ đề "
-                        "đã chuyển sang Ghi thẳng vào hình.")
+            TOASTS.info(
+                "Kiểu chữ tự chỉnh cần ghi thẳng vào hình, nên phụ đề "
+                "đã chuyển sang Ghi thẳng vào hình."
+            )
         self._save_render_opts()
         self._apply_style_to_player()
         try:
-            from autodub_gui.env_store import bool_to_env, write_env
             import json
+
+            from autodub_gui.env_store import bool_to_env, write_env
+
             updates = {}
             if self._subtitle_style:
                 style = self._subtitle_style
-                if "font" in style: updates["SUBTITLE_FONT"] = str(style["font"])
-                if "font_size" in style: updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
-                if "position" in style: updates["SUBTITLE_POSITION"] = str(style["position"])
-                if "color" in style: updates["SUBTITLE_COLOR"] = str(style["color"])
-                if "outline" in style: updates["SUBTITLE_OUTLINE"] = str(style["outline"])
-                if "outline_color" in style: updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
-                if "shadow" in style: updates["SUBTITLE_SHADOW"] = str(style["shadow"])
-                if "bold" in style: updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
-                if "box" in style: updates["SUBTITLE_BOX"] = str(style["box"])
-                if "box_color" in style: updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
-                if "box_opacity" in style: updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
-                if "display" in style: updates["SUBTITLE_DISPLAY"] = str(style["display"])
-                if "words_per_cue" in style: updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
-                if "effect" in style: updates["KARAOKE_EFFECT"] = str(style["effect"])
-                if "highlight_color" in style: updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
+                if "font" in style:
+                    updates["SUBTITLE_FONT"] = str(style["font"])
+                if "font_size" in style:
+                    updates["SUBTITLE_FONT_SIZE"] = str(style["font_size"])
+                if "position" in style:
+                    updates["SUBTITLE_POSITION"] = str(style["position"])
+                if "color" in style:
+                    updates["SUBTITLE_COLOR"] = str(style["color"])
+                if "outline" in style:
+                    updates["SUBTITLE_OUTLINE"] = str(style["outline"])
+                if "outline_color" in style:
+                    updates["SUBTITLE_OUTLINE_COLOR"] = str(style["outline_color"])
+                if "shadow" in style:
+                    updates["SUBTITLE_SHADOW"] = str(style["shadow"])
+                if "bold" in style:
+                    updates["SUBTITLE_BOLD"] = bool_to_env(bool(style["bold"]))
+                if "box" in style:
+                    updates["SUBTITLE_BOX"] = str(style["box"])
+                if "box_color" in style:
+                    updates["SUBTITLE_BOX_COLOR"] = str(style["box_color"])
+                if "box_opacity" in style:
+                    updates["SUBTITLE_BOX_OPACITY"] = str(style["box_opacity"])
+                if "display" in style:
+                    updates["SUBTITLE_DISPLAY"] = str(style["display"])
+                if "words_per_cue" in style:
+                    updates["KARAOKE_WORDS_PER_CUE"] = str(style["words_per_cue"])
+                if "effect" in style:
+                    updates["KARAOKE_EFFECT"] = str(style["effect"])
+                if "highlight_color" in style:
+                    updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
             if self._blur_regions:
                 updates["BLUR_REGIONS"] = json.dumps(self._blur_regions)
             if updates:
                 write_env(updates)
         except Exception:
             pass
-        TOASTS.info("Bấm «Ghi lại phụ đề vào video» để thấy kiểu chữ mới trên "
-                    "video ngay, không cần xuất lại cả phim.")
+        TOASTS.info(
+            "Bấm «Ghi lại phụ đề vào video» để thấy kiểu chữ mới trên "
+            "video ngay, không cần xuất lại cả phim."
+        )
 
     def _export(self) -> None:
         from autodub_gui.workers import RebuildWorker
@@ -365,35 +438,46 @@ class VoiceAndExportMixin:
         self._flush_edits()
         if self.voice_panel.has_pending_voice_change():
             confirmed, _ = ConfirmDialog.ask(
-                self, "Giọng mới chưa được áp dụng",
+                self,
+                "Giọng mới chưa được áp dụng",
                 f"Bạn đã chọn giọng {self.voice_panel.picker.voice()} nhưng "
                 "chưa bấm «Lưu tất cả và đọc lại». Nếu xuất bây giờ, video "
                 f"vẫn dùng giọng {self.voice_panel.project_voice()}.",
-                kind="warning", confirm_label="Cứ xuất với giọng cũ",
-                cancel_label="Để tôi đọc lại đã")
+                kind="warning",
+                confirm_label="Cứ xuất với giọng cũ",
+                cancel_label="Để tôi đọc lại đã",
+            )
             if not confirmed:
                 self._show_tab("voice")
                 return
         if self._dirty_ids:
             confirmed, _ = ConfirmDialog.ask(
-                self, "Còn câu chưa đọc lại",
+                self,
+                "Còn câu chưa đọc lại",
                 f"Bạn đã sửa {len(self._dirty_ids)} câu nhưng chưa tạo giọng "
                 "mới cho chúng. Nếu xuất bây giờ, những câu đó vẫn dùng giọng "
                 "cũ. Bạn muốn làm gì?",
-                kind="warning", confirm_label="Cứ xuất video",
-                cancel_label="Để tôi đọc lại đã")
+                kind="warning",
+                confirm_label="Cứ xuất video",
+                cancel_label="Để tôi đọc lại đã",
+            )
             if not confirmed:
                 self._show_tab("voice")
                 return
         settings = self._render_settings()
         background = self.background_panel.values()
         worker = RebuildWorker(
-            settings, self._work_dir, self.target_key(),
+            settings,
+            self._work_dir,
+            self.target_key(),
             self.voice_panel.project_voice(),
-            background["bg_mode"], background["bg_duck_db"],
+            background["bg_mode"],
+            background["bg_duck_db"],
             self.export_panel.subtitle.current_key(),
             list(getattr(self, "_blur_regions", [])),
-            getattr(self, "_subtitle_style", None), self)
+            getattr(self, "_subtitle_style", None),
+            self,
+        )
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_export_done)
         worker.failed.connect(self._on_export_failed)
@@ -410,9 +494,11 @@ class VoiceAndExportMixin:
         # Windows tệp đang phát là tệp bị khóa (WinError 32).
         self._export_resume_pos = self.release_video()
         REGISTRY.start_job(
-            ActiveJob(kind="rebuild", title=f"Xuất video {self._project.title}",
-                      work_dir=self._work_dir),
-            on_cancel=worker.cancel)
+            ActiveJob(
+                kind="rebuild", title=f"Xuất video {self._project.title}", work_dir=self._work_dir
+            ),
+            on_cancel=worker.cancel,
+        )
         worker.start()
 
     def _export_subtitles(self) -> None:
@@ -430,20 +516,24 @@ class VoiceAndExportMixin:
             return
         self._flush_edits()
         if self.export_panel.subtitle.current_key() == "none":
-            TOASTS.warn("Kiểu phụ đề đang là Không gắn phụ đề — hãy chọn "
-                        "Ghi thẳng vào hình rồi bấm lại.")
+            TOASTS.warn(
+                "Kiểu phụ đề đang là Không gắn phụ đề — hãy chọn Ghi thẳng vào hình rồi bấm lại."
+            )
             return
         worker = SubtitleWorker(
-            self._render_settings(), self._work_dir, self.target_key(),
+            self._render_settings(),
+            self._work_dir,
+            self.target_key(),
             self.export_panel.subtitle.current_key(),
             list(getattr(self, "_blur_regions", [])),
-            getattr(self, "_subtitle_style", None), self)
+            getattr(self, "_subtitle_style", None),
+            self,
+        )
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_subtitles_done)
         worker.failed.connect(self._on_export_failed)
         worker.cancelled.connect(self._on_export_cancelled)
-        worker.finished.connect(
-            lambda: self.export_panel.set_running(False, subtitles_only=True))
+        worker.finished.connect(lambda: self.export_panel.set_running(False, subtitles_only=True))
         worker.progress.connect(self._on_progress_log)
         self.log.reset_log()
         self._narrator.reset()
@@ -454,10 +544,11 @@ class VoiceAndExportMixin:
         # Nhả video: bước này ghi đè dubbed_video.mp4 đang mở trong trình phát.
         self._export_resume_pos = self.release_video()
         REGISTRY.start_job(
-            ActiveJob(kind="rebuild",
-                      title=f"Ghi phụ đề {self._project.title}",
-                      work_dir=self._work_dir),
-            on_cancel=worker.cancel)
+            ActiveJob(
+                kind="rebuild", title=f"Ghi phụ đề {self._project.title}", work_dir=self._work_dir
+            ),
+            on_cancel=worker.cancel,
+        )
         worker.start()
 
     def _preview_segment(self) -> None:
@@ -480,51 +571,60 @@ class VoiceAndExportMixin:
                 seg = self._segments[0]
             seg_id = int(seg.get("id", 0)) if seg else 0
         if seg_id <= 0:
-            TOASTS.warn("Chưa có câu nào để xem thử — hãy chọn một câu ở "
-                        "mục Phụ đề.")
+            TOASTS.warn("Chưa có câu nào để xem thử — hãy chọn một câu ở mục Phụ đề.")
             return
         if self._dirty_ids and seg_id in self._dirty_ids:
-            TOASTS.warn(f"Câu {seg_id} vừa sửa chữ nhưng chưa đọc lại giọng — "
-                        "đoạn xem thử sẽ dùng giọng cũ.")
+            TOASTS.warn(
+                f"Câu {seg_id} vừa sửa chữ nhưng chưa đọc lại giọng — "
+                "đoạn xem thử sẽ dùng giọng cũ."
+            )
         background = self.background_panel.values()
         worker = SegmentPreviewWorker(
-            self._render_settings(), self._work_dir, seg_id,
-            self.target_key(), background["bg_mode"],
+            self._render_settings(),
+            self._work_dir,
+            seg_id,
+            self.target_key(),
+            background["bg_mode"],
             background["bg_duck_db"],
             self.export_panel.subtitle.current_key(),
-            getattr(self, "_subtitle_style", None), self)
+            getattr(self, "_subtitle_style", None),
+            self,
+        )
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_preview_seg_done)
         worker.failed.connect(self._on_preview_seg_failed)
-        worker.finished.connect(
-            lambda: self.export_panel.set_previewing(False))
+        worker.finished.connect(lambda: self.export_panel.set_previewing(False))
         self.export_panel.set_previewing(True)
-        self.export_panel.set_status(
-            f"Đang dựng đoạn xem thử quanh câu {seg_id}…")
+        self.export_panel.set_status(f"Đang dựng đoạn xem thử quanh câu {seg_id}…")
         self._preview_seg_worker = worker
         worker.start()
 
     def _on_preview_seg_done(self, path: str) -> None:
         self.export_panel.set_status("Đã dựng xong đoạn xem thử.")
-        TOASTS.success("Đoạn xem thử đã sẵn sàng.", action_label="Mở xem",
-                       on_action=lambda: open_file(path))
+        TOASTS.success(
+            "Đoạn xem thử đã sẵn sàng.", action_label="Mở xem", on_action=lambda: open_file(path)
+        )
         open_file(path)
 
     def _on_preview_seg_failed(self, message: str) -> None:
         self.export_panel.set_status("")
         ConfirmDialog.show_error(
-            self, "Không dựng được đoạn xem thử",
-            "Có lỗi khi dựng đoạn xem thử. Bạn vẫn có thể xuất cả video như "
-            "bình thường.", detail=message)
+            self,
+            "Không dựng được đoạn xem thử",
+            "Có lỗi khi dựng đoạn xem thử. Bạn vẫn có thể xuất cả video như bình thường.",
+            detail=message,
+        )
 
     def _on_subtitles_done(self, path: str) -> None:
         self._sub_dirty_ids.clear()
         self._refresh_banner()
         REGISTRY.finish_job(True)
         self.export_panel.set_status(f"Đã ghi phụ đề vào: {path}")
-        TOASTS.success("Phụ đề mới đã nằm trong video.",
-                       action_label="Mở video",
-                       on_action=lambda: open_file(path))
+        TOASTS.success(
+            "Phụ đề mới đã nằm trong video.",
+            action_label="Mở video",
+            on_action=lambda: open_file(path),
+        )
         self._reload_player(path)
 
     def _on_export_done(self, path: str) -> None:
@@ -532,8 +632,9 @@ class VoiceAndExportMixin:
         self._refresh_banner()
         REGISTRY.finish_job(True)
         self.export_panel.set_status(f"Đã xuất xong: {path}")
-        TOASTS.success("Đã xuất video mới.", action_label="Mở video",
-                       on_action=lambda: open_file(path))
+        TOASTS.success(
+            "Đã xuất video mới.", action_label="Mở video", on_action=lambda: open_file(path)
+        )
         self._reload_player(path)
         # Lượt xuất vừa ghi lại audio_vi_full.wav (và có thể cả nhạc nền đã
         # làm chậm) — nạp lại dạng sóng để band Giọng AI khớp bản mới.
@@ -541,6 +642,7 @@ class VoiceAndExportMixin:
         # Chụp bản vừa xuất vào lịch sử, rồi refresh danh sách.
         try:
             from autodub.editor import record_export_snapshot
+
             record_export_snapshot(self._work_dir)
         except Exception:
             pass
@@ -553,8 +655,7 @@ class VoiceAndExportMixin:
         """Mở lại video kết quả để bạn xem ngay phụ đề vừa ghi."""
         self._export_resume_pos = None
         self.player.open(path)
-        self.player.set_segments(self._segments,
-                                 self._state.target.text_field)
+        self.player.set_segments(self._segments, self._state.target.text_field)
         # Video vừa xuất có chữ ghi thẳng vào hình thì tắt lớp chữ xem trước,
         # tránh hai phụ đề chồng nhau.
         self._sync_overlay(path)
@@ -577,9 +678,12 @@ class VoiceAndExportMixin:
             ConfirmDialog.show_error(self, title, advice, detail=message)
             return
         ConfirmDialog.show_error(
-            self, "Không xuất được video",
+            self,
+            "Không xuất được video",
             "Có lỗi ngoài dự tính khi ghép video. Phần giọng đọc đã tạo vẫn "
-            "còn nguyên, bạn có thể thử xuất lại.", detail=message)
+            "còn nguyên, bạn có thể thử xuất lại.",
+            detail=message,
+        )
 
     def _on_progress_log(self, event) -> None:
         """Kể lại tiến trình bằng lời thường vào Nhật ký."""
@@ -599,8 +703,8 @@ class VoiceAndExportMixin:
             return
         title = (self._project.title or "subtitle").replace(" ", "_")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Lưu phụ đề SRT", f"{title}.srt",
-            "SubRip subtitle (*.srt)")
+            self, "Lưu phụ đề SRT", f"{title}.srt", "SubRip subtitle (*.srt)"
+        )
         if not path:
             return
         self._run_export_subs_worker(path, "srt")
@@ -613,16 +717,14 @@ class VoiceAndExportMixin:
             return
         title = (self._project.title or "subtitle").replace(" ", "_")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Lưu phụ đề ASS", f"{title}.ass",
-            "Advanced SubStation Alpha (*.ass)")
+            self, "Lưu phụ đề ASS", f"{title}.ass", "Advanced SubStation Alpha (*.ass)"
+        )
         if not path:
             return
         self._run_export_subs_worker(path, "ass")
 
-    def _run_export_subs_worker(self, output_path: str,
-                                subs_format: str) -> None:
+    def _run_export_subs_worker(self, output_path: str, subs_format: str) -> None:
         from autodub.workdir import data_path
-
         from autodub_gui.workers import ExportSubsFileWorker
 
         if self._busy_warn():
@@ -630,27 +732,29 @@ class VoiceAndExportMixin:
 
         merge_dir = data_path(self._work_dir, "segments")
         worker = ExportSubsFileWorker(
-            list(self._segments), self._work_dir, output_path,
+            list(self._segments),
+            self._work_dir,
+            output_path,
             self._state.target.text_field,
             getattr(self, "_subtitle_style", None),
             subs_format=subs_format,
             merge_dir=merge_dir,
-            parent=self)
+            parent=self,
+        )
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_export_subs_file_done)
         worker.failed.connect(
-            lambda msg: ConfirmDialog.show_error(
-                self, "Không xuất được phụ đề", msg))
+            lambda msg: ConfirmDialog.show_error(self, "Không xuất được phụ đề", msg)
+        )
         worker.start()
         self._export_subs_file_worker = worker
         self.export_panel.set_status(
-            f"Đang xuất phụ đề {'ASS' if subs_format == 'ass' else 'SRT'}…")
+            f"Đang xuất phụ đề {'ASS' if subs_format == 'ass' else 'SRT'}…"
+        )
 
     def _on_export_subs_file_done(self, path: str) -> None:
         self.export_panel.set_status(f"Đã xuất: {path}")
-        TOASTS.success(
-            f"Đã lưu phụ đề.", action_label="Mở tệp",
-            on_action=lambda: open_file(path))
+        TOASTS.success("Đã lưu phụ đề.", action_label="Mở tệp", on_action=lambda: open_file(path))
 
     def _export_audio_mp3(self) -> None:
         """Xuất âm thanh lồng tiếng thành MP3."""
@@ -664,16 +768,16 @@ class VoiceAndExportMixin:
             return
         title = (self._project.title or "audio").replace(" ", "_")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Lưu âm thanh lồng tiếng MP3", f"{title}_vi.mp3",
-            "MP3 audio (*.mp3)")
+            self, "Lưu âm thanh lồng tiếng MP3", f"{title}_vi.mp3", "MP3 audio (*.mp3)"
+        )
         if not path:
             return
         worker = ExportAudioWorker(self._work_dir, path, parent=self)
         worker.log.connect(self.log.append_log)
         worker.finished_ok.connect(self._on_export_audio_done)
         worker.failed.connect(
-            lambda msg: ConfirmDialog.show_error(
-                self, "Không xuất được âm thanh", msg))
+            lambda msg: ConfirmDialog.show_error(self, "Không xuất được âm thanh", msg)
+        )
         worker.start()
         self._export_audio_worker = worker
         self.export_panel.set_status("Đang chuyển đổi âm thanh thành MP3…")
@@ -681,14 +785,15 @@ class VoiceAndExportMixin:
     def _on_export_audio_done(self, path: str) -> None:
         self.export_panel.set_status(f"Đã xuất: {path}")
         TOASTS.success(
-            "Đã lưu âm thanh MP3.", action_label="Mở tệp",
-            on_action=lambda: open_file(path))
+            "Đã lưu âm thanh MP3.", action_label="Mở tệp", on_action=lambda: open_file(path)
+        )
 
     # -- Đăng bài & Thumbnail --------------------------------------------
 
     def _open_thumbnail(self) -> None:
         """Mở ảnh bìa Thumbnail đã sinh."""
         import os
+
         from autodub_gui.system_open import open_file
 
         if not self._work_dir:
@@ -705,12 +810,17 @@ class VoiceAndExportMixin:
         video_path = getattr(self._state, "video_path", "")
         if video_path and os.path.exists(video_path):
             from autodub.media.thumbnail import generate_high_ctr_thumbnail
+
             os.makedirs(yt_dir, exist_ok=True)
             out_thumb = os.path.join(yt_dir, "thumbnail_landscape.jpg")
             title = getattr(self._project, "title", "") or "VIDEO MỚI NHẤT"
             try:
                 generate_high_ctr_thumbnail(video_path, title, out_thumb, aspect="16:9")
-                TOASTS.success("Đã sinh xong ảnh bìa Thumbnail!", action_label="Mở xem", on_action=lambda: open_file(out_thumb))
+                TOASTS.success(
+                    "Đã sinh xong ảnh bìa Thumbnail!",
+                    action_label="Mở xem",
+                    on_action=lambda: open_file(out_thumb),
+                )
                 open_file(out_thumb)
                 return
             except Exception as e:
@@ -734,24 +844,36 @@ class VoiceAndExportMixin:
         for meta_path in candidates:
             if os.path.exists(meta_path):
                 try:
-                    with open(meta_path, "r", encoding="utf-8") as f:
+                    with open(meta_path, encoding="utf-8") as f:
                         data = json.load(f)
                     if isinstance(data, dict) and (data.get("title") or data.get("hashtags")):
                         return data
                 except Exception:
                     pass
-        title = getattr(self._project, "title", "") if hasattr(self, "_project") and self._project else ""
+        title = (
+            getattr(self._project, "title", "")
+            if hasattr(self, "_project") and self._project
+            else ""
+        )
         if title:
             return {
                 "title": title,
                 "description": f"Video {title} bản tiếng Việt lồng tiếng AI.",
-                "hashtags": ["#shorts", "#reviewphim", "#trending", "#viral", "#xuhuong", "#phimhay"]
+                "hashtags": [
+                    "#shorts",
+                    "#reviewphim",
+                    "#trending",
+                    "#viral",
+                    "#xuhuong",
+                    "#phimhay",
+                ],
             }
         return {}
 
     def _copy_youtube_title(self) -> None:
         """Sao chép tiêu đề video vào clipboard."""
         from PySide6.QtWidgets import QApplication
+
         meta = self._get_social_metadata()
         title = meta.get("title") or getattr(self._project, "title", "")
         if title:
@@ -763,6 +885,7 @@ class VoiceAndExportMixin:
     def _copy_youtube_description(self) -> None:
         """Sao chép mô tả và hashtag vào clipboard."""
         from PySide6.QtWidgets import QApplication
+
         meta = self._get_social_metadata()
         desc = meta.get("description", "")
         tags = " ".join(meta.get("hashtags", []))
@@ -770,9 +893,11 @@ class VoiceAndExportMixin:
         if full:
             QApplication.clipboard().setText(full)
             TOASTS.success("Đã chép mô tả & hashtag vào Clipboard!")
+
     def _copy_youtube_hashtags(self) -> None:
         """Sao chép danh sách hashtag vào clipboard."""
         from PySide6.QtWidgets import QApplication
+
         meta = self._get_social_metadata()
         tags = meta.get("hashtags", [])
         tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
@@ -785,12 +910,13 @@ class VoiceAndExportMixin:
     def _copy_youtube_all(self) -> None:
         """Sao chép toàn bộ tiêu đề, mô tả và hashtag vào clipboard."""
         from PySide6.QtWidgets import QApplication
+
         meta = self._get_social_metadata()
         title = meta.get("title") or getattr(self._project, "title", "")
         desc = meta.get("description", "")
         tags = meta.get("hashtags", [])
         tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
-        
+
         parts = []
         if title:
             parts.append(f"Tiêu đề:\n{title}")
@@ -807,16 +933,22 @@ class VoiceAndExportMixin:
 
     def _open_thumbnail_studio(self) -> None:
         """Mở hộp thoại Thumbnail Studio độc lập để thiết kế ảnh bìa."""
-        import os
         if not self._work_dir:
             TOASTS.info("Chưa có dự án nào được mở.")
             return
         from autodub_gui.thumbnail_dialog import ThumbnailStudioDialog
+
         video_path = getattr(self._state, "video_path", "")
         if not video_path and hasattr(self, "_project") and self._project:
-            video_path = getattr(self._project, "video_path", "") or getattr(self._project, "input_video", "") or ""
+            video_path = (
+                getattr(self._project, "video_path", "")
+                or getattr(self._project, "input_video", "")
+                or ""
+            )
         title = getattr(self._project, "title", "") or "SIÊU PHẨM MỚI NHẤT"
-        dlg = ThumbnailStudioDialog(self._work_dir, video_path=video_path, initial_title=title, parent=self)
+        dlg = ThumbnailStudioDialog(
+            self._work_dir, video_path=video_path, initial_title=title, parent=self
+        )
         dlg.thumbnail_saved.connect(lambda _p: self._refresh_social_metadata())
         dlg.exec()
         self._refresh_social_metadata()
@@ -825,6 +957,7 @@ class VoiceAndExportMixin:
         """Tự động sinh thumbnail High-CTR 16:9 và 9:16 chạy ngầm không block UI."""
         import os
         import threading
+
         if not self._work_dir or not video_path or not os.path.exists(video_path):
             return
 
@@ -847,17 +980,33 @@ class VoiceAndExportMixin:
         def _worker():
             try:
                 from autodub.media.thumbnail import generate_high_ctr_thumbnail
+
                 generate_high_ctr_thumbnail(
-                    video_path, title, out_16_9, aspect="16:9",
-                    badge_text=badge, top_title=top_title, bottom_title=bottom_title, preset=preset,
+                    video_path,
+                    title,
+                    out_16_9,
+                    aspect="16:9",
+                    badge_text=badge,
+                    top_title=top_title,
+                    bottom_title=bottom_title,
+                    preset=preset,
                 )
                 generate_high_ctr_thumbnail(
-                    video_path, title, out_9_16, aspect="9:16",
-                    badge_text=badge, top_title=top_title, bottom_title=bottom_title, preset=preset,
+                    video_path,
+                    title,
+                    out_9_16,
+                    aspect="9:16",
+                    badge_text=badge,
+                    top_title=top_title,
+                    bottom_title=bottom_title,
+                    preset=preset,
                 )
                 from PySide6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(self, "_refresh_social_metadata", Qt.ConnectionType.QueuedConnection)
-            except Exception as e:
+
+                QMetaObject.invokeMethod(
+                    self, "_refresh_social_metadata", Qt.ConnectionType.QueuedConnection
+                )
+            except Exception:
                 # Lỗi khi tạo thumbnail tuyệt đối không làm fail video export
                 pass
 
@@ -867,10 +1016,15 @@ class VoiceAndExportMixin:
     def _refresh_social_metadata(self) -> None:
         """Cập nhật thông tin tiêu đề, hashtag và tên video lên panel xuất video."""
         import os
+
         meta = self._get_social_metadata()
         video_name = ""
         if hasattr(self, "_project") and self._project:
-            video_path = getattr(self._project, "video_path", "") or getattr(self._project, "input_video", "") or ""
+            video_path = (
+                getattr(self._project, "video_path", "")
+                or getattr(self._project, "input_video", "")
+                or ""
+            )
             video_name = os.path.basename(video_path) if video_path else ""
         thumb_path = ""
         if self._work_dir:
@@ -886,6 +1040,6 @@ class VoiceAndExportMixin:
             TOASTS.info("Chưa có dự án nào được mở.")
             return
         from autodub_gui.viral_clipper_dialog import ViralClipperDialog
+
         dlg = ViralClipperDialog(self, self._state, settings=self._settings_provider())
         dlg.exec()
-

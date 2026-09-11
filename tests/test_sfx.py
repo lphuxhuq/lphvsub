@@ -1,7 +1,8 @@
 import os
 import wave
+
 import numpy as np
-import pytest
+
 from autodub.media.sfx import generate_sfx, write_sfx_wav
 
 

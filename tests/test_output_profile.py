@@ -1,5 +1,4 @@
-import pytest
-from autodub.media.output_profile import OutputProfile, DEFAULT_MAX_PIXELS
+from autodub.media.output_profile import DEFAULT_MAX_PIXELS, OutputProfile
 
 
 def test_output_profile_9_16_normalization():

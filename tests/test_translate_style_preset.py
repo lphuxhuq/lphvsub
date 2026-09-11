@@ -3,6 +3,7 @@
 Phong cách được truyền vào lõi xử lý bằng cách nối thêm ghi chú vào phần
 hướng dẫn dịch mà lõi đã đọc sẵn, nên không phải sửa gì trong lõi.
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -40,8 +41,7 @@ def test_unknown_key_adds_nothing() -> None:
     assert style_note("khong_ton_tai") == ""
 
 
-@pytest.mark.parametrize("key", ["formal", "literal", "creative",
-                                 "humorous", "social"])
+@pytest.mark.parametrize("key", ["formal", "literal", "creative", "humorous", "social"])
 def test_each_style_has_a_note(key: str) -> None:
     assert style_note(key).strip()
 
@@ -79,6 +79,5 @@ def test_core_reads_style_notes_in_prompt() -> None:
     from autodub.text import translate_hint
 
     settings = _apply(Settings(), "humorous")
-    prompt = translate_hint.build_translation_prompt(
-        get_target("vi"), "zh-CN", settings=settings)
+    prompt = translate_hint.build_translation_prompt(get_target("vi"), "zh-CN", settings=settings)
     assert style_note("humorous") in prompt

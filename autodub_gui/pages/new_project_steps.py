@@ -3,14 +3,23 @@
 Mỗi bước là một widget độc lập, tự giữ giá trị của mình và báo ra ngoài khi
 có thay đổi. Trang cha chỉ lo chuyển qua lại giữa các bước và gom dữ liệu.
 """
+
 from __future__ import annotations
 
 import os
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QSizePolicy, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import dub_constants as consts
@@ -18,16 +27,19 @@ from autodub_gui import tokens
 from autodub_gui.formatting import format_size
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton, SegmentedControl
 from autodub_gui.ui.inputs import (
-    LabeledCombo, LabeledLineEdit, LabeledSlider, LabeledWidget, polish_combo,
+    LabeledCombo,
+    LabeledLineEdit,
+    LabeledSlider,
+    LabeledWidget,
+    polish_combo,
 )
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.style import clear_background
 
-STEP_NAMES = ("Video", "Nhận dạng", "Dịch thuật", "Giọng & Phụ đề",
-              "Chạy dịch", "Xuất video")
+STEP_NAMES = ("Video", "Nhận dạng", "Dịch thuật", "Giọng & Phụ đề", "Chạy dịch", "Xuất video")
 
-VIDEO_FILTER = ("Video (*.mp4 *.mkv *.mov *.avi *.webm);;Tất cả tệp (*.*)")
-_LARGE_FILE_BYTES = 4 * 1024 ** 3
+VIDEO_FILTER = "Video (*.mp4 *.mkv *.mov *.avi *.webm);;Tất cả tệp (*.*)"
+_LARGE_FILE_BYTES = 4 * 1024**3
 
 
 class _StepPanel(QWidget):
@@ -35,8 +47,7 @@ class _StepPanel(QWidget):
 
     changed = Signal()
 
-    def __init__(self, title: str, description: str,
-                 parent: QWidget | None = None):
+    def __init__(self, title: str, description: str, parent: QWidget | None = None):
         super().__init__(parent)
         # Mỗi bước nằm trong một thẻ — để nền trong suốt thì nó ăn theo nền
         # của thẻ, không tự vẽ ra một khối tối rời rạc bên trong.
@@ -47,12 +58,13 @@ class _StepPanel(QWidget):
         heading = QLabel(title)
         heading.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_CARD_TITLE}px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         note = QLabel(description)
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.body.addWidget(heading)
         self.body.addWidget(note)
 
@@ -77,15 +89,18 @@ class VideoPreviewLoaderDialog(QDialog):
         self._url = url
         self._worker = None
 
-        from autodub_gui.ui.buttons import GhostButton
         from PySide6.QtWidgets import QProgressBar
+
+        from autodub_gui.ui.buttons import GhostButton
 
         root = QVBoxLayout(self)
         root.setContentsMargins(tokens.SP_4, tokens.SP_4, tokens.SP_4, tokens.SP_4)
         root.setSpacing(tokens.SP_3)
 
         title_lbl = QLabel("Đang tải video xem trước từ link...")
-        title_lbl.setStyleSheet(f"color: {tokens.TEXT_PRIMARY}; font-weight: 600; font-size: {tokens.FS_SECTION}px;")
+        title_lbl.setStyleSheet(
+            f"color: {tokens.TEXT_PRIMARY}; font-weight: 600; font-size: {tokens.FS_SECTION}px;"
+        )
         root.addWidget(title_lbl)
 
         url_lbl = ElidedLabel(url)
@@ -103,7 +118,8 @@ class VideoPreviewLoaderDialog(QDialog):
         root.addWidget(self.pbar)
 
         desc_lbl = QLabel(
-            "Video đang được tải về tạm để bạn có thể xem trực tiếp video thật, bấm phát/tua khi căn chỉnh phụ đề và vùng che.")
+            "Video đang được tải về tạm để bạn có thể xem trực tiếp video thật, bấm phát/tua khi căn chỉnh phụ đề và vùng che."
+        )
         desc_lbl.setWordWrap(True)
         desc_lbl.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px;")
         root.addWidget(desc_lbl)
@@ -126,6 +142,7 @@ class VideoPreviewLoaderDialog(QDialog):
     def _start_download(self):
         from autodub.config import cache_dir
         from autodub_gui.workers import PrefetchWorker
+
         out_dir = os.path.join(cache_dir(), "preview_videos")
         self._worker = PrefetchWorker(self._url, out_dir)
         self._worker.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
@@ -184,12 +201,15 @@ class VideoPreviewLoaderDialog(QDialog):
 class VideoStep(_StepPanel):
     """Bước 1: chọn nguồn video (hỗ trợ nhập 1 hoặc nhiều liên kết để chạy đa luồng)."""
 
-    SOURCES = [("Dán liên kết", "url"), ("Tải tệp lên", "file"),
-               ("Tiếp tục dang dở", "resume")]
+    SOURCES = [("Dán liên kết", "url"), ("Tải tệp lên", "file"), ("Tiếp tục dang dở", "resume")]
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Chọn video", "Dán một hoặc nhiều liên kết (chạy đa luồng), "
-                                       "chọn tệp từ máy, hoặc chạy tiếp dự án đang dở.", parent)
+        super().__init__(
+            "Chọn video",
+            "Dán một hoặc nhiều liên kết (chạy đa luồng), "
+            "chọn tệp từ máy, hoặc chạy tiếp dự án đang dở.",
+            parent,
+        )
         from autodub_gui.ui.inputs import LabeledPlainTextEdit
 
         self.source = SegmentedControl(self.SOURCES)
@@ -210,24 +230,33 @@ class VideoStep(_StepPanel):
         self.url_badge.setWordWrap(True)
         self.url_badge.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self.body.addWidget(self.url_badge)
 
         from autodub_gui.ui.progress import DownloadProgressBar
+
         self.download_progress = DownloadProgressBar(self)
         self.body.addWidget(self.download_progress)
 
         self.concurrency_slider = LabeledSlider(
-            "Số luồng xử lý song song", 1.0, 4.0, 1.0,
-            "Số video được tải và lồng tiếng đồng thời cùng lúc", " luồng", decimals=0)
+            "Số luồng xử lý song song",
+            1.0,
+            4.0,
+            1.0,
+            "Số video được tải và lồng tiếng đồng thời cùng lúc",
+            " luồng",
+            decimals=0,
+        )
         self.concurrency_slider.set_value(2.0)
         self.concurrency_slider.changed.connect(lambda _v: self.changed.emit())
         self.concurrency_slider.setVisible(False)
         self.body.addWidget(self.concurrency_slider)
 
         # Khung thiết lập chi tiết từng video (Giọng đọc riêng, danh sách link)
-        from autodub_gui.ui.collapsible import CollapsibleSection
         from PySide6.QtCore import QTimer
+
+        from autodub_gui.ui.collapsible import CollapsibleSection
 
         self._custom_items: dict[str, dict] = {}
         self._prefetched_paths: dict[str, str] = {}
@@ -236,7 +265,9 @@ class VideoStep(_StepPanel):
         self._prefetch_timer.setSingleShot(True)
         self._prefetch_timer.timeout.connect(self._auto_prefetch_urls)
 
-        self.setup_section = CollapsibleSection("Cấu hình chi tiết từng video trước khi chạy", expanded=True)
+        self.setup_section = CollapsibleSection(
+            "Cấu hình chi tiết từng video trước khi chạy", expanded=True
+        )
         self.setup_container = QWidget()
         clear_background(self.setup_container)
         self.setup_layout = QVBoxLayout(self.setup_container)
@@ -247,26 +278,27 @@ class VideoStep(_StepPanel):
         self.body.addWidget(self.setup_section)
 
         self.file_row, self.file_edit = self._picker(
-            "Tệp video trên máy", "Chưa chọn tệp nào", self._pick_file)
+            "Tệp video trên máy", "Chưa chọn tệp nào", self._pick_file
+        )
         self.body.addWidget(self.file_row)
 
         self.resume_row, self.resume_edit = self._picker(
-            "Thư mục dự án đang dở", "Chọn thư mục kết quả của lần chạy trước",
-            self._pick_folder)
+            "Thư mục dự án đang dở", "Chọn thư mục kết quả của lần chạy trước", self._pick_folder
+        )
         self.body.addWidget(self.resume_row)
 
         self.info = ElidedLabel("")
         self.info.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self.body.addWidget(self.info)
         self.finish()
         self._on_source("url")
 
-    def _picker(self, label: str, placeholder: str,
-                handler) -> tuple[QWidget, LabeledLineEdit]:
+    def _picker(self, label: str, placeholder: str, handler) -> tuple[QWidget, LabeledLineEdit]:
         holder = QWidget()
-        clear_background(holder)     # ăn theo nền của thẻ chứa nó
+        clear_background(holder)  # ăn theo nền của thẻ chứa nó
         layout = QVBoxLayout(holder)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(tokens.SP_2)
@@ -335,9 +367,15 @@ class VideoStep(_StepPanel):
                     self.download_progress.set_progress(0.01, "Đang kết nối tải video...")
 
                 worker = PrefetchWorker(u, out_dir)
-                worker.progress_url.connect(self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection)
-                worker.finished_ok_url.connect(self._on_prefetch_done, Qt.ConnectionType.QueuedConnection)
-                worker.failed_url.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
+                worker.progress_url.connect(
+                    self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection
+                )
+                worker.finished_ok_url.connect(
+                    self._on_prefetch_done, Qt.ConnectionType.QueuedConnection
+                )
+                worker.failed_url.connect(
+                    self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection
+                )
                 worker.finished.connect(worker.deleteLater)
                 self._prefetch_workers.append(worker)
                 worker.start()
@@ -354,9 +392,7 @@ class VideoStep(_StepPanel):
         if len(urls) == 1 and urls[0] == url:
             self.download_progress.lbl_status.setText(f"Lỗi tải: {err[:60]}")
             self.url_badge.setText(f"Tải video thất bại: {err[:60]}")
-            self.url_badge.setStyleSheet(
-                f"color: {tokens.DANGER}; font-size: {tokens.FS_META}px;"
-            )
+            self.url_badge.setStyleSheet(f"color: {tokens.DANGER}; font-size: {tokens.FS_META}px;")
 
     @Slot(str, str)
     def _on_prefetch_done(self, url: str, path: str) -> None:
@@ -382,8 +418,9 @@ class VideoStep(_StepPanel):
             u = urls[0]
             existing = None
             try:
-                from autodub.pipeline import find_existing_project_by_url
                 from autodub.config import Settings
+                from autodub.pipeline import find_existing_project_by_url
+
                 s = Settings.load()
                 out_dir = getattr(s, "output_dir", None) or "output"
                 existing = find_existing_project_by_url(out_dir, u)
@@ -407,7 +444,8 @@ class VideoStep(_StepPanel):
             self.setup_section.setVisible(False)
         else:
             self.url_badge.setText(
-                f"Đã nhập {n} liên kết video (Chế độ xử lý đa luồng — đang tự động tải ngầm...)")
+                f"Đã nhập {n} liên kết video (Chế độ xử lý đa luồng — đang tự động tải ngầm...)"
+            )
             self.url_badge.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px;"
             )
@@ -422,6 +460,7 @@ class VideoStep(_StepPanel):
 
     def items(self):
         from autodub.batch import parse_lines
+
         raw = self.url.text()
         base_items = parse_lines(raw)
         result = []
@@ -441,9 +480,10 @@ class VideoStep(_StepPanel):
 
     def _open_item_custom_dialog(self, url: str, index: int) -> None:
         """Mở hộp thoại Kiểu chữ, Vùng che Blur, Logo & Watermark riêng cho video này."""
-        from autodub_gui.style_dialog import StyleDialog
-        from autodub.config import Settings
         from PySide6.QtWidgets import QDialog
+
+        from autodub.config import Settings
+        from autodub_gui.style_dialog import StyleDialog
 
         video_path = None
         if url and url.startswith(("http://", "https://")):
@@ -546,15 +586,17 @@ class VideoStep(_StepPanel):
             if child.widget():
                 child.widget().deleteLater()
 
+        from PySide6.QtWidgets import QComboBox
+
         from autodub_gui import icons
         from autodub_gui.ui.buttons import GhostButton, IconButton
-        from PySide6.QtWidgets import QComboBox
 
         # Lấy danh sách giọng đọc có sẵn
         available_voices = ["(Theo dự án)"]
         try:
             from autodub.config import Settings
             from autodub.speech.tts import voices
+
             all_v = voices.names(Settings.load())
             if all_v:
                 available_voices.extend(all_v)
@@ -572,7 +614,9 @@ class VideoStep(_StepPanel):
         tb_layout.setSpacing(tokens.SP_2)
 
         lbl_bulk = QLabel("Đổi giọng hàng loạt:")
-        lbl_bulk.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; font-weight: 600;")
+        lbl_bulk.setStyleSheet(
+            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; font-weight: 600;"
+        )
         tb_layout.addWidget(lbl_bulk)
 
         self._bulk_voice_combo = QComboBox()
@@ -606,7 +650,9 @@ class VideoStep(_StepPanel):
             r_layout.setSpacing(tokens.SP_2)
 
             num_lbl = QLabel(f"#{idx + 1}")
-            num_lbl.setStyleSheet(f"color: {tokens.PRIMARY}; font-weight: bold; font-size: {tokens.FS_META}px;")
+            num_lbl.setStyleSheet(
+                f"color: {tokens.PRIMARY}; font-weight: bold; font-size: {tokens.FS_META}px;"
+            )
             r_layout.addWidget(num_lbl)
 
             url_lbl = ElidedLabel(item.url or "")
@@ -614,7 +660,9 @@ class VideoStep(_StepPanel):
             r_layout.addWidget(url_lbl, 1)
 
             # Huy hiệu trạng thái tải ngầm
-            if item.url in self._prefetched_paths and os.path.isfile(self._prefetched_paths[item.url]):
+            if item.url in self._prefetched_paths and os.path.isfile(
+                self._prefetched_paths[item.url]
+            ):
                 tag = QLabel("Đã tải xong")
                 tag.setStyleSheet(
                     f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; "
@@ -637,9 +685,7 @@ class VideoStep(_StepPanel):
                 f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: {tokens.RADIUS_SM}px; "
                 f"padding: 2px 8px; font-size: {tokens.FS_META}px; min-width: 130px; }}"
             )
-            cb_voice.currentTextChanged.connect(
-                lambda v, i=idx: self._on_item_voice_changed(i, v)
-            )
+            cb_voice.currentTextChanged.connect(lambda v, i=idx: self._on_item_voice_changed(i, v))
             r_layout.addWidget(cb_voice)
 
             # Nút chỉnh Blur, Sub, Logo, Watermark riêng cho video này
@@ -657,7 +703,9 @@ class VideoStep(_StepPanel):
                 btn_fx.setStyleSheet(
                     f"font-size: {tokens.FS_META}px; border-radius: {tokens.RADIUS_SM}px; padding: 2px 8px;"
                 )
-            btn_fx.clicked.connect(lambda _c=False, u=item.url, i=idx: self._open_item_custom_dialog(u, i))
+            btn_fx.clicked.connect(
+                lambda _c=False, u=item.url, i=idx: self._open_item_custom_dialog(u, i)
+            )
             r_layout.addWidget(btn_fx)
 
             if has_custom:
@@ -700,6 +748,7 @@ class VideoStep(_StepPanel):
         if source_url not in self._custom_items:
             return
         import copy
+
         src_data = self._custom_items[source_url]
         for it in self.items():
             if it.url and it.url != source_url:
@@ -738,15 +787,15 @@ class VideoStep(_StepPanel):
 
     def _pick_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER)
+            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER
+        )
         if path:
             self.file_edit.set_text(path)
             self.source.set_key("file")
             self._on_source("file")
 
     def _pick_folder(self) -> None:
-        path = QFileDialog.getExistingDirectory(
-            self, "Chọn thư mục dự án đang dở", "output")
+        path = QFileDialog.getExistingDirectory(self, "Chọn thư mục dự án đang dở", "output")
         if path:
             self.resume_edit.set_text(path)
             self.source.set_key("resume")
@@ -756,10 +805,10 @@ class VideoStep(_StepPanel):
         path = self.file_edit.text()
         if path and os.path.isfile(path):
             size = os.path.getsize(path)
-            warn = ("  —  video rất lớn, xử lý có thể mất nhiều giờ"
-                    if size > _LARGE_FILE_BYTES else "")
-            self.info.setText(f"{os.path.basename(path)} · "
-                              f"{format_size(size)}{warn}")
+            warn = (
+                "  —  video rất lớn, xử lý có thể mất nhiều giờ" if size > _LARGE_FILE_BYTES else ""
+            )
+            self.info.setText(f"{os.path.basename(path)} · {format_size(size)}{warn}")
         else:
             self.info.setText("")
         self.changed.emit()
@@ -783,8 +832,10 @@ class VideoStep(_StepPanel):
             "source": self.source.current_key(),
             "url": urls[0] if len(urls) == 1 else self.url.text(),
             "urls": urls,
-            "items": [{"url": it.url, "voice": it.voice,
-                       "has_custom": it.url in self._custom_items} for it in items],
+            "items": [
+                {"url": it.url, "voice": it.voice, "has_custom": it.url in self._custom_items}
+                for it in items
+            ],
             "custom_items": self._custom_items,
             "concurrency": int(self.concurrency_slider.value()) if len(urls) > 1 else 1,
             "file_path": self.file_edit.text(),
@@ -826,31 +877,38 @@ class RecognizeStep(_StepPanel):
     """Bước 2: nghe và chép lời video gốc, kèm cách xử lý nhạc nền."""
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Nghe và chép lời",
-                         "Ứng dụng nghe video gốc rồi chép lại thành chữ. "
-                         "Chép càng đúng thì bản dịch càng sát.", parent)
+        super().__init__(
+            "Nghe và chép lời",
+            "Ứng dụng nghe video gốc rồi chép lại thành chữ. Chép càng đúng thì bản dịch càng sát.",
+            parent,
+        )
         from autodub_gui.ui.collapsible import CollapsibleSection
 
         self.engine = LabeledCombo(
-            "Bộ nhận dạng", consts.ASR_ENGINES,
+            "Bộ nhận dạng",
+            consts.ASR_ENGINES,
             "Whisper nghe được mọi ngôn ngữ. Paraformer chính xác hơn với "
-            "video tiếng Trung nhưng phải cài thêm một lần.")
+            "video tiếng Trung nhưng phải cài thêm một lần.",
+        )
         self.model = LabeledCombo(
-            "Độ chính xác", consts.WHISPER_MODELS,
-            "Mức càng cao thì nghe càng đúng nhưng chạy càng lâu và tải "
-            "về càng nặng.")
+            "Độ chính xác",
+            consts.WHISPER_MODELS,
+            "Mức càng cao thì nghe càng đúng nhưng chạy càng lâu và tải về càng nặng.",
+        )
         self.language = LabeledCombo(
-            "Ngôn ngữ trong video", consts.SOURCE_LANGS,
-            "Cho biết video gốc nói tiếng gì.")
+            "Ngôn ngữ trong video", consts.SOURCE_LANGS, "Cho biết video gốc nói tiếng gì."
+        )
         self.auto_detect = QCheckBox("Để ứng dụng tự nhận ra ngôn ngữ")
         self.auto_detect.setToolTip(
             "Bật khi bạn không chắc video nói tiếng gì. Tắt thì dùng đúng "
-            "ngôn ngữ bạn chọn ở trên, thường chính xác hơn.")
+            "ngôn ngữ bạn chọn ở trên, thường chính xác hơn."
+        )
         self.auto_detect.toggled.connect(self._on_auto)
 
         self.diarization_enabled = QCheckBox("Tự động phân tách người nói (Speaker Diarization)")
         self.diarization_enabled.setToolTip(
-            "Tự động nhận diện và phân biệt các nhân vật khác nhau trong video bằng âm sắc giọng nói.")
+            "Tự động nhận diện và phân biệt các nhân vật khác nhau trong video bằng âm sắc giọng nói."
+        )
         self.diarization_enabled.setChecked(True)
         self.diarization_enabled.toggled.connect(lambda _c: self.changed.emit())
 
@@ -866,13 +924,20 @@ class RecognizeStep(_StepPanel):
         # ngay sau bước nghe; gập lại mặc định cho gọn.
         self._bg_section = CollapsibleSection("Nhạc nền")
         self.background = LabeledCombo(
-            "Cách giữ nhạc nền", consts.BG_MODES,
-            "Tách giọng gốc giữ được nhạc nền hay nhất nhưng chạy lâu hơn.")
+            "Cách giữ nhạc nền",
+            consts.BG_MODES,
+            "Tách giọng gốc giữ được nhạc nền hay nhất nhưng chạy lâu hơn.",
+        )
         self.background.changed.connect(self._on_background)
         self.duck = LabeledSlider(
-            "Mức giảm tiếng gốc", -40.0, 0.0, 1.0,
+            "Mức giảm tiếng gốc",
+            -40.0,
+            0.0,
+            1.0,
             "Càng âm thì tiếng gốc càng nhỏ khi có lời thoại tiếng Việt.",
-            " dB", decimals=0)
+            " dB",
+            decimals=0,
+        )
         self.duck.set_value(-12.0)
         self.duck.changed.connect(lambda _v: self.changed.emit())
         self._bg_section.add_widget(self.background)
@@ -915,30 +980,36 @@ class TranslateStep(_StepPanel):
     """Bước 3: dịch sang tiếng Việt."""
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Dịch sang tiếng Việt",
-                         "Chọn cách dịch và giọng văn cho bản dịch. Ngôn ngữ "
-                         "đích luôn là tiếng Việt.", parent)
+        super().__init__(
+            "Dịch sang tiếng Việt",
+            "Chọn cách dịch và giọng văn cho bản dịch. Ngôn ngữ đích luôn là tiếng Việt.",
+            parent,
+        )
         self.source_view = QLabel("")
         self.source_view.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px; "
             f"background: {tokens.BG_INPUT}; border-radius: 8px; "
-            f"padding: 8px 12px;")
-        self.body.addWidget(LabeledWidget(
-            "Dịch từ", self.source_view,
-            "Lấy theo ngôn ngữ bạn chọn ở bước Nghe và chép lời."))
+            f"padding: 8px 12px;"
+        )
+        self.body.addWidget(
+            LabeledWidget(
+                "Dịch từ", self.source_view, "Lấy theo ngôn ngữ bạn chọn ở bước Nghe và chép lời."
+            )
+        )
 
         target = QLabel("Tiếng Việt")
         target.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
             f"font-weight: 600; background: {tokens.BG_INPUT}; "
-            f"border-radius: 8px; padding: 8px 12px;")
-        self.body.addWidget(LabeledWidget(
-            "Dịch sang", target, "Bản này chỉ lồng tiếng Việt."))
+            f"border-radius: 8px; padding: 8px 12px;"
+        )
+        self.body.addWidget(LabeledWidget("Dịch sang", target, "Bản này chỉ lồng tiếng Việt."))
 
         # Hai lựa chọn quyết định dịch & metadata
         self.auto_translate = QCheckBox("Dịch tự động bằng AI")
         self.auto_translate.setToolTip(
-            "Bật: tự động dịch toàn bộ các câu thoại sang tiếng Việt. Tắt: dừng ở bước dịch để bạn dịch tay.")
+            "Bật: tự động dịch toàn bộ các câu thoại sang tiếng Việt. Tắt: dừng ở bước dịch để bạn dịch tay."
+        )
         self.auto_translate.setChecked(True)
         self.auto_translate.toggled.connect(self._on_auto_translate)
         self.body.addWidget(self.auto_translate)
@@ -946,7 +1017,8 @@ class TranslateStep(_StepPanel):
         self.metadata = QCheckBox("Tạo tiêu đề + mô tả đăng bài (YouTube/TikTok/Facebook)")
         self.metadata.setToolTip(
             "AI viết sẵn tiêu đề, mô tả và hashtag cho mạng xã hội, lưu vào "
-            "tệp youtube_post.txt trong thư mục dự án.")
+            "tệp youtube_post.txt trong thư mục dự án."
+        )
         self.metadata.setChecked(True)
         self.metadata.toggled.connect(lambda _c: self.changed.emit())
         self.body.addWidget(self.metadata)
@@ -961,14 +1033,16 @@ class TranslateStep(_StepPanel):
                 ("OpenRouter API (Hàng trăm mô hình AI)", "openrouter"),
                 ("OpenAI API (GPT-4o, GPT-4o-mini)", "openai"),
             ],
-            "Chọn nơi xử lý dịch thuật: Gemini SRT Pro, AI Studio (trình duyệt, miễn phí), API trực tiếp (DeepSeek/OpenRouter/OpenAI).")
+            "Chọn nơi xử lý dịch thuật: Gemini SRT Pro, AI Studio (trình duyệt, miễn phí), API trực tiếp (DeepSeek/OpenRouter/OpenAI).",
+        )
         self.engine.changed.connect(self._on_engine_changed)
 
         # 1. Các ô nhập cho Gemini SRT Pro
         self.gemini_key = LabeledLineEdit(
             "Google Gemini API Key(s)",
             "AIzaSyKey1, AIzaSyKey2... (dán 1 hoặc nhiều key để chia luồng)",
-            "Khóa API Gemini (lấy miễn phí tại aistudio.google.com). Có thể nhập nhiều key để chia luồng.")
+            "Khóa API Gemini (lấy miễn phí tại aistudio.google.com). Có thể nhập nhiều key để chia luồng.",
+        )
         self.gemini_key.changed.connect(lambda _t: self.changed.emit())
 
         self.gemini_model = LabeledCombo(
@@ -978,7 +1052,8 @@ class TranslateStep(_StepPanel):
                 ("Gemini 1.5 Flash (Ổn định, tốc độ cao)", "gemini-1.5-flash"),
                 ("Gemini 2.5 Pro (Văn phong cao cấp, thông minh)", "gemini-2.5-pro"),
             ],
-            "Mô hình AI xử lý dịch thuật và tạo nội dung đăng bài.")
+            "Mô hình AI xử lý dịch thuật và tạo nội dung đăng bài.",
+        )
         self.gemini_model.changed.connect(lambda *_a: self.changed.emit())
 
         self.btn_open_gemini_web = GhostButton("Mở Trình Dịch Web Gemini SRT Pro")
@@ -986,52 +1061,54 @@ class TranslateStep(_StepPanel):
 
         self.btn_login_ai_studio = GhostButton("Đăng nhập Google AI Studio")
         self.btn_login_ai_studio.setToolTip(
-            "Mở Chrome để đăng nhập Google lần đầu. Cookies sẽ được lưu cho các lần sau.")
+            "Mở Chrome để đăng nhập Google lần đầu. Cookies sẽ được lưu cho các lần sau."
+        )
         self.btn_login_ai_studio.clicked.connect(self._open_ai_studio_login)
 
         self.ai_studio_hint = QLabel(
             "Dùng Google AI Studio miễn phí qua trình duyệt Chrome — không cần API Key. "
             "Chậm hơn API trực tiếp nhưng không tốn phí. Cần đăng nhập Google lần đầu. "
-            "Lần chạy này bỏ qua API Key đã lưu (phương thức 1) để đi đường trình duyệt.")
+            "Lần chạy này bỏ qua API Key đã lưu (phương thức 1) để đi đường trình duyệt."
+        )
         self.ai_studio_hint.setWordWrap(True)
         self.ai_studio_hint.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.ai_studio_hint.setVisible(False)
 
         self.ai_studio_login_status = QLabel("")
         self.ai_studio_login_status.setWordWrap(True)
         self.ai_studio_login_status.setStyleSheet(
-            f"font-size: {tokens.FS_META}px; background: transparent;")
+            f"font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.ai_studio_login_status.setVisible(False)
 
         # 2. Các ô nhập cho DeepSeek, OpenRouter, OpenAI
         self.deepseek_key = LabeledLineEdit(
-            "DeepSeek API Key",
-            "sk-...",
-            "Khóa API DeepSeek từ platform.deepseek.com.")
+            "DeepSeek API Key", "sk-...", "Khóa API DeepSeek từ platform.deepseek.com."
+        )
         self.deepseek_key.changed.connect(lambda _t: self.changed.emit())
 
         self.openrouter_key = LabeledLineEdit(
-            "OpenRouter API Key",
-            "sk-or-v1-...",
-            "Khóa API OpenRouter từ openrouter.ai.")
+            "OpenRouter API Key", "sk-or-v1-...", "Khóa API OpenRouter từ openrouter.ai."
+        )
         self.openrouter_key.changed.connect(lambda _t: self.changed.emit())
 
         self.openai_key = LabeledLineEdit(
-            "OpenAI API Key",
-            "sk-...",
-            "Khóa API OpenAI từ platform.openai.com.")
+            "OpenAI API Key", "sk-...", "Khóa API OpenAI từ platform.openai.com."
+        )
         self.openai_key.changed.connect(lambda _t: self.changed.emit())
 
         self.style = LabeledCombo(
             "Phong cách dịch",
             [(label, key) for label, key, _note in consts.TRANSLATE_STYLES],
-            "Quyết định giọng văn của bản dịch, ví dụ trang trọng hay đời thường.")
+            "Quyết định giọng văn của bản dịch, ví dụ trang trọng hay đời thường.",
+        )
         self.note = LabeledLineEdit(
             "Ghi chú thêm cho người dịch",
             "ví dụ: giữ tên nhân vật Hán Việt, xưng hô mình với các bạn",
-            "Ghi chú này được gửi kèm mỗi lần dịch.")
+            "Ghi chú này được gửi kèm mỗi lần dịch.",
+        )
         self.style.changed.connect(lambda *_a: self.changed.emit())
         self.note.changed.connect(lambda _t: self.changed.emit())
 
@@ -1051,11 +1128,12 @@ class TranslateStep(_StepPanel):
         self.manual_note = QLabel(
             "Đã tắt dịch tự động: chạy tới bước dịch, ứng dụng sẽ dừng lại và "
             "mở hướng dẫn để bạn tự dịch (theo TRANSLATE_PENDING.txt), xong "
-            "bấm tiếp tục.")
+            "bấm tiếp tục."
+        )
         self.manual_note.setWordWrap(True)
         self.manual_note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.manual_note.setVisible(False)
         self.body.addWidget(self.manual_note)
         self.finish()
@@ -1064,6 +1142,7 @@ class TranslateStep(_StepPanel):
         try:
             from autodub.tools.gemini_srt_ui.server_manager import get_server_manager
             from autodub_gui.system_open import open_url
+
             mgr = get_server_manager()
             url = mgr.start(open_browser=False)
             if url:
@@ -1073,6 +1152,7 @@ class TranslateStep(_StepPanel):
 
     def _open_ai_studio_login(self) -> None:
         import threading
+
         btn = self.btn_login_ai_studio
         btn.setEnabled(False)
         btn.setText("⏳ Đang mở cửa sổ đăng nhập...")
@@ -1080,6 +1160,7 @@ class TranslateStep(_StepPanel):
         def worker():
             try:
                 from autodub.text.translate_browser import AiStudioBrowserClient
+
                 client = AiStudioBrowserClient(headless=False)
                 client.open_login_window()
             except Exception:
@@ -1089,12 +1170,14 @@ class TranslateStep(_StepPanel):
                 btn.setEnabled(True)
                 btn.setText("Đăng nhập Google AI Studio")
                 self._check_ai_studio_login()
+
             try:
-                from PySide6.QtWidgets import QApplication
                 from PySide6.QtCore import QEvent
+                from PySide6.QtWidgets import QApplication
 
                 class _Ev(QEvent):
                     _TYPE = QEvent.Type(QEvent.registerEventType())
+
                     def __init__(self, cb):
                         super().__init__(self._TYPE)
                         self.cb = cb
@@ -1107,46 +1190,63 @@ class TranslateStep(_StepPanel):
 
     def _check_ai_studio_login(self) -> None:
         import threading
-        from autodub.text.translate_browser import get_cached_login_status, _has_google_session, _get_default_profile_dir
+
+        from autodub.text.translate_browser import (
+            _get_default_profile_dir,
+            _has_google_session,
+            get_cached_login_status,
+        )
 
         cached = get_cached_login_status()
         if cached == "true":
             self.ai_studio_login_status.setStyleSheet(
-                f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;")
+                f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;"
+            )
             self.ai_studio_login_status.setText("Đã đăng nhập Google AI Studio — sẵn sàng dịch!")
             return
 
         profile_dir = _get_default_profile_dir()
         if not _has_google_session(profile_dir):
             self.ai_studio_login_status.setStyleSheet(
-                f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;")
-            self.ai_studio_login_status.setText("Chưa đăng nhập — bấm nút 'Đăng nhập Google AI Studio' ở trên trước khi chạy.")
+                f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;"
+            )
+            self.ai_studio_login_status.setText(
+                "Chưa đăng nhập — bấm nút 'Đăng nhập Google AI Studio' ở trên trước khi chạy."
+            )
             return
 
         self.ai_studio_login_status.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.ai_studio_login_status.setText("Đang kiểm tra đăng nhập...")
 
         def worker():
             from autodub.text.translate_browser import check_login_status
+
             result = check_login_status()
 
             def _update():
                 if result["logged_in"]:
                     self.ai_studio_login_status.setStyleSheet(
-                        f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;")
-                    self.ai_studio_login_status.setText("Đã đăng nhập Google AI Studio — sẵn sàng dịch!")
+                        f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; background: transparent;"
+                    )
+                    self.ai_studio_login_status.setText(
+                        "Đã đăng nhập Google AI Studio — sẵn sàng dịch!"
+                    )
                 else:
                     self.ai_studio_login_status.setStyleSheet(
-                        f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;")
+                        f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;"
+                    )
                     msg = result.get("error") or "Chưa đăng nhập"
                     self.ai_studio_login_status.setText(f"{msg} — bấm nút 'Đăng nhập' ở trên.")
+
             try:
-                from PySide6.QtWidgets import QApplication
                 from PySide6.QtCore import QEvent
+                from PySide6.QtWidgets import QApplication
 
                 class _Ev(QEvent):
                     _TYPE = QEvent.Type(QEvent.registerEventType())
+
                     def __init__(self, cb):
                         super().__init__(self._TYPE)
                         self.cb = cb
@@ -1158,7 +1258,7 @@ class TranslateStep(_StepPanel):
         threading.Thread(target=worker, daemon=True).start()
 
     def customEvent(self, event):
-        if hasattr(event, 'cb'):
+        if hasattr(event, "cb"):
             event.cb()
 
     def _on_engine_changed(self) -> None:
@@ -1178,9 +1278,18 @@ class TranslateStep(_StepPanel):
 
     def _on_auto_translate(self, checked: bool) -> None:
         for widget in (
-            self.engine, self.gemini_key, self.gemini_model, self.btn_open_gemini_web,
-            self.btn_login_ai_studio, self.ai_studio_hint, self.ai_studio_login_status,
-            self.deepseek_key, self.openrouter_key, self.openai_key, self.style, self.note
+            self.engine,
+            self.gemini_key,
+            self.gemini_model,
+            self.btn_open_gemini_web,
+            self.btn_login_ai_studio,
+            self.ai_studio_hint,
+            self.ai_studio_login_status,
+            self.deepseek_key,
+            self.openrouter_key,
+            self.openai_key,
+            self.style,
+            self.note,
         ):
             widget.setEnabled(checked)
         self.manual_note.setVisible(not checked)
@@ -1207,6 +1316,7 @@ class TranslateStep(_StepPanel):
         fb_ai_studio = False
         try:
             from autodub.config import Settings
+
             settings = Settings.load()
             fb_auto = settings.translate_enabled
             fb_meta = settings.generate_metadata
@@ -1216,7 +1326,7 @@ class TranslateStep(_StepPanel):
             fb_openrouter_key = settings.openrouter_api_key
             fb_openai_key = settings.openai_api_key
             fb_ai_studio = bool(settings.ai_studio_enabled)
-        except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
+        except Exception:
             fb_auto, fb_meta = True, True
             fb_gemini_key, fb_gemini_model = "", "gemini-2.5-flash"
             fb_deepseek_key, fb_openrouter_key, fb_openai_key = "", "", ""
@@ -1257,18 +1367,20 @@ class TranslateStep(_StepPanel):
 class VoiceStep(_StepPanel):
     """Bước 4: giọng đọc + phụ đề — hai lựa chọn cuối trước khi chạy."""
 
-    preview_requested = Signal(str)     # tên giọng
+    preview_requested = Signal(str)  # tên giọng
     style_requested = Signal()
     checkpoint_save_requested = Signal(str)
     checkpoint_load_requested = Signal(str)
     checkpoint_delete_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Giọng đọc & phụ đề",
-                         "Video này sẽ đọc bằng giọng mặc định bạn chọn trong "
-                         "Cài đặt. Chọn thêm cách hiện phụ đề — sau khi chạy "
-                         "xong vẫn sửa được trong Trình chỉnh sửa.",
-                         parent)
+        super().__init__(
+            "Giọng đọc & phụ đề",
+            "Video này sẽ đọc bằng giọng mặc định bạn chọn trong "
+            "Cài đặt. Chọn thêm cách hiện phụ đề — sau khi chạy "
+            "xong vẫn sửa được trong Trình chỉnh sửa.",
+            parent,
+        )
         from autodub.media.subtitle import PRESET_CHOICES
         from autodub_gui.ui.collapsible import CollapsibleSection
         from autodub_gui.voice_picker import VoicePicker
@@ -1292,7 +1404,9 @@ class VoiceStep(_StepPanel):
         ckpt_layout.addWidget(lbl_ckpt)
 
         self.cb_checkpoints = QComboBox()
-        self.cb_checkpoints.setToolTip("Chọn bộ cấu hình đã lưu (Logo, Watermark, Anti-Reup, Khung hình, Subtitle...)")
+        self.cb_checkpoints.setToolTip(
+            "Chọn bộ cấu hình đã lưu (Logo, Watermark, Anti-Reup, Khung hình, Subtitle...)"
+        )
         self.cb_checkpoints.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         polish_combo(self.cb_checkpoints)
         ckpt_layout.addWidget(self.cb_checkpoints, 1)
@@ -1303,7 +1417,9 @@ class VoiceStep(_StepPanel):
         ckpt_layout.addWidget(self.btn_load_ckpt)
 
         self.btn_save_ckpt = PrimaryButton("Lưu")
-        self.btn_save_ckpt.setToolTip("Lưu toàn bộ thiết lập hiện tại thành Checkpoint (theo tên kênh)")
+        self.btn_save_ckpt.setToolTip(
+            "Lưu toàn bộ thiết lập hiện tại thành Checkpoint (theo tên kênh)"
+        )
         self.btn_save_ckpt.clicked.connect(self._on_save_checkpoint_clicked)
         ckpt_layout.addWidget(self.btn_save_ckpt)
 
@@ -1324,10 +1440,12 @@ class VoiceStep(_StepPanel):
         self._default_label = ElidedLabel("")
         self._default_label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         self._btn_default_preview = GhostButton("Nghe thử")
         self._btn_default_preview.clicked.connect(
-            lambda: self.preview_requested.emit(self._default_voice()))
+            lambda: self.preview_requested.emit(self._default_voice())
+        )
         default_row.addWidget(self._default_label, 1)
         default_row.addWidget(self._btn_default_preview)
         self.body.addLayout(default_row)
@@ -1342,25 +1460,33 @@ class VoiceStep(_StepPanel):
         self.body.addWidget(self._override)
 
         self.speed = LabeledSlider(
-            "Tốc độ đọc", 0.5, 2.0, 0.05,
+            "Tốc độ đọc",
+            0.5,
+            2.0,
+            0.05,
             "1.00 là tốc độ tự nhiên. Tăng lên khi câu tiếng Việt dài hơn câu "
-            "gốc và bị chồng sang câu sau.", "x")
+            "gốc và bị chồng sang câu sau.",
+            "x",
+        )
         self.speed.set_value(1.0)
         self.speed.changed.connect(lambda _v: self.changed.emit())
         self.body.addWidget(self.speed)
 
         # Phụ đề — dọn về đây từ bước Phụ đề cũ (bước 5 giờ là Chạy dịch).
         self.mode = LabeledCombo(
-            "Kiểu phụ đề", consts.SUBTITLE_MODES,
+            "Kiểu phụ đề",
+            consts.SUBTITLE_MODES,
             "Phụ đề rời là tệp riêng, người xem tự bật tắt. Ghi thẳng vào "
-            "hình thì chữ nằm luôn trên video.")
+            "hình thì chữ nằm luôn trên video.",
+        )
         self.mode.changed.connect(lambda *_a: self.changed.emit())
         self.body.addWidget(self.mode)
 
         self.preset = LabeledCombo(
-            "Bộ kiểu chữ", PRESET_CHOICES,
-            "Chọn một bộ có sẵn là xong. Muốn tự quyết từng thông số thì bấm "
-            "Kiểu chữ và vùng che.")
+            "Bộ kiểu chữ",
+            PRESET_CHOICES,
+            "Chọn một bộ có sẵn là xong. Muốn tự quyết từng thông số thì bấm Kiểu chữ và vùng che.",
+        )
         self.preset.changed.connect(lambda *_a: self.changed.emit())
         self.body.addWidget(self.preset)
 
@@ -1375,8 +1501,8 @@ class VoiceStep(_StepPanel):
         self.summary = QLabel("Kiểu mặc định, chưa che vùng nào")
         self.summary.setWordWrap(True)
         self.summary.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.body.addWidget(self.summary)
 
         # Logo / Watermark thương hiệu
@@ -1386,13 +1512,17 @@ class VoiceStep(_StepPanel):
         logo_file_row = QHBoxLayout()
         logo_file_row.setSpacing(tokens.SP_2)
         self.logo_path_input = LabeledLineEdit(
-            "Tệp logo", "Đường dẫn tệp logo (.png trong suốt, .jpg, .webp)...",
-            "Chọn hình ảnh logo để chèn lên video xuất ra.")
+            "Tệp logo",
+            "Đường dẫn tệp logo (.png trong suốt, .jpg, .webp)...",
+            "Chọn hình ảnh logo để chèn lên video xuất ra.",
+        )
         self.logo_path_input.changed.connect(lambda *_a: self.changed.emit())
         self.btn_browse_logo = GhostButton("Chọn ảnh…")
         self.btn_browse_logo.clicked.connect(self._browse_logo)
         self.btn_clear_logo = GhostButton("Xóa")
-        self.btn_clear_logo.clicked.connect(lambda: (self.logo_path_input.set_text(""), self.changed.emit()))
+        self.btn_clear_logo.clicked.connect(
+            lambda: (self.logo_path_input.set_text(""), self.changed.emit())
+        )
         logo_file_row.addWidget(self.logo_path_input, 1)
         logo_file_row.addWidget(self.btn_browse_logo)
         logo_file_row.addWidget(self.btn_clear_logo)
@@ -1413,19 +1543,29 @@ class VoiceStep(_StepPanel):
 
         self.logo_motion = LabeledCombo(
             "Hiệu ứng logo",
-            [("Cố định tại vị trí đã chọn", "static"),
-             ("Chạy nảy mượt mà quanh video (Bouncing)", "bounce")])
+            [
+                ("Cố định tại vị trí đã chọn", "static"),
+                ("Chạy nảy mượt mà quanh video (Bouncing)", "bounce"),
+            ],
+        )
         self.logo_motion.changed.connect(lambda *_a: self.changed.emit())
         self._logo_section.add_widget(self.logo_motion)
 
-        self.logo_scale = LabeledSlider("Kích thước logo", 0.04, 0.40, 0.01,
-                                        "Tỷ lệ chiều rộng logo so với chiều rộng khung hình video.", "")
+        self.logo_scale = LabeledSlider(
+            "Kích thước logo",
+            0.04,
+            0.40,
+            0.01,
+            "Tỷ lệ chiều rộng logo so với chiều rộng khung hình video.",
+            "",
+        )
         self.logo_scale.set_value(0.12)
         self.logo_scale.changed.connect(lambda _v: self.changed.emit())
         self._logo_section.add_widget(self.logo_scale)
 
-        self.logo_opacity = LabeledSlider("Độ rõ nét", 0.10, 1.0, 0.05,
-                                          "Độ mờ / trong suốt của logo.", "")
+        self.logo_opacity = LabeledSlider(
+            "Độ rõ nét", 0.10, 1.0, 0.05, "Độ mờ / trong suốt của logo.", ""
+        )
         self.logo_opacity.set_value(0.85)
         self.logo_opacity.changed.connect(lambda _v: self.changed.emit())
         self._logo_section.add_widget(self.logo_opacity)
@@ -1437,29 +1577,41 @@ class VoiceStep(_StepPanel):
         self._wm_section.toggled.connect(lambda _e: self.changed.emit())
 
         self.wm_text = LabeledLineEdit(
-            "Chữ watermark", "@KenhCuaBan, SĐT, hoặc tên bạn...",
-            "Dòng chữ chìm di chuyển quanh video để bảo vệ bản quyền.")
+            "Chữ watermark",
+            "@KenhCuaBan, SĐT, hoặc tên bạn...",
+            "Dòng chữ chìm di chuyển quanh video để bảo vệ bản quyền.",
+        )
         self.wm_text.changed.connect(lambda *_a: self.changed.emit())
         self._wm_section.add_widget(self.wm_text)
 
         self.wm_motion = LabeledCombo(
             "Kiểu chuyển động",
-            [("Chạy nảy mượt mà quanh video (Khuyên dùng)", "bounce"),
-             ("Cố định góc trên bên phải", "top_right"),
-             ("Cố định góc dưới bên phải", "bottom_right"),
-             ("Cố định góc dưới bên trái", "bottom_left"),
-             ("Cố định góc trên bên trái", "top_left")])
+            [
+                ("Chạy nảy mượt mà quanh video (Khuyên dùng)", "bounce"),
+                ("Cố định góc trên bên phải", "top_right"),
+                ("Cố định góc dưới bên phải", "bottom_right"),
+                ("Cố định góc dưới bên trái", "bottom_left"),
+                ("Cố định góc trên bên trái", "top_left"),
+            ],
+        )
         self.wm_motion.changed.connect(lambda *_a: self.changed.emit())
         self._wm_section.add_widget(self.wm_motion)
 
-        self.wm_opacity = LabeledSlider("Độ mờ chìm", 0.08, 0.60, 0.02,
-                                        "Độ trong suốt của chữ watermark (0.15 - 0.35 là chìm nhẹ tinh tế).", "")
+        self.wm_opacity = LabeledSlider(
+            "Độ mờ chìm",
+            0.08,
+            0.60,
+            0.02,
+            "Độ trong suốt của chữ watermark (0.15 - 0.35 là chìm nhẹ tinh tế).",
+            "",
+        )
         self.wm_opacity.set_value(0.28)
         self.wm_opacity.changed.connect(lambda _v: self.changed.emit())
         self._wm_section.add_widget(self.wm_opacity)
 
-        self.wm_speed = LabeledSlider("Tốc độ chạy", 10, 150, 5,
-                                      "Tốc độ di chuyển quanh khung hình.", " px/s")
+        self.wm_speed = LabeledSlider(
+            "Tốc độ chạy", 10, 150, 5, "Tốc độ di chuyển quanh khung hình.", " px/s"
+        )
         self.wm_speed.set_value(40)
         self.wm_speed.changed.connect(lambda _v: self.changed.emit())
         self._wm_section.add_widget(self.wm_speed)
@@ -1467,27 +1619,36 @@ class VoiceStep(_StepPanel):
         self.body.addWidget(self._wm_section)
 
         # Xử lý Video & Chống quét bản quyền (Anti-Content ID)
-        self._anti_id_section = CollapsibleSection("Xử lý Video & Chống bản quyền (Anti-Content ID)")
+        self._anti_id_section = CollapsibleSection(
+            "Xử lý Video & Chống bản quyền (Anti-Content ID)"
+        )
         self._anti_id_section.toggled.connect(lambda _e: self.changed.emit())
 
         self.smart_flip = QCheckBox("Lật gương thông minh (Smart Flip — Giữ nguyên phụ đề / logo)")
-        self.smart_flip.setToolTip("Lật ngang hình ảnh video để tránh nhận diện bản quyền nhưng không lật chữ tiếng Việt.")
+        self.smart_flip.setToolTip(
+            "Lật ngang hình ảnh video để tránh nhận diện bản quyền nhưng không lật chữ tiếng Việt."
+        )
         self.smart_flip.toggled.connect(lambda _c: self.changed.emit())
         self._anti_id_section.add_widget(self.smart_flip)
 
         self.micro_zoom = QCheckBox("Zoom động 103% & Trượt góc máy (Micro-zoom)")
-        self.micro_zoom.setToolTip("Phóng to nhẹ và chuyển động vi mô phá vỡ thuật toán quét khuôn hình.")
+        self.micro_zoom.setToolTip(
+            "Phóng to nhẹ và chuyển động vi mô phá vỡ thuật toán quét khuôn hình."
+        )
         self.micro_zoom.toggled.connect(lambda _c: self.changed.emit())
         self._anti_id_section.add_widget(self.micro_zoom)
 
         self.color_filter = LabeledCombo(
             "Bộ lọc màu điện ảnh",
-            [("Nguyên bản (Không lọc màu)", "none"),
-             ("Cinematic Warm (Ấm áp điện ảnh)", "cinematic_warm"),
-             ("Teal & Orange (Phim bom tấn Hollywood)", "teal_orange"),
-             ("Vintage Retro (Hoài niệm cổ điển)", "vintage"),
-             ("Moody Dark (Tương phản cao)", "moody_dark"),
-             ("Clean Film (Trong trẻo sắc nét)", "clean_film")])
+            [
+                ("Nguyên bản (Không lọc màu)", "none"),
+                ("Cinematic Warm (Ấm áp điện ảnh)", "cinematic_warm"),
+                ("Teal & Orange (Phim bom tấn Hollywood)", "teal_orange"),
+                ("Vintage Retro (Hoài niệm cổ điển)", "vintage"),
+                ("Moody Dark (Tương phản cao)", "moody_dark"),
+                ("Clean Film (Trong trẻo sắc nét)", "clean_film"),
+            ],
+        )
         self.color_filter.changed.connect(lambda *_a: self.changed.emit())
         self._anti_id_section.add_widget(self.color_filter)
 
@@ -1503,24 +1664,27 @@ class VoiceStep(_StepPanel):
 
         self.audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề, bỏ ghép video")
         self.audio_only.setToolTip(
-            "Bật khi bạn tự dựng video ở phần mềm khác và chỉ cần tiếng Việt "
-            "cùng tệp phụ đề.")
+            "Bật khi bạn tự dựng video ở phần mềm khác và chỉ cần tiếng Việt cùng tệp phụ đề."
+        )
         self.audio_only.toggled.connect(lambda _c: self.changed.emit())
         self.body.addWidget(self.audio_only)
 
         self.status = QLabel("")
         self.status.setWordWrap(True)
         self.status.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.body.addWidget(self.status)
         self.finish()
         self._refresh_default_label()
 
     def _browse_logo(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn hình ảnh Logo / Watermark", "",
-            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)")
+            self,
+            "Chọn hình ảnh Logo / Watermark",
+            "",
+            "Hình ảnh (*.png *.jpg *.jpeg *.webp *.svg);;Tất cả tệp (*.*)",
+        )
         if path:
             self.logo_path_input.set_text(path)
             self.changed.emit()
@@ -1532,17 +1696,16 @@ class VoiceStep(_StepPanel):
 
         try:
             from autodub.config import Settings
+
             return Settings.load(override=True).vieneu_voice or DEFAULT_VOICE
-        except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng giọng gốc
+        except Exception:
             return DEFAULT_VOICE
 
     def _refresh_default_label(self) -> None:
-        self._default_label.setText(
-            f"Giọng mặc định: {self._default_voice()}")
-        self._default_label.setToolTip(
-            "Đổi giọng mặc định trong Cài đặt, thẻ Giọng đọc.")
+        self._default_label.setText(f"Giọng mặc định: {self._default_voice()}")
+        self._default_label.setToolTip("Đổi giọng mặc định trong Cài đặt, thẻ Giọng đọc.")
 
-    def showEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def showEvent(self, event) -> None:
         # Người dùng có thể vừa đổi giọng mặc định trong Cài đặt.
         self._refresh_default_label()
         super().showEvent(event)
@@ -1559,8 +1722,7 @@ class VoiceStep(_StepPanel):
         logo_path = self.logo_path_input.text().strip() if self._logo_section.is_expanded() else ""
         wm_text = self.wm_text.text().strip() if self._wm_section.is_expanded() else ""
         return {
-            "voice": (self.picker.voice()
-                      if self._override.is_expanded() else ""),
+            "voice": (self.picker.voice() if self._override.is_expanded() else ""),
             "voice_speed": self.speed.value(),
             "subtitle_mode": self.mode.current_key(),
             "subtitle_preset": self.preset.current_key(),
@@ -1573,9 +1735,15 @@ class VoiceStep(_StepPanel):
             "watermark_motion": self.wm_motion.current_key(),
             "watermark_opacity": self.wm_opacity.value(),
             "watermark_speed": int(self.wm_speed.value()),
-            "smart_flip": self.smart_flip.isChecked() if self._anti_id_section.is_expanded() else False,
-            "micro_zoom": self.micro_zoom.isChecked() if self._anti_id_section.is_expanded() else False,
-            "color_filter": self.color_filter.current_key() if self._anti_id_section.is_expanded() else "none",
+            "smart_flip": self.smart_flip.isChecked()
+            if self._anti_id_section.is_expanded()
+            else False,
+            "micro_zoom": self.micro_zoom.isChecked()
+            if self._anti_id_section.is_expanded()
+            else False,
+            "color_filter": self.color_filter.current_key()
+            if self._anti_id_section.is_expanded()
+            else "none",
             "randomize_metadata": self.chk_randomize_metadata.isChecked(),
             "skip_video": self.audio_only.isChecked(),
         }
@@ -1591,6 +1759,7 @@ class VoiceStep(_StepPanel):
         # phải "none"/"clean" cứng — để hai nơi luôn thống nhất.
         try:
             from autodub.config import Settings
+
             settings = Settings.load()
             fb_mode = settings.subtitle_mode
             fb_preset = settings.subtitle_preset
@@ -1607,9 +1776,15 @@ class VoiceStep(_StepPanel):
             fb_smart_flip = getattr(settings, "smart_flip", False)
             fb_micro_zoom = getattr(settings, "micro_zoom", False)
             fb_color_filter = getattr(settings, "color_filter", "none")
-        except Exception:  # noqa: BLE001 — cấu hình hỏng thì dùng mặc định
+        except Exception:
             fb_mode, fb_preset = "none", "clean"
-            fb_logo_path, fb_logo_pos, fb_logo_scale, fb_logo_opacity, fb_logo_motion = "", "top_right", 0.12, 0.85, "static"
+            fb_logo_path, fb_logo_pos, fb_logo_scale, fb_logo_opacity, fb_logo_motion = (
+                "",
+                "top_right",
+                0.12,
+                0.85,
+                "static",
+            )
             fb_wm_text, fb_wm_motion, fb_wm_opacity, fb_wm_speed = "", "bounce", 0.28, 40
             fb_smart_flip, fb_micro_zoom, fb_color_filter = False, False, "none"
             fb_rand_meta = True
@@ -1722,11 +1897,13 @@ class VoiceStep(_StepPanel):
 
     def _on_save_checkpoint_clicked(self) -> None:
         from PySide6.QtWidgets import QInputDialog
+
         curr = self.current_checkpoint_name()
         if curr.startswith("Mặc định (Chưa lưu"):
             curr = "Mặc định"
         name, ok = QInputDialog.getText(
-            self, "Lưu Checkpoint Cấu Hình",
+            self,
+            "Lưu Checkpoint Cấu Hình",
             "Nhập tên Checkpoint (ví dụ: Kênh Review Phim, TikTok Shorts, Mặc định):",
             text=curr,
         )
@@ -1737,10 +1914,13 @@ class VoiceStep(_StepPanel):
         name = self.current_checkpoint_name()
         if name and not name.startswith("Mặc định (Chưa lưu"):
             from autodub_gui.ui.modal import ConfirmDialog
+
             confirmed, _ = ConfirmDialog.ask(
-                self, "Xóa Checkpoint",
+                self,
+                "Xóa Checkpoint",
                 f"Bạn có chắc chắn muốn xóa Checkpoint «{name}» không?",
-                kind="warning", confirm_label="Xóa"
+                kind="warning",
+                confirm_label="Xóa",
             )
             if confirmed:
                 self.checkpoint_delete_requested.emit(name)
@@ -1750,27 +1930,32 @@ class RunStep(_StepPanel):
     """Bước 5: xem lại lựa chọn rồi chạy thật — tiến trình hiện ở cột trái."""
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Chạy dịch và lồng tiếng",
-                         "Xem lại các lựa chọn rồi bấm Bắt đầu lồng tiếng. "
-                         "Ứng dụng sẽ nghe, dịch và đọc toàn bộ video — "
-                         "tiến trình và nhật ký hiện ở khung bên trái.", parent)
+        super().__init__(
+            "Chạy dịch và lồng tiếng",
+            "Xem lại các lựa chọn rồi bấm Bắt đầu lồng tiếng. "
+            "Ứng dụng sẽ nghe, dịch và đọc toàn bộ video — "
+            "tiến trình và nhật ký hiện ở khung bên trái.",
+            parent,
+        )
         self.summary = QLabel("")
         self.summary.setWordWrap(True)
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
             f"background: {tokens.BG_INPUT}; border-radius: 8px; "
-            f"padding: 10px 12px;")
+            f"padding: 10px 12px;"
+        )
         self.body.addWidget(LabeledWidget("Tóm tắt lựa chọn", self.summary))
 
         note = QLabel(
             "Giá của video chốt ngay sau bước nghe-chép, theo số câu thoại "
             "(10 Vox/câu, 12 nếu bật dịch tự động, +20 cho gói tiêu đề + mô "
-            "tả) và không đổi nữa — ứng dụng báo tổng Vox trước khi trừ ví.")
+            "tả) và không đổi nữa — ứng dụng báo tổng Vox trước khi trừ ví."
+        )
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.body.addWidget(note)
         self.finish()
 
@@ -1794,16 +1979,19 @@ class ExportSummaryStep(_StepPanel):
     """
 
     def __init__(self, parent: QWidget | None = None):
-        super().__init__("Xuất video",
-                         "Video đã lồng tiếng xong. Bấm Xuất video để nhận "
-                         "video hoàn chỉnh.", parent)
+        super().__init__(
+            "Xuất video",
+            "Video đã lồng tiếng xong. Bấm Xuất video để nhận video hoàn chỉnh.",
+            parent,
+        )
         self.summary = QLabel("Chưa có lần chạy nào chờ xuất.")
         self.summary.setWordWrap(True)
         self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.summary.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px; "
             f"background: {tokens.BG_INPUT}; border-radius: 8px; "
-            f"padding: 12px 14px;")
+            f"padding: 12px 14px;"
+        )
         self.body.addWidget(LabeledWidget("Tổng kết lần chạy", self.summary))
         self.finish()
 
@@ -1812,21 +2000,21 @@ class ExportSummaryStep(_StepPanel):
         mins, secs = divmod(int(seconds or 0), 60)
         return f"{mins} phút {secs:02d} giây" if mins else f"{secs} giây"
 
-    def set_stats(self, sentences: int, duration_s: float,
-                  usage: dict | None, hold: dict | None) -> None:
+    def set_stats(
+        self, sentences: int, duration_s: float, usage: dict | None, hold: dict | None
+    ) -> None:
         """Bảng tổng kết: thời lượng và số câu thoại."""
         rows = [
             ("Thời lượng video", self._fmt_duration(duration_s)),
             ("Số câu thoại", f"{sentences:,}"),
         ]
-        self.summary.setText(
-            "<br>".join(f"<b>{name}:</b> {value}" for name, value in rows))
+        self.summary.setText("<br>".join(f"<b>{name}:</b> {value}" for name, value in rows))
 
     def set_error(self, message: str) -> None:
         """Xuất trượt — thông báo kiểm tra mạng rồi thử lại."""
         self.summary.setText(
-            f"Chưa xuất được: {message}<br>Kiểm tra mạng rồi bấm Xuất video lần nữa.")
-
+            f"Chưa xuất được: {message}<br>Kiểm tra mạng rồi bấm Xuất video lần nữa."
+        )
 
     def values(self) -> dict:
         return {}

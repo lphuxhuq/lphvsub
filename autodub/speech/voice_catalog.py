@@ -3,9 +3,11 @@
 Cung cấp interface trừu tượng VoiceProvider để phân loại và truy vấn giọng đọc
 thống nhất, phục vụ cho AI Voice Director.
 """
+
 from __future__ import annotations
 
 from typing import Protocol
+
 from autodub.config import Settings
 from autodub.speech.voice_models import VoiceProfile
 from autodub.utils import setup_logging
@@ -49,18 +51,22 @@ class VieNeuVoiceProvider:
                 continue
             # Đánh giá độ phù hợp làm narrator dựa trên phong cách
             narrator_score = 0.90 if v.style in ("tin_tuc", "doc_truyen") else 0.70
-            pitch_tag = "deep_male" if v.gender == "male" else ("female" if v.gender == "female" else "")
+            pitch_tag = (
+                "deep_male" if v.gender == "male" else ("female" if v.gender == "female" else "")
+            )
 
-            out.append(VoiceProfile(
-                voice_id=v.name,
-                name=v.name,
-                provider="vieneu",
-                gender=v.gender,
-                region=v.region,
-                style=v.style,
-                narrator_suitability=narrator_score,
-                pitch_tag=pitch_tag,
-            ))
+            out.append(
+                VoiceProfile(
+                    voice_id=v.name,
+                    name=v.name,
+                    provider="vieneu",
+                    gender=v.gender,
+                    region=v.region,
+                    style=v.style,
+                    narrator_suitability=narrator_score,
+                    pitch_tag=pitch_tag,
+                )
+            )
         return out
 
 
@@ -86,17 +92,21 @@ class CapCutVoiceProvider:
         for v in raw_voices:
             if not v.is_capcut:
                 continue
-            pitch_tag = "young_male" if v.gender == "male" else ("female" if v.gender == "female" else "")
-            out.append(VoiceProfile(
-                voice_id=v.name,
-                name=v.name,
-                provider="capcut",
-                gender=v.gender,
-                region=v.region,
-                style=v.style,
-                narrator_suitability=0.80,
-                pitch_tag=pitch_tag,
-            ))
+            pitch_tag = (
+                "young_male" if v.gender == "male" else ("female" if v.gender == "female" else "")
+            )
+            out.append(
+                VoiceProfile(
+                    voice_id=v.name,
+                    name=v.name,
+                    provider="capcut",
+                    gender=v.gender,
+                    region=v.region,
+                    style=v.style,
+                    narrator_suitability=0.80,
+                    pitch_tag=pitch_tag,
+                )
+            )
         return out
 
 
@@ -107,12 +117,14 @@ class UnifiedVoiceCatalog:
         self._providers = providers or {}
 
     @classmethod
-    def create_default(cls, settings: Settings | None = None) -> "UnifiedVoiceCatalog":
+    def create_default(cls, settings: Settings | None = None) -> UnifiedVoiceCatalog:
         cfg = settings or Settings()
-        return cls(providers={
-            "vieneu": VieNeuVoiceProvider(cfg),
-            "capcut": CapCutVoiceProvider(cfg),
-        })
+        return cls(
+            providers={
+                "vieneu": VieNeuVoiceProvider(cfg),
+                "capcut": CapCutVoiceProvider(cfg),
+            }
+        )
 
     def get_all_voices(self, provider: str | None = None) -> list[VoiceProfile]:
         """Lấy tất cả giọng khả dụng (có thể lọc theo provider)."""

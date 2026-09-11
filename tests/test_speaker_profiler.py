@@ -1,16 +1,12 @@
 import numpy as np
-import pytest
 
 from autodub.speech.speaker_profiler import (
-    estimate_f0_stats,
     classify_gender_probabilistic,
     detect_narrator_role,
+    estimate_f0_stats,
     profile_speakers,
-    DEFAULT_DEEP_MALE_MAX_HZ,
-    DEFAULT_YOUNG_MALE_MAX_HZ,
-    DEFAULT_FEMALE_MAX_HZ,
 )
-from autodub.speech.voice_models import PitchStats, SpeakerProfile
+from autodub.speech.voice_models import PitchStats
 
 
 def _generate_synthetic_tone(freq_hz: float, duration_s: float, sr: int = 16000) -> np.ndarray:
@@ -55,8 +51,12 @@ def test_estimate_f0_silence():
 def test_classify_gender_probabilistic():
     # Male test
     stats_male = PitchStats(
-        pitch_median=120.0, pitch_p10=110.0, pitch_p90=130.0, pitch_std=5.0,
-        voiced_ratio=0.85, confidence=0.90,
+        pitch_median=120.0,
+        pitch_p10=110.0,
+        pitch_p90=130.0,
+        pitch_std=5.0,
+        voiced_ratio=0.85,
+        confidence=0.90,
     )
     gender, conf = classify_gender_probabilistic(stats_male)
     assert gender == "male"
@@ -64,8 +64,12 @@ def test_classify_gender_probabilistic():
 
     # Female test
     stats_female = PitchStats(
-        pitch_median=220.0, pitch_p10=200.0, pitch_p90=240.0, pitch_std=8.0,
-        voiced_ratio=0.85, confidence=0.90,
+        pitch_median=220.0,
+        pitch_p10=200.0,
+        pitch_p90=240.0,
+        pitch_std=8.0,
+        voiced_ratio=0.85,
+        confidence=0.90,
     )
     gender, conf = classify_gender_probabilistic(stats_female)
     assert gender == "female"
@@ -73,8 +77,12 @@ def test_classify_gender_probabilistic():
 
     # Low confidence silence
     stats_silence = PitchStats(
-        pitch_median=0.0, pitch_p10=0.0, pitch_p90=0.0, pitch_std=0.0,
-        voiced_ratio=0.0, confidence=0.0,
+        pitch_median=0.0,
+        pitch_p10=0.0,
+        pitch_p90=0.0,
+        pitch_std=0.0,
+        voiced_ratio=0.0,
+        confidence=0.0,
     )
     gender, conf = classify_gender_probabilistic(stats_silence)
     assert gender == "unknown"
@@ -106,7 +114,6 @@ def test_detect_narrator_role():
 
 def test_profile_speakers_multi_speaker(tmp_path):
     import wave
-    import struct
 
     sr = 16000
     # Speaker 0: Nam (120Hz) - đóng vai trò Dẫn chuyện
@@ -128,7 +135,13 @@ def test_profile_speakers_multi_speaker(tmp_path):
     segments = [
         {"id": 1, "speaker_id": 0, "start": 0.0, "end": 5.0, "text": "Lời dẫn chuyện phần một"},
         {"id": 2, "speaker_id": 0, "start": 5.0, "end": 10.0, "text": "Lời dẫn chuyện phần hai"},
-        {"id": 3, "speaker_id": 1, "start": 10.0, "end": 15.0, "text": "Chào anh, em là nhân vật nữ"},
+        {
+            "id": 3,
+            "speaker_id": 1,
+            "start": 10.0,
+            "end": 15.0,
+            "text": "Chào anh, em là nhân vật nữ",
+        },
     ]
 
     profiles = profile_speakers(audio_path, segments)
@@ -138,4 +151,3 @@ def test_profile_speakers_multi_speaker(tmp_path):
     assert profiles[0].gender == "male"
     assert profiles[0].role == "narrator"
     assert profiles[1].gender == "female"
-

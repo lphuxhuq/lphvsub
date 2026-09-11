@@ -3,10 +3,11 @@
 Cho phép các widget con (như chip, tag, pill badge) tự động xếp hàng ngang
 và tự xuống dòng kế tiếp khi hết chiều rộng, không bao giờ ép méo chữ.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt
-from PySide6.QtWidgets import QLayout, QLayoutItem, QSizePolicy, QWidget
+from PySide6.QtWidgets import QLayout, QLayoutItem, QWidget
 
 
 class FlowLayout(QLayout):
@@ -25,48 +26,48 @@ class FlowLayout(QLayout):
         self._v_spacing = v_spacing
         self.setContentsMargins(margin, margin, margin, margin)
 
-    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802
+    def addItem(self, item: QLayoutItem) -> None:
         self._items.append(item)
         self.invalidate()
 
-    def horizontalSpacing(self) -> int:  # noqa: N802
+    def horizontalSpacing(self) -> int:
         return self._h_spacing
 
-    def verticalSpacing(self) -> int:  # noqa: N802
+    def verticalSpacing(self) -> int:
         return self._v_spacing
 
     def count(self) -> int:
         return len(self._items)
 
-    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802
+    def itemAt(self, index: int) -> QLayoutItem | None:
         if 0 <= index < len(self._items):
             return self._items[index]
         return None
 
-    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802
+    def takeAt(self, index: int) -> QLayoutItem | None:
         if 0 <= index < len(self._items):
             item = self._items.pop(index)
             self.invalidate()
             return item
         return None
 
-    def expandingDirections(self) -> Qt.Orientations:  # noqa: N802
+    def expandingDirections(self) -> Qt.Orientations:
         return Qt.Orientation(0)
 
-    def hasHeightForWidth(self) -> bool:  # noqa: N802
+    def hasHeightForWidth(self) -> bool:
         return True
 
-    def heightForWidth(self, width: int) -> int:  # noqa: N802
+    def heightForWidth(self, width: int) -> int:
         return self._do_layout(QRect(0, 0, width, 0), test_only=True)
 
-    def setGeometry(self, rect: QRect) -> None:  # noqa: N802
+    def setGeometry(self, rect: QRect) -> None:
         super().setGeometry(rect)
         self._do_layout(rect, test_only=False)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    def sizeHint(self) -> QSize:
         return self.minimumSize()
 
-    def minimumSize(self) -> QSize:  # noqa: N802
+    def minimumSize(self) -> QSize:
         size = QSize()
         for item in self._items:
             size = size.expandedTo(item.minimumSize())

@@ -7,16 +7,19 @@ cached artifacts so nothing is recomputed unnecessarily.
 The work dir stays the single source of truth: edits are written straight back
 to the translated transcript JSON, so a later ``--resume`` sees them too.
 """
+
 from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from autodub.config import Settings
 from autodub.languages import TargetLang, get_target
 from autodub.progress import ProgressReporter
-from autodub.utils import save_json_atomic, setup_logging, seg_wav_path
+from autodub.utils import save_json_atomic, seg_wav_path, setup_logging
 from autodub.workdir import data_dir, data_path
 
 logger = setup_logging("autodub.editor")
@@ -55,11 +58,12 @@ def _find_source_video(work_dir: str) -> str | None:
         lower = f.lower()
         # slowed_video.mp4 is a derivative of the source — never pick
         # derivatives as the rebuild source.
-        if (lower.endswith(_VIDEO_EXTS)
-                and not lower.startswith(("dubbed_video", "retimed_video",
-                                          "slowed_video"))):
+        if lower.endswith(_VIDEO_EXTS) and not lower.startswith(
+            ("dubbed_video", "retimed_video", "slowed_video")
+        ):
             return os.path.join(work_dir, f)
     from autodub.pipeline import source_video_path
+
     return source_video_path(work_dir)
 
 
@@ -84,6 +88,7 @@ def load_work_dir(work_dir: str, target_key: str = "vi") -> EditorState:
     if not os.path.isdir(work_dir):
         raise EditorError(f"Work directory not found: {work_dir}")
     from autodub import securestore
+
     if securestore.is_locked(work_dir):
         # Dự án wizard chưa bấm Xuất video — dữ liệu trả phí còn mã hóa.
         raise EditorError(
@@ -93,9 +98,7 @@ def load_work_dir(work_dir: str, target_key: str = "vi") -> EditorState:
     target = get_target(target_key)
     path = _transcript_path(work_dir, target)
     if not os.path.exists(path):
-        raise EditorError(
-            f"No translation found ({target.transcript_name}). Run the dub first."
-        )
+        raise EditorError(f"No translation found ({target.transcript_name}). Run the dub first.")
     with open(path, encoding="utf-8") as f:
         segments = json.load(f)
     if not isinstance(segments, list) or not segments:
@@ -110,29 +113,22 @@ def load_work_dir(work_dir: str, target_key: str = "vi") -> EditorState:
     )
 
 
-def update_segment_text(
-    work_dir: str, seg_id: int, new_text: str, target_key: str = "vi"
-) -> None:
+def update_segment_text(work_dir: str, seg_id: int, new_text: str, target_key: str = "vi") -> None:
     """Ghi một câu vừa sửa trở lại tệp lời thoại."""
     save_segment_texts(work_dir, {seg_id: new_text}, target_key)
 
 
-def save_segment_texts(
-    work_dir: str, edits: dict[int, str], target_key: str = "vi"
-) -> list[int]:
+def save_segment_texts(work_dir: str, edits: dict[int, str], target_key: str = "vi") -> list[int]:
     """Ghi nhiều câu vừa sửa trong một lượt.
 
     Trả về số thứ tự của những câu THẬT SỰ đổi chữ, để lớp gọi biết câu nào
     cần đọc lại giọng. Câu để trống bị chặn trước khi ghi bất cứ thứ gì, nên
     một dòng trống không làm hỏng cả tệp lời thoại.
     """
-    return _save_field(work_dir, edits, target_key, field=None,
-                       allow_empty=False)
+    return _save_field(work_dir, edits, target_key, field=None, allow_empty=False)
 
 
-def save_subtitle_texts(
-    work_dir: str, edits: dict[int, str], target_key: str = "vi"
-) -> list[int]:
+def save_subtitle_texts(work_dir: str, edits: dict[int, str], target_key: str = "vi") -> list[int]:
     """Ghi phụ đề viết riêng cho từng câu (không đụng tới lời đọc).
 
     Đây là thứ làm cho việc "sửa phụ đề trực tiếp" thành thật: chữ phụ đề
@@ -145,18 +141,17 @@ def save_subtitle_texts(
     """
     from autodub.text.srt import SUBTITLE_FIELD
 
-    return _save_field(work_dir, edits, target_key, field=SUBTITLE_FIELD,
-                       allow_empty=True)
+    return _save_field(work_dir, edits, target_key, field=SUBTITLE_FIELD, allow_empty=True)
 
 
-def _save_field(work_dir: str, edits: dict[int, str], target_key: str,
-                field: str | None, allow_empty: bool) -> list[int]:
+def _save_field(
+    work_dir: str, edits: dict[int, str], target_key: str, field: str | None, allow_empty: bool
+) -> list[int]:
     """Phần chung của hai hàm ghi ở trên."""
     target = get_target(target_key)
     path = _transcript_path(work_dir, target)
     if not os.path.exists(path):
-        raise EditorError(f"Chưa có bản dịch trong dự án này "
-                          f"({target.transcript_name})")
+        raise EditorError(f"Chưa có bản dịch trong dự án này ({target.transcript_name})")
 
     clean: dict[int, str] = {}
     for seg_id, text in edits.items():
@@ -178,8 +173,7 @@ def _save_field(work_dir: str, edits: dict[int, str], target_key: str,
     for seg_id, text in clean.items():
         seg = by_id[seg_id]
         # Phụ đề trùng lời đọc thì không cần lưu riêng.
-        drop = field is not None and (not text
-                                      or text == str(seg.get(target.text_field, "")))
+        drop = field is not None and (not text or text == str(seg.get(target.text_field, "")))
         if drop:
             if key in seg:
                 seg.pop(key)
@@ -197,8 +191,7 @@ def _save_field(work_dir: str, edits: dict[int, str], target_key: str,
     return sorted(changed)
 
 
-def set_segment_voice(work_dir: str, seg_id: int, voice: str,
-                      target_key: str = "vi") -> bool:
+def set_segment_voice(work_dir: str, seg_id: int, voice: str, target_key: str = "vi") -> bool:
     """Gán (hoặc bỏ) giọng đọc riêng cho MỘT câu.
 
     ``voice`` rỗng nghĩa là câu quay về giọng chung của dự án — khóa
@@ -209,8 +202,7 @@ def set_segment_voice(work_dir: str, seg_id: int, voice: str,
     target = get_target(target_key)
     path = _transcript_path(work_dir, target)
     if not os.path.exists(path):
-        raise EditorError(f"Chưa có bản dịch trong dự án này "
-                          f"({target.transcript_name})")
+        raise EditorError(f"Chưa có bản dịch trong dự án này ({target.transcript_name})")
     with open(path, encoding="utf-8") as f:
         segments = json.load(f)
     seg = next((s for s in segments if s.get("id") == int(seg_id)), None)
@@ -254,9 +246,7 @@ def set_segment_speaker(
     return True
 
 
-def set_speaker_voice(
-    work_dir: str, speaker_id: int, voice: str, target_key: str = "vi"
-) -> None:
+def set_speaker_voice(work_dir: str, speaker_id: int, voice: str, target_key: str = "vi") -> None:
     """Gán giọng đọc cho một speaker_id trong render_opts.json."""
     opts = load_render_opts(work_dir)
     speaker_voices = dict(opts.get("speaker_voices", {}))
@@ -296,14 +286,20 @@ def _stale_derived_paths(work_dir: str, target: TargetLang, seg_id: int) -> list
     """
     # Both name widths: 5-digit (current) and 3-digit (legacy work dirs).
     names = [f"seg_{seg_id:05d}.wav", f"seg_{seg_id:03d}.wav"]
-    paths = [data_path(work_dir, target.audio_name),
-             os.path.join(work_dir, "dubbed_video.mp4")]
+    paths = [data_path(work_dir, target.audio_name), os.path.join(work_dir, "dubbed_video.mp4")]
     # Voice-speed caches (segments_speedN_NN) and legacy fit/slow dirs.
     dd = data_dir(work_dir)
     if os.path.isdir(dd):
         for d in os.listdir(dd):
-            if d.startswith(("segments_speed", "segments_slow", "segments_fit",
-                             "segments_post", "segments_timed")):
+            if d.startswith(
+                (
+                    "segments_speed",
+                    "segments_slow",
+                    "segments_fit",
+                    "segments_post",
+                    "segments_timed",
+                )
+            ):
                 paths += [os.path.join(dd, d, n) for n in names]
     return paths
 
@@ -330,8 +326,11 @@ def _remove_with_retry(path: str, attempts: int = 5, delay: float = 0.3) -> None
 
 
 def resynth_segment(
-    work_dir: str, seg_id: int, settings: Settings,
-    target_key: str = "vi", voice: str | None = None,
+    work_dir: str,
+    seg_id: int,
+    settings: Settings,
+    target_key: str = "vi",
+    voice: str | None = None,
     synth=None,
 ) -> dict:
     """Re-run TTS for one segment (strict 1:1 — one line, one clip).
@@ -369,7 +368,6 @@ def resynth_segment(
     if synth is None and seg_voice:
         voice = seg_voice
 
-
     seg_dir = data_path(work_dir, "segments", create_dir=True)
     os.makedirs(seg_dir, exist_ok=True)
     seg_path = seg_wav_path(seg_dir, seg["id"])
@@ -382,7 +380,8 @@ def resynth_segment(
         synth = get_synthesizer(target, settings, voice)
         try:
             result = synth.synthesize(
-                text=text, output_path=seg_path,
+                text=text,
+                output_path=seg_path,
                 target_duration=seg.get("slot", seg["duration"]),
             ).to_dict()
         finally:
@@ -392,7 +391,8 @@ def resynth_segment(
                 synth.close()
     else:
         result = synth.synthesize(
-            text=text, output_path=seg_path,
+            text=text,
+            output_path=seg_path,
             target_duration=seg.get("slot", seg["duration"]),
         ).to_dict()
 
@@ -401,14 +401,16 @@ def resynth_segment(
             _remove_with_retry(stale)
             logger.info(f"Invalidated stale artifact: {os.path.basename(stale)}")
 
-    logger.info(f"Segment {seg_id} re-synthesized "
-                f"({result['actual_duration']:.1f}s)")
+    logger.info(f"Segment {seg_id} re-synthesized ({result['actual_duration']:.1f}s)")
     return result
 
 
 def resynth_segments(
-    work_dir: str, seg_ids: list[int], settings: Settings,
-    target_key: str = "vi", voice: str | None = None,
+    work_dir: str,
+    seg_ids: list[int],
+    settings: Settings,
+    target_key: str = "vi",
+    voice: str | None = None,
     reporter: ProgressReporter | None = None,
     on_progress=None,
 ) -> dict[int, dict]:
@@ -452,24 +454,22 @@ def resynth_segments(
     # Giọng chung đi trước để giữ thứ tự tiến độ quen thuộc.
     voice_order = sorted(by_voice, key=lambda n: (n != main_voice, n))
 
-
     done = 0
     for name in voice_order:
         ids = by_voice[name]
         # Giọng phụ (vài câu lẻ) chỉ mở một tiến trình con — không nhân
         # đôi RAM theo cả nhóm worker của giọng chung.
         synth = get_synthesizer(
-            target, settings, name,
-            num_workers=None if name == main_voice else 1)
+            target, settings, name, num_workers=None if name == main_voice else 1
+        )
         try:
             for seg_id in ids:
                 if reporter is not None:
                     reporter.check_cancelled()
-                    reporter.emit("tts", "progress",
-                                  current=done + 1, total=total)
+                    reporter.emit("tts", "progress", current=done + 1, total=total)
                 results[seg_id] = resynth_segment(
-                    work_dir, seg_id, settings, target_key, name,
-                    synth=synth)
+                    work_dir, seg_id, settings, target_key, name, synth=synth
+                )
                 done += 1
                 if on_progress is not None:
                     on_progress(done, total, seg_id)
@@ -515,44 +515,49 @@ def auto_detect_hardsub_regions(work_dir: str) -> list[dict]:
     if not video_path or not os.path.exists(video_path):
         return []
     from autodub.media.hardsub_detector import detect_hardsub_regions
+
     return detect_hardsub_regions(video_path)
 
 
-def _render_options(state: EditorState, settings: Settings,
-                    subtitle_mode: str | None, blur_regions: list[dict] | None,
-                    subtitle_style: dict | None,
-                    logo_path: str | None = None,
-                    logo_position: str | None = None,
-                    logo_scale: float | None = None,
-                    logo_opacity: float | None = None,
-                    logo_margin: int | None = None,
-                    logo_motion: str | None = None,
-                    watermark_text: str | None = None,
-                    watermark_opacity: float | None = None,
-                    watermark_font_size: int | None = None,
-                    watermark_color: str | None = None,
-                    watermark_speed: int | None = None,
-                    watermark_motion: str | None = None,
-                    smart_flip: bool | None = None,
-                    micro_zoom: bool | None = None,
-                    color_filter: str | None = None,
-                    aspect_preset: str | None = None,
-                    reframe_mode: str | None = None,
-                    auto_sfx_enabled: bool | None = None,
-                    sfx_preset: str | None = None,
-                    sfx_volume_db: float | None = None,
-                    mask_method: str | None = None,
-                    inpaint_engine: str | None = None,
-                    inpaint_device: str | None = None,
-                    frame_banner_enabled: bool | None = None,
-                    frame_banner_color: str | None = None,
-                    frame_header_text: str | None = None,
-                    frame_header_font_size: int | None = None,
-                    frame_header_color: str | None = None,
-                    frame_footer_text: str | None = None,
-                    frame_footer_font_size: int | None = None,
-                    frame_footer_color: str | None = None,
-                    randomize_metadata: bool | None = None) -> tuple[str, list[dict], dict, dict]:
+def _render_options(
+    state: EditorState,
+    settings: Settings,
+    subtitle_mode: str | None,
+    blur_regions: list[dict] | None,
+    subtitle_style: dict | None,
+    logo_path: str | None = None,
+    logo_position: str | None = None,
+    logo_scale: float | None = None,
+    logo_opacity: float | None = None,
+    logo_margin: int | None = None,
+    logo_motion: str | None = None,
+    watermark_text: str | None = None,
+    watermark_opacity: float | None = None,
+    watermark_font_size: int | None = None,
+    watermark_color: str | None = None,
+    watermark_speed: int | None = None,
+    watermark_motion: str | None = None,
+    smart_flip: bool | None = None,
+    micro_zoom: bool | None = None,
+    color_filter: str | None = None,
+    aspect_preset: str | None = None,
+    reframe_mode: str | None = None,
+    auto_sfx_enabled: bool | None = None,
+    sfx_preset: str | None = None,
+    sfx_volume_db: float | None = None,
+    mask_method: str | None = None,
+    inpaint_engine: str | None = None,
+    inpaint_device: str | None = None,
+    frame_banner_enabled: bool | None = None,
+    frame_banner_color: str | None = None,
+    frame_header_text: str | None = None,
+    frame_header_font_size: int | None = None,
+    frame_header_color: str | None = None,
+    frame_footer_text: str | None = None,
+    frame_footer_font_size: int | None = None,
+    frame_footer_color: str | None = None,
+    randomize_metadata: bool | None = None,
+) -> tuple[str, list[dict], dict, dict]:
     """Chốt bộ tùy chọn xuất video và ghi lại vào ``render_opts.json``.
 
     Tham số nào để None thì lấy theo lựa chọn đã lưu của dự án, rồi mới tới
@@ -565,78 +570,144 @@ def _render_options(state: EditorState, settings: Settings,
         subtitle_mode = opts.get("subtitle_mode", "none")
     if blur_regions is None:
         blur_regions = opts.get("blur_regions", [])
-    style = normalize_style(subtitle_style or opts.get("subtitle_style")
-                            or settings.subtitle_style())
+    style = normalize_style(
+        subtitle_style or opts.get("subtitle_style") or settings.subtitle_style()
+    )
     merged = dict(opts)
-    merged.update({
-        "subtitle_mode": subtitle_mode,
-        "blur_regions": blur_regions,
-        "subtitle_style": style,
-    })
-    if logo_path is not None: merged["logo_path"] = logo_path
-    if logo_position is not None: merged["logo_position"] = logo_position
-    if logo_scale is not None: merged["logo_scale"] = logo_scale
-    if logo_opacity is not None: merged["logo_opacity"] = logo_opacity
-    if logo_margin is not None: merged["logo_margin"] = logo_margin
-    if logo_motion is not None: merged["logo_motion"] = logo_motion
-    if watermark_text is not None: merged["watermark_text"] = watermark_text
-    if watermark_opacity is not None: merged["watermark_opacity"] = watermark_opacity
-    if watermark_font_size is not None: merged["watermark_font_size"] = watermark_font_size
-    if watermark_color is not None: merged["watermark_color"] = watermark_color
-    if watermark_speed is not None: merged["watermark_speed"] = watermark_speed
-    if watermark_motion is not None: merged["watermark_motion"] = watermark_motion
-    if smart_flip is not None: merged["smart_flip"] = smart_flip
-    if micro_zoom is not None: merged["micro_zoom"] = micro_zoom
-    if color_filter is not None: merged["color_filter"] = color_filter
-    if aspect_preset is not None: merged["aspect_preset"] = aspect_preset
-    if reframe_mode is not None: merged["reframe_mode"] = reframe_mode
-    if auto_sfx_enabled is not None: merged["auto_sfx_enabled"] = auto_sfx_enabled
-    if sfx_preset is not None: merged["sfx_preset"] = sfx_preset
-    if sfx_volume_db is not None: merged["sfx_volume_db"] = sfx_volume_db
-    if mask_method is not None: merged["mask_method"] = mask_method
-    if inpaint_engine is not None: merged["inpaint_engine"] = inpaint_engine
-    if inpaint_device is not None: merged["inpaint_device"] = inpaint_device
-    if frame_banner_enabled is not None: merged["frame_banner_enabled"] = frame_banner_enabled
-    if frame_banner_color is not None: merged["frame_banner_color"] = frame_banner_color
-    if frame_header_text is not None: merged["frame_header_text"] = frame_header_text
-    if frame_header_font_size is not None: merged["frame_header_font_size"] = frame_header_font_size
-    if frame_header_color is not None: merged["frame_header_color"] = frame_header_color
-    if frame_footer_text is not None: merged["frame_footer_text"] = frame_footer_text
-    if frame_footer_font_size is not None: merged["frame_footer_font_size"] = frame_footer_font_size
-    if frame_footer_color is not None: merged["frame_footer_color"] = frame_footer_color
-    if randomize_metadata is not None: merged["randomize_metadata"] = randomize_metadata
+    merged.update(
+        {
+            "subtitle_mode": subtitle_mode,
+            "blur_regions": blur_regions,
+            "subtitle_style": style,
+        }
+    )
+    if logo_path is not None:
+        merged["logo_path"] = logo_path
+    if logo_position is not None:
+        merged["logo_position"] = logo_position
+    if logo_scale is not None:
+        merged["logo_scale"] = logo_scale
+    if logo_opacity is not None:
+        merged["logo_opacity"] = logo_opacity
+    if logo_margin is not None:
+        merged["logo_margin"] = logo_margin
+    if logo_motion is not None:
+        merged["logo_motion"] = logo_motion
+    if watermark_text is not None:
+        merged["watermark_text"] = watermark_text
+    if watermark_opacity is not None:
+        merged["watermark_opacity"] = watermark_opacity
+    if watermark_font_size is not None:
+        merged["watermark_font_size"] = watermark_font_size
+    if watermark_color is not None:
+        merged["watermark_color"] = watermark_color
+    if watermark_speed is not None:
+        merged["watermark_speed"] = watermark_speed
+    if watermark_motion is not None:
+        merged["watermark_motion"] = watermark_motion
+    if smart_flip is not None:
+        merged["smart_flip"] = smart_flip
+    if micro_zoom is not None:
+        merged["micro_zoom"] = micro_zoom
+    if color_filter is not None:
+        merged["color_filter"] = color_filter
+    if aspect_preset is not None:
+        merged["aspect_preset"] = aspect_preset
+    if reframe_mode is not None:
+        merged["reframe_mode"] = reframe_mode
+    if auto_sfx_enabled is not None:
+        merged["auto_sfx_enabled"] = auto_sfx_enabled
+    if sfx_preset is not None:
+        merged["sfx_preset"] = sfx_preset
+    if sfx_volume_db is not None:
+        merged["sfx_volume_db"] = sfx_volume_db
+    if mask_method is not None:
+        merged["mask_method"] = mask_method
+    if inpaint_engine is not None:
+        merged["inpaint_engine"] = inpaint_engine
+    if inpaint_device is not None:
+        merged["inpaint_device"] = inpaint_device
+    if frame_banner_enabled is not None:
+        merged["frame_banner_enabled"] = frame_banner_enabled
+    if frame_banner_color is not None:
+        merged["frame_banner_color"] = frame_banner_color
+    if frame_header_text is not None:
+        merged["frame_header_text"] = frame_header_text
+    if frame_header_font_size is not None:
+        merged["frame_header_font_size"] = frame_header_font_size
+    if frame_header_color is not None:
+        merged["frame_header_color"] = frame_header_color
+    if frame_footer_text is not None:
+        merged["frame_footer_text"] = frame_footer_text
+    if frame_footer_font_size is not None:
+        merged["frame_footer_font_size"] = frame_footer_font_size
+    if frame_footer_color is not None:
+        merged["frame_footer_color"] = frame_footer_color
+    if randomize_metadata is not None:
+        merged["randomize_metadata"] = randomize_metadata
 
     save_render_opts(state.work_dir, merged)
     logo_opts = {
         "logo_path": merged.get("logo_path") or getattr(settings, "logo_path", ""),
-        "logo_position": merged.get("logo_position") or getattr(settings, "logo_position", "top_right"),
+        "logo_position": merged.get("logo_position")
+        or getattr(settings, "logo_position", "top_right"),
         "logo_scale": merged.get("logo_scale", getattr(settings, "logo_scale", 0.12)),
         "logo_opacity": merged.get("logo_opacity", getattr(settings, "logo_opacity", 0.85)),
         "logo_margin": merged.get("logo_margin", getattr(settings, "logo_margin", 24)),
         "logo_motion": merged.get("logo_motion") or getattr(settings, "logo_motion", "static"),
         "watermark_text": merged.get("watermark_text") or getattr(settings, "watermark_text", ""),
-        "watermark_opacity": merged.get("watermark_opacity", getattr(settings, "watermark_opacity", 0.28)),
-        "watermark_font_size": merged.get("watermark_font_size", getattr(settings, "watermark_font_size", 26)),
-        "watermark_color": merged.get("watermark_color", getattr(settings, "watermark_color", "white")),
+        "watermark_opacity": merged.get(
+            "watermark_opacity", getattr(settings, "watermark_opacity", 0.28)
+        ),
+        "watermark_font_size": merged.get(
+            "watermark_font_size", getattr(settings, "watermark_font_size", 26)
+        ),
+        "watermark_color": merged.get(
+            "watermark_color", getattr(settings, "watermark_color", "white")
+        ),
         "watermark_speed": merged.get("watermark_speed", getattr(settings, "watermark_speed", 40)),
-        "watermark_motion": merged.get("watermark_motion", getattr(settings, "watermark_motion", "bounce")),
+        "watermark_motion": merged.get(
+            "watermark_motion", getattr(settings, "watermark_motion", "bounce")
+        ),
         "smart_flip": merged.get("smart_flip", getattr(settings, "smart_flip", False)),
         "micro_zoom": merged.get("micro_zoom", getattr(settings, "micro_zoom", False)),
         "color_filter": merged.get("color_filter", getattr(settings, "color_filter", "none")),
-        "aspect_preset": merged.get("aspect_preset", getattr(settings, "video_aspect_preset", "original")),
+        "aspect_preset": merged.get(
+            "aspect_preset", getattr(settings, "video_aspect_preset", "original")
+        ),
         "reframe_mode": merged.get("reframe_mode", getattr(settings, "video_reframe_mode", "blur")),
         "mask_method": merged.get("mask_method") or getattr(settings, "mask_method", "blur"),
-        "inpaint_engine": merged.get("inpaint_engine") or getattr(settings, "inpaint_engine", "lama_onnx"),
-        "inpaint_device": merged.get("inpaint_device") or getattr(settings, "inpaint_device", "auto"),
-        "frame_banner_enabled": merged.get("frame_banner_enabled", getattr(settings, "frame_banner_enabled", False)),
-        "frame_banner_color": merged.get("frame_banner_color", getattr(settings, "frame_banner_color", "#000000")),
-        "frame_header_text": merged.get("frame_header_text", getattr(settings, "frame_header_text", "")),
-        "frame_header_font_size": merged.get("frame_header_font_size", getattr(settings, "frame_header_font_size", 32)),
-        "frame_header_color": merged.get("frame_header_color", getattr(settings, "frame_header_color", "#FFFFFF")),
-        "frame_footer_text": merged.get("frame_footer_text", getattr(settings, "frame_footer_text", "")),
-        "frame_footer_font_size": merged.get("frame_footer_font_size", getattr(settings, "frame_footer_font_size", 24)),
-        "frame_footer_color": merged.get("frame_footer_color", getattr(settings, "frame_footer_color", "#FFD54A")),
-        "randomize_metadata": merged.get("randomize_metadata", getattr(settings, "randomize_metadata", True)),
+        "inpaint_engine": merged.get("inpaint_engine")
+        or getattr(settings, "inpaint_engine", "lama_onnx"),
+        "inpaint_device": merged.get("inpaint_device")
+        or getattr(settings, "inpaint_device", "auto"),
+        "frame_banner_enabled": merged.get(
+            "frame_banner_enabled", getattr(settings, "frame_banner_enabled", False)
+        ),
+        "frame_banner_color": merged.get(
+            "frame_banner_color", getattr(settings, "frame_banner_color", "#000000")
+        ),
+        "frame_header_text": merged.get(
+            "frame_header_text", getattr(settings, "frame_header_text", "")
+        ),
+        "frame_header_font_size": merged.get(
+            "frame_header_font_size", getattr(settings, "frame_header_font_size", 32)
+        ),
+        "frame_header_color": merged.get(
+            "frame_header_color", getattr(settings, "frame_header_color", "#FFFFFF")
+        ),
+        "frame_footer_text": merged.get(
+            "frame_footer_text", getattr(settings, "frame_footer_text", "")
+        ),
+        "frame_footer_font_size": merged.get(
+            "frame_footer_font_size", getattr(settings, "frame_footer_font_size", 24)
+        ),
+        "frame_footer_color": merged.get(
+            "frame_footer_color", getattr(settings, "frame_footer_color", "#FFD54A")
+        ),
+        "randomize_metadata": merged.get(
+            "randomize_metadata", getattr(settings, "randomize_metadata", True)
+        ),
     }
     return subtitle_mode, blur_regions, style, logo_opts
 
@@ -656,17 +727,17 @@ def _check_render_mode(work_dir: str) -> None:
                 mode = f.read().strip()
         except OSError:
             mode = None
-    if mode != DubPipeline.RENDER_MODE and any(
-            f.endswith(".wav") for f in os.listdir(seg_dir)):
+    if mode != DubPipeline.RENDER_MODE and any(f.endswith(".wav") for f in os.listdir(seg_dir)):
         raise EditorError(
             "Thư mục này chứa giọng đọc tạo theo cơ chế gộp câu đời cũ. "
             "Hãy chạy tiếp dự án một lần để tạo lại giọng theo từng câu, rồi "
-            "mới xuất video.")
+            "mới xuất video."
+        )
 
 
-def _apply_slowdown(work_dir: str, segments: list[dict],
-                    video_path: str | None
-                    ) -> tuple[str | None, tuple[float, str] | None]:
+def _apply_slowdown(
+    work_dir: str, segments: list[dict], video_path: str | None
+) -> tuple[str | None, tuple[float, str] | None]:
     """Đưa mốc thời gian về đúng bản video đã làm chậm, nếu có.
 
     Lần chạy với Tốc độ video < 1.0 đã tạo ``slowed_video.mp4``. Tệp lời
@@ -686,6 +757,7 @@ def _apply_slowdown(work_dir: str, segments: list[dict],
     deferred_marker = data_path(work_dir, "deferred_speed.json")
     if os.path.isfile(deferred_marker):
         from autodub.media.retime import rescale_segments
+
         try:
             with open(deferred_marker, encoding="utf-8") as f:
                 info = json.load(f)
@@ -693,31 +765,27 @@ def _apply_slowdown(work_dir: str, segments: list[dict],
             if speed < 0.999:
                 rescale_segments(segments, 1.0 / speed)
                 annotate_slots(segments)
-                logger.info(f"Làm chậm video ({speed}x) gộp vào lượt xuất — "
-                            "như lần chạy trước")
+                logger.info(f"Làm chậm video ({speed}x) gộp vào lượt xuất — như lần chạy trước")
                 return video_path, (speed, fps)
         except (OSError, ValueError, KeyError) as e:
-            logger.warning(f"Không đọc được deferred_speed.json ({e}) — "
-                           "xuất trên video gốc")
+            logger.warning(f"Không đọc được deferred_speed.json ({e}) — xuất trên video gốc")
         return video_path, None
     slowed_video = data_path(work_dir, "slowed_video.mp4")
     slowed_marker = data_path(work_dir, "slowed_video.json")
     if not (os.path.isfile(slowed_video) and os.path.isfile(slowed_marker)):
         return video_path, None
-    from autodub.media.retime import (probe_duration, probe_video_info,
-                                      rescale_segments)
+    from autodub.media.retime import probe_duration, probe_video_info, rescale_segments
+
     try:
         orig_dur = probe_video_info(video_path)[0] if video_path else None
         new_dur = probe_duration(slowed_video)
         if orig_dur and new_dur:
             rescale_segments(segments, new_dur / orig_dur)
             annotate_slots(segments)
-            logger.info(f"Dùng bản video đã làm chậm ({new_dur:.0f} giây) từ "
-                        "lần chạy trước")
+            logger.info(f"Dùng bản video đã làm chậm ({new_dur:.0f} giây) từ lần chạy trước")
             return slowed_video, None
     except Exception as e:
-        logger.warning(f"Không dùng được bản video đã làm chậm ({e}) — "
-                       "xuất trên video gốc")
+        logger.warning(f"Không dùng được bản video đã làm chậm ({e}) — xuất trên video gốc")
     return video_path, None
 
 
@@ -730,21 +798,23 @@ def final_segments_dir(work_dir: str) -> str:
     """
     root = data_dir(work_dir)
     if os.path.isdir(root):
-        speed_dirs = sorted(d for d in os.listdir(root)
-                            if d.startswith("segments_speed"))
-        for name in ("segments_timed", *reversed(speed_dirs),
-                     "segments_post", "segments"):
+        speed_dirs = sorted(d for d in os.listdir(root) if d.startswith("segments_speed"))
+        for name in ("segments_timed", *reversed(speed_dirs), "segments_post", "segments"):
             path = os.path.join(root, name)
-            if os.path.isdir(path) and any(f.endswith(".wav")
-                                           for f in os.listdir(path)):
+            if os.path.isdir(path) and any(f.endswith(".wav") for f in os.listdir(path)):
                 return path
     return data_path(work_dir, "segments")
 
 
 def rebuild_output(
-    work_dir: str, settings: Settings, target_key: str = "vi",
-    voice: str | None = None, bg_mode: str = "demucs", bg_duck_db: float = -12.0,
-    subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
+    work_dir: str,
+    settings: Settings,
+    target_key: str = "vi",
+    voice: str | None = None,
+    bg_mode: str = "demucs",
+    bg_duck_db: float = -12.0,
+    subtitle_mode: str | None = None,
+    blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
     reporter: ProgressReporter | None = None,
     *,
@@ -791,23 +861,45 @@ def rebuild_output(
     from autodub.media.video import merge_video
     from autodub.text.subtitles import refresh_subtitles
 
-    del voice        # giọng chỉ dùng khi đọc lại, không ảnh hưởng bước ghép
+    del voice  # giọng chỉ dùng khi đọc lại, không ảnh hưởng bước ghép
 
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
     subtitle_mode, blur_regions, style, logo_opts = _render_options(
-        state, settings, subtitle_mode, blur_regions, subtitle_style,
-        logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
-        logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
-        watermark_text=watermark_text, watermark_opacity=watermark_opacity,
-        watermark_font_size=watermark_font_size, watermark_color=watermark_color,
-        watermark_speed=watermark_speed, watermark_motion=watermark_motion,
-        smart_flip=smart_flip, micro_zoom=micro_zoom, color_filter=color_filter,
-        aspect_preset=aspect_preset, reframe_mode=reframe_mode,
-        auto_sfx_enabled=auto_sfx_enabled, sfx_preset=sfx_preset, sfx_volume_db=sfx_volume_db,
-        mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
-        inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None),
+        state,
+        settings,
+        subtitle_mode,
+        blur_regions,
+        subtitle_style,
+        logo_path=logo_path,
+        logo_position=logo_position,
+        logo_scale=logo_scale,
+        logo_opacity=logo_opacity,
+        logo_margin=logo_margin,
+        logo_motion=logo_motion,
+        watermark_text=watermark_text,
+        watermark_opacity=watermark_opacity,
+        watermark_font_size=watermark_font_size,
+        watermark_color=watermark_color,
+        watermark_speed=watermark_speed,
+        watermark_motion=watermark_motion,
+        smart_flip=smart_flip,
+        micro_zoom=micro_zoom,
+        color_filter=color_filter,
+        aspect_preset=aspect_preset,
+        reframe_mode=reframe_mode,
+        auto_sfx_enabled=auto_sfx_enabled,
+        sfx_preset=sfx_preset,
+        sfx_volume_db=sfx_volume_db,
+        mask_method=mask_method
+        if mask_method is not None
+        else getattr(settings, "mask_method", None),
+        inpaint_engine=inpaint_engine
+        if inpaint_engine is not None
+        else getattr(settings, "inpaint_engine", None),
+        inpaint_device=inpaint_device
+        if inpaint_device is not None
+        else getattr(settings, "inpaint_device", None),
         frame_banner_enabled=frame_banner_enabled,
         frame_banner_color=frame_banner_color,
         frame_header_text=frame_header_text,
@@ -816,8 +908,8 @@ def rebuild_output(
         frame_footer_text=frame_footer_text,
         frame_footer_font_size=frame_footer_font_size,
         frame_footer_color=frame_footer_color,
-        randomize_metadata=randomize_metadata)
-
+        randomize_metadata=randomize_metadata,
+    )
 
     def emit(step, status, **kw):
         if reporter is not None:
@@ -831,54 +923,69 @@ def rebuild_output(
     emit("merge_audio", "start")
     seg_dir = data_path(work_dir, "segments")
     _check_render_mode(work_dir)
-    video_path, deferred_speed = _apply_slowdown(work_dir, segments,
-                                                 state.video_path)
+    video_path, deferred_speed = _apply_slowdown(work_dir, segments, state.video_path)
     slowed_video = data_path(work_dir, "slowed_video.mp4")
 
     total_duration = max(s["end"] for s in segments) + 1.0 if segments else 0.0
     merge_dir = seg_dir
     if settings.voice_postprocess:
         from autodub.media.audio import postprocess_voice_clips
+
         merge_dir = postprocess_voice_clips(
-            segments, seg_dir, data_path(work_dir, "segments_post"),
-            target_lufs=settings.voice_target_lufs)
+            segments,
+            seg_dir,
+            data_path(work_dir, "segments_post"),
+            target_lufs=settings.voice_target_lufs,
+        )
     if abs(settings.voice_speed - 1.0) >= 0.005:
         from autodub.media.audio import slow_segments
+
         speed = settings.voice_speed
-        dst = data_path(work_dir,
-                        f"segments_speed{speed:.2f}".replace(".", "_"))
+        dst = data_path(work_dir, f"segments_speed{speed:.2f}".replace(".", "_"))
         merge_dir = slow_segments(segments, merge_dir, dst, speed)
     if settings.soft_timing_fit:
         # Cùng cơ chế với pipeline: dồn trễ vào khoảng lặng, không đổi tốc độ
         # đọc từng câu và bảo vệ mốc chuyển cảnh.
         scene_cuts = None
-        if getattr(settings, "voice_scene_guard_enabled", True) and video_path and os.path.exists(video_path):
+        if (
+            getattr(settings, "voice_scene_guard_enabled", True)
+            and video_path
+            and os.path.exists(video_path)
+        ):
             try:
                 from autodub.media.scene_detector import load_or_detect_scene_cuts
+
                 scene_cuts = load_or_detect_scene_cuts(video_path, work_dir=work_dir)
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong editor.py", exc_info=True)
         from autodub.media.timing import apply_soft_timing
+
         merge_dir, _timing = apply_soft_timing(
-            segments, merge_dir, data_path(work_dir, "segments_timed"),
-            settings, scene_cuts=scene_cuts)
+            segments,
+            merge_dir,
+            data_path(work_dir, "segments_timed"),
+            settings,
+            scene_cuts=scene_cuts,
+        )
     for s in segments:
         dur = wav_duration_s(seg_wav_path(merge_dir, s["id"]))
         if dur:
             total_duration = max(total_duration, s["start"] + dur + 0.5)
 
-    background_path, background_gain_db = resolve_existing_background(
-        work_dir, bg_mode, bg_duck_db)
+    background_path, background_gain_db = resolve_existing_background(work_dir, bg_mode, bg_duck_db)
     slowed_bg = data_path(work_dir, "slowed_background.wav")
     # Nhạc nền đã làm chậm khi video chậm — dù chậm rời (slowed_video.mp4)
     # hay gộp vào lượt xuất (deferred_speed).
-    if ((video_path == slowed_video or deferred_speed is not None)
-            and os.path.isfile(slowed_bg)):
+    if (video_path == slowed_video or deferred_speed is not None) and os.path.isfile(slowed_bg):
         background_path = slowed_bg
     merged_audio_path = data_path(work_dir, target.audio_name)
     merge_segments(
-        segments, merge_dir, merged_audio_path, total_duration,
-        background_path=background_path, background_gain_db=background_gain_db,
+        segments,
+        merge_dir,
+        merged_audio_path,
+        total_duration,
+        background_path=background_path,
+        background_gain_db=background_gain_db,
         duck_voice_db=settings.bg_duck_voice_db,
         scene_cuts=scene_cuts,
         auto_sfx_enabled=getattr(settings, "auto_sfx_enabled", False),
@@ -889,23 +996,36 @@ def rebuild_output(
 
     check()
     if not video_path:
-        raise EditorError("Thư mục dự án không còn video gốc nên không ghép "
-                          "lại được. Hãy chọn lại tệp video rồi chạy tiếp.")
+        raise EditorError(
+            "Thư mục dự án không còn video gốc nên không ghép "
+            "lại được. Hãy chọn lại tệp video rồi chạy tiếp."
+        )
     emit("merge_video", "start")
     dubbed = os.path.join(work_dir, "dubbed_video.mp4")
     # Phụ đề luôn được sinh lại từ danh sách câu hiện tại, trên đúng timeline
     # vừa đặt — chữ trong video là chữ bạn vừa sửa, không phải bản cũ.
     _srt_path, burn_path = refresh_subtitles(
-        segments, work_dir, target, style, merge_dir=merge_dir,
-        settings=settings, for_burn=subtitle_mode == "burn")
+        segments,
+        work_dir,
+        target,
+        style,
+        merge_dir=merge_dir,
+        settings=settings,
+        for_burn=subtitle_mode == "burn",
+    )
     merge_video(
-        video_path, merged_audio_path, dubbed,
-        srt_path=burn_path, subtitle_mode=subtitle_mode,
-        blur_regions=blur_regions, subtitle_lang=target.iso639_2,
+        video_path,
+        merged_audio_path,
+        dubbed,
+        srt_path=burn_path,
+        subtitle_mode=subtitle_mode,
+        blur_regions=blur_regions,
+        subtitle_lang=target.iso639_2,
         subtitle_style=style,
         speed=deferred_speed[0] if deferred_speed else None,
         fps=deferred_speed[1] if deferred_speed else None,
-        **logo_opts)
+        **logo_opts,
+    )
     emit("merge_video", "done", detail=dubbed)
     emit("done", "done", detail=work_dir)
     logger.info(f"Đã xuất xong video: {dubbed}")
@@ -913,8 +1033,11 @@ def rebuild_output(
 
 
 def rebuild_subtitles(
-    work_dir: str, settings: Settings, target_key: str = "vi",
-    subtitle_mode: str | None = None, blur_regions: list[dict] | None = None,
+    work_dir: str,
+    settings: Settings,
+    target_key: str = "vi",
+    subtitle_mode: str | None = None,
+    blur_regions: list[dict] | None = None,
     subtitle_style: dict | None = None,
     reporter: ProgressReporter | None = None,
     *,
@@ -960,17 +1083,36 @@ def rebuild_subtitles(
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
     subtitle_mode, blur_regions, style, logo_opts = _render_options(
-        state, settings, subtitle_mode, blur_regions, subtitle_style,
-        logo_path=logo_path, logo_position=logo_position, logo_scale=logo_scale,
-        logo_opacity=logo_opacity, logo_margin=logo_margin, logo_motion=logo_motion,
-        watermark_text=watermark_text, watermark_opacity=watermark_opacity,
-        watermark_font_size=watermark_font_size, watermark_color=watermark_color,
-        watermark_speed=watermark_speed, watermark_motion=watermark_motion,
-        smart_flip=smart_flip, micro_zoom=micro_zoom, color_filter=color_filter,
+        state,
+        settings,
+        subtitle_mode,
+        blur_regions,
+        subtitle_style,
+        logo_path=logo_path,
+        logo_position=logo_position,
+        logo_scale=logo_scale,
+        logo_opacity=logo_opacity,
+        logo_margin=logo_margin,
+        logo_motion=logo_motion,
+        watermark_text=watermark_text,
+        watermark_opacity=watermark_opacity,
+        watermark_font_size=watermark_font_size,
+        watermark_color=watermark_color,
+        watermark_speed=watermark_speed,
+        watermark_motion=watermark_motion,
+        smart_flip=smart_flip,
+        micro_zoom=micro_zoom,
+        color_filter=color_filter,
         aspect_preset=aspect_preset,
-        mask_method=mask_method if mask_method is not None else getattr(settings, "mask_method", None),
-        inpaint_engine=inpaint_engine if inpaint_engine is not None else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device if inpaint_device is not None else getattr(settings, "inpaint_device", None),
+        mask_method=mask_method
+        if mask_method is not None
+        else getattr(settings, "mask_method", None),
+        inpaint_engine=inpaint_engine
+        if inpaint_engine is not None
+        else getattr(settings, "inpaint_engine", None),
+        inpaint_device=inpaint_device
+        if inpaint_device is not None
+        else getattr(settings, "inpaint_device", None),
         frame_banner_enabled=frame_banner_enabled,
         frame_banner_color=frame_banner_color,
         frame_header_text=frame_header_text,
@@ -979,39 +1121,51 @@ def rebuild_subtitles(
         frame_footer_text=frame_footer_text,
         frame_footer_font_size=frame_footer_font_size,
         frame_footer_color=frame_footer_color,
-        randomize_metadata=randomize_metadata)
-
+        randomize_metadata=randomize_metadata,
+    )
 
     merged_audio_path = data_path(work_dir, target.audio_name)
     if not os.path.isfile(merged_audio_path):
         raise EditorError(
             "Dự án này chưa có bản âm thanh đã ghép nên chưa ghi riêng phụ đề "
-            "được. Hãy bấm Xuất video một lần trước đã.")
+            "được. Hãy bấm Xuất video một lần trước đã."
+        )
 
-    video_path, deferred_speed = _apply_slowdown(work_dir, segments,
-                                                 state.video_path)
+    video_path, deferred_speed = _apply_slowdown(work_dir, segments, state.video_path)
     if not video_path:
-        raise EditorError("Thư mục dự án không còn video gốc nên không ghép "
-                          "lại được. Hãy chọn lại tệp video rồi chạy tiếp.")
+        raise EditorError(
+            "Thư mục dự án không còn video gốc nên không ghép "
+            "lại được. Hãy chọn lại tệp video rồi chạy tiếp."
+        )
 
     if reporter is not None:
         reporter.check_cancelled()
         reporter.emit("merge_video", "start")
 
     _srt_path, burn_path = refresh_subtitles(
-        segments, work_dir, target, style,
-        merge_dir=final_segments_dir(work_dir), settings=settings,
-        for_burn=subtitle_mode == "burn")
+        segments,
+        work_dir,
+        target,
+        style,
+        merge_dir=final_segments_dir(work_dir),
+        settings=settings,
+        for_burn=subtitle_mode == "burn",
+    )
 
     dubbed = os.path.join(work_dir, "dubbed_video.mp4")
     merge_video(
-        video_path, merged_audio_path, dubbed,
-        srt_path=burn_path, subtitle_mode=subtitle_mode,
-        blur_regions=blur_regions, subtitle_lang=target.iso639_2,
+        video_path,
+        merged_audio_path,
+        dubbed,
+        srt_path=burn_path,
+        subtitle_mode=subtitle_mode,
+        blur_regions=blur_regions,
+        subtitle_lang=target.iso639_2,
         subtitle_style=style,
         speed=deferred_speed[0] if deferred_speed else None,
         fps=deferred_speed[1] if deferred_speed else None,
-        **logo_opts)
+        **logo_opts,
+    )
     if reporter is not None:
         reporter.emit("merge_video", "done", detail=dubbed)
         reporter.emit("done", "done", detail=work_dir)
@@ -1020,9 +1174,14 @@ def rebuild_subtitles(
 
 
 def render_segment_preview(
-    work_dir: str, settings: Settings, seg_id: int, target_key: str = "vi",
-    bg_mode: str = "demucs", bg_duck_db: float = -12.0,
-    subtitle_mode: str | None = None, subtitle_style: dict | None = None,
+    work_dir: str,
+    settings: Settings,
+    seg_id: int,
+    target_key: str = "vi",
+    bg_mode: str = "demucs",
+    bg_duck_db: float = -12.0,
+    subtitle_mode: str | None = None,
+    subtitle_style: dict | None = None,
     pad_s: float = 1.0,
 ) -> str:
     """Dựng một đoạn XEM THỬ ngắn quanh câu ``seg_id``, trước khi xuất cả phim.
@@ -1047,7 +1206,8 @@ def render_segment_preview(
     state = load_work_dir(work_dir, target_key)
     target, segments = state.target, state.segments
     subtitle_mode, _blur, style, *_ = _render_options(
-        state, settings, subtitle_mode, None, subtitle_style)
+        state, settings, subtitle_mode, None, subtitle_style
+    )
 
     seg = next((s for s in segments if s.get("id") == seg_id), None)
     if seg is None:
@@ -1057,58 +1217,77 @@ def render_segment_preview(
     # Cùng phép co giãn timeline với lượt xuất thật — dự án có làm chậm video
     # thì mốc câu đã được đổi về timeline chậm, còn deferred trả (speed, fps)
     # để làm chậm ngay trong lượt mã hóa xem thử.
-    video_path, deferred_speed = _apply_slowdown(work_dir, segments,
-                                                 state.video_path)
+    video_path, deferred_speed = _apply_slowdown(work_dir, segments, state.video_path)
     if not video_path:
-        raise EditorError("Thư mục dự án không còn video gốc nên không dựng "
-                          "được đoạn xem thử. Hãy chọn lại tệp video.")
+        raise EditorError(
+            "Thư mục dự án không còn video gốc nên không dựng "
+            "được đoạn xem thử. Hãy chọn lại tệp video."
+        )
     seg = next(s for s in segments if s.get("id") == seg_id)
 
     merge_dir = final_segments_dir(work_dir)
     voice_dur = wav_duration_s(seg_wav_path(merge_dir, seg_id)) or 0.0
     w0 = max(0.0, float(seg["start"]) - pad_s)
-    w1 = max(float(seg["end"]),
-             float(seg["start"]) + voice_dur) + pad_s
+    w1 = max(float(seg["end"]), float(seg["start"]) + voice_dur) + pad_s
 
     # Các câu chạm vào cửa sổ xem thử, mốc thời gian dời về 0 tại w0. Giọng
     # của câu tràn vào từ trước cửa sổ vẫn được trộn (mốc âm được
     # merge_segments cắt đúng phần lọt trong khối); riêng phụ đề thì kẹp về 0.
-    window = [dict(s, start=float(s["start"]) - w0, end=float(s["end"]) - w0)
-              for s in segments
-              if float(s["end"]) > w0 and float(s["start"]) < w1]
-    sub_window = [dict(s, start=max(0.0, s["start"]), end=min(s["end"], w1 - w0))
-                  for s in window]
+    window = [
+        dict(s, start=float(s["start"]) - w0, end=float(s["end"]) - w0)
+        for s in segments
+        if float(s["end"]) > w0 and float(s["start"]) < w1
+    ]
+    sub_window = [dict(s, start=max(0.0, s["start"]), end=min(s["end"], w1 - w0)) for s in window]
 
-    background_path, background_gain_db = resolve_existing_background(
-        work_dir, bg_mode, bg_duck_db)
+    background_path, background_gain_db = resolve_existing_background(work_dir, bg_mode, bg_duck_db)
     slowed_bg = data_path(work_dir, "slowed_background.wav")
-    if ((video_path == data_path(work_dir, "slowed_video.mp4")
-         or deferred_speed is not None) and os.path.isfile(slowed_bg)):
+    if (
+        video_path == data_path(work_dir, "slowed_video.mp4") or deferred_speed is not None
+    ) and os.path.isfile(slowed_bg):
         background_path = slowed_bg
 
     # Cắt nhạc nền về đúng cửa sổ để merge_segments không phải trộn từ 0s.
     bg_cut = None
     if background_path and os.path.isfile(background_path):
         import subprocess
+
         bg_cut = data_path(work_dir, "preview_bg.tmp.wav")
         result = subprocess.run(
-            ["ffmpeg", "-y", "-ss", f"{w0:.3f}", "-to", f"{w1:.3f}",
-             "-i", background_path, "-acodec", "pcm_s16le", bg_cut],
-            capture_output=True, text=True,
-            timeout=ffmpeg_timeout_s(w1 - w0))
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                f"{w0:.3f}",
+                "-to",
+                f"{w1:.3f}",
+                "-i",
+                background_path,
+                "-acodec",
+                "pcm_s16le",
+                bg_cut,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=ffmpeg_timeout_s(w1 - w0),
+        )
         if result.returncode != 0 or not os.path.getsize(bg_cut):
-            logger.warning("Không cắt được nhạc nền cho đoạn xem thử — "
-                           "dùng nền im lặng")
+            logger.warning("Không cắt được nhạc nền cho đoạn xem thử — dùng nền im lặng")
             bg_cut = None
 
     preview_audio = data_path(work_dir, "preview_audio.tmp.wav")
     preview_path = data_path(work_dir, f"preview_seg{seg_id:05d}.mp4")
     srt_tmp = None
     try:
-        merge_segments(window, merge_dir, preview_audio, w1 - w0,
-                       background_path=bg_cut,
-                       background_gain_db=background_gain_db,
-                       duck_voice_db=settings.bg_duck_voice_db)
+        merge_segments(
+            window,
+            merge_dir,
+            preview_audio,
+            w1 - w0,
+            background_path=bg_cut,
+            background_gain_db=background_gain_db,
+            duck_voice_db=settings.bg_duck_voice_db,
+        )
         if subtitle_mode == "burn":
             srt_tmp = data_path(work_dir, "preview_subs.tmp.srt")
             generate_srt_styled(sub_window, srt_tmp, target.text_field, style)
@@ -1118,16 +1297,24 @@ def render_segment_preview(
         speed = deferred_speed[0] if deferred_speed else None
         fps = deferred_speed[1] if deferred_speed else None
         vs0, vs1 = (w0 * speed, w1 * speed) if speed else (w0, w1)
-        render_preview_clip(video_path, preview_audio, preview_path,
-                            vs0, vs1, srt_path=srt_tmp, subtitle_style=style,
-                            speed=speed, fps=fps)
+        render_preview_clip(
+            video_path,
+            preview_audio,
+            preview_path,
+            vs0,
+            vs1,
+            srt_path=srt_tmp,
+            subtitle_style=style,
+            speed=speed,
+            fps=fps,
+        )
     finally:
         for tmp in (preview_audio, bg_cut, srt_tmp):
             if tmp and os.path.exists(tmp):
                 try:
                     os.remove(tmp)
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong editor.py", exc_info=True)
 
     logger.info(f"Đã dựng đoạn xem thử câu {seg_id}: {preview_path}")
     return preview_path
@@ -1145,12 +1332,17 @@ def render_segment_preview(
 # giọng của câu này vào chỗ của câu khác.
 # ---------------------------------------------------------------------------
 
-_MIN_SEGMENT_S = 0.2        # câu ngắn hơn mức này thì nghe như tiếng động
-_TIME_EPSILON = 1e-6        # sai số cho phép khi so hai mốc thời gian
+_MIN_SEGMENT_S = 0.2  # câu ngắn hơn mức này thì nghe như tiếng động
+_TIME_EPSILON = 1e-6  # sai số cho phép khi so hai mốc thời gian
 
 # Thư mục chứa các bản giọng đọc đã qua xử lý, phải xóa khi bộ câu đổi
-_DERIVED_DIR_PREFIXES = ("segments_speed", "segments_slow", "segments_fit",
-                         "segments_post", "segments_timed")
+_DERIVED_DIR_PREFIXES = (
+    "segments_speed",
+    "segments_slow",
+    "segments_fit",
+    "segments_post",
+    "segments_timed",
+)
 
 
 def _segments_dir(work_dir: str) -> str:
@@ -1164,7 +1356,8 @@ def _load_segments(work_dir: str, target: TargetLang) -> tuple[list[dict], str]:
     if not os.path.exists(path):
         raise EditorError(
             f"Chưa có bản dịch trong thư mục dự án này ({target.transcript_name}). "
-            "Hãy chạy lồng tiếng trước khi chỉnh sửa.")
+            "Hãy chạy lồng tiếng trước khi chỉnh sửa."
+        )
     with open(path, encoding="utf-8") as f:
         segments = json.load(f)
     if not isinstance(segments, list) or not segments:
@@ -1188,28 +1381,29 @@ def _validate_times(start: float, end: float, label: str = "") -> None:
     if end - start < _MIN_SEGMENT_S - _TIME_EPSILON:
         raise EditorError(
             f"{prefix}câu thoại phải dài ít nhất {_MIN_SEGMENT_S} giây. "
-            "Hãy kéo dài thêm hoặc gộp với câu bên cạnh.")
+            "Hãy kéo dài thêm hoặc gộp với câu bên cạnh."
+        )
 
 
-def _check_no_overlap(segments: list[dict], index: int,
-                      start: float, end: float) -> None:
+def _check_no_overlap(segments: list[dict], index: int, start: float, end: float) -> None:
     """Câu này có lấn sang câu trước hoặc câu sau không."""
     if index > 0:
         previous = segments[index - 1]
         if start < float(previous.get("end", 0.0)) - _TIME_EPSILON:
             raise EditorError(
                 "Câu này bắt đầu trước khi câu liền trước kết thúc. "
-                "Hãy kéo mốc bắt đầu sang phải, hoặc gộp hai câu lại.")
+                "Hãy kéo mốc bắt đầu sang phải, hoặc gộp hai câu lại."
+            )
     if index < len(segments) - 1:
         following = segments[index + 1]
         if end > float(following.get("start", 0.0)) + _TIME_EPSILON:
             raise EditorError(
                 "Câu này kết thúc sau khi câu liền sau đã bắt đầu. "
-                "Hãy kéo mốc kết thúc sang trái, hoặc gộp hai câu lại.")
+                "Hãy kéo mốc kết thúc sang trái, hoặc gộp hai câu lại."
+            )
 
 
-def _renumber_and_rename(work_dir: str, segments: list[dict],
-                         old_ids: list[int]) -> None:
+def _renumber_and_rename(work_dir: str, segments: list[dict], old_ids: list[int]) -> None:
     """Đánh lại số câu từ 1 tới N và đổi tên tệp giọng đọc cho khớp.
 
     `old_ids` là số cũ của từng câu theo đúng thứ tự hiện tại của danh sách;
@@ -1223,8 +1417,7 @@ def _renumber_and_rename(work_dir: str, segments: list[dict],
             continue
         source = seg_wav_path(seg_dir, old_id)
         if os.path.isfile(source):
-            renames.append((source,
-                            os.path.join(seg_dir, f"seg_{position:05d}.wav")))
+            renames.append((source, os.path.join(seg_dir, f"seg_{position:05d}.wav")))
     _apply_renames(renames)
 
 
@@ -1259,8 +1452,10 @@ def _invalidate_derived(work_dir: str, target: TargetLang) -> None:
     """Xóa mọi thứ đã dựng từ bộ câu cũ để lần xuất sau làm lại từ đầu."""
     import shutil
 
-    for path in (data_path(work_dir, target.audio_name),
-                 os.path.join(work_dir, "dubbed_video.mp4")):
+    for path in (
+        data_path(work_dir, target.audio_name),
+        os.path.join(work_dir, "dubbed_video.mp4"),
+    ):
         if os.path.isfile(path):
             _remove_with_retry(path)
     root = data_dir(work_dir)
@@ -1274,17 +1469,24 @@ def _invalidate_derived(work_dir: str, target: TargetLang) -> None:
                 logger.warning(f"Không xóa được thư mục {name}: {e}")
 
 
-def _commit(work_dir: str, target: TargetLang, segments: list[dict],
-            path: str, old_ids: list[int]) -> None:
+def _commit(
+    work_dir: str, target: TargetLang, segments: list[dict], path: str, old_ids: list[int]
+) -> None:
     """Đánh số lại, đổi tên tệp, xóa tệp dẫn xuất rồi ghi xuống đĩa."""
     _renumber_and_rename(work_dir, segments, old_ids)
     _invalidate_derived(work_dir, target)
     save_json_atomic(segments, path)
 
 
-def add_segment(work_dir: str, after_id: int, start: float, end: float,
-                text: str = "", source_text: str = "",
-                target_key: str = "vi") -> int:
+def add_segment(
+    work_dir: str,
+    after_id: int,
+    start: float,
+    end: float,
+    text: str = "",
+    source_text: str = "",
+    target_key: str = "vi",
+) -> int:
     """Chèn một câu mới ngay sau câu `after_id`.
 
     Dùng `after_id` bằng 0 để chèn lên đầu danh sách. Trả về số thứ tự của
@@ -1321,8 +1523,8 @@ def delete_segment(work_dir: str, seg_id: int, target_key: str = "vi") -> None:
     segments, path = _load_segments(work_dir, target)
     if len(segments) <= 1:
         raise EditorError(
-            "Dự án phải còn ít nhất một câu thoại. Hãy sửa nội dung câu này "
-            "thay vì xóa nó đi.")
+            "Dự án phải còn ít nhất một câu thoại. Hãy sửa nội dung câu này thay vì xóa nó đi."
+        )
     index = _index_of(segments, seg_id)
     old_ids = [int(s.get("id", -1)) for s in segments]
 
@@ -1345,8 +1547,9 @@ def _split_text(text: str, ratio: float) -> tuple[str, str]:
     return " ".join(words[:cut]), " ".join(words[cut:])
 
 
-def split_segment(work_dir: str, seg_id: int, at_time: float,
-                  target_key: str = "vi") -> tuple[int, int]:
+def split_segment(
+    work_dir: str, seg_id: int, at_time: float, target_key: str = "vi"
+) -> tuple[int, int]:
     """Tách một câu thành hai tại mốc thời gian `at_time`.
 
     Phần chữ được chia theo tỉ lệ thời gian, cắt ở ranh giới từ gần nhất để
@@ -1363,39 +1566,49 @@ def split_segment(work_dir: str, seg_id: int, at_time: float,
     if not (start + _MIN_SEGMENT_S <= at_time <= end - _MIN_SEGMENT_S):
         raise EditorError(
             "Chỗ tách nằm quá sát đầu hoặc cuối câu. Mỗi nửa phải dài ít "
-            f"nhất {_MIN_SEGMENT_S} giây.")
+            f"nhất {_MIN_SEGMENT_S} giây."
+        )
 
     ratio = (at_time - start) / (end - start) if end > start else 0.5
-    left_text, right_text = _split_text(
-        str(segment.get(target.text_field, "")), ratio)
+    left_text, right_text = _split_text(str(segment.get(target.text_field, "")), ratio)
     left_source, right_source = _split_text(str(segment.get("text", "")), ratio)
     spk_id = int(segment.get("speaker_id", 0))
 
     left = dict(segment)
-    left.update({"end": at_time, "duration": round(at_time - start, 3),
-                 target.text_field: left_text, "text": left_source,
-                 "speaker_id": spk_id})
+    left.update(
+        {
+            "end": at_time,
+            "duration": round(at_time - start, 3),
+            target.text_field: left_text,
+            "text": left_source,
+            "speaker_id": spk_id,
+        }
+    )
     right = dict(segment)
-    right.update({"start": at_time, "duration": round(end - at_time, 3),
-                  target.text_field: right_text, "text": right_source,
-                  "speaker_id": spk_id})
+    right.update(
+        {
+            "start": at_time,
+            "duration": round(end - at_time, 3),
+            target.text_field: right_text,
+            "text": right_source,
+            "speaker_id": spk_id,
+        }
+    )
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     # Cả hai nửa đều phải đọc lại vì lời thoại đã khác, nên bỏ tệp giọng cũ.
     _drop_segment_audio(work_dir, seg_id)
-    segments[index:index + 1] = [left, right]
-    old_ids[index:index + 1] = [-1, -1]
+    segments[index : index + 1] = [left, right]
+    old_ids[index : index + 1] = [-1, -1]
 
     _commit(work_dir, target, segments, path, old_ids)
     left_id = int(segments[index]["id"])
     right_id = int(segments[index + 1]["id"])
-    logger.info(f"Đã tách câu số {seg_id} thành {left_id} và {right_id} "
-                f"tại giây {at_time:.3f}")
+    logger.info(f"Đã tách câu số {seg_id} thành {left_id} và {right_id} tại giây {at_time:.3f}")
     return left_id, right_id
 
 
-def merge_segments(work_dir: str, seg_ids: list[int],
-                   target_key: str = "vi") -> int:
+def merge_segments(work_dir: str, seg_ids: list[int], target_key: str = "vi") -> int:
     """Gộp nhiều câu liền nhau thành một câu duy nhất.
 
     Mốc bắt đầu lấy của câu đầu, mốc kết thúc lấy của câu cuối, phần chữ nối
@@ -1410,25 +1623,25 @@ def merge_segments(work_dir: str, seg_ids: list[int],
     positions = [_index_of(segments, seg_id) for seg_id in ids]
     if positions != list(range(positions[0], positions[0] + len(positions))):
         raise EditorError(
-            "Chỉ gộp được những câu nằm liền nhau. Hãy chọn lại các câu "
-            "kề nhau rồi thử lần nữa.")
+            "Chỉ gộp được những câu nằm liền nhau. Hãy chọn lại các câu kề nhau rồi thử lần nữa."
+        )
 
     first, last = positions[0], positions[-1]
-    group = segments[first:last + 1]
+    group = segments[first : last + 1]
     merged = dict(group[0])
     merged["end"] = float(group[-1].get("end", 0.0))
     merged["duration"] = round(merged["end"] - float(merged.get("start", 0.0)), 3)
     merged[target.text_field] = " ".join(
-        str(s.get(target.text_field, "")).strip() for s in group).strip()
-    merged["text"] = " ".join(
-        str(s.get("text", "")).strip() for s in group).strip()
+        str(s.get(target.text_field, "")).strip() for s in group
+    ).strip()
+    merged["text"] = " ".join(str(s.get("text", "")).strip() for s in group).strip()
     merged["speaker_id"] = int(group[0].get("speaker_id", 0))
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     for seg_id in ids:
         _drop_segment_audio(work_dir, seg_id)
-    segments[first:last + 1] = [merged]
-    old_ids[first:last + 1] = [-1]        # câu gộp phải được đọc lại
+    segments[first : last + 1] = [merged]
+    old_ids[first : last + 1] = [-1]  # câu gộp phải được đọc lại
 
     _commit(work_dir, target, segments, path, old_ids)
     kept = int(segments[first]["id"])
@@ -1436,8 +1649,9 @@ def merge_segments(work_dir: str, seg_ids: list[int],
     return kept
 
 
-def set_segment_time(work_dir: str, seg_id: int, start: float, end: float,
-                     target_key: str = "vi") -> None:
+def set_segment_time(
+    work_dir: str, seg_id: int, start: float, end: float, target_key: str = "vi"
+) -> None:
     """Đổi mốc bắt đầu và kết thúc của một câu.
 
     Dùng khi người dùng kéo khối câu thoại trên dải thời gian.
@@ -1450,8 +1664,10 @@ def set_segment_time(work_dir: str, seg_id: int, start: float, end: float,
     _check_no_overlap(segments, index, start, end)
 
     segment = segments[index]
-    if (abs(float(segment.get("start", 0.0)) - start) < _TIME_EPSILON
-            and abs(float(segment.get("end", 0.0)) - end) < _TIME_EPSILON):
+    if (
+        abs(float(segment.get("start", 0.0)) - start) < _TIME_EPSILON
+        and abs(float(segment.get("end", 0.0)) - end) < _TIME_EPSILON
+    ):
         return
     segment["start"] = start
     segment["end"] = end
@@ -1461,8 +1677,7 @@ def set_segment_time(work_dir: str, seg_id: int, start: float, end: float,
     # video cũ đã sai thời điểm nên phải bỏ đi.
     _invalidate_derived(work_dir, target)
     save_json_atomic(segments, path)
-    logger.info(f"Đã đổi mốc thời gian câu số {seg_id} thành "
-                f"{start:.3f} tới {end:.3f} giây")
+    logger.info(f"Đã đổi mốc thời gian câu số {seg_id} thành {start:.3f} tới {end:.3f} giây")
 
 
 # --- Lịch sử bản xuất -------------------------------------------------------
@@ -1492,23 +1707,22 @@ def record_export_snapshot(work_dir: str) -> None:
         shutil.copy2(src, dst)
         _prune_history(hist_dir)
     except OSError:
-        pass
+        logger.debug("Bỏ qua lỗi OSError trong editor.py", exc_info=True)
 
 
 def _prune_history(hist_dir: str) -> None:
     """Xóa bớt, chỉ giữ _MAX_HISTORY bản mới nhất."""
     try:
-        entries = sorted([
-            f for f in os.listdir(hist_dir)
-            if f.startswith("dubbed_") and f.endswith(".mp4")
-        ])
+        entries = sorted(
+            [f for f in os.listdir(hist_dir) if f.startswith("dubbed_") and f.endswith(".mp4")]
+        )
         for old in entries[:-_MAX_HISTORY]:
             try:
                 os.remove(os.path.join(hist_dir, old))
             except OSError:
-                pass
+                logger.debug("Bỏ qua lỗi OSError trong editor.py", exc_info=True)
     except OSError:
-        pass
+        logger.debug("Bỏ qua lỗi OSError trong editor.py", exc_info=True)
 
 
 def list_export_history(work_dir: str) -> list[dict]:
@@ -1526,14 +1740,16 @@ def list_export_history(work_dir: str) -> list[dict]:
                 p = os.path.join(hist_dir, f)
                 try:
                     st = os.stat(p)
-                    entries.append({
-                        "path": p,
-                        "name": f,
-                        "mtime": st.st_mtime,
-                        "size_bytes": st.st_size,
-                    })
+                    entries.append(
+                        {
+                            "path": p,
+                            "name": f,
+                            "mtime": st.st_mtime,
+                            "size_bytes": st.st_size,
+                        }
+                    )
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong editor.py", exc_info=True)
         entries.sort(key=lambda x: x["mtime"], reverse=True)
         return entries
     except OSError:
@@ -1558,7 +1774,9 @@ def batch_replace_text(
     target = get_target(target_key)
     segments, path = _load_segments(work_dir, target)
     updated, changed_count = batch_replace_segments(
-        segments, search_term, replacement,
+        segments,
+        search_term,
+        replacement,
         text_field=target.text_field,
         case_sensitive=case_sensitive,
         whole_word=whole_word,
@@ -1574,7 +1792,9 @@ def batch_replace_text(
             else:
                 old_ids.append(int(orig.get("id", -1)))
         _commit(work_dir, target, updated, path, old_ids)
-        logger.info(f"Đã thay thế «{search_term}» → «{replacement}» trong {changed_count} câu ({work_dir})")
+        logger.info(
+            f"Đã thay thế «{search_term}» → «{replacement}» trong {changed_count} câu ({work_dir})"
+        )
     return changed_count
 
 
@@ -1627,9 +1847,12 @@ def retranslate_segment_ai(
         raise EditorError(f"Không tìm thấy câu {seg_id}")
 
     from autodub.text.translate_direct import (
-        get_direct_client, _build_system_prompt, parse_response_segments,
-        ensure_terminal_punct
+        _build_system_prompt,
+        ensure_terminal_punct,
+        get_direct_client,
+        parse_response_segments,
     )
+
     client, provider_desc = get_direct_client(settings)
 
     # Đọc ngữ cảnh video nếu có
@@ -1637,12 +1860,12 @@ def retranslate_segment_ai(
     style_notes = getattr(settings, "translate_style_notes", "")
     if os.path.exists(ctx_path):
         try:
-            with open(ctx_path, "r", encoding="utf-8") as f:
+            with open(ctx_path, encoding="utf-8") as f:
                 ctx_data = json.load(f)
                 if ctx_data.get("style_notes"):
                     style_notes = f"{style_notes}\n{ctx_data['style_notes']}".strip()
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong editor.py", exc_info=True)
 
     system_prompt = _build_system_prompt(target_field=target.text_field, style_notes=style_notes)
     user_prompt = f"Translate this segment into {target.name} ({target.text_field}):\n{json.dumps([{'id': seg_id, 'text': seg.get('text', '')}], ensure_ascii=False)}"
@@ -1668,7 +1891,7 @@ def retranslate_all_segments_ai(
     work_dir: str,
     target_key: str = "vi",
     settings: Any = None,
-    reporter: Optional[ProgressReporter] = None,
+    reporter: ProgressReporter | None = None,
 ) -> list[dict]:
     """Dịch lại toàn bộ các câu thoại trong dự án bằng AI bên thứ 3."""
     if settings is None:
@@ -1678,8 +1901,8 @@ def retranslate_all_segments_ai(
     if not segments:
         return []
 
-    from autodub.text.translate_direct import translate_segments_direct
     from autodub.pipeline import source_lang_of
+    from autodub.text.translate_direct import translate_segments_direct
 
     source_lang = source_lang_of(work_dir) or "auto"
     translated = translate_segments_direct(
@@ -1770,6 +1993,7 @@ def export_project_short_clip(
     if ass_path:
         try:
             from autodub.media.clipper import slice_ass_subtitles
+
             with open(ass_path, encoding="utf-8") as f:
                 ass_text = f.read()
             sliced_text = slice_ass_subtitles(ass_text, start_time, end_time)
@@ -1784,7 +2008,9 @@ def export_project_short_clip(
         output_dir = os.path.join(state.work_dir, "shorts")
     os.makedirs(output_dir, exist_ok=True)
 
-    clean_title = re.sub(r'[\\/*?:"<>|]', "", str(clip.get("title", f"short_{clip_id}")))[:30].strip()
+    clean_title = re.sub(r'[\\/*?:"<>|]', "", str(clip.get("title", f"short_{clip_id}")))[
+        :30
+    ].strip()
     out_name = f"short_{clip_id:02d}_{clean_title or 'clip'}.mp4"
     out_path = os.path.join(output_dir, out_name)
 
@@ -1801,5 +2027,3 @@ def export_project_short_clip(
         reframe_mode=reframe_mode,
         reporter=reporter,
     )
-
-

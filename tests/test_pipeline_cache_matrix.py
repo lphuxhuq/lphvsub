@@ -10,23 +10,17 @@ Tests:
 - SQLite concurrency stress test (multi-threaded concurrent read/write)
 - SQLite corruption recovery & auto-healing
 """
+
 import concurrent.futures
-import os
-import sqlite3
-import threading
 from pathlib import Path
+
 import pytest
 
 from autodub.pipeline_cache import (
-    get_demucs_cache,
-    get_asr_cache,
-    get_translation_cache,
-    get_tts_cache,
-    compute_media_fingerprint,
+    AsrGlobalCache,
     TranslationGlobalCache,
     TtsGlobalCache,
-    AsrGlobalCache,
-    DemucsGlobalCache,
+    compute_media_fingerprint,
 )
 
 
@@ -35,6 +29,7 @@ def cache_env(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache_test"
     monkeypatch.setenv("LPHVSub_PIPELINE_CACHE", str(cache_root))
     import autodub.pipeline_cache as pc
+
     pc._ROOT = cache_root
     return cache_root
 
@@ -45,7 +40,13 @@ def _make_dummy_wav(path: Path) -> str:
     data_len = len(pcm_data)
     riff_len = 36 + data_len
     with path.open("wb") as f:
-        f.write(b"RIFF" + riff_len.to_bytes(4, "little") + b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data" + data_len.to_bytes(4, "little") + pcm_data)
+        f.write(
+            b"RIFF"
+            + riff_len.to_bytes(4, "little")
+            + b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data"
+            + data_len.to_bytes(4, "little")
+            + pcm_data
+        )
     return str(path)
 
 
@@ -171,7 +172,13 @@ def test_changed_source_video_invalidates_all_stages(cache_env, tmp_path):
     assert fp1 != fp2
 
     asr = AsrGlobalCache()
-    asr.store(v1, model="base", language="zh", engine="whisper", segments=[{"start": 0, "end": 1, "text": "V1"}])
+    asr.store(
+        v1,
+        model="base",
+        language="zh",
+        engine="whisper",
+        segments=[{"start": 0, "end": 1, "text": "V1"}],
+    )
 
     assert asr.lookup(v1, model="base", language="zh", engine="whisper") is not None
     # Video 2 must MISS

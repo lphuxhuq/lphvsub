@@ -1,20 +1,17 @@
 import os
-import tempfile
-import numpy as np
-import pytest
 
+import numpy as np
+
+from autodub.media.inpaint import inpaint_video_with_cache
 from autodub.media.inpaint.base import (
     convert_normalized_regions_to_mask,
     get_bounding_box_for_regions,
-    BaseInpaintEngine,
 )
 from autodub.media.inpaint.cache import (
     compute_inpaint_hash,
-    get_inpaint_cache_dir,
-    get_inpaint_cache_target,
     get_cached_clean_video,
+    get_inpaint_cache_target,
 )
-from autodub.media.inpaint import inpaint_video_with_cache
 
 
 def test_convert_normalized_regions_to_mask():

@@ -2,12 +2,11 @@
 
 import json
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autodub.media.download.validator import MediaValidator, ValidationResult
+from autodub.media.download.validator import MediaValidator
 
 
 @pytest.fixture
@@ -59,8 +58,8 @@ def test_validator_mocked_valid_stream(validator, tmp_path):
                 "codec_type": "audio",
                 "codec_name": "aac",
                 "channels": 2,
-            }
-        ]
+            },
+        ],
     }
 
     mock_proc = MagicMock()
@@ -94,7 +93,7 @@ def test_validator_missing_audio_when_required(validator, tmp_path):
                 "height": 720,
                 "r_frame_rate": "24/1",
             }
-        ]
+        ],
     }
 
     mock_proc = MagicMock()
@@ -116,12 +115,23 @@ def test_validator_real_ffmpeg_generated_media(validator, tmp_path):
     """Generate a real 1-second MP4 test file via ffmpeg and validate with actual ffprobe."""
     test_media = tmp_path / "real_test.mp4"
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=30",
-        "-f", "lavfi", "-i", "sine=frequency=1000:duration=1",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        str(test_media)
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=duration=1:size=320x240:rate=30",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000:duration=1",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        str(test_media),
     ]
     sub_res = subprocess.run(cmd, capture_output=True)
     if sub_res.returncode != 0:

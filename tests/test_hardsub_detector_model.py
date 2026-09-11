@@ -1,7 +1,8 @@
 import pytest
+
 from autodub.media.hardsub_detector import (
-    HardsubRegion,
     FrameSample,
+    HardsubRegion,
     TextCandidate,
 )
 
@@ -58,7 +59,10 @@ def test_frame_sample_model():
 
 def test_text_candidate_model():
     cand = TextCandidate(
-        x=100, y=300, w=400, h=35,
+        x=100,
+        y=300,
+        w=400,
+        h=35,
         edge_score=0.8,
         contrast_score=0.7,
         density_score=0.75,

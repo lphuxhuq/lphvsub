@@ -1,5 +1,5 @@
-"""Quản lý bộ nhớ đệm (Cache) cho các video đã xóa phụ đề bằng AI Inpaint.
-"""
+"""Quản lý bộ nhớ đệm (Cache) cho các video đã xóa phụ đề bằng AI Inpaint."""
+
 from __future__ import annotations
 
 import hashlib
@@ -20,7 +20,6 @@ def get_inpaint_cache_dir(custom_dir: str | None = None) -> str:
         base = os.path.join(global_cache_dir(), "inpaint_videos")
     os.makedirs(base, exist_ok=True)
     return base
-
 
 
 def compute_inpaint_hash(
@@ -60,14 +59,16 @@ def compute_inpaint_hash(
     # 2. Danh sách vùng ROI chuẩn hóa
     normalized_regions = []
     for r in regions or []:
-        normalized_regions.append({
-            "x": round(float(r.get("x", 0.0)), 4),
-            "y": round(float(r.get("y", 0.0)), 4),
-            "w": round(float(r.get("w", 0.0)), 4),
-            "h": round(float(r.get("h", 0.0)), 4),
-            "t_start": r.get("t_start"),
-            "t_end": r.get("t_end"),
-        })
+        normalized_regions.append(
+            {
+                "x": round(float(r.get("x", 0.0)), 4),
+                "y": round(float(r.get("y", 0.0)), 4),
+                "w": round(float(r.get("w", 0.0)), 4),
+                "h": round(float(r.get("h", 0.0)), 4),
+                "t_start": r.get("t_start"),
+                "t_end": r.get("t_end"),
+            }
+        )
     # Sort theo tọa độ để đảm bảo thứ tự không làm đổi hash
     normalized_regions.sort(key=lambda item: (item["x"], item["y"], item["w"], item["h"]))
     regions_json = json.dumps(normalized_regions, sort_keys=True)
@@ -94,5 +95,5 @@ def get_cached_clean_video(cache_key: str, cache_dir: str | None = None) -> str 
             if os.path.getsize(target) > 1024:
                 return target
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong cache.py", exc_info=True)
     return None

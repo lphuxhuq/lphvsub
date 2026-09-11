@@ -34,12 +34,12 @@
   ```python
   class _KeyRateLimiter:
       def acquire(self, key: str) -> None:
-          with self._lock:              # <--- Khóa mutex toàn bộ instance
+          with self._lock:  # <--- Khóa mutex toàn bộ instance
               now = time.monotonic()
               last = self._last_hits.get(key, 0.0)
               wait = self.min_interval_s - (now - last)
               if wait > 0:
-                  time.sleep(wait)      # <--- SLEEP NẰM BÊN TRONG LOCK!
+                  time.sleep(wait)  # <--- SLEEP NẰM BÊN TRONG LOCK!
               self._last_hits[key] = time.monotonic()
   ```
   Khi Luồng 1 (Key A) phải chờ `0.3s`, nó giữ luôn `self._lock`. Luồng 2 (Key B) hoàn toàn độc lập nhưng vẫn bị block đứng chờ Luồng 1 ngủ dậy mới được vào, làm giảm hiệu suất đa luồng từ $N \times$ về đúng $1 \times$.

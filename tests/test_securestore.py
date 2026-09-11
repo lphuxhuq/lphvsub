@@ -1,4 +1,5 @@
 """Kiểm thử autodub/securestore.py — mã hóa file trung gian khi hold chưa chốt."""
+
 from __future__ import annotations
 
 import json
@@ -9,7 +10,7 @@ import pytest
 from autodub import securestore
 from autodub.securestore import SecureStoreError
 
-KEY = "ab" * 32          # 32 byte hex — như máy chủ sinh
+KEY = "ab" * 32  # 32 byte hex — như máy chủ sinh
 OTHER_KEY = "cd" * 32
 
 
@@ -36,7 +37,7 @@ def test_bad_key_format():
     with pytest.raises(SecureStoreError):
         securestore.encrypt_bytes(b"x", "khong-phai-hex")
     with pytest.raises(SecureStoreError):
-        securestore.encrypt_bytes(b"x", "abcd")   # hex nhưng quá ngắn
+        securestore.encrypt_bytes(b"x", "abcd")  # hex nhưng quá ngắn
 
 
 def test_file_roundtrip_binary(tmp_path):
@@ -48,7 +49,7 @@ def test_file_roundtrip_binary(tmp_path):
     securestore.encrypt_file(p, KEY)
     assert securestore.is_encrypted(p)
     with open(p, "rb") as f:
-        assert f.read() != payload   # không còn plaintext trên đĩa
+        assert f.read() != payload  # không còn plaintext trên đĩa
 
     # Mã hóa lại lần hai là no-op (resume sau crash).
     securestore.encrypt_file(p, KEY)

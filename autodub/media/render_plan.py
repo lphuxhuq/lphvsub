@@ -1,12 +1,13 @@
 """RenderPlan — DAG kiến trúc điều phối và sinh Filter Graph tối ưu cho FFmpeg export."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass
 
+from autodub.media.blur_strategy import BlurMode, BlurStrategy
+from autodub.media.encoder_profile import QualityMode
 from autodub.media.output_profile import OutputProfile
-from autodub.media.blur_strategy import BlurStrategy, BlurMode
-from autodub.media.encoder_profile import EncoderProfile, QualityMode
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RenderPlan:
     """Kế hoạch dựng hình (Render Plan) hợp nhất toàn bộ pipeline."""
+
     video_w: int
     video_h: int
     output_profile: OutputProfile | None = None
@@ -37,7 +39,11 @@ class RenderPlan:
     ) -> RenderPlan:
         out_prof = OutputProfile.resolve(video_w, video_h, aspect_preset)
         bm = BlurMode(str(blur_mode).lower()) if not isinstance(blur_mode, BlurMode) else blur_mode
-        qm = QualityMode(str(quality_mode).lower()) if not isinstance(quality_mode, QualityMode) else quality_mode
+        qm = (
+            QualityMode(str(quality_mode).lower())
+            if not isinstance(quality_mode, QualityMode)
+            else quality_mode
+        )
         return cls(
             video_w=video_w,
             video_h=video_h,
@@ -84,8 +90,13 @@ class RenderPlan:
 
         elif mode in ("top_split", "top", "split"):
             bg_flt = BlurStrategy.build_background_filter(
-                tw, th, mode=self.blur_mode, brightness=-0.12, saturation=1.2,
-                in_tag="asp_bg", out_tag="asp_bgb"
+                tw,
+                th,
+                mode=self.blur_mode,
+                brightness=-0.12,
+                saturation=1.2,
+                in_tag="asp_bg",
+                out_tag="asp_bgb",
             )
             flt = (
                 f"split[asp_bg][asp_fg];"
@@ -95,8 +106,13 @@ class RenderPlan:
             )
         else:  # blur (default)
             bg_flt = BlurStrategy.build_background_filter(
-                tw, th, mode=self.blur_mode, brightness=-0.08, saturation=1.15,
-                in_tag="asp_bg", out_tag="asp_bgb"
+                tw,
+                th,
+                mode=self.blur_mode,
+                brightness=-0.08,
+                saturation=1.15,
+                in_tag="asp_bg",
+                out_tag="asp_bgb",
             )
             flt = (
                 f"split[asp_bg][asp_fg];"

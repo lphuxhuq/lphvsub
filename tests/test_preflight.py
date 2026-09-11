@@ -1,12 +1,19 @@
 """Kiểm tra autodub.preflight — logic thuần, không cần Qt."""
+
 import os
 
 import pytest
 
 from autodub.config import Settings
 from autodub.preflight import (
-    CheckResult, blocking_failures, run_preflight, warnings_of,
-    _check_asr, _check_disk, _check_vieneu, _total_ram_gb,
+    CheckResult,
+    _check_asr,
+    _check_disk,
+    _check_vieneu,
+    _total_ram_gb,
+    blocking_failures,
+    run_preflight,
+    warnings_of,
 )
 
 
@@ -92,9 +99,9 @@ def test_logs_dir_and_file_logging(tmp_path, monkeypatch):
     # Gọi lại phải trả về cùng tệp, không thêm handler thứ hai.
     assert utils.init_file_logging() == path
     import logging
+
     root = logging.getLogger("autodub")
-    file_handlers = [h for h in root.handlers
-                     if getattr(h, "baseFilename", "") == path]
+    file_handlers = [h for h in root.handlers if getattr(h, "baseFilename", "") == path]
     assert len(file_handlers) == 1
     # Dọn: gỡ handler để không giữ tệp mở sang test khác.
     for h in file_handlers:
@@ -105,6 +112,7 @@ def test_logs_dir_and_file_logging(tmp_path, monkeypatch):
 
 def test_check_inpaint_blur_mode(settings):
     from autodub.preflight import _check_inpaint
+
     settings.mask_method = "blur"
     res = _check_inpaint(settings)
     assert res.key == "inpaint"
@@ -113,6 +121,7 @@ def test_check_inpaint_blur_mode(settings):
 
 def test_check_inpaint_lama_missing_model(settings, tmp_path):
     from autodub.preflight import _check_inpaint
+
     settings.mask_method = "ai_inpaint"
     settings.inpaint_engine = "lama_onnx"
     settings.inpaint_model_path = str(tmp_path / "not_found.onnx")
@@ -124,6 +133,7 @@ def test_check_inpaint_lama_missing_model(settings, tmp_path):
 
 def test_check_inpaint_lama_model_ready(settings, tmp_path):
     from autodub.preflight import _check_inpaint
+
     dummy_model = tmp_path / "lama.onnx"
     dummy_model.write_bytes(b"dummy onnx content")
 
@@ -133,4 +143,3 @@ def test_check_inpaint_lama_model_ready(settings, tmp_path):
     res = _check_inpaint(settings)
     assert res.key == "inpaint"
     assert res.level == "ok"
-

@@ -36,21 +36,29 @@ Xoa toan bo 19 quy tac nguy hiem (len <= 2 hoac ky tu dac biet):
 ```python
 _DEFAULT_PHONETIC_GLOSSARY = [
     # Am cam than / tieng long ro rang
-    ('hac hac', 'ha ha'), ('hac hac hac', 'ha ha ha'),
-    ('hic', 'hich'), ('huhu', 'hu hu'), ('huhuhu', 'hu hu hu'),
-    ('huh', 'Hum'),
-    ('uhm', 'u'), ('Uhm', 'u'),
-    ('hmm', 'hu'), ('Hmm', 'hu'), ('Hmmm', 'hu'),
+    ("hac hac", "ha ha"),
+    ("hac hac hac", "ha ha ha"),
+    ("hic", "hich"),
+    ("huhu", "hu hu"),
+    ("huhuhu", "hu hu hu"),
+    ("huh", "Hum"),
+    ("uhm", "u"),
+    ("Uhm", "u"),
+    ("hmm", "hu"),
+    ("Hmm", "hu"),
+    ("Hmmm", "hu"),
     # Tu tieng Anh / nuoc ngoai du dai
-    ('cosplay', 'cot bo lay'),
-    ('NTR', 'No Te Ro'),
-    ('bye', 'bai'),
-    ('app', 'ap'),
-    ('donate', 'do net'),
-    ('yes', 'det'),
+    ("cosplay", "cot bo lay"),
+    ("NTR", "No Te Ro"),
+    ("bye", "bai"),
+    ("app", "ap"),
+    ("donate", "do net"),
+    ("yes", "det"),
     # Cum tu Viet cu the du dai
-    ('tu vi', 'tu vy'), ('vi su', 'vy su'), ('vi dieu', 'vy dieu'),
-    ('xi mang', 'sy mang'),
+    ("tu vi", "tu vy"),
+    ("vi su", "vy su"),
+    ("vi dieu", "vy dieu"),
+    ("xi mang", "sy mang"),
 ]
 ```
 

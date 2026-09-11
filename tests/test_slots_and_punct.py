@@ -4,6 +4,7 @@ These three pieces implement the strict 1:1 dub contract: one translated
 segment = one spoken clip that fits its real time window and ends on a
 full-stop-class mark.
 """
+
 import pytest
 
 from autodub.text.translate_hint import (
@@ -14,11 +15,11 @@ from autodub.text.translate_hint import (
 
 
 def seg(i, start, end):
-    return {"id": i, "text": f"t{i}", "start": start, "end": end,
-            "duration": round(end - start, 3)}
+    return {"id": i, "text": f"t{i}", "start": start, "end": end, "duration": round(end - start, 3)}
 
 
 # --------------------------- annotate_slots --------------------------- #
+
 
 def test_slot_is_gap_to_next_start():
     segs = annotate_slots([seg(1, 0.0, 2.0), seg(2, 3.5, 5.0)])
@@ -48,9 +49,11 @@ def test_annotate_empty():
 
 # --------------------------- payload_segment --------------------------- #
 
+
 def test_max_chars_follows_slot():
     s = {**seg(1, 0.0, 2.0), "slot": 3.5}
     from autodub.text.translate_hint import CHARS_PER_SECOND_BUDGET
+
     assert payload_segment(s)["max_chars"] == int(3.5 * CHARS_PER_SECOND_BUDGET)
 
 
@@ -63,8 +66,8 @@ def test_max_chars_follows_custom_cps_budget():
 def test_max_chars_falls_back_to_duration():
     # Pre-slot transcripts (manual path) still get a budget.
     from autodub.text.translate_hint import CHARS_PER_SECOND_BUDGET
-    assert (payload_segment(seg(1, 0.0, 3.0))["max_chars"]
-            == int(3.0 * CHARS_PER_SECOND_BUDGET))
+
+    assert payload_segment(seg(1, 0.0, 3.0))["max_chars"] == int(3.0 * CHARS_PER_SECOND_BUDGET)
 
 
 def test_max_chars_floor_is_12():
@@ -80,17 +83,21 @@ def test_payload_has_no_slot_field():
 
 # --------------------------- ensure_terminal_punct --------------------------- #
 
-@pytest.mark.parametrize("raw,expected", [
-    ("xin chào", "xin chào."),
-    ("xin chào.", "xin chào."),
-    ("thật á?", "thật á?"),
-    ("tuyệt vời!", "tuyệt vời!"),
-    ("rồi sao nữa…", "rồi sao nữa…"),
-    ("và rồi,", "và rồi."),           # trailing comma → full stop
-    ("đợi chút -", "đợi chút."),      # trailing dash → full stop
-    ("nhiều   khoảng  trắng", "nhiều khoảng trắng."),
-    ("  có  đệm  hai đầu  ", "có đệm hai đầu."),
-    ("", ""),
-])
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("xin chào", "xin chào."),
+        ("xin chào.", "xin chào."),
+        ("thật á?", "thật á?"),
+        ("tuyệt vời!", "tuyệt vời!"),
+        ("rồi sao nữa…", "rồi sao nữa…"),
+        ("và rồi,", "và rồi."),  # trailing comma → full stop
+        ("đợi chút -", "đợi chút."),  # trailing dash → full stop
+        ("nhiều   khoảng  trắng", "nhiều khoảng trắng."),
+        ("  có  đệm  hai đầu  ", "có đệm hai đầu."),
+        ("", ""),
+    ],
+)
 def test_terminal_punct(raw, expected):
     assert ensure_terminal_punct(raw) == expected

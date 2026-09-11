@@ -1,5 +1,5 @@
 import json
-import pytest
+
 from autodub.config import Settings
 from autodub.languages import get_target
 from autodub.text.translate_direct import (
@@ -12,7 +12,7 @@ from autodub.text.translate_direct import (
 
 
 def test_strip_fences_and_citations():
-    text = "```json\n[{\"id\": 1, \"text_vi\": \"Xin chào.\"}[cite: 3]]\n```"
+    text = '```json\n[{"id": 1, "text_vi": "Xin chào."}[cite: 3]]\n```'
     cleaned = _strip_fences_and_citations(text)
     assert "[cite:" not in cleaned
     assert "```" not in cleaned
@@ -65,23 +65,29 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
 
     keys_used = set()
 
-    def _mock_call(self, system_instruction, user_prompt, preferred_key=None, max_retries=4, **kwargs):
+    def _mock_call(
+        self, system_instruction, user_prompt, preferred_key=None, max_retries=4, **kwargs
+    ):
         if preferred_key:
             keys_used.add(preferred_key)
         # Trích xuất id từ prompt
         try:
             items_str = user_prompt.split(":\n", 1)[1]
             items = json.loads(items_str)
-            return json.dumps([{"id": item["id"], "text_vi": f"Dịch câu {item['id']}"} for item in items])
+            return json.dumps(
+                [{"id": item["id"], "text_vi": f"Dịch câu {item['id']}"} for item in items]
+            )
         except Exception:
             return json.dumps([])
-
 
     monkeypatch.setattr(GeminiDirectClient, "call_ai", _mock_call)
 
     target = get_target("vi")
     translated = translate_segments_direct(
-        segments, target, "en", settings,
+        segments,
+        target,
+        "en",
+        settings,
         checkpoint_path=str(tmp_path / "ckpt_parallel.json"),
     )
 
@@ -94,7 +100,8 @@ def test_translate_segments_direct_parallel_multi_keys(monkeypatch, tmp_path):
 
 
 def test_get_direct_client_prioritizes_gemini():
-    from autodub.text.translate_direct import get_direct_client, GeminiDirectClient
+    from autodub.text.translate_direct import GeminiDirectClient, get_direct_client
+
     settings = Settings(
         gemini_api_key="AIzaSyTestKey123",
         gemini_model="gemini-2.5-flash",
@@ -124,12 +131,13 @@ def test_parse_response_segments_with_thoughts_and_reversed_keys():
     assert res[1]["id"] == 2
 
 
-
 # ----------------------------------------------- speedup: plan/workers/thinking #
+
 
 def test_plan_batches_splits_for_workers():
     """38 câu, batch 40, 4 luồng → phải chia 4 lọ cân bằng thay vì 1 lô khổng lồ."""
     from autodub.text.translate_direct import _plan_batches
+
     spans = _plan_batches(38, batch_size=40, workers=4, floor=8)
     assert len(spans) == 4
     sizes = [e - s for _b, s, e in spans]
@@ -143,12 +151,14 @@ def test_plan_batches_splits_for_workers():
 def test_plan_batches_respects_floor_when_short():
     """Ít câu hơn floor → không chia lẻ được, giữ 1 lô."""
     from autodub.text.translate_direct import _plan_batches
+
     spans = _plan_batches(6, batch_size=40, workers=4, floor=8)
     assert spans == [(1, 0, 6)]
 
 
 def test_plan_batches_keeps_normal_batching():
     from autodub.text.translate_direct import _plan_batches
+
     spans = _plan_batches(100, batch_size=25, workers=4, floor=8)
     assert len(spans) == 4
     assert all(e - s == 25 for _b, s, e in spans)
@@ -160,10 +170,11 @@ def test_plan_batches_keeps_normal_batching():
 
 def test_default_workers():
     from autodub.text.translate_direct import _default_workers
-    assert _default_workers(1, 0, is_compat=False) == 2   # 1 key vẫn 2 luồng
+
+    assert _default_workers(1, 0, is_compat=False) == 2  # 1 key vẫn 2 luồng
     assert _default_workers(9, 0, is_compat=False) == 4
     assert _default_workers(1, 0, is_compat=True) == 2
-    assert _default_workers(1, 5, is_compat=False) == 5   # cấu hình đè
+    assert _default_workers(1, 5, is_compat=False) == 5  # cấu hình đè
     assert _default_workers(1, 99, is_compat=False) == 8  # trần 8
 
 
@@ -177,6 +188,7 @@ class _FakeResp:
 
 def _capture_payload(model, thinking=False):
     from autodub.text.translate_direct import GeminiDirectClient as G
+
     client = G("k1", model=model, thinking=thinking)
     captured = {}
 
@@ -215,16 +227,18 @@ def test_thinking_setting_reenables():
 
 def test_get_direct_client_passes_thinking_setting():
     from autodub.text.translate_direct import get_direct_client
-    client_on, _ = get_direct_client(Settings(
-        gemini_api_key="AIzaSyTestKey123", translate_thinking=True))
+
+    client_on, _ = get_direct_client(
+        Settings(gemini_api_key="AIzaSyTestKey123", translate_thinking=True)
+    )
     assert client_on.thinking is True
-    client_off, _ = get_direct_client(Settings(
-        gemini_api_key="AIzaSyTestKey123"))
+    client_off, _ = get_direct_client(Settings(gemini_api_key="AIzaSyTestKey123"))
     assert client_off.thinking is False
 
 
 def test_response_schema_in_gemini_payload():
     from autodub.text.translate_direct import GeminiDirectClient
+
     client = GeminiDirectClient("k1", model="gemini-2.5-flash")
     captured = {}
 
@@ -242,4 +256,3 @@ def test_response_schema_in_gemini_payload():
     cfg = captured["payload"]["generationConfig"]
     assert cfg["responseMimeType"] == "application/json"
     assert cfg["responseSchema"] == schema
-

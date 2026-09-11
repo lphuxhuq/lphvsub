@@ -1,4 +1,5 @@
 """Toán chia khúc + crossfade của demucs_worker — thuần numpy, không cần torch."""
+
 import numpy as np
 
 from autodub.media.demucs_worker import crossfade_into, plan_chunks
@@ -28,8 +29,8 @@ def test_last_chunk_absorbs_remainder():
 
 
 def test_crossfade_endpoints_and_monotonic_blend():
-    tail = np.ones((2, 10), dtype=np.float32)          # khúc trước: toàn 1
-    head = np.zeros((2, 30), dtype=np.float32)         # khúc sau: toàn 0
+    tail = np.ones((2, 10), dtype=np.float32)  # khúc trước: toàn 1
+    head = np.zeros((2, 30), dtype=np.float32)  # khúc sau: toàn 0
     out = crossfade_into(tail, head)
     assert out is head
     # Khung đầu nghiêng hẳn về khúc trước, khung cuối vùng blend về khúc sau
@@ -53,5 +54,5 @@ def test_crossfade_identical_signals_is_identity():
 def test_crossfade_handles_mismatched_lengths():
     tail = np.ones((2, 5), dtype=np.float32)
     head = np.zeros((2, 3), dtype=np.float32)
-    out = crossfade_into(tail, head)   # không được nổ index
+    out = crossfade_into(tail, head)  # không được nổ index
     assert out.shape == (2, 3)

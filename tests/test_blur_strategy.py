@@ -1,5 +1,4 @@
-import pytest
-from autodub.media.blur_strategy import BlurStrategy, BlurMode
+from autodub.media.blur_strategy import BlurMode, BlurStrategy
 
 
 def test_blur_strategy_fast():

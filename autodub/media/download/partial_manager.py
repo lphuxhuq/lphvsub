@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import requests
-
-from autodub.media.download.contract import ErrorType
-from autodub.media.download.retry import ErrorClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +31,18 @@ class DownloadProgressState:
     part_path: str
     total_bytes: int = 0
     downloaded_bytes: int = 0
-    etag: Optional[str] = None
-    last_modified: Optional[str] = None
+    etag: str | None = None
+    last_modified: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     is_dash: bool = False
-    fragments: List[Dict[str, Any]] = field(default_factory=list)
+    fragments: list[dict[str, Any]] = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> DownloadProgressState:
+    def from_dict(cls, data: dict[str, Any]) -> DownloadProgressState:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -63,7 +60,7 @@ class PartialDownloadManager:
         p = Path(target_path)
         return p.parent / f"{p.name}.part"
 
-    def load_state(self, target_path: Path | str) -> Optional[DownloadProgressState]:
+    def load_state(self, target_path: Path | str) -> DownloadProgressState | None:
         meta_file = self.get_progress_meta_path(target_path)
         if not meta_file.is_file():
             return None
@@ -103,9 +100,9 @@ class PartialDownloadManager:
         url: str,
         target_path: Path | str,
         session: requests.Session,
-        headers: Optional[Dict[str, str]] = None,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-        is_cancelled: Optional[Callable[[], bool]] = None,
+        headers: dict[str, str] | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
         timeout: float = 30.0,
     ) -> Path:
         """Downloads a progressive HTTP stream with Range resume support."""
@@ -113,7 +110,6 @@ class PartialDownloadManager:
         target.parent.mkdir(parents=True, exist_ok=True)
         part_file = self.get_part_path(target)
 
-        state = self.load_state(target)
         existing_bytes = 0
         if part_file.is_file():
             existing_bytes = part_file.stat().st_size
@@ -124,9 +120,10 @@ class PartialDownloadManager:
         if existing_bytes > 0:
             req_headers["Range"] = f"bytes={existing_bytes}-"
             resumed = True
-            logger.info(f"Attempting to resume download from byte offset {existing_bytes} for {target.name}")
+            logger.info(
+                f"Attempting to resume download from byte offset {existing_bytes} for {target.name}"
+            )
 
-        start_time = time.time()
         resp = None
         try:
             resp = session.get(url, headers=req_headers, stream=True, timeout=timeout)
@@ -150,7 +147,9 @@ class PartialDownloadManager:
                     try:
                         total_bytes = int(content_range.split("/")[-1])
                     except ValueError:
-                        pass
+                        logger.debug(
+                            "Bỏ qua lỗi ValueError trong partial_manager.py", exc_info=True
+                        )
                 if total_bytes == 0:
                     content_length = int(resp.headers.get("Content-Length", 0))
                     total_bytes = existing_bytes + content_length
@@ -196,25 +195,33 @@ class PartialDownloadManager:
 
                     now = time.time()
                     elapsed_tick = now - last_callback_time
-                    if elapsed_tick >= 0.25: # Debounced progress reporting
+                    if elapsed_tick >= 0.25:  # Debounced progress reporting
                         speed = bytes_since_last_tick / elapsed_tick if elapsed_tick > 0 else 0.0
-                        percent = (bytes_downloaded / total_bytes * 100.0) if total_bytes > 0 else 0.0
-                        eta = (total_bytes - bytes_downloaded) / speed if (speed > 0 and total_bytes > bytes_downloaded) else 0.0
+                        percent = (
+                            (bytes_downloaded / total_bytes * 100.0) if total_bytes > 0 else 0.0
+                        )
+                        eta = (
+                            (total_bytes - bytes_downloaded) / speed
+                            if (speed > 0 and total_bytes > bytes_downloaded)
+                            else 0.0
+                        )
 
                         current_state.downloaded_bytes = bytes_downloaded
                         self.save_state(current_state)
 
                         if progress_callback:
-                            progress_callback({
-                                "status": "downloading",
-                                "bytes_downloaded": bytes_downloaded,
-                                "total_bytes": total_bytes,
-                                "percent": percent,
-                                "speed_bps": speed,
-                                "speed_mb": speed / (1024 * 1024),
-                                "eta_seconds": eta,
-                                "resumed": resumed,
-                            })
+                            progress_callback(
+                                {
+                                    "status": "downloading",
+                                    "bytes_downloaded": bytes_downloaded,
+                                    "total_bytes": total_bytes,
+                                    "percent": percent,
+                                    "speed_bps": speed,
+                                    "speed_mb": speed / (1024 * 1024),
+                                    "eta_seconds": eta,
+                                    "resumed": resumed,
+                                }
+                            )
 
                         last_callback_time = now
                         bytes_since_last_tick = 0
@@ -230,5 +237,7 @@ class PartialDownloadManager:
             if resp:
                 resp.close()
             # Preserve .part file and .progress.json on error! Do not delete them!
-            logger.warning(f"Download stream error for {url}: {e}. Partial file preserved at {part_file}")
+            logger.warning(
+                f"Download stream error for {url}: {e}. Partial file preserved at {part_file}"
+            )
             raise

@@ -1,8 +1,14 @@
 """Kiểm tra autodub.diskspace — logic thuần, không cần Qt."""
+
 import os
 
 from autodub.diskspace import (
-    OUTPUT_VIDEO, clean_all, clean_project, dir_size, measure, measure_project,
+    OUTPUT_VIDEO,
+    clean_all,
+    clean_project,
+    dir_size,
+    measure,
+    measure_project,
 )
 from autodub.workdir import DATA_SUBDIR
 
@@ -23,13 +29,10 @@ def _make_project(root, name, done=True, legacy=False, data_size=1000):
     if legacy:
         _write(os.path.join(work, "original_audio.wav"), data_size)
         _write(os.path.join(work, "segments", "seg_0001.wav"), data_size)
-        _write(os.path.join(work, "segments_speed1.2", "seg_0001.wav"),
-               data_size)
+        _write(os.path.join(work, "segments_speed1.2", "seg_0001.wav"), data_size)
     else:
-        _write(os.path.join(work, DATA_SUBDIR, "original_audio.wav"),
-               data_size)
-        _write(os.path.join(work, DATA_SUBDIR, "segments", "seg_0001.wav"),
-               data_size)
+        _write(os.path.join(work, DATA_SUBDIR, "original_audio.wav"), data_size)
+        _write(os.path.join(work, DATA_SUBDIR, "segments", "seg_0001.wav"), data_size)
     return work
 
 
@@ -41,7 +44,7 @@ def test_measure_project_done_counts_cleanable(tmp_path):
     work = _make_project(tmp_path, "p1", done=True)
     usage = measure_project(work)
     assert usage.has_output
-    assert usage.cleanable_bytes == 2000          # data/ chứa 2 tệp 1000 byte
+    assert usage.cleanable_bytes == 2000  # data/ chứa 2 tệp 1000 byte
     assert usage.total_bytes > usage.cleanable_bytes
 
 
@@ -63,7 +66,7 @@ def test_clean_project_new_layout_keeps_outputs(tmp_path):
 
 def test_clean_project_legacy_keeps_outputs(tmp_path):
     work = _make_project(tmp_path, "p1", done=True, legacy=True)
-    _write(os.path.join(work, "transcript_vi.json"), 30)   # tệp cần giữ
+    _write(os.path.join(work, "transcript_vi.json"), 30)  # tệp cần giữ
     freed = clean_project(work)
     assert freed == 3000
     assert os.path.isfile(os.path.join(work, OUTPUT_VIDEO))

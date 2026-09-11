@@ -93,8 +93,8 @@ if settings.ocr_enabled:
         ocr_segments = run_selective_ocr(video_path, suspects.suspect, settings)
         suspects2 = detect_suspect_segments(segments, meta.get("empty_chunks"), ocr_segments)
         segments, fusion_report = fuse(segments, ocr_segments, suspects2)
-        save_json_atomic(data_path(work_dir,"asr_fusion_report.json"), fusion_report)
-save_transcript(segments, transcript_orig_path)   # như cũ
+        save_json_atomic(data_path(work_dir, "asr_fusion_report.json"), fusion_report)
+save_transcript(segments, transcript_orig_path)  # như cũ
 ```
 - `empty_chunks` từ RC-3 signal; khi worker cũ chưa cập nhật (resume) → meta rỗng, heuristic khác vẫn chạy.
 

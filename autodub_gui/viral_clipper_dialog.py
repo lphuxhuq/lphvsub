@@ -9,15 +9,21 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QHBoxLayout, QLabel, QProgressBar,
-    QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub.config import Settings
 from autodub.editor import EditorState, export_project_short_clip, get_or_analyze_viral_clips
-from autodub_gui import icons, tokens
+from autodub_gui import tokens
 from autodub_gui.system_open import open_file, open_folder
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 from autodub_gui.ui.toast import TOASTS
@@ -25,11 +31,14 @@ from autodub_gui.ui.toast import TOASTS
 
 class ExportClipWorker(QThread):
     """Worker chạy ngầm xuất clip ngắn 9:16 không block GUI."""
+
     progress = Signal(int, str)
     finished_clip = Signal(int, str)
     error = Signal(int, str)
 
-    def __init__(self, state: EditorState, clip_id: int, settings: Any, parent: QWidget | None = None):
+    def __init__(
+        self, state: EditorState, clip_id: int, settings: Any, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self.state = state
         self.clip_id = clip_id
@@ -52,6 +61,7 @@ class ExportClipWorker(QThread):
 
 class ClipCard(QFrame):
     """Thẻ hiển thị 1 phân đoạn Viral Short."""
+
     export_requested = Signal(int)
     preview_requested = Signal(float, float)
 
@@ -75,7 +85,9 @@ class ClipCard(QFrame):
         # 1. Top row: Badge điểm Viral + Thời lượng
         top_row = QHBoxLayout()
         score = int(clip_data.get("viral_score", 85))
-        badge_color = tokens.DANGER if score >= 90 else tokens.WARNING if score >= 80 else tokens.PRIMARY
+        badge_color = (
+            tokens.DANGER if score >= 90 else tokens.WARNING if score >= 80 else tokens.PRIMARY
+        )
 
         badge = QLabel(f"Viral Score: {score}/100")
         badge.setStyleSheet(
@@ -88,7 +100,7 @@ class ClipCard(QFrame):
         s_time = float(clip_data.get("start", 0.0))
         e_time = float(clip_data.get("end", 0.0))
         dur = float(clip_data.get("duration", e_time - s_time))
-        
+
         m_s, sec_s = int(s_time // 60), int(s_time % 60)
         m_e, sec_e = int(e_time // 60), int(e_time % 60)
         time_lbl = QLabel(f"{m_s:02d}:{sec_s:02d} -> {m_e:02d}:{sec_e:02d} ({dur:.1f}s)")
@@ -138,7 +150,7 @@ class ClipCard(QFrame):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(False)
-        self.progress_bar.setStyleSheet(f"max-height: 4px; border-radius: 2px;")
+        self.progress_bar.setStyleSheet("max-height: 4px; border-radius: 2px;")
         layout.addWidget(self.progress_bar)
 
     def set_exporting(self, is_exporting: bool) -> None:
@@ -183,8 +195,12 @@ class ViralClipperDialog(QDialog):
         header = QHBoxLayout()
         h_text = QVBoxLayout()
         title = QLabel("AI Viral Shorts Studio")
-        title.setStyleSheet(f"font-size: {tokens.FS_PAGE_TITLE}px; font-weight: 700; color: {tokens.TEXT_PRIMARY};")
-        desc = QLabel("Tự động phân tích điểm cao trào kịch tính, căn mốc câu thoại và tạo Shorts 9:16 hoàn chỉnh.")
+        title.setStyleSheet(
+            f"font-size: {tokens.FS_PAGE_TITLE}px; font-weight: 700; color: {tokens.TEXT_PRIMARY};"
+        )
+        desc = QLabel(
+            "Tự động phân tích điểm cao trào kịch tính, căn mốc câu thoại và tạo Shorts 9:16 hoàn chỉnh."
+        )
         desc.setStyleSheet(f"font-size: {tokens.FS_META}px; color: {tokens.TEXT_MUTED};")
         h_text.addWidget(title)
         h_text.addWidget(desc)
@@ -241,7 +257,9 @@ class ViralClipperDialog(QDialog):
         self._cards.clear()
 
         self.status_lbl.setText("Đang phân tích kịch bản...")
-        clips = get_or_analyze_viral_clips(self.state, settings=self.settings, force_refresh=force_refresh)
+        clips = get_or_analyze_viral_clips(
+            self.state, settings=self.settings, force_refresh=force_refresh
+        )
         self.status_lbl.setText(f"Tìm thấy {len(clips)} phân đoạn Shorts tiềm năng")
 
         for clip in clips:

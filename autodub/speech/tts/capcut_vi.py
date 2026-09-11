@@ -2,6 +2,7 @@
 
 Hỗ trợ Device Pool đa thiết bị (fake nhiều device.json) chạy đa luồng tốc độ cao.
 """
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,7 @@ import re
 import subprocess
 import threading
 import time
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from autodub.speech.tts.base import TTSResult, write_silence
 from autodub.speech.tts.capcut_device_pool import get_device_pool
@@ -37,12 +38,16 @@ TASK_TIMEOUT_S = 60.0
 DOWNLOAD_TIMEOUT_S = 30
 FFMPEG_TIMEOUT_S = 60
 
-OFFLINE_HINT = ("Giọng CapCut cần kết nối mạng. Kiểm tra mạng rồi chạy lại, "
-                "hoặc chọn một giọng offline (VieNeu) ở ô chọn giọng.")
+OFFLINE_HINT = (
+    "Giọng CapCut cần kết nối mạng. Kiểm tra mạng rồi chạy lại, "
+    "hoặc chọn một giọng offline (VieNeu) ở ô chọn giọng."
+)
 
-BLOCKED_HINT = ("Máy chủ CapCut đang tạm thời bận hoặc giới hạn kết nối (system busy / shark block). "
-                "Hệ thống đã tự động thử lại và điều tiết nhịp gửi nhưng máy chủ vẫn chưa phản hồi. "
-                "Hãy thử lại sau ít phút hoặc chọn một giọng offline (VieNeu) để lồng tiếng ngay.")
+BLOCKED_HINT = (
+    "Máy chủ CapCut đang tạm thời bận hoặc giới hạn kết nối (system busy / shark block). "
+    "Hệ thống đã tự động thử lại và điều tiết nhịp gửi nhưng máy chủ vẫn chưa phản hồi. "
+    "Hãy thử lại sau ít phút hoặc chọn một giọng offline (VieNeu) để lồng tiếng ngay."
+)
 
 _GLOBAL_THROTTLE_LOCK = threading.Lock()
 _global_next_slot = 0.0
@@ -59,6 +64,7 @@ def _current_profile() -> dict:
     with _DEVICE_LOCK:
         if _profile is None:
             from autodub.speech.tts import capcut_catalog
+
             _profile = capcut_catalog.device_profile()
         return _profile
 
@@ -80,10 +86,13 @@ def _rotate_profile(seen: dict) -> dict | None:
         if _rotations >= MAX_ROTATIONS:
             return None
         from autodub.speech.tts import capcut_catalog
+
         _rotations += 1
         _profile = capcut_catalog.rotate_device()
-        logger.warning("CapCut chặn định danh máy — đã đổi sang định danh mới "
-                       f"(lần {_rotations}/{MAX_ROTATIONS}).")
+        logger.warning(
+            "CapCut chặn định danh máy — đã đổi sang định danh mới "
+            f"(lần {_rotations}/{MAX_ROTATIONS})."
+        )
         return _profile
 
 
@@ -94,7 +103,7 @@ def _trigger_global_backoff(duration_s: float = 1.0) -> None:
         _global_backoff_until = max(_global_backoff_until, time.monotonic() + duration_s)
 
 
-def _throttle(device: Optional[dict] = None) -> None:
+def _throttle(device: dict | None = None) -> None:
     """Giữ nhịp gửi toàn cục và nhịp riêng theo từng thiết bị."""
     global _global_next_slot
     with _GLOBAL_THROTTLE_LOCK:
@@ -117,11 +126,7 @@ def _throttle(device: Optional[dict] = None) -> None:
 def _is_hard_block(error: Exception) -> bool:
     """Máy chủ chặn vĩnh viễn định danh máy (shark block / ret -6) — cần đổi thiết bị."""
     text = str(error).lower()
-    return (
-        "shark block" in text
-        or "'ret': '-6'" in text
-        or '"ret": "-6"' in text
-    )
+    return "shark block" in text or "'ret': '-6'" in text or '"ret": "-6"' in text
 
 
 def _is_rate_limited(error: Exception) -> bool:
@@ -156,8 +161,8 @@ def _is_invalid_text(error: Exception) -> bool:
     return (
         "TTSInvalidText" in text
         or "err_code': 40402002" in text
-        or "err_code\": 40402002" in text
-        or "40402002" in text and "invalid" in text.lower()
+        or 'err_code": 40402002' in text
+        or ("40402002" in text and "invalid" in text.lower())
     )
 
 
@@ -177,8 +182,8 @@ def sanitize_capcut_text(text: str) -> str:
     cleaned = _CJK_RE.sub(" ", cleaned)
     cleaned = cleaned.replace("\u200b", "").replace("\ufeff", "")
     cleaned = cleaned.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    cleaned = cleaned.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
-    cleaned = cleaned.replace("«", "\"").replace("»", "\"").replace("[", "(").replace("]", ")")
+    cleaned = cleaned.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    cleaned = cleaned.replace("«", '"').replace("»", '"').replace("[", "(").replace("]", ")")
     cleaned = _WEIRD_RE.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) > 280:
@@ -221,7 +226,7 @@ class CapCutSynthesizer:
 
     # -- gọi máy chủ ------------------------------------------------------
 
-    def _get_worker_client_and_device(self) -> Tuple[Any, dict]:
+    def _get_worker_client_and_device(self) -> tuple[Any, dict]:
         """Lấy client và hồ sơ thiết bị riêng biệt cho từng luồng thực thi."""
         # Luồng phụ trong ThreadPoolExecutor (đa luồng thực sự):
         if threading.current_thread() is not threading.main_thread():
@@ -229,6 +234,7 @@ class CapCutSynthesizer:
             device = getattr(self._local, "device", None)
             if client is None or device is None:
                 from autodub.speech.tts.capcut_api import CapCutClient
+
                 device = self._pool.get_device()
                 client = CapCutClient(device=device)
                 self._local.client = client
@@ -243,10 +249,11 @@ class CapCutSynthesizer:
             new_dev = self._pool.rotate_device(used)
             if new_dev.get("device_id") != used.get("device_id"):
                 from autodub.speech.tts.capcut_api import CapCutClient
+
                 try:
                     self._local.client.session.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong capcut_vi.py", exc_info=True)
                 self._local.device = new_dev
                 self._local.client = CapCutClient(device=new_dev)
 
@@ -260,7 +267,7 @@ class CapCutSynthesizer:
             try:
                 self._local.client.session.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong capcut_vi.py", exc_info=True)
             self._local.device = new_dev
             self._local.client = CapCutClient(device=new_dev)
             return True
@@ -284,10 +291,13 @@ class CapCutSynthesizer:
                 except TypeError:
                     _throttle()
                 task = client.generate_speech(
-                    texts=text, voice=self._voice_type,
-                    resource_id=self._resource_id, wait=True,
+                    texts=text,
+                    voice=self._voice_type,
+                    resource_id=self._resource_id,
+                    wait=True,
                     poll_interval=0.35,
-                    timeout=TASK_TIMEOUT_S)
+                    timeout=TASK_TIMEOUT_S,
+                )
                 url = (task or {}).get("speech_url") or (task or {}).get("audio_url")
                 if not url:
                     raise RuntimeError(f"Máy chủ không trả link audio: {task}")
@@ -298,13 +308,13 @@ class CapCutSynthesizer:
                 self._pool.report_success(used)
                 _note_success()
                 return resp.content
-            except Exception as e:  # noqa: BLE001 — lỗi nào cũng đáng thử lại
+            except Exception as e:
                 last_error = e
                 if _is_invalid_text(e):
                     raise RuntimeError(
                         f"CapCut từ chối nội dung câu (TTSInvalidText): {text!r}"
                     ) from e
-                
+
                 # 1. Hard Block (shark block / ret -6) -> Thiết bị bị ban thật, phải đổi định danh
                 if _is_hard_block(e):
                     if not self._reload_device(used):
@@ -330,13 +340,14 @@ class CapCutSynthesizer:
                     continue
 
                 if attempt < RETRIES - 1:
-                    logger.warning(
-                        f"CapCut lỗi (lần {attempt + 1}/{RETRIES}): {e}")
+                    logger.warning(f"CapCut lỗi (lần {attempt + 1}/{RETRIES}): {e}")
                     time.sleep(BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)])
         if last_error is not None and (_is_hard_block(last_error) or _is_rate_limited(last_error)):
             raise RuntimeError(BLOCKED_HINT) from last_error
-        raise RuntimeError(f"Không đọc được câu bằng giọng CapCut sau "
-                           f"{RETRIES} lần thử: {last_error}. {OFFLINE_HINT}")
+        raise RuntimeError(
+            f"Không đọc được câu bằng giọng CapCut sau "
+            f"{RETRIES} lần thử: {last_error}. {OFFLINE_HINT}"
+        )
 
     # -- chuyển định dạng -------------------------------------------------
 
@@ -347,16 +358,15 @@ class CapCutSynthesizer:
 
         with FFMPEG_SLOTS:
             result = subprocess.run(
-                ["ffmpeg", "-y", "-i", "pipe:0", "-ac", "1", "-ar", "44100",
-                 output_path],
+                ["ffmpeg", "-y", "-i", "pipe:0", "-ac", "1", "-ar", "44100", output_path],
                 input=mp3_bytes,
                 capture_output=True,
                 timeout=FFMPEG_TIMEOUT_S,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
         if result.returncode != 0 or not os.path.isfile(output_path):
             err_msg = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
-            raise RuntimeError("ffmpeg không chuyển được audio CapCut "
-                               f"sang WAV: {err_msg[-300:]}")
+            raise RuntimeError(f"ffmpeg không chuyển được audio CapCut sang WAV: {err_msg[-300:]}")
 
     # -- giao diện Synthesizer -------------------------------------------
 
@@ -400,7 +410,9 @@ class CapCutSynthesizer:
                         )
                 except Exception as retry_err:
                     logger.warning("Thử lại câu lỗi thất bại (%s) — ghi clip im lặng.", retry_err)
-                return write_silence(output_path, duration_s=max(0.12, min(1.2, (target_duration or 0.4))))
+                return write_silence(
+                    output_path, duration_s=max(0.12, min(1.2, (target_duration or 0.4)))
+                )
             raise
         duration = wav_duration_s(output_path) or 0.0
         return TTSResult(
@@ -417,10 +429,10 @@ class CapCutSynthesizer:
             try:
                 session.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong capcut_vi.py", exc_info=True)
         local_client = getattr(self._local, "client", None)
         if local_client is not None and getattr(local_client, "session", None):
             try:
                 local_client.session.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong capcut_vi.py", exc_info=True)

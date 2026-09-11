@@ -1,19 +1,20 @@
-import os
 import wave
+
 import numpy as np
-import pytest
 
 from autodub.config import Settings
 from autodub.speech.diarization import (
-    estimate_frame_f0,
-    extract_acoustic_embedding,
-    estimate_num_speakers,
     cluster_speaker_embeddings,
     diarize_segments,
+    estimate_frame_f0,
+    estimate_num_speakers,
+    extract_acoustic_embedding,
 )
 
 
-def _create_synthetic_audio(path: str, duration_s: float = 4.0, freq: float = 200.0, sr: int = 16000):
+def _create_synthetic_audio(
+    path: str, duration_s: float = 4.0, freq: float = 200.0, sr: int = 16000
+):
     t = np.linspace(0, duration_s, int(sr * duration_s), endpoint=False)
     sig = 0.5 * np.sin(2 * np.pi * freq * t) + 0.25 * np.sin(2 * np.pi * freq * 2 * t)
     sig_int16 = (sig * 32767).astype(np.int16)
@@ -107,6 +108,7 @@ def test_speaker_voices_map_settings():
 
 def test_dub_request_diarization_and_speaker_voices():
     from autodub.pipeline import DubRequest
+
     req = DubRequest(
         diarization_enabled=True,
         diarization_num_speakers=2,
@@ -119,4 +121,3 @@ def test_dub_request_diarization_and_speaker_voices():
     assert req.diarization_max_speakers == 5
     assert req.speaker_voices[1] == "female_voice"
     assert req.aspect_preset == "tiktok_9_16"
-

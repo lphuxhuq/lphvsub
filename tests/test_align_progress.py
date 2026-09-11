@@ -1,12 +1,10 @@
-import os
-import wave
-import struct
-import math
 import logging
+import math
+import struct
+import wave
 from unittest.mock import MagicMock, patch
 
-import pytest
-from autodub.speech.align import align_segments, _MIN_CLIP_S
+from autodub.speech.align import align_segments
 
 
 def _write_tone(path, dur, rate=24000):
@@ -15,10 +13,11 @@ def _write_tone(path, dur, rate=24000):
         w.setsampwidth(2)
         w.setframerate(rate)
         n = int(dur * rate)
-        w.writeframes(struct.pack(
-            f"<{n}h",
-            *[int(8000 * math.sin(2 * math.pi * 440 * i / rate))
-              for i in range(n)]))
+        w.writeframes(
+            struct.pack(
+                f"<{n}h", *[int(8000 * math.sin(2 * math.pi * 440 * i / rate)) for i in range(n)]
+            )
+        )
 
 
 def test_align_segments_detailed_progress_and_callback(tmp_path, caplog):
@@ -33,14 +32,17 @@ def test_align_segments_detailed_progress_and_callback(tmp_path, caplog):
     for i in range(1, 6):
         wav_path = str(seg_dir / f"seg_{i:05d}.wav")
         _write_tone(wav_path, 1.5)
-        segments.append({
-            "id": i,
-            "start": float((i - 1) * 2.0),
-            "end": float((i - 1) * 2.0 + 1.5),
-            "text_vi": f"đây là câu số {i} rất chi tiết"
-        })
+        segments.append(
+            {
+                "id": i,
+                "start": float((i - 1) * 2.0),
+                "end": float((i - 1) * 2.0 + 1.5),
+                "text_vi": f"đây là câu số {i} rất chi tiết",
+            }
+        )
 
     mock_model = MagicMock()
+
     # Mock _asr_words trả về danh sách từ hợp lệ
     def mock_asr(model, wav):
         return [
@@ -51,23 +53,26 @@ def test_align_segments_detailed_progress_and_callback(tmp_path, caplog):
             ("x", 0.9, 1.1),
             ("rất", 1.1, 1.3),
             ("chi", 1.3, 1.4),
-            ("tiết", 1.4, 1.5)
+            ("tiết", 1.4, 1.5),
         ]
 
     progress_events = []
+
     def on_progress(ratio, msg):
         progress_events.append((ratio, msg))
 
     caplog.set_level(logging.INFO, logger="autodub.align")
 
-    with patch("autodub.speech.align._load_align_model", return_value=(mock_model, "cpu", 2)), \
-         patch("autodub.speech.align._asr_words", side_effect=mock_asr):
+    with (
+        patch("autodub.speech.align._load_align_model", return_value=(mock_model, "cpu", 2)),
+        patch("autodub.speech.align._asr_words", side_effect=mock_asr),
+    ):
         out = align_segments(
             segments,
             str(seg_dir),
             "text_vi",
             cache_path=str(tmp_path / "align_cache.json"),
-            progress_cb=on_progress
+            progress_cb=on_progress,
         )
 
     # 1. Kiểm tra kết quả alignment đầy đủ cả 5 câu
@@ -105,12 +110,14 @@ def test_align_segments_sparse_fallback_logged(tmp_path, caplog):
     seg_dir.mkdir()
     wav_path = str(seg_dir / "seg_00001.wav")
     _write_tone(wav_path, 2.0)
-    segments = [{
-        "id": 1,
-        "start": 0.0,
-        "end": 2.0,
-        "text_vi": "câu này có rất nhiều chữ nhưng ASR chỉ nghe được một chữ"
-    }]
+    segments = [
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 2.0,
+            "text_vi": "câu này có rất nhiều chữ nhưng ASR chỉ nghe được một chữ",
+        }
+    ]
 
     mock_model = MagicMock()
     # ASR chỉ nghe được 1 từ trong khi câu có 12 từ (sparse)
@@ -118,8 +125,10 @@ def test_align_segments_sparse_fallback_logged(tmp_path, caplog):
 
     caplog.set_level(logging.INFO, logger="autodub.align")
 
-    with patch("autodub.speech.align._load_align_model", return_value=(mock_model, "cpu", 1)), \
-         patch("autodub.speech.align._asr_words", side_effect=mock_asr):
+    with (
+        patch("autodub.speech.align._load_align_model", return_value=(mock_model, "cpu", 1)),
+        patch("autodub.speech.align._asr_words", side_effect=mock_asr),
+    ):
         out = align_segments(segments, str(seg_dir), "text_vi")
 
     logs = [rec.message for rec in caplog.records if rec.name == "autodub.align"]

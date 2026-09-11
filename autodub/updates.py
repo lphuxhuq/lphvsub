@@ -4,6 +4,7 @@ Chỉ là phần logic thuần: gọi API công khai của GitHub (không cần 
 so sánh số phiên bản và trả về kết quả. Phần giao diện (chạy nền, hiện thông
 báo) nằm ở ``autodub_gui`` — tách ra để kiểm thử được không cần mạng.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,9 +17,9 @@ _TIMEOUT_S = 10
 class UpdateInfo:
     """Một bản phát hành mới hơn bản đang chạy."""
 
-    version: str        # số phiên bản mới, ví dụ "2.2"
-    url: str            # trang tải bản mới
-    notes: str          # ghi chú phát hành (có thể trống)
+    version: str  # số phiên bản mới, ví dụ "2.2"
+    url: str  # trang tải bản mới
+    notes: str  # ghi chú phát hành (có thể trống)
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -51,8 +52,11 @@ def check_for_update(repo: str, current_version: str) -> UpdateInfo | None:
     repo = (repo or "").strip().strip("/")
     if not repo or "/" not in repo:
         return None
-    resp = requests.get(_API_URL.format(repo=repo), timeout=_TIMEOUT_S,
-                        headers={"Accept": "application/vnd.github+json"})
+    resp = requests.get(
+        _API_URL.format(repo=repo),
+        timeout=_TIMEOUT_S,
+        headers={"Accept": "application/vnd.github+json"},
+    )
     resp.raise_for_status()
     data = resp.json()
     tag = str(data.get("tag_name") or "").strip()

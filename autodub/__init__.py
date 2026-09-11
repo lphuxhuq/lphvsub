@@ -8,23 +8,24 @@ Public API used by the GUI:
     pipeline = DubPipeline(settings, progress=my_callback, cancel_event=my_event)
     result = pipeline.run(DubRequest(url="https://...", voice="male"))
 """
+
 from autodub.config import ConfigError, Settings
 from autodub.languages import TARGETS, TargetLang, get_target
 from autodub.pipeline import DubPipeline, DubRequest, DubResult
 from autodub.progress import PipelineCancelled, ProgressEvent, ProgressFn
 
 __all__ = [
-    "ConfigError",
-    "Settings",
     "TARGETS",
-    "TargetLang",
-    "get_target",
+    "ConfigError",
     "DubPipeline",
     "DubRequest",
     "DubResult",
     "PipelineCancelled",
     "ProgressEvent",
     "ProgressFn",
+    "Settings",
+    "TargetLang",
+    "get_target",
 ]
 
 __version__ = "3.0.0"

@@ -6,11 +6,10 @@ Tests:
 - Cancellation safety: cancel_event immediately stops decoding and encoding.
 - Exit code and error reporting: subprocess failure propagates stderr diagnostics.
 """
-import os
+
 import subprocess
 import sys
 import threading
-import time
 from collections import deque
 from unittest import mock
 
@@ -21,7 +20,7 @@ from autodub.media.inpaint.lama_onnx import LaMaOnnxEngine
 
 def test_stderr_drain_prevents_pipe_deadlock():
     """Verify that background stderr draining prevents OS pipe buffer deadlock.
-    
+
     If stderr is not drained, writing more than OS pipe buffer (usually 4KB-64KB)
     causes the child process to block forever on write().
     """
@@ -68,9 +67,10 @@ def test_inpaint_handles_immediate_cancellation(tmp_path):
     engine.session = mock.MagicMock()
 
     # Mock probe functions
-    with mock.patch("autodub.media.retime.probe_video_info", return_value=(2.0, "30/1")), \
-         mock.patch("autodub.media.video.probe_dimensions", return_value=(640, 480)):
-        
+    with (
+        mock.patch("autodub.media.retime.probe_video_info", return_value=(2.0, "30/1")),
+        mock.patch("autodub.media.video.probe_dimensions", return_value=(640, 480)),
+    ):
         dummy_video = str(tmp_path / "dummy.mp4")
         with open(dummy_video, "wb") as f:
             f.write(b"dummy video data")
@@ -111,10 +111,11 @@ def test_inpaint_encoder_failure_raises_with_stderr(tmp_path):
             return mock_enc
         return mock_dec
 
-    with mock.patch("autodub.media.retime.probe_video_info", return_value=(1.0, "30/1")), \
-         mock.patch("autodub.media.video.probe_dimensions", return_value=(640, 480)), \
-         mock.patch("subprocess.Popen", side_effect=fake_popen):
-
+    with (
+        mock.patch("autodub.media.retime.probe_video_info", return_value=(1.0, "30/1")),
+        mock.patch("autodub.media.video.probe_dimensions", return_value=(640, 480)),
+        mock.patch("subprocess.Popen", side_effect=fake_popen),
+    ):
         with pytest.raises(RuntimeError, match="Invalid encoder settings error message"):
             engine.inpaint_video(
                 dummy_video,

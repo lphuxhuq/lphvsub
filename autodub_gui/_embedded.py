@@ -8,4 +8,4 @@ người dùng và người dùng không chỉnh được.
 
 # Rỗng = không nhúng; saas_client rơi về địa chỉ cố định trong mã, rồi tới
 # biến môi trường VOXDUB_API_URL (chỉ khi chạy từ mã nguồn).
-VOXDUB_API_URL = ''
+VOXDUB_API_URL = ""

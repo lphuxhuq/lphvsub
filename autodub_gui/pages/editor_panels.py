@@ -3,19 +3,31 @@
 Bảng danh sách phụ đề là phần được dùng nhiều nhất nên được tối ưu riêng:
 khi dự án có nhiều câu, chỉ những câu đang nhìn thấy mới được dựng widget.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QHBoxLayout, QLabel, QListWidget,
-    QListWidgetItem, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPlainTextEdit,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import dub_constants as consts
 from autodub_gui import icons, tokens
 from autodub_gui.formatting import (
-    format_duration, format_hours, format_size, format_timecode,
+    format_duration,
+    format_hours,
+    format_size,
+    format_timecode,
 )
 from autodub_gui.ui.buttons import GhostButton, IconButton, PrimaryButton
 from autodub_gui.ui.collapsible import CollapsibleSection
@@ -43,27 +55,28 @@ class _GrowingTextEdit(QPlainTextEdit):
     def __init__(self, text: str, parent: QWidget | None = None):
         super().__init__(text, parent)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.document().documentLayout().documentSizeChanged.connect(
-            lambda _s: self._fit())
+        self.document().documentLayout().documentSizeChanged.connect(lambda _s: self._fit())
         self._fit()
 
     def _fit(self) -> None:
         # documentSize() của QPlainTextDocumentLayout trả chiều cao theo SỐ
         # DÒNG (đã tính cả xuống dòng tự động), không phải điểm ảnh.
         lines = max(1, int(self.document().size().height()))
-        height = int(lines * self.fontMetrics().lineSpacing()
-                     + 2 * self.document().documentMargin()
-                     + 2 * self.frameWidth() + 2)
+        height = int(
+            lines * self.fontMetrics().lineSpacing()
+            + 2 * self.document().documentMargin()
+            + 2 * self.frameWidth()
+            + 2
+        )
         height = max(_TEXT_MIN_H, height)
         if height != self.minimumHeight():
             self.setMinimumHeight(height)
             self.setMaximumHeight(height)
             self.height_changed.emit()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         # Đổi bề rộng làm chữ xuống dòng khác đi — đo lại chiều cao.
         self._fit()
@@ -85,11 +98,16 @@ class SegmentRow(QWidget):
     split_requested = Signal(int)
     merge_requested = Signal(int)
     delete_requested = Signal(int)
-    height_changed = Signal(int)         # id câu — dòng cần được đo lại
-    voice_changed = Signal(int, str)     # (id, tên giọng) — "" = dùng giọng chung
+    height_changed = Signal(int)  # id câu — dòng cần được đo lại
+    voice_changed = Signal(int, str)  # (id, tên giọng) — "" = dùng giọng chung
 
-    def __init__(self, segment: dict, text_field: str,
-                 show_subtitle: bool = False, parent: QWidget | None = None):
+    def __init__(
+        self,
+        segment: dict,
+        text_field: str,
+        show_subtitle: bool = False,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         from autodub.text.srt import SUBTITLE_FIELD, has_subtitle_override
 
@@ -97,8 +115,7 @@ class SegmentRow(QWidget):
         self._text_field = text_field
         self._voice_override: str = str(segment.get("voice", "")).strip()
         root = QVBoxLayout(self)
-        root.setContentsMargins(_ROW_PADDING, _ROW_PADDING,
-                                _ROW_PADDING, _ROW_PADDING)
+        root.setContentsMargins(_ROW_PADDING, _ROW_PADDING, _ROW_PADDING, _ROW_PADDING)
         root.setSpacing(tokens.SP_1)
 
         head = QHBoxLayout()
@@ -106,7 +123,8 @@ class SegmentRow(QWidget):
         self.time_label = QLabel(self._time_text(segment))
         self.time_label.setStyleSheet(
             f"color: {tokens.PRIMARY}; font-size: {tokens.FS_META}px; "
-            f"font-family: {tokens.FONT_MONO}; background: transparent;")
+            f"font-family: {tokens.FONT_MONO}; background: transparent;"
+        )
         head.addWidget(self.time_label)
         self._speaker_id = segment.get("speaker_id")
         if self._speaker_id is not None:
@@ -114,11 +132,13 @@ class SegmentRow(QWidget):
             self._spk_badge.setStyleSheet(
                 f"color: {tokens.PRIMARY}; font-size: {tokens.FS_BADGE}px; "
                 f"background: {tokens.BG_SELECTED_SOFT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
-                f"border-radius: 6px; padding: 0 4px; font-weight: 500;")
+                f"border-radius: 6px; padding: 0 4px; font-weight: 500;"
+            )
             head.addWidget(self._spk_badge)
         head.addStretch()
         # Chip giọng riêng — chỉ hiện khi câu này có giọng khác giọng chung.
         from PySide6.QtWidgets import QPushButton
+
         self._voice_chip = QPushButton(self._voice_override or "")
         self._voice_chip.setToolTip("Giọng riêng của câu này — bấm để bỏ")
         self._voice_chip.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -127,54 +147,52 @@ class SegmentRow(QWidget):
             f"color: {tokens.ACCENT_PURPLE}; font-size: {tokens.FS_BADGE}px; "
             f"font-weight: 600; border: 1px solid {tokens.ACCENT_PURPLE}; "
             f"border-radius: 8px; padding: 0 6px; }} "
-            f"QPushButton:hover {{ background: {tokens.BG_SELECTED}; }}")
+            f"QPushButton:hover {{ background: {tokens.BG_SELECTED}; }}"
+        )
         self._voice_chip.setFixedHeight(18)
         self._voice_chip.setVisible(bool(self._voice_override))
         self._voice_chip.clicked.connect(lambda: self._emit_voice(""))
         head.addWidget(self._voice_chip)
         self.index_label = QLabel(f"Câu {self._id}")
         self.index_label.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; background: transparent;"
+        )
         head.addWidget(self.index_label)
         root.addLayout(head)
 
-
-        self.editor = self._text_box(str(segment.get(text_field, "")),
-                                     tokens.TEXT_PRIMARY)
+        self.editor = self._text_box(str(segment.get(text_field, "")), tokens.TEXT_PRIMARY)
         self.editor.textChanged.connect(
-            lambda: self.text_edited.emit(self._id,
-                                          self.editor.toPlainText()))
+            lambda: self.text_edited.emit(self._id, self.editor.toPlainText())
+        )
         root.addWidget(self.editor)
 
         self.sub_caption = QLabel("Phụ đề riêng")
         self.sub_caption.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; background: transparent;"
+        )
         self.sub_editor = self._text_box(
-            str(segment.get(SUBTITLE_FIELD, "") or ""), tokens.TEXT_SECONDARY)
+            str(segment.get(SUBTITLE_FIELD, "") or ""), tokens.TEXT_SECONDARY
+        )
         self.sub_editor.setPlaceholderText("Để trống là dùng y hệt lời đọc")
         self.sub_editor.textChanged.connect(
-            lambda: self.subtitle_edited.emit(self._id,
-                                              self.sub_editor.toPlainText()))
+            lambda: self.subtitle_edited.emit(self._id, self.sub_editor.toPlainText())
+        )
         root.addWidget(self.sub_caption)
         root.addWidget(self.sub_editor)
-        self.set_subtitle_visible(
-            show_subtitle or has_subtitle_override(segment, text_field))
+        self.set_subtitle_visible(show_subtitle or has_subtitle_override(segment, text_field))
 
         root.addLayout(self._build_actions())
         # Ô chữ cao lên (gõ thêm dòng) thì báo cho danh sách nới dòng theo.
-        self.editor.height_changed.connect(
-            lambda: self.height_changed.emit(self._id))
-        self.sub_editor.height_changed.connect(
-            lambda: self.height_changed.emit(self._id))
+        self.editor.height_changed.connect(lambda: self.height_changed.emit(self._id))
+        self.sub_editor.height_changed.connect(lambda: self.height_changed.emit(self._id))
 
     @staticmethod
-    def _text_box(text: str, color: str) -> "_GrowingTextEdit":
+    def _text_box(text: str, color: str) -> _GrowingTextEdit:
         box = _GrowingTextEdit(text)
         box.setStyleSheet(
             f"QPlainTextEdit {{ background: transparent; border: none; "
-            f"color: {color}; font-size: {tokens.FS_BODY}px; padding: 0; }}")
+            f"color: {color}; font-size: {tokens.FS_BODY}px; padding: 0; }}"
+        )
         return box
 
     def set_subtitle_visible(self, visible: bool) -> None:
@@ -186,14 +204,14 @@ class SegmentRow(QWidget):
         row.setSpacing(tokens.SP_1)
         specs = (
             (icons.play(tokens.SUCCESS), "Nghe câu này", self.play_requested),
-            (icons.reload(tokens.ACCENT_BLUE), "Đọc lại câu này",
-             self.resynth_requested),
-            (icons.globe(tokens.ACCENT_PURPLE), "Dịch lại câu này bằng AI (HHTech / Gemini / DeepSeek)",
-             self.ai_translate_requested),
-            (icons.scissors(tokens.TEXT_SECONDARY), "Tách câu này làm đôi",
-             self.split_requested),
-            (icons.merge(tokens.TEXT_SECONDARY), "Gộp với câu bên dưới",
-             self.merge_requested),
+            (icons.reload(tokens.ACCENT_BLUE), "Đọc lại câu này", self.resynth_requested),
+            (
+                icons.globe(tokens.ACCENT_PURPLE),
+                "Dịch lại câu này bằng AI (HHTech / Gemini / DeepSeek)",
+                self.ai_translate_requested,
+            ),
+            (icons.scissors(tokens.TEXT_SECONDARY), "Tách câu này làm đôi", self.split_requested),
+            (icons.merge(tokens.TEXT_SECONDARY), "Gộp với câu bên dưới", self.merge_requested),
             (icons.trash(tokens.DANGER), "Xóa câu này", self.delete_requested),
         )
         for icon, tip, signal in specs:
@@ -202,8 +220,8 @@ class SegmentRow(QWidget):
             row.addWidget(button)
         # Nút gán giọng riêng — mở popup giọng để người dùng chọn.
         self._btn_voice = IconButton(
-            icons.mic(tokens.TEXT_SECONDARY),
-            "Gán giọng riêng cho câu này", size=_ROW_ICON)
+            icons.mic(tokens.TEXT_SECONDARY), "Gán giọng riêng cho câu này", size=_ROW_ICON
+        )
         self._btn_voice.clicked.connect(self._open_voice_popup)
         row.addWidget(self._btn_voice)
         row.addStretch()
@@ -211,13 +229,13 @@ class SegmentRow(QWidget):
 
     def _open_voice_popup(self) -> None:
         """Mở popup chọn giọng cho riêng câu này."""
-        from autodub.speech.tts import voices as catalog
         from autodub.config import Settings
+        from autodub.speech.tts import voices as catalog
         from autodub_gui.voice_picker import _VoicePopup
 
         try:
             voices = catalog.catalog(Settings.load())
-        except Exception:  # noqa: BLE001
+        except Exception:
             voices = []
         popup = _VoicePopup(self)
         popup.picked.connect(self._emit_voice)
@@ -233,8 +251,10 @@ class SegmentRow(QWidget):
 
     @staticmethod
     def _time_text(segment: dict) -> str:
-        return (f"{format_timecode(segment.get('start', 0))}  →  "
-                f"{format_timecode(segment.get('end', 0))}")
+        return (
+            f"{format_timecode(segment.get('start', 0))}  →  "
+            f"{format_timecode(segment.get('end', 0))}"
+        )
 
     def segment_id(self) -> int:
         return self._id
@@ -252,7 +272,9 @@ class SegmentRow(QWidget):
         """Tô sáng câu đang được đọc."""
         self.setStyleSheet(
             f"background: {tokens.BG_SELECTED_SOFT}; border-radius: 8px;"
-            if active else "background: transparent;")
+            if active
+            else "background: transparent;"
+        )
 
 
 class SubtitleListPanel(QWidget):
@@ -267,7 +289,7 @@ class SubtitleListPanel(QWidget):
     split_requested = Signal(int)
     merge_requested = Signal(int)
     delete_requested = Signal(int)
-    voice_changed = Signal(int, str)     # (seg_id, tên giọng) — "" = giọng chung
+    voice_changed = Signal(int, str)  # (seg_id, tên giọng) — "" = giọng chung
     add_requested = Signal()
     retranslate_all_requested = Signal()
 
@@ -295,8 +317,8 @@ class SubtitleListPanel(QWidget):
         head.addStretch()
         self.count_label = QLabel("")
         self.count_label.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         head.addWidget(self.count_label)
         root.addLayout(head)
 
@@ -308,15 +330,14 @@ class SubtitleListPanel(QWidget):
         self.chk_split.setToolTip(
             "Bật khi bạn muốn chữ trên màn hình khác với chữ được đọc lên. "
             "Sửa phụ đề riêng chỉ cần ghi lại phụ đề vào video, không phải "
-            "đọc lại giọng.")
+            "đọc lại giọng."
+        )
         self.chk_split.toggled.connect(self._on_split_toggled)
         root.addWidget(self.chk_split)
 
         self.list = QListWidget()
-        self.list.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection)
-        self.list.setVerticalScrollMode(
-            QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.list.setUniformItemSizes(False)
         self.list.currentRowChanged.connect(self._on_row_changed)
         root.addWidget(self.list, 1)
@@ -328,14 +349,15 @@ class SubtitleListPanel(QWidget):
         btn_row.addWidget(add_button)
 
         retrans_btn = GhostButton("Dịch lại tất cả bằng AI")
-        retrans_btn.setToolTip("Dịch lại toàn bộ các câu thoại bằng AI bên thứ 3 (HHTech / Gemini / DeepSeek...)")
+        retrans_btn.setToolTip(
+            "Dịch lại toàn bộ các câu thoại bằng AI bên thứ 3 (HHTech / Gemini / DeepSeek...)"
+        )
         retrans_btn.clicked.connect(self.retranslate_all_requested.emit)
         btn_row.addWidget(retrans_btn)
         root.addLayout(btn_row)
 
     # -- Dữ liệu -------------------------------------------------------
-    def set_segments(self, segments: list[dict],
-                     text_field: str = "text_vi") -> None:
+    def set_segments(self, segments: list[dict], text_field: str = "text_vi") -> None:
         """Dựng lại toàn bộ danh sách."""
         self._segments = segments
         self._text_field = text_field
@@ -343,9 +365,11 @@ class SubtitleListPanel(QWidget):
 
     def _apply_filter(self, query: str = "") -> None:
         text = (query or "").strip().lower()
-        self._filtered = [s for s in self._segments
-                          if not text
-                          or text in str(s.get(self._text_field, "")).lower()]
+        self._filtered = [
+            s
+            for s in self._segments
+            if not text or text in str(s.get(self._text_field, "")).lower()
+        ]
         self._rebuild()
 
     def _on_split_toggled(self, checked: bool) -> None:
@@ -379,9 +403,7 @@ class SubtitleListPanel(QWidget):
             self._items[row.segment_id()] = item
         total = len(self._segments)
         shown = len(self._filtered)
-        self.count_label.setText(
-            f"{total} câu" if shown == total
-            else f"{shown} trên {total} câu")
+        self.count_label.setText(f"{total} câu" if shown == total else f"{shown} trên {total} câu")
 
     def _on_row_height_changed(self, seg_id: int) -> None:
         """Nới dòng danh sách theo chiều cao mới của ô chữ — không cắt chữ."""
@@ -414,8 +436,7 @@ class SubtitleListPanel(QWidget):
             item = self.list.item(index)
             if item.data(Qt.ItemDataRole.UserRole) == seg_id:
                 if not self._is_visible(index):
-                    self.list.scrollToItem(
-                        item, QAbstractItemView.ScrollHint.PositionAtCenter)
+                    self.list.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
                 break
 
     def _is_visible(self, index: int) -> bool:
@@ -446,8 +467,8 @@ class OverviewPanel(QScrollArea):
     open_subtitle = Signal()
     open_youtube = Signal()
     open_other = Signal()
-    issue_clicked = Signal(int)          # id câu trong báo cáo chất lượng
-    context_saved = Signal(dict)         # ngữ cảnh dịch người dùng vừa sửa
+    issue_clicked = Signal(int)  # id câu trong báo cáo chất lượng
+    context_saved = Signal(dict)  # ngữ cảnh dịch người dùng vừa sửa
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -461,51 +482,56 @@ class OverviewPanel(QScrollArea):
 
         self._rows: dict[str, ElidedLabel] = {}
         info = CollapsibleSection("Thông tin dự án", expanded=True)
-        for key, label in (("title", "Tên dự án"), ("path", "Thư mục"),
-                           ("language", "Ngôn ngữ gốc"), ("voice", "Giọng đọc"),
-                           ("segments", "Số câu thoại"),
-                           ("duration", "Thời lượng"),
-                           ("processing", "Thời gian đã xử lý"),
-                           ("size", "Dung lượng")):
+        for key, label in (
+            ("title", "Tên dự án"),
+            ("path", "Thư mục"),
+            ("language", "Ngôn ngữ gốc"),
+            ("voice", "Giọng đọc"),
+            ("segments", "Số câu thoại"),
+            ("duration", "Thời lượng"),
+            ("processing", "Thời gian đã xử lý"),
+            ("size", "Dung lượng"),
+        ):
             info.add_layout(self._info_row(key, label))
         self._layout.addWidget(info)
 
-        self.quality = CollapsibleSection("Chất lượng bản lồng tiếng",
-                                          expanded=True)
+        self.quality = CollapsibleSection("Chất lượng bản lồng tiếng", expanded=True)
         self.quality_label = QLabel("Chưa có số liệu.")
         self.quality_label.setWordWrap(True)
         self.quality_label.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self.quality.add_widget(self.quality_label)
         # Danh sách câu cần xem lại — bấm một dòng là nhảy tới đúng câu đó
         # trong mục Phụ đề, khỏi phải dò tìm bằng mắt.
         self.issue_list = QListWidget()
-        self.issue_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection)
-        self.issue_list.setVerticalScrollMode(
-            QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.issue_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.issue_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.issue_list.setStyleSheet(
             f"QListWidget {{ background: {tokens.BG_INPUT}; border: 1px solid "
             f"{tokens.BORDER_SUBTLE}; border-radius: 8px; }}"
-            f"QListWidget::item {{ padding: 6px 8px; }}")
+            f"QListWidget::item {{ padding: 6px 8px; }}"
+        )
         self.issue_list.itemClicked.connect(self._on_issue_clicked)
         self.issue_list.setVisible(False)
         self.quality.add_widget(self.issue_list)
         self.usage_label = QLabel("")
         self.usage_label.setWordWrap(True)
         self.usage_label.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; background: transparent;"
+        )
         self.usage_label.setVisible(False)
         self.quality.add_widget(self.usage_label)
         self._layout.addWidget(self.quality)
 
         actions = CollapsibleSection("Mở nhanh", expanded=True)
-        for text, signal in (("Mở thư mục dự án", self.open_folder),
-                             ("Mở tệp phụ đề", self.open_subtitle),
-                             ("Mở thư mục tiêu đề và mô tả", self.open_youtube),
-                             ("Mở thư mục dự án khác…", self.open_other)):
+        for text, signal in (
+            ("Mở thư mục dự án", self.open_folder),
+            ("Mở tệp phụ đề", self.open_subtitle),
+            ("Mở thư mục tiêu đề và mô tả", self.open_youtube),
+            ("Mở thư mục dự án khác…", self.open_other),
+        ):
             row = QHBoxLayout()
             button = GhostButton(text)
             button.clicked.connect(signal.emit)
@@ -524,34 +550,41 @@ class OverviewPanel(QScrollArea):
         đã đoán ra. Người dùng sửa ở đây rồi dịch lại/xuất lại thì bản dịch
         dùng đúng thuật ngữ và xưng hô họ muốn, không phải đoán nữa.
         """
-        section = CollapsibleSection("Ngữ cảnh dịch của video này",
-                                     expanded=False)
+        section = CollapsibleSection("Ngữ cảnh dịch của video này", expanded=False)
         note = QLabel(
             "App tự phân tích video để đoán chủ đề, xưng hô và thuật ngữ. "
             "Bạn có thể sửa lại cho đúng ý — bản dịch lại (nếu có) sẽ dùng "
-            "các thông tin này.")
+            "các thông tin này."
+        )
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         section.add_widget(note)
 
         self._ctx_fields: dict[str, QPlainTextEdit] = {}
         for key, label, placeholder, height in (
-                ("summary", "Video nói về gì",
-                 "Ví dụ: Video review điện thoại, người nói là chủ kênh…", 64),
-                ("domain", "Chủ đề",
-                 "Ví dụ: review công nghệ", 40),
-                ("pronouns", "Cách xưng hô",
-                 "Ví dụ: mình – các bạn", 40),
-                ("glossary", "Thuật ngữ cố định (mỗi dòng: gốc = dịch)",
-                 "Ví dụ:\n小米 = Xiaomi\n老板 = ông chủ", 88),
-                ("style_notes", "Ghi chú văn phong",
-                 "Ví dụ: giọng vui vẻ, thân mật", 40)):
+            (
+                "summary",
+                "Video nói về gì",
+                "Ví dụ: Video review điện thoại, người nói là chủ kênh…",
+                64,
+            ),
+            ("domain", "Chủ đề", "Ví dụ: review công nghệ", 40),
+            ("pronouns", "Cách xưng hô", "Ví dụ: mình – các bạn", 40),
+            (
+                "glossary",
+                "Thuật ngữ cố định (mỗi dòng: gốc = dịch)",
+                "Ví dụ:\n小米 = Xiaomi\n老板 = ông chủ",
+                88,
+            ),
+            ("style_notes", "Ghi chú văn phong", "Ví dụ: giọng vui vẻ, thân mật", 40),
+        ):
             caption = QLabel(label)
             caption.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; "
-                f"font-size: {tokens.FS_META}px; background: transparent;")
+                f"font-size: {tokens.FS_META}px; background: transparent;"
+            )
             box = QPlainTextEdit()
             box.setPlaceholderText(placeholder)
             box.setFixedHeight(height)
@@ -559,15 +592,15 @@ class OverviewPanel(QScrollArea):
                 f"QPlainTextEdit {{ background: {tokens.BG_INPUT}; "
                 f"border: 1px solid {tokens.BORDER_SUBTLE}; "
                 f"border-radius: 6px; color: {tokens.TEXT_PRIMARY}; "
-                f"font-size: {tokens.FS_META}px; padding: 4px; }}")
+                f"font-size: {tokens.FS_META}px; padding: 4px; }}"
+            )
             self._ctx_fields[key] = box
             section.add_widget(caption)
             section.add_widget(box)
 
         row = QHBoxLayout()
         save = GhostButton("Lưu ngữ cảnh")
-        save.setToolTip("Lưu vào dự án này. Lần dịch lại kế tiếp sẽ dùng "
-                        "đúng các thông tin trên.")
+        save.setToolTip("Lưu vào dự án này. Lần dịch lại kế tiếp sẽ dùng đúng các thông tin trên.")
         save.clicked.connect(self._emit_context)
         row.addWidget(save)
         row.addStretch()
@@ -579,8 +612,7 @@ class OverviewPanel(QScrollArea):
         for key, box in self._ctx_fields.items():
             value = (context or {}).get(key, "")
             if key == "glossary" and isinstance(value, list):
-                value = "\n".join(str(x).strip() for x in value
-                                  if str(x).strip())
+                value = "\n".join(str(x).strip() for x in value if str(x).strip())
             box.blockSignals(True)
             box.setPlainText(str(value or ""))
             box.blockSignals(False)
@@ -590,8 +622,7 @@ class OverviewPanel(QScrollArea):
         for key, box in self._ctx_fields.items():
             text = box.toPlainText().strip()
             if key == "glossary":
-                data[key] = [line.strip() for line in text.splitlines()
-                             if line.strip()]
+                data[key] = [line.strip() for line in text.splitlines() if line.strip()]
             else:
                 data[key] = text
         self.context_saved.emit(data)
@@ -601,13 +632,13 @@ class OverviewPanel(QScrollArea):
         row.setSpacing(tokens.SP_2)
         name = QLabel(label)
         name.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         name.setMinimumWidth(130)
         value = ElidedLabel("—")
         value.setStyleSheet(
-            f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         row.addWidget(name)
         row.addWidget(value, 1)
         self._rows[key] = value
@@ -633,8 +664,11 @@ class OverviewPanel(QScrollArea):
     def _fill_issues(self, quality: dict) -> None:
         """Đổ danh sách câu cần xem lại từ quality_report.json."""
         self.issue_list.clear()
-        issues = [s for s in (quality or {}).get("per_segment") or []
-                  if isinstance(s, dict) and s.get("id") is not None]
+        issues = [
+            s
+            for s in (quality or {}).get("per_segment") or []
+            if isinstance(s, dict) and s.get("id") is not None
+        ]
         self.issue_list.setVisible(bool(issues))
         for seg in issues:
             item = QListWidgetItem(_issue_text(seg))
@@ -644,16 +678,15 @@ class OverviewPanel(QScrollArea):
         # Cao vừa đủ nội dung (tối đa ~8 dòng) — bảng Tổng quan tự cuộn.
         if issues:
             row_h = self.issue_list.sizeHintForRow(0)
-            self.issue_list.setFixedHeight(
-                min(len(issues), 8) * max(row_h, 24) + 12)
+            self.issue_list.setFixedHeight(min(len(issues), 8) * max(row_h, 24) + 12)
         usage = (quality or {}).get("translate_usage") or {}
         total = int(usage.get("total_tokens", 0) or 0)
         if total:
             self.usage_label.setText(
                 f"Lượt dịch dùng {usage.get('requests', 0)} lần gọi, "
                 f"{total:,} token ({usage.get('prompt_tokens', 0):,} gửi đi, "
-                f"{usage.get('completion_tokens', 0):,} nhận về).".replace(
-                    ",", "."))
+                f"{usage.get('completion_tokens', 0):,} nhận về).".replace(",", ".")
+            )
         self.usage_label.setVisible(bool(total))
 
     def _on_issue_clicked(self, item: QListWidgetItem) -> None:
@@ -677,19 +710,19 @@ def _quality_text(quality: dict) -> str:
     if overlapped:
         lines.append(
             f"Còn {overlapped} câu bị chồng sang câu sau. Hãy giảm Tốc độ "
-            "video hoặc tăng Tốc độ giọng đọc rồi xuất lại.")
+            "video hoặc tăng Tốc độ giọng đọc rồi xuất lại."
+        )
     else:
         lines.append("Không còn câu nào bị chồng tiếng.")
     extras = []
     if summary.get("segments_shifted"):
-        extras.append(f"{summary['segments_shifted']} câu được lùi nhẹ "
-                      "vào khoảng lặng")
+        extras.append(f"{summary['segments_shifted']} câu được lùi nhẹ vào khoảng lặng")
     if summary.get("segments_compressed"):
-        extras.append(f"{summary['segments_compressed']} câu đọc nhanh hơn "
-                      "một chút cho vừa chỗ")
+        extras.append(f"{summary['segments_compressed']} câu đọc nhanh hơn một chút cho vừa chỗ")
     if summary.get("segments_over_budget"):
-        extras.append(f"{summary['segments_over_budget']} câu có bản dịch "
-                      "dài hơn thời lượng cho phép")
+        extras.append(
+            f"{summary['segments_over_budget']} câu có bản dịch dài hơn thời lượng cho phép"
+        )
     if extras:
         lines.append(", ".join(extras).capitalize() + ".")
     hint = (quality or {}).get("hint")
@@ -726,22 +759,36 @@ class AudioPanel(CollapsibleSection):
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Âm thanh của dự án này", expanded=True, parent=parent)
         self.postprocess = QCheckBox("Làm đều độ lớn giọng đọc")
-        self.postprocess.setToolTip(
-            "Cân bằng để câu nào cũng nghe rõ như nhau.")
+        self.postprocess.setToolTip("Cân bằng để câu nào cũng nghe rõ như nhau.")
         self.loudness = LabeledSlider(
-            "Độ lớn giọng đọc", -24.0, -10.0, 0.5,
-            "Càng gần 0 thì giọng càng to.", " dB", decimals=1)
+            "Độ lớn giọng đọc",
+            -24.0,
+            -10.0,
+            0.5,
+            "Càng gần 0 thì giọng càng to.",
+            " dB",
+            decimals=1,
+        )
         self.duck = LabeledSlider(
-            "Giảm nhạc nền khi có lời", -24.0, 0.0, 0.5,
+            "Giảm nhạc nền khi có lời",
+            -24.0,
+            0.0,
+            0.5,
             "Nhạc nền tự nhỏ đi bấy nhiêu mỗi khi có lời thoại.",
-            " dB", decimals=1)
+            " dB",
+            decimals=1,
+        )
         self.soft_timing = QCheckBox("Tự căn lại thời điểm từng câu")
         self.drift = LabeledSlider(
-            "Cho phép lệch tối đa", 0.0, 5.0, 0.1,
+            "Cho phép lệch tối đa",
+            0.0,
+            5.0,
+            0.1,
             "Mỗi câu được dịch đi nhiều nhất bấy nhiêu giây.",
-            " giây", decimals=1)
-        for widget in (self.postprocess, self.loudness, self.duck,
-                       self.soft_timing, self.drift):
+            " giây",
+            decimals=1,
+        )
+        for widget in (self.postprocess, self.loudness, self.duck, self.soft_timing, self.drift):
             self.add_widget(widget)
         for widget in (self.loudness, self.duck, self.drift):
             widget.changed.connect(lambda _v: self.changed.emit())
@@ -750,16 +797,11 @@ class AudioPanel(CollapsibleSection):
 
     def load(self, opts: dict, settings) -> None:
         """Nạp từ tùy chọn của dự án, thiếu thì lấy theo cài đặt chung."""
-        self.postprocess.setChecked(
-            bool(opts.get("voice_postprocess", settings.voice_postprocess)))
-        self.loudness.set_value(
-            float(opts.get("voice_target_lufs", settings.voice_target_lufs)))
-        self.duck.set_value(
-            float(opts.get("bg_duck_voice_db", settings.bg_duck_voice_db)))
-        self.soft_timing.setChecked(
-            bool(opts.get("soft_timing_fit", settings.soft_timing_fit)))
-        self.drift.set_value(
-            float(opts.get("timing_max_drift_s", settings.timing_max_drift_s)))
+        self.postprocess.setChecked(bool(opts.get("voice_postprocess", settings.voice_postprocess)))
+        self.loudness.set_value(float(opts.get("voice_target_lufs", settings.voice_target_lufs)))
+        self.duck.set_value(float(opts.get("bg_duck_voice_db", settings.bg_duck_voice_db)))
+        self.soft_timing.setChecked(bool(opts.get("soft_timing_fit", settings.soft_timing_fit)))
+        self.drift.set_value(float(opts.get("timing_max_drift_s", settings.timing_max_drift_s)))
 
     def values(self) -> dict:
         return {
@@ -774,7 +816,7 @@ class AudioPanel(CollapsibleSection):
 class VoicePanel(CollapsibleSection):
     """Chọn giọng theo tên và đọc lại những câu đã sửa."""
 
-    preview_requested = Signal(str)      # tên giọng
+    preview_requested = Signal(str)  # tên giọng
     resynth_all_requested = Signal()
     changed = Signal()
 
@@ -786,7 +828,8 @@ class VoicePanel(CollapsibleSection):
         self.picker.setToolTip(
             "Đây là giọng video này đang dùng. Đổi giọng ở đây rồi bấm "
             "«Lưu tất cả và đọc lại» để đọc lại toàn bộ bằng giọng mới — "
-            "cài đặt chung không bị ảnh hưởng.")
+            "cài đặt chung không bị ảnh hưởng."
+        )
         self.picker.changed.connect(self._on_voice_changed)
         self.picker.preview_requested.connect(self.preview_requested.emit)
         self.add_widget(self.picker)
@@ -794,14 +837,12 @@ class VoicePanel(CollapsibleSection):
         self.voice_hint = QLabel("")
         self.voice_hint.setWordWrap(True)
         self.voice_hint.setStyleSheet(
-            f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.voice_hint.setVisible(False)
         self.add_widget(self.voice_hint)
 
-        self.speed = LabeledSlider(
-            "Tốc độ đọc", 0.5, 2.0, 0.05,
-            "1.00 là tốc độ tự nhiên.", "x")
+        self.speed = LabeledSlider("Tốc độ đọc", 0.5, 2.0, 0.05, "1.00 là tốc độ tự nhiên.", "x")
         self.speed.set_value(1.0)
         self.speed.changed.connect(lambda _v: self.changed.emit())
         self.add_widget(self.speed)
@@ -829,7 +870,8 @@ class VoicePanel(CollapsibleSection):
         row.setSpacing(tokens.SP_2)
         self.btn_resynth = PrimaryButton("Lưu tất cả và đọc lại")
         self.btn_resynth.setToolTip(
-            "Lưu mọi câu bạn đã sửa rồi tạo lại giọng đọc cho những câu đó.")
+            "Lưu mọi câu bạn đã sửa rồi tạo lại giọng đọc cho những câu đó."
+        )
         self.btn_resynth.clicked.connect(self.resynth_all_requested.emit)
         row.addWidget(self.btn_resynth)
         row.addStretch()
@@ -841,8 +883,8 @@ class VoicePanel(CollapsibleSection):
         self.status = QLabel("")
         self.status.setWordWrap(True)
         self.status.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.add_widget(self.status)
         self._project_voice = ""
 
@@ -892,7 +934,11 @@ class VoicePanel(CollapsibleSection):
             title = f"Người nói {spk_id + 1} ({count} câu)"
             if speaker_profiles and spk_id in speaker_profiles:
                 p = speaker_profiles[spk_id]
-                gender_str = "Nam" if p.get("gender") == "male" else ("Nữ" if p.get("gender") == "female" else "")
+                gender_str = (
+                    "Nam"
+                    if p.get("gender") == "male"
+                    else ("Nữ" if p.get("gender") == "female" else "")
+                )
                 role_str = "Dẫn chuyện" if p.get("role") == "narrator" else "Nhân vật"
                 tag = " · ".join(x for x in [role_str, gender_str] if x)
                 title = f"Người nói {spk_id + 1} — {tag} ({count} câu)"
@@ -906,6 +952,7 @@ class VoicePanel(CollapsibleSection):
                 def _handler():
                     self._speaker_voices[sid] = pkr.voice()
                     self.changed.emit()
+
                 return _handler
 
             picker.changed.connect(_make_handler())
@@ -913,7 +960,6 @@ class VoicePanel(CollapsibleSection):
 
             self.speakers_layout.addWidget(picker)
             self._speaker_pickers[spk_id] = picker
-
 
     def set_project_voice(self, name: str) -> None:
         """Ghi nhớ giọng video này đang dùng thật, để so khi người dùng đổi."""
@@ -927,13 +973,13 @@ class VoicePanel(CollapsibleSection):
 
     def _refresh_hint(self) -> None:
         """Đổi giọng mà chưa đọc lại thì video vẫn là giọng cũ — phải nói rõ."""
-        changed = (self._project_voice
-                   and self.picker.voice() != self._project_voice)
+        changed = self._project_voice and self.picker.voice() != self._project_voice
         if changed:
             self.voice_hint.setText(
                 f"Video đang dùng giọng {self._project_voice}. Bấm «Lưu tất "
                 f"cả và đọc lại» để chuyển hẳn sang giọng "
-                f"{self.picker.voice()}.")
+                f"{self.picker.voice()}."
+            )
         self.voice_hint.setVisible(bool(changed))
 
     def mark_voice_applied(self) -> None:
@@ -943,8 +989,7 @@ class VoicePanel(CollapsibleSection):
 
     def has_pending_voice_change(self) -> bool:
         """Người dùng đã đổi giọng nhưng chưa đọc lại toàn bộ."""
-        return bool(self._project_voice
-                    and self.picker.voice() != self._project_voice)
+        return bool(self._project_voice and self.picker.voice() != self._project_voice)
 
     def project_voice(self) -> str:
         """Giọng đang nằm thật trong âm thanh của video."""
@@ -953,8 +998,7 @@ class VoicePanel(CollapsibleSection):
     def set_progress(self, done: int, total: int) -> None:
         self.progress.setVisible(total > 0)
         self.progress.setValue(int(done / total * 100) if total else 0)
-        self.status.setText(f"Đang đọc lại câu {done} trên {total}"
-                            if total else "")
+        self.status.setText(f"Đang đọc lại câu {done} trên {total}" if total else "")
 
     def finish_progress(self, message: str) -> None:
         self.progress.setVisible(False)
@@ -980,12 +1024,17 @@ class BackgroundPanel(CollapsibleSection):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Nhạc nền", expanded=True, parent=parent)
-        self.mode = LabeledCombo("Cách xử lý", consts.BG_MODES,
-                                 "Cách xử lý âm thanh gốc của video")
+        self.mode = LabeledCombo("Cách xử lý", consts.BG_MODES, "Cách xử lý âm thanh gốc của video")
         self.mode.changed.connect(lambda *_a: self.changed.emit())
         self.duck = LabeledSlider(
-            "Mức giảm tiếng gốc", -40.0, 0.0, 1.0,
-            "Càng âm thì tiếng gốc càng nhỏ.", " dB", decimals=0)
+            "Mức giảm tiếng gốc",
+            -40.0,
+            0.0,
+            1.0,
+            "Càng âm thì tiếng gốc càng nhỏ.",
+            " dB",
+            decimals=0,
+        )
         self.duck.set_value(-12.0)
         self.duck.changed.connect(lambda _v: self.changed.emit())
         self.add_widget(self.mode)
@@ -993,21 +1042,21 @@ class BackgroundPanel(CollapsibleSection):
         self.status = QLabel("")
         self.status.setWordWrap(True)
         self.status.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.add_widget(self.status)
 
     def set_separated(self, available: bool) -> None:
         """Cho biết dự án đã có bản nhạc nền tách sẵn hay chưa."""
         self.status.setText(
             "Dự án này đã có bản nhạc nền tách sẵn, xuất lại sẽ rất nhanh."
-            if available else
-            "Dự án này chưa tách nhạc nền. Chọn Tách giọng gốc sẽ mất thêm "
-            "thời gian ở lần xuất tới.")
+            if available
+            else "Dự án này chưa tách nhạc nền. Chọn Tách giọng gốc sẽ mất thêm "
+            "thời gian ở lần xuất tới."
+        )
 
     def values(self) -> dict:
-        return {"bg_mode": self.mode.current_key(),
-                "bg_duck_db": self.duck.value()}
+        return {"bg_mode": self.mode.current_key(), "bg_duck_db": self.duck.value()}
 
 
 class ExportPanel(CollapsibleSection):
@@ -1033,14 +1082,17 @@ class ExportPanel(CollapsibleSection):
         super().__init__("Xuất video", expanded=True, parent=parent)
         from autodub.media.subtitle import PRESET_CHOICES
 
-        self.subtitle = LabeledCombo("Kiểu phụ đề", consts.SUBTITLE_MODES,
-                                     "Cách hiện phụ đề trên video kết quả")
+        self.subtitle = LabeledCombo(
+            "Kiểu phụ đề", consts.SUBTITLE_MODES, "Cách hiện phụ đề trên video kết quả"
+        )
         self.subtitle.changed.connect(lambda *_a: self.changed.emit())
         self.add_widget(self.subtitle)
 
         self.preset = LabeledCombo(
-            "Bộ kiểu chữ", PRESET_CHOICES,
-            "Đổi bộ kiểu rồi bấm Ghi lại phụ đề là thấy ngay trên video.")
+            "Bộ kiểu chữ",
+            PRESET_CHOICES,
+            "Đổi bộ kiểu rồi bấm Ghi lại phụ đề là thấy ngay trên video.",
+        )
         self.preset.changed.connect(lambda *_a: self.changed.emit())
         self.add_widget(self.preset)
 
@@ -1054,34 +1106,42 @@ class ExportPanel(CollapsibleSection):
         self.source_info = QLabel("")
         self.source_info.setWordWrap(True)
         self.source_info.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.add_widget(self.source_info)
 
         self.btn_preview = GhostButton("Xem thử câu đang chọn")
         self.btn_preview.setToolTip(
             "Dựng nhanh vài giây quanh câu đang chọn (giọng + nhạc nền + "
-            "phụ đề như bản xuất) để kiểm tra trước khi xuất cả video.")
+            "phụ đề như bản xuất) để kiểm tra trước khi xuất cả video."
+        )
         self.btn_preview.clicked.connect(self.preview_requested.emit)
         self.btn_subtitles = GhostButton("Ghi lại phụ đề vào video")
         self.btn_subtitles.setToolTip(
             "Chỉ vẽ lại chữ lên video, giữ nguyên giọng đọc đã có. Nhanh hơn "
             "nhiều so với xuất lại cả video, dùng khi bạn chỉ sửa chữ hoặc "
-            "đổi kiểu chữ.")
+            "đổi kiểu chữ."
+        )
         self.btn_subtitles.clicked.connect(self.subtitles_requested.emit)
         self.btn_export = PrimaryButton("Xuất video")
         self.btn_export.setToolTip(
-            "Ghép lại cả âm thanh lẫn hình. Dùng khi bạn vừa đọc lại giọng "
-            "hoặc đổi nhạc nền.")
+            "Ghép lại cả âm thanh lẫn hình. Dùng khi bạn vừa đọc lại giọng hoặc đổi nhạc nền."
+        )
         self.btn_export.clicked.connect(self.export_requested.emit)
 
         self.btn_viral_shorts = PrimaryButton("AI Tạo Shorts & Reels (9:16)")
         self.btn_viral_shorts.setToolTip(
-            "Tự động phân tích các đoạn cao trào kịch tính và trích xuất video ngắn 9:16 chuẩn TikTok/Shorts.")
+            "Tự động phân tích các đoạn cao trào kịch tính và trích xuất video ngắn 9:16 chuẩn TikTok/Shorts."
+        )
         self.btn_viral_shorts.clicked.connect(self.viral_shorts_requested.emit)
 
         # Các nút xếp DỌC: bảng bên phải có thể hẹp tới 280 điểm
-        for button in (self.btn_preview, self.btn_export, self.btn_subtitles, self.btn_viral_shorts):
+        for button in (
+            self.btn_preview,
+            self.btn_export,
+            self.btn_subtitles,
+            self.btn_viral_shorts,
+        ):
             row = QHBoxLayout()
             row.setSpacing(tokens.SP_2)
             row.addWidget(button)
@@ -1094,8 +1154,8 @@ class ExportPanel(CollapsibleSection):
         self.status = QLabel("")
         self.status.setWordWrap(True)
         self.status.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.add_widget(self.status)
 
         # --- Xuất riêng phụ đề / âm thanh -----------------------------------
@@ -1104,27 +1164,25 @@ class ExportPanel(CollapsibleSection):
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
             f"font-weight: 600; background: transparent; "
             f"border-top: 1px solid {tokens.BORDER_SUBTLE}; "
-            f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;")
+            f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;"
+        )
         self.add_widget(sep)
 
         self.btn_export_srt = GhostButton("Tải xuống .SRT")
         self.btn_export_srt.setToolTip(
-            "Xuất tệp phụ đề .srt ra máy (dùng được với CapCut, "
-            "Premiere, DaVinci Resolve…).")
+            "Xuất tệp phụ đề .srt ra máy (dùng được với CapCut, Premiere, DaVinci Resolve…)."
+        )
         self.btn_export_srt.clicked.connect(self.export_srt_requested.emit)
 
         self.btn_export_ass = GhostButton("Tải xuống .ASS")
-        self.btn_export_ass.setToolTip(
-            "Xuất tệp phụ đề .ass kiểu karaoke/cụm chữ.")
+        self.btn_export_ass.setToolTip("Xuất tệp phụ đề .ass kiểu karaoke/cụm chữ.")
         self.btn_export_ass.clicked.connect(self.export_ass_requested.emit)
 
         self.btn_export_mp3 = GhostButton("Tải xuống MP3 lồng tiếng")
-        self.btn_export_mp3.setToolTip(
-            "Xuất riêng bản âm thanh đã lồng tiếng thành tệp MP3.")
+        self.btn_export_mp3.setToolTip("Xuất riêng bản âm thanh đã lồng tiếng thành tệp MP3.")
         self.btn_export_mp3.clicked.connect(self.export_audio_mp3_requested.emit)
 
-        for button in (self.btn_export_srt, self.btn_export_ass,
-                       self.btn_export_mp3):
+        for button in (self.btn_export_srt, self.btn_export_ass, self.btn_export_mp3):
             row2 = QHBoxLayout()
             row2.setSpacing(tokens.SP_2)
             row2.addWidget(button)
@@ -1137,7 +1195,8 @@ class ExportPanel(CollapsibleSection):
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
             f"font-weight: 600; background: transparent; "
             f"border-top: 1px solid {tokens.BORDER_SUBTLE}; "
-            f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;")
+            f"padding-top: {tokens.SP_2}px; margin-top: {tokens.SP_2}px;"
+        )
         self.add_widget(sep_post)
 
         # Thumbnail Preview thu nhỏ
@@ -1145,7 +1204,8 @@ class ExportPanel(CollapsibleSection):
         self.thumb_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thumb_preview.setStyleSheet(
             f"background: {tokens.BG_INPUT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
-            f"border-radius: 6px; padding: 4px;")
+            f"border-radius: 6px; padding: 4px;"
+        )
         self.thumb_preview.setToolTip("Bấm để mở xem ảnh bìa kích thước thật")
         self.thumb_preview.setCursor(Qt.CursorShape.PointingHandCursor)
         self.thumb_preview.mousePressEvent = lambda _e: self.open_thumb_requested.emit()
@@ -1153,7 +1213,9 @@ class ExportPanel(CollapsibleSection):
         self.add_widget(self.thumb_preview)
 
         self.btn_studio = PrimaryButton("Thiết kế ảnh bìa (Studio)")
-        self.btn_studio.setToolTip("Mở hộp thoại thiết kế ảnh bìa: chọn frame từ video, sửa chữ 3D và đổi preset.")
+        self.btn_studio.setToolTip(
+            "Mở hộp thoại thiết kế ảnh bìa: chọn frame từ video, sửa chữ 3D và đổi preset."
+        )
         self.btn_studio.clicked.connect(self.open_studio_requested.emit)
         row_studio = QHBoxLayout()
         row_studio.setSpacing(tokens.SP_2)
@@ -1166,7 +1228,8 @@ class ExportPanel(CollapsibleSection):
         self.video_meta_info.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
             f"background: {tokens.BG_INPUT}; border: 1px solid {tokens.BORDER_SUBTLE}; "
-            f"border-radius: 6px; padding: 8px; line-height: 1.4;")
+            f"border-radius: 6px; padding: 8px; line-height: 1.4;"
+        )
         self.video_meta_info.setVisible(False)
         self.add_widget(self.video_meta_info)
 
@@ -1175,7 +1238,9 @@ class ExportPanel(CollapsibleSection):
         self.btn_copy_title.clicked.connect(self.copy_title_requested.emit)
 
         self.btn_copy_tags = GhostButton("Chép Hashtags")
-        self.btn_copy_tags.setToolTip("Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard.")
+        self.btn_copy_tags.setToolTip(
+            "Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard."
+        )
         self.btn_copy_tags.clicked.connect(self.copy_tags_requested.emit)
 
         self.btn_copy_desc = GhostButton("Chép Mô tả")
@@ -1190,7 +1255,13 @@ class ExportPanel(CollapsibleSection):
         self.btn_open_thumb.setToolTip("Mở ảnh bìa Thumbnail của video.")
         self.btn_open_thumb.clicked.connect(self.open_thumb_requested.emit)
 
-        for button in (self.btn_copy_title, self.btn_copy_tags, self.btn_copy_desc, self.btn_copy_all, self.btn_open_thumb):
+        for button in (
+            self.btn_copy_title,
+            self.btn_copy_tags,
+            self.btn_copy_desc,
+            self.btn_copy_all,
+            self.btn_open_thumb,
+        ):
             row_post = QHBoxLayout()
             row_post.setSpacing(tokens.SP_2)
             row_post.addWidget(button)
@@ -1198,15 +1269,15 @@ class ExportPanel(CollapsibleSection):
             self.add_layout(row_post)
 
         # --- Lịch sử bản xuất -----------------------------------------------
-        self._hist_section = CollapsibleSection(
-            "Lịch sử bản xuất", expanded=False, parent=self)
+        self._hist_section = CollapsibleSection("Lịch sử bản xuất", expanded=False, parent=self)
         self._hist_list = QListWidget()
         self._hist_list.setFixedHeight(120)
         self._hist_list.setStyleSheet(
             f"QListWidget {{ background: {tokens.BG_INPUT}; "
             f"border: 1px solid {tokens.BORDER_SUBTLE}; border-radius: 6px; "
             f"font-size: {tokens.FS_META}px; }} "
-            f"QListWidget::item:hover {{ background: {tokens.BG_PANEL_HOVER}; }}")
+            f"QListWidget::item:hover {{ background: {tokens.BG_PANEL_HOVER}; }}"
+        )
         self._hist_list.itemDoubleClicked.connect(self._open_history_item)
         self._hist_section.add_widget(self._hist_list)
         self.add_widget(self._hist_section)
@@ -1214,6 +1285,7 @@ class ExportPanel(CollapsibleSection):
     def set_social_metadata(self, meta: dict, video_name: str = "", thumb_path: str = "") -> None:
         """Cập nhật thông tin tiêu đề, hashtag, mô tả và thumbnail lên giao diện."""
         import os
+
         from PySide6.QtGui import QPixmap
 
         # Hiển thị ảnh bìa thu nhỏ nếu có
@@ -1221,7 +1293,8 @@ class ExportPanel(CollapsibleSection):
             pix = QPixmap(thumb_path)
             if not pix.isNull():
                 scaled_pix = pix.scaled(
-                    250, 140,
+                    250,
+                    140,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -1247,10 +1320,14 @@ class ExportPanel(CollapsibleSection):
         if title:
             lines.append(f"<b>Tiêu đề:</b> {title}")
         if tags_str:
-            lines.append(f"<b>Hashtags:</b> <span style='color:{tokens.PRIMARY_HOVER};'>{tags_str}</span>")
+            lines.append(
+                f"<b>Hashtags:</b> <span style='color:{tokens.PRIMARY_HOVER};'>{tags_str}</span>"
+            )
         if desc:
             short_desc = (desc[:90] + "…") if len(desc) > 90 else desc
-            lines.append(f"<b>Mô tả:</b> <span style='color:{tokens.TEXT_SECONDARY};'>{short_desc}</span>")
+            lines.append(
+                f"<b>Mô tả:</b> <span style='color:{tokens.TEXT_SECONDARY};'>{short_desc}</span>"
+            )
 
         if lines:
             self.video_meta_info.setText("<br>".join(lines))
@@ -1267,6 +1344,7 @@ class ExportPanel(CollapsibleSection):
         if not entries:
             item = QListWidgetItem("(chưa có bản nào)")
             from PySide6.QtCore import Qt
+
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self._hist_list.addItem(item)
             return
@@ -1282,8 +1360,9 @@ class ExportPanel(CollapsibleSection):
             self._hist_list.addItem(item)
 
     def _open_history_item(self, item: QListWidgetItem) -> None:
-        from autodub_gui.system_open import open_file
         from PySide6.QtCore import Qt
+
+        from autodub_gui.system_open import open_file
 
         path = item.data(Qt.ItemDataRole.UserRole)
         if path:
@@ -1294,11 +1373,12 @@ class ExportPanel(CollapsibleSection):
         if width and height:
             self.source_info.setText(
                 f"Video kết quả giữ nguyên thông số của video gốc: "
-                f"{width} nhân {height} điểm ảnh, {fps:.0f} hình mỗi giây.")
+                f"{width} nhân {height} điểm ảnh, {fps:.0f} hình mỗi giây."
+            )
         else:
             self.source_info.setText(
-                "Video kết quả giữ nguyên độ phân giải và số hình mỗi giây "
-                "của video gốc.")
+                "Video kết quả giữ nguyên độ phân giải và số hình mỗi giây của video gốc."
+            )
 
     def set_running(self, running: bool, subtitles_only: bool = False) -> None:
         if subtitles_only:
@@ -1322,8 +1402,10 @@ class ExportPanel(CollapsibleSection):
         self.status.setText(text)
 
     def values(self) -> dict:
-        return {"subtitle_mode": self.subtitle.current_key(),
-                "subtitle_preset": self.preset.current_key()}
+        return {
+            "subtitle_mode": self.subtitle.current_key(),
+            "subtitle_preset": self.preset.current_key(),
+        }
 
 
 class DirtyBanner(QWidget):
@@ -1337,18 +1419,18 @@ class DirtyBanner(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(tokens.SP_3, tokens.SP_2,
-                                  tokens.SP_3, tokens.SP_2)
+        layout.setContentsMargins(tokens.SP_3, tokens.SP_2, tokens.SP_3, tokens.SP_2)
         self.label = QLabel("")
         self.label.setWordWrap(True)
         self.label.setStyleSheet(
-            f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.WARNING}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(self.label)
         self.setStyleSheet(
             f"background: {tokens.WARNING_BG}; "
             f"border: 1px solid {tokens.WARNING}; "
-            f"border-radius: {tokens.RADIUS_MD}px;")
+            f"border-radius: {tokens.RADIUS_MD}px;"
+        )
 
         self.setVisible(False)
 
@@ -1359,12 +1441,14 @@ class DirtyBanner(QWidget):
         if voice_count:
             parts.append(
                 f"Đã sửa lời đọc của {voice_count} câu — bấm «Lưu tất cả và "
-                "đọc lại» ở mục Giọng đọc, rồi bấm «Xuất video».")
+                "đọc lại» ở mục Giọng đọc, rồi bấm «Xuất video»."
+            )
         if subtitle_count:
             parts.append(
                 f"Đã sửa phụ đề của {subtitle_count} câu — bấm «Ghi lại phụ "
                 "đề vào video» ở mục Xuất video là xong, không cần đọc lại "
-                "giọng.")
+                "giọng."
+            )
         self.label.setText(" ".join(parts))
 
 
@@ -1383,28 +1467,29 @@ class QCPanel(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(tokens.SP_4, tokens.SP_4,
-                                  tokens.SP_4, tokens.SP_4)
+        layout.setContentsMargins(tokens.SP_4, tokens.SP_4, tokens.SP_4, tokens.SP_4)
         layout.setSpacing(tokens.SP_3)
 
         header = QLabel("Kiểm tra lỗi trước khi xuất")
         header.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_CARD_TITLE}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         layout.addWidget(header)
 
         hint = QLabel(
             "Danh sách các vấn đề cần xem lại. Bấm vào từng dòng để nhảy tới "
-            "câu đó trong mục Phụ đề.")
+            "câu đó trong mục Phụ đề."
+        )
         hint.setWordWrap(True)
         hint.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         layout.addWidget(hint)
 
         self.list = QListWidget()
-        self.list.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.list.setSpacing(2)
         self.list.setStyleSheet(
             f"QListWidget {{ background: {tokens.BG_PANEL}; "
@@ -1414,26 +1499,31 @@ class QCPanel(QWidget):
             f"border-radius: 6px; }} "
             f"QListWidget::item:hover {{ background: {tokens.BG_PANEL_HOVER}; }} "
             f"QListWidget::item:selected {{ background: {tokens.BG_SELECTED}; "
-            f"color: {tokens.TEXT_PRIMARY}; }}")
+            f"color: {tokens.TEXT_PRIMARY}; }}"
+        )
         self.list.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self.list, 1)
 
         self.summary = QLabel("")
         self.summary.setWordWrap(True)
         self.summary.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(self.summary)
 
-    def refresh(self, segments: list[dict], quality: dict,
-                dirty_ids: set[int], text_field: str = "text_vi") -> None:
+    def refresh(
+        self, segments: list[dict], quality: dict, dirty_ids: set[int], text_field: str = "text_vi"
+    ) -> None:
         """Quét toàn bộ segments + quality_report + dirty_ids để tìm vấn đề."""
         self.list.clear()
         issues: list[tuple[int, str, str]] = []  # (seg_id, category, text)
 
         # 1. Vấn đề từ quality_report.json (overlap, shift, atempo, over_budget)
-        per_seg = {s.get("id"): s for s in (quality or {}).get("per_segment") or []
-                   if isinstance(s, dict) and s.get("id") is not None}
+        per_seg = {
+            s.get("id"): s
+            for s in (quality or {}).get("per_segment") or []
+            if isinstance(s, dict) and s.get("id") is not None
+        }
         for seg_id, qdata in per_seg.items():
             desc = _issue_text(qdata)
             issues.append((seg_id, "timing", desc))
@@ -1450,21 +1540,30 @@ class QCPanel(QWidget):
 
             # Dịch trống
             if not text:
-                issues.append((seg_id, "empty",
-                              f"Câu {seg_id}\nBản dịch trống"))
+                issues.append((seg_id, "empty", f"Câu {seg_id}\nBản dịch trống"))
                 continue
 
             # Đọc quá nhanh
             if dur > 0.1:
                 cps = len(text) / dur
                 if cps > self._FAST_CPS:
-                    issues.append((seg_id, "fast",
-                                  f"Câu {seg_id} — đọc nhanh {cps:.1f} ký tự/giây\n{text[:60]}{'…' if len(text) > 60 else ''}"))
+                    issues.append(
+                        (
+                            seg_id,
+                            "fast",
+                            f"Câu {seg_id} — đọc nhanh {cps:.1f} ký tự/giây\n{text[:60]}{'…' if len(text) > 60 else ''}",
+                        )
+                    )
 
             # Chưa đọc lại sau sửa
             if seg_id in dirty_ids:
-                issues.append((seg_id, "dirty",
-                              f"Câu {seg_id} — đã sửa lời đọc, chưa tổng hợp lại\n{text[:60]}{'…' if len(text) > 60 else ''}"))
+                issues.append(
+                    (
+                        seg_id,
+                        "dirty",
+                        f"Câu {seg_id} — đã sửa lời đọc, chưa tổng hợp lại\n{text[:60]}{'…' if len(text) > 60 else ''}",
+                    )
+                )
 
         # Sắp xếp: timing trước, empty/fast/dirty sau, cùng loại thì theo seg_id
         _ORDER = {"timing": 0, "empty": 1, "fast": 2, "dirty": 3}
@@ -1477,9 +1576,7 @@ class QCPanel(QWidget):
             # Màu sắc theo loại
             if cat == "timing":
                 item.setForeground(QColor(tokens.DANGER))
-            elif cat == "empty":
-                item.setForeground(QColor(tokens.WARNING))
-            elif cat == "fast":
+            elif cat == "empty" or cat == "fast":
                 item.setForeground(QColor(tokens.WARNING))
             else:  # dirty
                 item.setForeground(QColor(tokens.TEXT_MUTED))
@@ -1487,11 +1584,11 @@ class QCPanel(QWidget):
 
         # Tổng kết
         if not issues:
-            self.summary.setText(
-                "Không phát hiện vấn đề. Video sẵn sàng xuất.")
+            self.summary.setText("Không phát hiện vấn đề. Video sẵn sàng xuất.")
             self.summary.setStyleSheet(
                 f"color: {tokens.SUCCESS}; font-size: {tokens.FS_META}px; "
-                f"font-weight: 600; background: transparent;")
+                f"font-weight: 600; background: transparent;"
+            )
         else:
             counts = {}
             for _sid, cat, _desc in issues:
@@ -1505,11 +1602,11 @@ class QCPanel(QWidget):
                 parts.append(f"{counts['fast']} câu đọc quá nhanh")
             if counts.get("dirty"):
                 parts.append(f"{counts['dirty']} câu chưa đọc lại")
-            self.summary.setText(
-                f"Phát hiện {len(issues)} vấn đề: {', '.join(parts)}.")
+            self.summary.setText(f"Phát hiện {len(issues)} vấn đề: {', '.join(parts)}.")
             self.summary.setStyleSheet(
                 f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-                f"background: transparent;")
+                f"background: transparent;"
+            )
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         seg_id = item.data(Qt.ItemDataRole.UserRole)

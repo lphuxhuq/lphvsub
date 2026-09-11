@@ -1,12 +1,8 @@
 """Unit tests for optimized batch concurrency, GPU guard, and flat export."""
-import os
-import shutil
-import tempfile
-from unittest.mock import MagicMock, patch
 
-import pytest
+from unittest.mock import patch
 
-from autodub.batch import BatchItem, _build_item_request, _copy_to_export_dir, run_batch
+from autodub.batch import BatchItem, _copy_to_export_dir, run_batch
 from autodub.concurrency import detect_system_capabilities, gpu_resource_guard
 from autodub.config import Settings
 from autodub.pipeline import DubPipeline, DubRequest, DubResult
@@ -79,6 +75,7 @@ def test_batch_concurrent_with_export_dir(tmp_path):
     item2 = BatchItem(url="https://example.com/video2", voice="Minh Đức")
 
     with patch.object(DubPipeline, "run") as mock_run:
+
         def fake_run(req):
             video_file = tmp_path / f"fake_{req.url.split('/')[-1]}.mp4"
             video_file.write_bytes(b"fake mp4")

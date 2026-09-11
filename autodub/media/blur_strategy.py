@@ -1,4 +1,5 @@
 """Chiến lược làm mờ nền thích ứng (Adaptive Blur Strategy) cho LPHVSub."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ class BlurMode(str, Enum):
 @dataclass(frozen=True)
 class BlurSpec:
     """Đặc tả thông số làm mờ nền dạng Downscale Pyramid."""
+
     low_w: int
     low_h: int
     boxblur_radius: int

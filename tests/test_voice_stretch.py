@@ -1,8 +1,10 @@
 import os
 import wave
+
 import numpy as np
-import pytest
-from autodub.media.voice_stretch import build_stretch_filter_chain, apply_formant_preserved_stretch
+
+from autodub.media.voice_stretch import apply_formant_preserved_stretch, build_stretch_filter_chain
+
 
 def test_build_stretch_filter_chain():
     # Khi tempo = 1.0 -> không cần filter
@@ -12,6 +14,7 @@ def test_build_stretch_filter_chain():
     # Khi tempo = 2.5 -> chuỗi multiple atempo (vì atempo max 2.0)
     chain = build_stretch_filter_chain(2.5)
     assert "atempo=2.0" in chain and "atempo=1.25" in chain
+
 
 def test_apply_formant_preserved_stretch(tmp_path):
     rate = 16000

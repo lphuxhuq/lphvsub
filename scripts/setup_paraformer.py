@@ -10,6 +10,7 @@ Các bước đều resume-safe — chạy lại script sẽ bỏ qua phần đ�
   4. Nhận dạng thử 1 file (smoke test) → installed_ok.json
   5. Bật ASR_ENGINE=paraformer trong .env
 """
+
 import json
 import os
 import shutil
@@ -22,21 +23,20 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_DIR = os.path.join(PROJECT_ROOT, ".venv-asr")
-VENV_PY = os.path.join(VENV_DIR, "Scripts" if os.name == "nt" else "bin",
-                       "python.exe" if os.name == "nt" else "python")
+VENV_PY = os.path.join(
+    VENV_DIR, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+)
 MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "paraformer-zh")
 MARKER = os.path.join(MODEL_DIR, "installed_ok.json")
 
 #: Phiên bản package ASR. Chốt trần major để lần cài sau không tự nhảy sang
 #: bản đổi API — numpy 3.x cũng chưa được sherpa-onnx hỗ trợ.
 _ASR_SPECS = ("sherpa-onnx<2.0", "numpy<3.0")
-WORKER = os.path.join(PROJECT_ROOT, "autodub", "speech",
-                      "asr_paraformer_worker.py")
+WORKER = os.path.join(PROJECT_ROOT, "autodub", "speech", "asr_paraformer_worker.py")
 if not os.path.isfile(WORKER):
     # Bản đóng gói: worker nằm trong data/ (PyInstaller contents_directory).
     for _d in ("data", "_internal"):
-        _candidate = os.path.join(PROJECT_ROOT, _d, "autodub", "speech",
-                                  "asr_paraformer_worker.py")
+        _candidate = os.path.join(PROJECT_ROOT, _d, "autodub", "speech", "asr_paraformer_worker.py")
         if os.path.isfile(_candidate):
             WORKER = _candidate
             break
@@ -44,9 +44,11 @@ if not os.path.isfile(WORKER):
 _GH = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 ASR_TARBALL = f"{_GH}/asr-models/sherpa-onnx-paraformer-zh-2023-09-14.tar.bz2"
 VAD_URL = f"{_GH}/asr-models/silero_vad.onnx"
-PUNCT_TARBALL = (f"{_GH}/punctuation-models/"
-                 "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-"
-                 "2024-04-12.tar.bz2")
+PUNCT_TARBALL = (
+    f"{_GH}/punctuation-models/"
+    "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-"
+    "2024-04-12.tar.bz2"
+)
 
 
 def log(msg: str) -> None:
@@ -66,8 +68,7 @@ def _download(url: str, dest: str) -> None:
             f.write(chunk)
             done += len(chunk)
             if total:
-                print(f"\r[setup-asr]   {done >> 20}/{total >> 20} MB", end="",
-                      flush=True)
+                print(f"\r[setup-asr]   {done >> 20}/{total >> 20} MB", end="", flush=True)
     if total:
         print(flush=True)
     os.replace(tmp, dest)
@@ -80,8 +81,7 @@ def _extract_flat(tarball: str, dest_dir: str, wanted: tuple[str, ...]) -> None:
         for member in tf.getmembers():
             base = os.path.basename(member.name)
             if base in wanted and member.isfile():
-                with tf.extractfile(member) as src, \
-                        open(os.path.join(dest_dir, base), "wb") as out:
+                with tf.extractfile(member) as src, open(os.path.join(dest_dir, base), "wb") as out:
                     shutil.copyfileobj(src, out)
 
 
@@ -94,21 +94,21 @@ def step_venv() -> None:
 
 
 def step_install() -> None:
-    probe = subprocess.run([VENV_PY, "-c", "import sherpa_onnx, numpy"],
-                           capture_output=True)
+    probe = subprocess.run([VENV_PY, "-c", "import sherpa_onnx, numpy"], capture_output=True)
     if probe.returncode == 0:
         log("package sherpa-onnx đã cài — bỏ qua")
         return
     log("cài sherpa-onnx + numpy (ONNX, không cần GPU) ...")
-    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet",
-                    *_ASR_SPECS], check=True)
+    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet", *_ASR_SPECS], check=True)
 
 
 def step_models() -> None:
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    if not (os.path.isfile(os.path.join(MODEL_DIR, "model.int8.onnx"))
-            and os.path.isfile(os.path.join(MODEL_DIR, "tokens.txt"))):
+    if not (
+        os.path.isfile(os.path.join(MODEL_DIR, "model.int8.onnx"))
+        and os.path.isfile(os.path.join(MODEL_DIR, "tokens.txt"))
+    ):
         log("tải model Paraformer-large zh (~230 MB) ...")
         tarball = os.path.join(MODEL_DIR, "paraformer.tar.bz2")
         _download(ASR_TARBALL, tarball)
@@ -131,9 +131,11 @@ def step_models() -> None:
             _download(PUNCT_TARBALL, tarball)
             _extract_flat(tarball, punct_dir, ("model.onnx",))
             os.remove(tarball)
-        except Exception as e:  # noqa: BLE001 — chấm câu là tùy chọn
-            log(f"!! không tải được model chấm câu ({e}) — bỏ qua, "
-                "Paraformer vẫn chạy được (không có dấu câu)")
+        except Exception as e:
+            log(
+                f"!! không tải được model chấm câu ({e}) — bỏ qua, "
+                "Paraformer vẫn chạy được (không có dấu câu)"
+            )
     else:
         log("model chấm câu đã có — bỏ qua")
 
@@ -145,24 +147,35 @@ def step_smoke() -> None:
     log("chạy thử nhận dạng 1 file (smoke test) ...")
     smoke_wav = os.path.join(MODEL_DIR, "smoke_test.wav")
     # 2 giây im lặng 16 kHz — chỉ cần worker chạy hết pipeline tới {"done"}.
-    gen = (f"import numpy as np, wave\n"
-           f"w = wave.open({smoke_wav!r}, 'wb')\n"
-           f"w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)\n"
-           f"w.writeframes(np.zeros(32000, dtype=np.int16).tobytes())\n"
-           f"w.close()\n")
+    gen = (
+        f"import numpy as np, wave\n"
+        f"w = wave.open({smoke_wav!r}, 'wb')\n"
+        f"w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)\n"
+        f"w.writeframes(np.zeros(32000, dtype=np.int16).tobytes())\n"
+        f"w.close()\n"
+    )
     subprocess.run([VENV_PY, "-c", gen], check=True)
     result = subprocess.run(
         [VENV_PY, WORKER, "--audio", smoke_wav, "--model-dir", MODEL_DIR],
-        capture_output=True, encoding="utf-8", errors="replace", timeout=600)
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=600,
+    )
     os.remove(smoke_wav)
     lines = [l for l in (result.stdout or "").splitlines() if l.strip()]
     ok = any('"done"' in l for l in lines)
     if not ok:
-        raise SystemExit(f"!! smoke test thất bại:\n{result.stdout}\n"
-                         f"{(result.stderr or '')[-500:]}")
+        raise SystemExit(
+            f"!! smoke test thất bại:\n{result.stdout}\n{(result.stderr or '')[-500:]}"
+        )
     with open(MARKER, "w", encoding="utf-8") as f:
-        json.dump({"ok": True, "model": "paraformer-zh-2023-09-14",
-                   "backend": "sherpa-onnx"}, f, ensure_ascii=False, indent=2)
+        json.dump(
+            {"ok": True, "model": "paraformer-zh-2023-09-14", "backend": "sherpa-onnx"},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
     log("smoke test PASS")
 
 
@@ -194,8 +207,10 @@ def main() -> None:
     step_models()
     step_smoke()
     step_enable_env()
-    log("XONG — mở app, video tiếng Trung sẽ được nhận dạng bằng Paraformer "
-        "(ngôn ngữ khác tự dùng Whisper).")
+    log(
+        "XONG — mở app, video tiếng Trung sẽ được nhận dạng bằng Paraformer "
+        "(ngôn ngữ khác tự dùng Whisper)."
+    )
 
 
 if __name__ == "__main__":

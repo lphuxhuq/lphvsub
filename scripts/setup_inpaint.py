@@ -2,6 +2,7 @@
 
 Chạy: py scripts/setup_inpaint.py
 """
+
 import os
 import sys
 import urllib.request
@@ -53,7 +54,11 @@ def download_file(url: str, dest_path: str) -> bool:
                         pct = (downloaded / total_size * 100) if total_size else 0
                         mb = downloaded / (1024 * 1024)
                         total_mb = total_size / (1024 * 1024)
-                        speed = (downloaded / (now - start_time)) / (1024 * 1024) if (now > start_time) else 0
+                        speed = (
+                            (downloaded / (now - start_time)) / (1024 * 1024)
+                            if (now > start_time)
+                            else 0
+                        )
                         print(
                             f"\r[setup-inpaint] Tiến độ: {pct:.1f}% ({mb:.1f}/{total_mb:.1f} MB) — {speed:.2f} MB/s",
                             end="",
@@ -65,7 +70,7 @@ def download_file(url: str, dest_path: str) -> bool:
         if os.path.exists(dest_path):
             os.remove(dest_path)
         os.rename(temp_path, dest_path)
-        log(f"Tải thành công: {dest_path} ({os.path.getsize(dest_path) / (1024*1024):.1f} MB)")
+        log(f"Tải thành công: {dest_path} ({os.path.getsize(dest_path) / (1024 * 1024):.1f} MB)")
         return True
     except Exception as e:
         log(f"Lỗi tải từ {url}: {e}")
@@ -85,15 +90,19 @@ def main():
     # 1. Kiểm tra thư viện onnxruntime
     try:
         import onnxruntime as ort
+
         log(f"Đã có onnxruntime v{ort.__version__} (Providers: {ort.get_available_providers()})")
     except ImportError:
         log("Đang cài đặt onnxruntime...")
         import subprocess
+
         subprocess.check_call([sys.executable, "-m", "pip", "install", "onnxruntime"])
 
     # 2. Kiểm tra file model
     if os.path.isfile(MODEL_PATH) and os.path.getsize(MODEL_PATH) > 10 * 1024 * 1024:
-        log(f"Model LaMa ONNX đã có sẵn tại '{MODEL_PATH}' ({os.path.getsize(MODEL_PATH)/(1024*1024):.1f} MB).")
+        log(
+            f"Model LaMa ONNX đã có sẵn tại '{MODEL_PATH}' ({os.path.getsize(MODEL_PATH) / (1024 * 1024):.1f} MB)."
+        )
     else:
         success = False
         for url in MODEL_URLS:

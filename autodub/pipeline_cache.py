@@ -4,6 +4,7 @@ The cache lives outside ``work_dir`` so creating a new project from the same
 source can reuse previous Demucs/ASR results.  Keys are deterministic and do
 not depend on Python's process-randomised ``hash()``.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +20,12 @@ from pathlib import Path
 from autodub.utils import save_json_atomic
 
 CACHE_VERSION = "upc-v1"
-_ROOT = Path(os.environ.get("LPHVSub_PIPELINE_CACHE", "")).expanduser() if os.environ.get("LPHVSub_PIPELINE_CACHE") else Path(os.environ.get("LOCALAPPDATA", Path.home())) / "lphvsub" / "cache" / "pipeline"
+# Tên env giữ nguyên dạng cũ (LPHVSub_*) để không phá cấu hình người dùng đã đặt.
+_ROOT = (
+    Path(os.environ.get("LPHVSub_PIPELINE_CACHE", "")).expanduser()  # noqa: SIM112
+    if os.environ.get("LPHVSub_PIPELINE_CACHE")  # noqa: SIM112
+    else Path(os.environ.get("LOCALAPPDATA", Path.home())) / "lphvsub" / "cache" / "pipeline"
+)
 _LOCK = threading.RLock()
 
 
@@ -117,8 +123,13 @@ class DemucsGlobalCache:
         return {"vocals": str(dst_v), "no_vocals": str(dst_n)}
 
     def store_result(
-        self, audio_path: str, vocals_path: str, no_vocals_path: str,
-        model: str, sample_rate: int, channels: int,
+        self,
+        audio_path: str,
+        vocals_path: str,
+        no_vocals_path: str,
+        model: str,
+        sample_rate: int,
+        channels: int,
     ) -> None:
         if not (_valid_wav(Path(vocals_path)) and _valid_wav(Path(no_vocals_path))):
             return
@@ -127,19 +138,22 @@ class DemucsGlobalCache:
         parent.mkdir(parents=True, exist_ok=True)
         final = parent / key
         with _LOCK:
-            if (_valid_wav(final / "vocals.wav") and _valid_wav(final / "no_vocals.wav")):
+            if _valid_wav(final / "vocals.wav") and _valid_wav(final / "no_vocals.wav"):
                 return
             tmp = Path(tempfile.mkdtemp(prefix=f".{key}.", dir=str(parent)))
             try:
                 shutil.copy2(vocals_path, tmp / "vocals.wav")
                 shutil.copy2(no_vocals_path, tmp / "no_vocals.wav")
-                save_json_atomic({
-                    "version": CACHE_VERSION,
-                    "audio_fingerprint": compute_media_fingerprint(audio_path),
-                    "model": model,
-                    "sample_rate": sample_rate,
-                    "channels": channels,
-                }, str(tmp / "meta.json"))
+                save_json_atomic(
+                    {
+                        "version": CACHE_VERSION,
+                        "audio_fingerprint": compute_media_fingerprint(audio_path),
+                        "model": model,
+                        "sample_rate": sample_rate,
+                        "channels": channels,
+                    },
+                    str(tmp / "meta.json"),
+                )
                 try:
                     os.replace(str(tmp), str(final))
                 except FileExistsError:
@@ -161,7 +175,9 @@ class AsrGlobalCache:
         try:
             with path.open(encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, list) and all(isinstance(s, dict) and "start" in s and "end" in s and "text" in s for s in data):
+            if isinstance(data, list) and all(
+                isinstance(s, dict) and "start" in s and "end" in s and "text" in s for s in data
+            ):
                 return data
         except (OSError, ValueError, json.JSONDecodeError):
             try:
@@ -170,7 +186,9 @@ class AsrGlobalCache:
                 pass
         return None
 
-    def store(self, audio_path: str, model: str, language: str, engine: str, segments: list[dict]) -> None:
+    def store(
+        self, audio_path: str, model: str, language: str, engine: str, segments: list[dict]
+    ) -> None:
         path = self._path(audio_path, model, language, engine)
         path.parent.mkdir(parents=True, exist_ok=True)
         save_json_atomic(segments, str(path))
@@ -247,7 +265,7 @@ class TranslationGlobalCache:
             return conn
 
     def _key(self, text: str, target_lang: str, provider: str) -> str:
-        raw = f"{CACHE_VERSION}|{text.strip()}|{target_lang.strip().lower()}|{provider.strip().lower()}".encode("utf-8")
+        raw = f"{CACHE_VERSION}|{text.strip()}|{target_lang.strip().lower()}|{provider.strip().lower()}".encode()
         return hashlib.sha256(raw).hexdigest()
 
     def lookup(self, source_text: str, target_lang: str, provider: str = "default") -> str | None:
@@ -258,7 +276,9 @@ class TranslationGlobalCache:
             conn = None
             try:
                 conn = self._get_connection()
-                cur = conn.execute("SELECT translated_text FROM translations WHERE cache_key = ?", (key,))
+                cur = conn.execute(
+                    "SELECT translated_text FROM translations WHERE cache_key = ?", (key,)
+                )
                 row = cur.fetchone()
                 return row[0] if row else None
             except sqlite3.DatabaseError:
@@ -270,7 +290,9 @@ class TranslationGlobalCache:
                 if conn:
                     conn.close()
 
-    def store(self, source_text: str, target_lang: str, translated_text: str, provider: str = "default") -> None:
+    def store(
+        self, source_text: str, target_lang: str, translated_text: str, provider: str = "default"
+    ) -> None:
         if not source_text or not translated_text:
             return
         key = self._key(source_text, target_lang, provider)
@@ -279,11 +301,14 @@ class TranslationGlobalCache:
             conn = None
             try:
                 conn = self._get_connection()
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO translations (cache_key, source_text, target_lang, provider, translated_text, created_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(cache_key) DO UPDATE SET translated_text = excluded.translated_text;
-                """, (key, source_text, target_lang, provider, translated_text, now))
+                """,
+                    (key, source_text, target_lang, provider, translated_text, now),
+                )
                 conn.commit()
             except sqlite3.DatabaseError:
                 self._reset_corrupt_db()
@@ -293,7 +318,9 @@ class TranslationGlobalCache:
                 if conn:
                     conn.close()
 
-    def lookup_batch(self, items: list[tuple[int, str]], target_lang: str, provider: str = "default") -> dict[int, str]:
+    def lookup_batch(
+        self, items: list[tuple[int, str]], target_lang: str, provider: str = "default"
+    ) -> dict[int, str]:
         if not items:
             return {}
         hits: dict[int, str] = {}
@@ -331,7 +358,9 @@ class TranslationGlobalCache:
                     conn.close()
         return hits
 
-    def store_batch(self, items: list[tuple[str, str]], target_lang: str, provider: str = "default") -> None:
+    def store_batch(
+        self, items: list[tuple[str, str]], target_lang: str, provider: str = "default"
+    ) -> None:
         if not items:
             return
         now = time.time()
@@ -347,11 +376,14 @@ class TranslationGlobalCache:
             conn = None
             try:
                 conn = self._get_connection()
-                conn.executemany("""
+                conn.executemany(
+                    """
                     INSERT INTO translations (cache_key, source_text, target_lang, provider, translated_text, created_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(cache_key) DO UPDATE SET translated_text = excluded.translated_text;
-                """, records)
+                """,
+                    records,
+                )
                 conn.commit()
             except sqlite3.DatabaseError:
                 self._reset_corrupt_db()
@@ -382,10 +414,12 @@ class TtsGlobalCache:
 
     def _key(self, text: str, voice: str, speed: float = 1.0, engine: str = "vieneu") -> str:
         clean_text = " ".join(text.strip().split())
-        raw = f"{CACHE_VERSION}|{clean_text}|{voice.strip().lower()}|{speed:.2f}|{engine.strip().lower()}".encode("utf-8")
+        raw = f"{CACHE_VERSION}|{clean_text}|{voice.strip().lower()}|{speed:.2f}|{engine.strip().lower()}".encode()
         return hashlib.sha256(raw).hexdigest()
 
-    def lookup(self, text: str, voice: str, speed: float = 1.0, engine: str = "vieneu") -> Path | None:
+    def lookup(
+        self, text: str, voice: str, speed: float = 1.0, engine: str = "vieneu"
+    ) -> Path | None:
         if not text or not text.strip():
             return None
         key = self._key(text, voice, speed, engine)
@@ -399,7 +433,9 @@ class TtsGlobalCache:
                 pass
         return None
 
-    def restore_to(self, text: str, voice: str, dst_path: str, speed: float = 1.0, engine: str = "vieneu") -> bool:
+    def restore_to(
+        self, text: str, voice: str, dst_path: str, speed: float = 1.0, engine: str = "vieneu"
+    ) -> bool:
         src = self.lookup(text, voice, speed, engine)
         if not src:
             return False
@@ -414,7 +450,9 @@ class TtsGlobalCache:
             except Exception:
                 return False
 
-    def store(self, text: str, voice: str, wav_path: str, speed: float = 1.0, engine: str = "vieneu") -> None:
+    def store(
+        self, text: str, voice: str, wav_path: str, speed: float = 1.0, engine: str = "vieneu"
+    ) -> None:
         src = Path(wav_path)
         if not _valid_wav(src):
             return
@@ -582,11 +620,14 @@ class AlignGlobalCache:
             conn = None
             try:
                 conn = self._get_connection()
-                conn.executemany("""
+                conn.executemany(
+                    """
                     INSERT INTO alignments (cache_key, words_json, created_at)
                     VALUES (?, ?, ?)
                     ON CONFLICT(cache_key) DO UPDATE SET words_json = excluded.words_json;
-                """, records)
+                """,
+                    records,
+                )
                 conn.commit()
             except sqlite3.DatabaseError:
                 self._reset_corrupt_db()
@@ -634,7 +675,9 @@ class PipelineCacheOrchestrator:
         fp = compute_media_fingerprint(media_path)
         demucs_key = self.demucs._key(media_path, demucs_model, sample_rate, channels)
         demucs_bucket = cache_root() / "demucs" / demucs_key
-        has_demucs = (_valid_wav(demucs_bucket / "vocals.wav") and _valid_wav(demucs_bucket / "no_vocals.wav"))
+        has_demucs = _valid_wav(demucs_bucket / "vocals.wav") and _valid_wav(
+            demucs_bucket / "no_vocals.wav"
+        )
 
         asr_path = self.asr._path(media_path, asr_model, lang, asr_engine)
         has_asr = asr_path.is_file()
@@ -670,7 +713,9 @@ class PipelineCacheOrchestrator:
             "tts_entries": tts_entries,
         }
 
-    def clean_cache(self, category: str | None = None, max_age_seconds: float | None = None) -> dict:
+    def clean_cache(
+        self, category: str | None = None, max_age_seconds: float | None = None
+    ) -> dict:
         root = cache_root()
         now = time.time()
         removed = 0
@@ -726,7 +771,13 @@ class PipelineCacheOrchestrator:
                     try:
                         with item.open(encoding="utf-8") as f:
                             d = json.load(f)
-                        if not (isinstance(d, list) and all(isinstance(s, dict) and "start" in s and "end" in s and "text" in s for s in d)):
+                        if not (
+                            isinstance(d, list)
+                            and all(
+                                isinstance(s, dict) and "start" in s and "end" in s and "text" in s
+                                for s in d
+                            )
+                        ):
                             item.unlink(missing_ok=True)
                             cleaned += 1
                     except Exception:

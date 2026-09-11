@@ -1,11 +1,8 @@
 import time
-import numpy as np
-import pytest
 
 from autodub.media.hardsub_detector import (
-    detect_hardsub_regions,
-    track_temporal_regions,
     FrameSample,
+    track_temporal_regions,
 )
 from tests.test_hardsub_detector import _generate_synthetic_frame
 
@@ -15,18 +12,22 @@ def test_hardsub_benchmark_and_accuracy():
     samples = []
     # 20 frames có phụ đề ở đáy (y=0.82..0.91, x=0.20..0.80)
     for i in range(20):
-        samples.append(FrameSample(
-            timestamp=float(i * 2.0),
-            frame_index=i,
-            image=_generate_synthetic_frame(640, 360, True, "bottom"),
-        ))
+        samples.append(
+            FrameSample(
+                timestamp=float(i * 2.0),
+                frame_index=i,
+                image=_generate_synthetic_frame(640, 360, True, "bottom"),
+            )
+        )
     # 5 frames không phụ đề
     for i in range(20, 25):
-        samples.append(FrameSample(
-            timestamp=float(i * 2.0),
-            frame_index=i,
-            image=_generate_synthetic_frame(640, 360, False),
-        ))
+        samples.append(
+            FrameSample(
+                timestamp=float(i * 2.0),
+                frame_index=i,
+                image=_generate_synthetic_frame(640, 360, False),
+            )
+        )
 
     t0 = time.perf_counter()
     regions = track_temporal_regions(samples, min_occurrence=0.25)
@@ -58,4 +59,3 @@ def test_hardsub_benchmark_and_accuracy():
     assert coverage_recall >= 0.95, f"Coverage recall too low: {coverage_recall:.3f}"
     assert iou >= 0.65, f"IoU too low: {iou:.3f}"
     assert r.confidence >= 0.60
-

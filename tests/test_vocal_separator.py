@@ -18,8 +18,10 @@ def test_separate_vocals_short_circuits_when_outputs_exist(tmp_path):
     input_wav = str(tmp_path / "original_audio.wav")
     _make_wav(input_wav)
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs") as run, \
-         mock.patch("autodub.media.vocal_separator.subprocess.run") as ffmpeg:
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs") as run,
+        mock.patch("autodub.media.vocal_separator.subprocess.run") as ffmpeg,
+    ):
         result = vocal_separator.separate_vocals(input_wav, work_dir)
 
     run.assert_not_called()
@@ -30,9 +32,7 @@ def test_separate_vocals_short_circuits_when_outputs_exist(tmp_path):
 
 def test_separate_vocals_returns_none_when_input_missing(tmp_path):
     work_dir = str(tmp_path)
-    result = vocal_separator.separate_vocals(
-        str(tmp_path / "missing.wav"), work_dir
-    )
+    result = vocal_separator.separate_vocals(str(tmp_path / "missing.wav"), work_dir)
     assert result == {"vocals": None, "no_vocals": None}
 
 
@@ -44,9 +44,10 @@ def test_separate_vocals_returns_none_when_demucs_raises(tmp_path):
     def boom(*args, **kwargs):
         raise RuntimeError("model load failed")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker",
-                    return_value=False), \
-         mock.patch("autodub.media.vocal_separator._run_demucs", side_effect=boom):
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", return_value=False),
+        mock.patch("autodub.media.vocal_separator._run_demucs", side_effect=boom),
+    ):
         result = vocal_separator.separate_vocals(input_wav, work_dir)
 
     assert result == {"vocals": None, "no_vocals": None}
@@ -73,11 +74,11 @@ def test_gpu_worker_used_when_available(tmp_path):
         AudioSegment.from_wav(src).export(cmd[-1], format="wav")
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker",
-                    side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator._run_demucs") as cpu_run, \
-         mock.patch("autodub.media.vocal_separator.subprocess.run",
-                    side_effect=fake_ffmpeg):
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator._run_demucs") as cpu_run,
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
         result = vocal_separator.separate_vocals(input_wav, work_dir)
 
     cpu_run.assert_not_called()
@@ -106,10 +107,11 @@ def test_separate_vocals_normalizes_and_cleans_up(tmp_path):
         AudioSegment.from_wav(src).export(dst, format="wav")
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker",
-                    return_value=False), \
-         mock.patch("autodub.media.vocal_separator._run_demucs", side_effect=fake_demucs), \
-         mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg):
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", return_value=False),
+        mock.patch("autodub.media.vocal_separator._run_demucs", side_effect=fake_demucs),
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
         result = vocal_separator.separate_vocals(input_wav, work_dir)
 
     assert result["no_vocals"] == os.path.join(work_dir, "no_vocals.wav")
@@ -141,12 +143,12 @@ def test_demucs_cache_used_when_it_succeeds(tmp_path):
         AudioSegment.from_wav(src).export(cmd[-1], format="wav")
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker") as gpu, \
-         mock.patch("autodub.media.vocal_separator._run_demucs") as cpu, \
-         mock.patch("autodub.media.vocal_separator.subprocess.run",
-                    side_effect=fake_ffmpeg):
-        result = vocal_separator.separate_vocals(
-            input_wav, work_dir, demucs_cache=cache)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker") as gpu,
+        mock.patch("autodub.media.vocal_separator._run_demucs") as cpu,
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        result = vocal_separator.separate_vocals(input_wav, work_dir, demucs_cache=cache)
 
     cache.separate.assert_called_once()
     gpu.assert_not_called()
@@ -173,13 +175,12 @@ def test_demucs_cache_failure_falls_back_to_one_shot(tmp_path):
         AudioSegment.from_wav(src).export(cmd[-1], format="wav")
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker",
-                    side_effect=fake_worker), \
-         mock.patch("autodub.media.vocal_separator._run_demucs") as cpu, \
-         mock.patch("autodub.media.vocal_separator.subprocess.run",
-                    side_effect=fake_ffmpeg):
-        result = vocal_separator.separate_vocals(
-            input_wav, work_dir, demucs_cache=cache)
+    with (
+        mock.patch("autodub.media.vocal_separator._run_demucs_gpu_worker", side_effect=fake_worker),
+        mock.patch("autodub.media.vocal_separator._run_demucs") as cpu,
+        mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_ffmpeg),
+    ):
+        result = vocal_separator.separate_vocals(input_wav, work_dir, demucs_cache=cache)
 
     cache.separate.assert_called_once()
     cpu.assert_not_called()
@@ -189,8 +190,7 @@ def test_demucs_cache_failure_falls_back_to_one_shot(tmp_path):
 def test_demucs_cache_ensure_fails_without_gpu_venv():
     """Không có venv GPU → _ensure trả False một lần rồi nhớ luôn."""
     cache = vocal_separator.DemucsCache()
-    with mock.patch("autodub.media.vocal_separator.gpu_venv_python",
-                    return_value="") as probe:
+    with mock.patch("autodub.media.vocal_separator.gpu_venv_python", return_value="") as probe:
         assert cache.separate("in.wav", "v.wav", "nv.wav", False) is False
         assert cache.separate("in.wav", "v.wav", "nv.wav", False) is False
     probe.assert_called_once()  # lần hai đã _failed, không dò lại
@@ -208,8 +208,7 @@ def test_normalize_passes_a_timeout(tmp_path):
         _make_wav(dst)
         return mock.Mock(returncode=0, stderr="")
 
-    with mock.patch("autodub.media.vocal_separator.subprocess.run",
-                    side_effect=fake_run):
+    with mock.patch("autodub.media.vocal_separator.subprocess.run", side_effect=fake_run):
         vocal_separator._normalize(src, dst, "16000")
 
 
@@ -219,8 +218,10 @@ def test_normalize_timeout_raises_runtime_error(tmp_path):
 
     src = str(tmp_path / "raw.wav")
     _make_wav(src)
-    with mock.patch("autodub.media.vocal_separator.subprocess.run",
-                    side_effect=subprocess.TimeoutExpired("ffmpeg", 60)):
+    with mock.patch(
+        "autodub.media.vocal_separator.subprocess.run",
+        side_effect=subprocess.TimeoutExpired("ffmpeg", 60),
+    ):
         try:
             vocal_separator._normalize(src, str(tmp_path / "out.wav"), "16000")
         except RuntimeError as exc:

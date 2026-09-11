@@ -3,9 +3,8 @@
 So sánh sai số giữa Greedy vs Beam 2 và Acoustic vs Ground Truth để bảo đảm
 tất cả sai số nằm trong ngưỡng cho phép (MAE <= 80ms, p95 <= 120ms).
 """
-import math
+
 import numpy as np
-import pytest
 
 from autodub.speech.acoustic_align import analyze_acoustic_alignment
 from autodub.speech.align import _map_words, validate_alignment
@@ -47,11 +46,13 @@ def test_golden_dataset_word_mapping_accuracy():
     p95_err = float(np.percentile(errors, 95))
     max_err = float(np.max(errors))
 
-    print(f"\n[Golden Mapping Metrics] MAE: {mae*1000:.1f}ms | Median: {median_err*1000:.1f}ms | p95: {p95_err*1000:.1f}ms | Max: {max_err*1000:.1f}ms")
+    print(
+        f"\n[Golden Mapping Metrics] MAE: {mae * 1000:.1f}ms | Median: {median_err * 1000:.1f}ms | p95: {p95_err * 1000:.1f}ms | Max: {max_err * 1000:.1f}ms"
+    )
 
-    assert mae <= 0.05       # MAE <= 50ms
-    assert p95_err <= 0.08   # p95 <= 80ms
-    assert max_err <= 0.10   # Max error <= 100ms
+    assert mae <= 0.05  # MAE <= 50ms
+    assert p95_err <= 0.08  # p95 <= 80ms
+    assert max_err <= 0.10  # Max error <= 100ms
 
 
 def test_acoustic_alignment_accuracy_metric(tmp_path):
@@ -73,6 +74,6 @@ def test_acoustic_alignment_accuracy_metric(tmp_path):
     err_t0 = abs(t0 - expected_t0)
     err_t1 = abs(t1 - expected_t1)
 
-    print(f"\n[Acoustic Precision] err_t0: {err_t0*1000:.1f}ms | err_t1: {err_t1*1000:.1f}ms")
+    print(f"\n[Acoustic Precision] err_t0: {err_t0 * 1000:.1f}ms | err_t1: {err_t1 * 1000:.1f}ms")
     assert err_t0 <= 0.06  # Sai số biên đầu <= 60ms
     assert err_t1 <= 0.06  # Sai số biên đuôi <= 60ms

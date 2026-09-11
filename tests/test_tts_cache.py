@@ -1,6 +1,6 @@
-import os
 import threading
 from pathlib import Path
+
 import pytest
 
 import autodub.pipeline_cache as pc
@@ -20,7 +20,9 @@ def create_dummy_wav(path: Path, content: bytes = b"tts_audio_content_test" * 20
         f.write(b"RIFF")
         total_size = len(content) + 44
         f.write((total_size - 8).to_bytes(4, "little"))
-        f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data")
+        f.write(
+            b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data"
+        )
         f.write(len(content).to_bytes(4, "little"))
         f.write(content)
     return path

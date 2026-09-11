@@ -1,7 +1,6 @@
-import threading
-import numpy as np
-import pytest
 from unittest.mock import MagicMock
+
+import numpy as np
 
 from autodub.media.inpaint.lama_onnx import LaMaOnnxEngine
 
@@ -14,7 +13,6 @@ def test_lama_onnx_missing_model_telea_fallback(tmp_path):
     res = engine.inpaint_frame(frame, mask)
     assert res.shape == (100, 100, 3)
     assert res.dtype == np.uint8
-
 
 
 def test_lama_onnx_inpaint_frame_mock_session():
@@ -111,4 +109,3 @@ def test_lama_onnx_fixed_512_shape_scaling():
     assert res[5, 5, 0] == 0
     # Vùng trong mask thành trắng (255)
     assert res[30, 80, 0] == 255
-

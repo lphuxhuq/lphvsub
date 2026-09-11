@@ -3,6 +3,7 @@
 Mỗi biểu tượng là một QIcon 20x20 nền trong suốt, vẽ có khử răng cưa.
 Màu lấy từ bảng màu tối của ứng dụng để mọi nơi trông nhất quán.
 """
+
 from __future__ import annotations
 
 import os
@@ -28,8 +29,7 @@ def _make_icon(draw_fn, color: str | QColor) -> QIcon:
     return QIcon(px)
 
 
-def nav_icon(icon_fn, normal: str | None = None,
-             selected: str | None = None) -> QIcon:
+def nav_icon(icon_fn, normal: str | None = None, selected: str | None = None) -> QIcon:
     """Biểu tượng hai trạng thái cho mục điều hướng.
 
     Trạng thái thường vẽ màu chữ phụ; khi hàng được chọn, item view của Qt
@@ -46,13 +46,15 @@ def app_logo(size: int = 32) -> QPixmap:
     """Biểu trưng ứng dụng lấy từ logo.png hoặc logo.ico; thiếu tệp thì vẽ tay."""
     try:
         from autodub.utils import bundled_file
+
         for filename in ("logo.png", "logo.ico"):
             path = bundled_file(filename)
             if path and os.path.exists(path):
                 px = QPixmap(str(path))
                 if not px.isNull():
                     return px.scaled(
-                        size, size,
+                        size,
+                        size,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )
@@ -107,6 +109,7 @@ def _draw_reload(p: QPainter, r: QRectF, c: QColor) -> None:
     # Arrow head
     end_angle = -60
     import math
+
     ex = cx + rad * math.cos(math.radians(end_angle))
     ey = cy - rad * math.sin(math.radians(end_angle))
     path = QPainterPath()
@@ -127,22 +130,17 @@ def _draw_trash(p: QPainter, r: QRectF, c: QColor) -> None:
     p.drawLine(QPointF(r.left() + 2, lid_y), QPointF(r.right() - 2, lid_y))
     # Handle
     handle_x = r.center().x()
-    p.drawLine(QPointF(handle_x - w * 0.1, lid_y),
-               QPointF(handle_x - w * 0.1, r.top() + 1))
-    p.drawLine(QPointF(handle_x + w * 0.1, lid_y),
-               QPointF(handle_x + w * 0.1, r.top() + 1))
-    p.drawLine(QPointF(handle_x - w * 0.1, r.top() + 1),
-               QPointF(handle_x + w * 0.1, r.top() + 1))
+    p.drawLine(QPointF(handle_x - w * 0.1, lid_y), QPointF(handle_x - w * 0.1, r.top() + 1))
+    p.drawLine(QPointF(handle_x + w * 0.1, lid_y), QPointF(handle_x + w * 0.1, r.top() + 1))
+    p.drawLine(QPointF(handle_x - w * 0.1, r.top() + 1), QPointF(handle_x + w * 0.1, r.top() + 1))
     # Body
     body = QRectF(r.left() + 3, lid_y + 1, w - 6, h - lid_y - 2)
     p.drawRect(body)
     # Lines inside
     line_y1 = body.top() + body.height() * 0.35
     line_y2 = body.top() + body.height() * 0.60
-    p.drawLine(QPointF(body.left() + 2, line_y1),
-               QPointF(body.right() - 2, line_y1))
-    p.drawLine(QPointF(body.left() + 2, line_y2),
-               QPointF(body.right() - 2, line_y2))
+    p.drawLine(QPointF(body.left() + 2, line_y1), QPointF(body.right() - 2, line_y1))
+    p.drawLine(QPointF(body.left() + 2, line_y2), QPointF(body.right() - 2, line_y2))
 
 
 def _draw_edit(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -150,14 +148,11 @@ def _draw_edit(p: QPainter, r: QRectF, c: QColor) -> None:
     p.setPen(QPen(c, 1.2))
     p.setBrush(Qt.BrushStyle.NoBrush)
     # Pencil body (diagonal line)
-    p.drawLine(QPointF(r.left() + 2, r.bottom() - 2),
-               QPointF(r.right() - 6, r.top() + 6))
+    p.drawLine(QPointF(r.left() + 2, r.bottom() - 2), QPointF(r.right() - 6, r.top() + 6))
     # Pencil tip
-    p.drawLine(QPointF(r.right() - 6, r.top() + 6),
-               QPointF(r.right() - 2, r.top() + 2))
+    p.drawLine(QPointF(r.right() - 6, r.top() + 6), QPointF(r.right() - 2, r.top() + 2))
     # Horizontal line bottom
-    p.drawLine(QPointF(r.left() + 2, r.bottom() - 2),
-               QPointF(r.left() + 9, r.bottom() - 7))
+    p.drawLine(QPointF(r.left() + 2, r.bottom() - 2), QPointF(r.left() + 9, r.bottom() - 7))
 
 
 def _draw_download(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -169,13 +164,10 @@ def _draw_download(p: QPainter, r: QRectF, c: QColor) -> None:
     p.drawLine(QPointF(cx, r.top() + 2), QPointF(cx, r.bottom() - 4))
     # Arrow head
     ah = r.bottom() - 2
-    p.drawLine(QPointF(cx - r.width() * 0.22, ah - r.height() * 0.18),
-               QPointF(cx, ah))
-    p.drawLine(QPointF(cx, ah),
-               QPointF(cx + r.width() * 0.22, ah - r.height() * 0.18))
+    p.drawLine(QPointF(cx - r.width() * 0.22, ah - r.height() * 0.18), QPointF(cx, ah))
+    p.drawLine(QPointF(cx, ah), QPointF(cx + r.width() * 0.22, ah - r.height() * 0.18))
     # Base line
-    p.drawLine(QPointF(r.left() + 2, r.bottom() - 1),
-               QPointF(r.right() - 2, r.bottom() - 1))
+    p.drawLine(QPointF(r.left() + 2, r.bottom() - 1), QPointF(r.right() - 2, r.bottom() - 1))
 
 
 def _draw_mic(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -192,12 +184,13 @@ def _draw_mic(p: QPainter, r: QRectF, c: QColor) -> None:
     # Stand
     stand_top = mic_y + mic_h
     stand_bottom = r.bottom() - 2
-    p.drawLine(QPointF(r.center().x(), stand_top),
-               QPointF(r.center().x(), stand_bottom))
+    p.drawLine(QPointF(r.center().x(), stand_top), QPointF(r.center().x(), stand_bottom))
     # Base
     base_w = w * 0.45
-    p.drawLine(QPointF(r.center().x() - base_w / 2, stand_bottom),
-               QPointF(r.center().x() + base_w / 2, stand_bottom))
+    p.drawLine(
+        QPointF(r.center().x() - base_w / 2, stand_bottom),
+        QPointF(r.center().x() + base_w / 2, stand_bottom),
+    )
 
 
 def _draw_layers(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -209,14 +202,14 @@ def _draw_layers(p: QPainter, r: QRectF, c: QColor) -> None:
     rect_w = w * 0.55
     rect_h = h * 0.35
     # Back layer
-    back = QRectF(r.center().x() - rect_w / 2 - offset,
-                  r.center().y() - rect_h / 2 + offset,
-                  rect_w, rect_h)
+    back = QRectF(
+        r.center().x() - rect_w / 2 - offset, r.center().y() - rect_h / 2 + offset, rect_w, rect_h
+    )
     p.drawRect(back)
     # Front layer
-    front = QRectF(r.center().x() - rect_w / 2 + offset,
-                   r.center().y() - rect_h / 2 - offset,
-                   rect_w, rect_h)
+    front = QRectF(
+        r.center().x() - rect_w / 2 + offset, r.center().y() - rect_h / 2 - offset, rect_w, rect_h
+    )
     p.drawRect(front)
 
 
@@ -244,7 +237,7 @@ def _draw_check(p: QPainter, r: QRectF, c: QColor) -> None:
 
 def _draw_warning(p: QPainter, r: QRectF, c: QColor) -> None:
     """Tam giác cảnh báo."""
-    w, h = r.width(), r.height()
+    h = r.height()
     p.setPen(QPen(c, 1.2))
     p.setBrush(Qt.BrushStyle.NoBrush)
     path = QPainterPath()
@@ -255,8 +248,7 @@ def _draw_warning(p: QPainter, r: QRectF, c: QColor) -> None:
     p.drawPath(path)
     # Exclamation mark
     ex_y = r.top() + h * 0.40
-    p.drawLine(QPointF(r.center().x(), ex_y),
-               QPointF(r.center().x(), r.bottom() - h * 0.28))
+    p.drawLine(QPointF(r.center().x(), ex_y), QPointF(r.center().x(), r.bottom() - h * 0.28))
     p.drawPoint(QPointF(r.center().x(), r.bottom() - h * 0.15))
 
 
@@ -268,10 +260,8 @@ def _draw_error(p: QPainter, r: QRectF, c: QColor) -> None:
     rad = r.width() * 0.38
     p.drawEllipse(QPointF(cx, cy), rad, rad)
     inset = rad * 0.55
-    p.drawLine(QPointF(cx - inset, cy - inset),
-               QPointF(cx + inset, cy + inset))
-    p.drawLine(QPointF(cx + inset, cy - inset),
-               QPointF(cx - inset, cy + inset))
+    p.drawLine(QPointF(cx - inset, cy - inset), QPointF(cx + inset, cy + inset))
+    p.drawLine(QPointF(cx + inset, cy - inset), QPointF(cx - inset, cy + inset))
 
 
 def _draw_external(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -283,12 +273,9 @@ def _draw_external(p: QPainter, r: QRectF, c: QColor) -> None:
     box = QRectF(r.left() + 1, r.top() + 1, w * 0.55, h * 0.55)
     p.drawRect(box)
     # Arrow
-    p.drawLine(QPointF(box.right(), box.top()),
-               QPointF(r.right() - 1, r.top() + 1))
-    p.drawLine(QPointF(r.right() - 1, r.top() + 1),
-               QPointF(r.right() - 1, r.top() + h * 0.3))
-    p.drawLine(QPointF(r.right() - 1, r.top() + 1),
-               QPointF(r.right() - w * 0.3, r.top() + 1))
+    p.drawLine(QPointF(box.right(), box.top()), QPointF(r.right() - 1, r.top() + 1))
+    p.drawLine(QPointF(r.right() - 1, r.top() + 1), QPointF(r.right() - 1, r.top() + h * 0.3))
+    p.drawLine(QPointF(r.right() - 1, r.top() + 1), QPointF(r.right() - w * 0.3, r.top() + 1))
 
 
 # ---- Public API ----
@@ -359,8 +346,7 @@ def _draw_home(p: QPainter, r: QRectF, c: QColor) -> None:
     roof.closeSubpath()
     p.drawPath(roof)
     # Thân nhà
-    body = QRectF(r.left() + w * 0.18, r.top() + h * 0.42,
-                  w * 0.64, h * 0.55)
+    body = QRectF(r.left() + w * 0.18, r.top() + h * 0.42, w * 0.64, h * 0.55)
     p.drawRect(body)
     # Cửa
     door_w = w * 0.18
@@ -380,8 +366,7 @@ def _draw_search(p: QPainter, r: QRectF, c: QColor) -> None:
     # Cán
     handle_x = cx + rad * 0.7
     handle_y = cy + rad * 0.7
-    p.drawLine(QPointF(handle_x, handle_y),
-               QPointF(handle_x + rad * 0.8, handle_y + rad * 0.8))
+    p.drawLine(QPointF(handle_x, handle_y), QPointF(handle_x + rad * 0.8, handle_y + rad * 0.8))
 
 
 def home(color: str | None = None) -> QIcon:
@@ -397,8 +382,9 @@ def search(color: str | None = None) -> QIcon:
 
 def _outline(p: QPainter, c: QColor) -> None:
     """Đặt bút nét mảnh cho biểu tượng dạng viền."""
-    p.setPen(QPen(c, _STROKE, Qt.PenStyle.SolidLine,
-                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setPen(
+        QPen(c, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    )
     p.setBrush(Qt.BrushStyle.NoBrush)
 
 
@@ -442,14 +428,12 @@ def _draw_bell(p: QPainter, r: QRectF, c: QColor) -> None:
     path.moveTo(r.left() + w * 0.12, r.top() + h * 0.72)
     path.lineTo(r.left() + w * 0.22, r.top() + h * 0.60)
     path.lineTo(r.left() + w * 0.22, r.top() + h * 0.40)
-    path.arcTo(QRectF(r.left() + w * 0.22, r.top() + h * 0.10,
-                      w * 0.56, h * 0.56), 180, -180)
+    path.arcTo(QRectF(r.left() + w * 0.22, r.top() + h * 0.10, w * 0.56, h * 0.56), 180, -180)
     path.lineTo(r.left() + w * 0.78, r.top() + h * 0.60)
     path.lineTo(r.left() + w * 0.88, r.top() + h * 0.72)
     path.closeSubpath()
     p.drawPath(path)
-    clapper = QRectF(r.center().x() - w * 0.10, r.top() + h * 0.74,
-                     w * 0.20, h * 0.16)
+    clapper = QRectF(r.center().x() - w * 0.10, r.top() + h * 0.74, w * 0.20, h * 0.16)
     p.drawArc(clapper, 0, -180 * 16)
 
 
@@ -467,10 +451,11 @@ def _draw_pause(p: QPainter, r: QRectF, c: QColor) -> None:
 def _draw_skip_back(p: QPainter, r: QRectF, c: QColor) -> None:
     """Tam giác lùi kèm vạch — về câu trước."""
     w, h = r.width(), r.height()
-    p.setPen(QPen(c, _STROKE, Qt.PenStyle.SolidLine,
-                  Qt.PenCapStyle.RoundCap))
-    p.drawLine(QPointF(r.left() + w * 0.20, r.top() + h * 0.18),
-               QPointF(r.left() + w * 0.20, r.bottom() - h * 0.18))
+    p.setPen(QPen(c, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(
+        QPointF(r.left() + w * 0.20, r.top() + h * 0.18),
+        QPointF(r.left() + w * 0.20, r.bottom() - h * 0.18),
+    )
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(c)
     tri = QPainterPath()
@@ -484,10 +469,11 @@ def _draw_skip_back(p: QPainter, r: QRectF, c: QColor) -> None:
 def _draw_skip_forward(p: QPainter, r: QRectF, c: QColor) -> None:
     """Tam giác tiến kèm vạch — sang câu sau."""
     w, h = r.width(), r.height()
-    p.setPen(QPen(c, _STROKE, Qt.PenStyle.SolidLine,
-                  Qt.PenCapStyle.RoundCap))
-    p.drawLine(QPointF(r.right() - w * 0.20, r.top() + h * 0.18),
-               QPointF(r.right() - w * 0.20, r.bottom() - h * 0.18))
+    p.setPen(QPen(c, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(
+        QPointF(r.right() - w * 0.20, r.top() + h * 0.18),
+        QPointF(r.right() - w * 0.20, r.bottom() - h * 0.18),
+    )
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(c)
     tri = QPainterPath()
@@ -518,8 +504,9 @@ def _draw_volume(p: QPainter, r: QRectF, c: QColor) -> None:
     _outline(p, c)
     p.drawPath(_speaker_path(r))
     for i, scale in enumerate((0.22, 0.40)):
-        box = QRectF(r.left() + w * 0.40, r.center().y() - h * scale,
-                     w * (0.30 + i * 0.24), h * scale * 2)
+        box = QRectF(
+            r.left() + w * 0.40, r.center().y() - h * scale, w * (0.30 + i * 0.24), h * scale * 2
+        )
         p.drawArc(box, -55 * 16, 110 * 16)
 
 
@@ -544,22 +531,25 @@ def _draw_pip(p: QPainter, r: QRectF, c: QColor) -> None:
     w, h = r.width(), r.height()
     _outline(p, c)
     p.drawRoundedRect(QRectF(r.left() + 1, r.top() + 1, w - 2, h - 2), 2.5, 2.5)
-    inner = QRectF(r.left() + w * 0.46, r.top() + h * 0.48,
-                   w * 0.44, h * 0.36)
+    inner = QRectF(r.left() + w * 0.46, r.top() + h * 0.48, w * 0.44, h * 0.36)
     p.drawRoundedRect(inner, 2, 2)
 
 
 def _draw_scissors(p: QPainter, r: QRectF, c: QColor) -> None:
     """Kéo cắt — tách câu thoại."""
-    w, h = r.width(), r.height()
+    w, _h = r.width(), r.height()
     _outline(p, c)
     rad = w * 0.13
     p.drawEllipse(QPointF(r.left() + w * 0.20, r.bottom() - rad - 1), rad, rad)
     p.drawEllipse(QPointF(r.right() - w * 0.20, r.bottom() - rad - 1), rad, rad)
-    p.drawLine(QPointF(r.left() + w * 0.26, r.bottom() - rad * 2 - 1),
-               QPointF(r.right() - w * 0.18, r.top() + 1))
-    p.drawLine(QPointF(r.right() - w * 0.26, r.bottom() - rad * 2 - 1),
-               QPointF(r.left() + w * 0.18, r.top() + 1))
+    p.drawLine(
+        QPointF(r.left() + w * 0.26, r.bottom() - rad * 2 - 1),
+        QPointF(r.right() - w * 0.18, r.top() + 1),
+    )
+    p.drawLine(
+        QPointF(r.right() - w * 0.26, r.bottom() - rad * 2 - 1),
+        QPointF(r.left() + w * 0.18, r.top() + 1),
+    )
 
 
 def _draw_zoom(p: QPainter, r: QRectF, c: QColor, plus: bool) -> None:
@@ -569,8 +559,7 @@ def _draw_zoom(p: QPainter, r: QRectF, c: QColor, plus: bool) -> None:
     cx, cy = r.center().x() - w * 0.06, r.center().y() - w * 0.06
     rad = w * 0.30
     p.drawEllipse(QPointF(cx, cy), rad, rad)
-    p.drawLine(QPointF(cx + rad * 0.72, cy + rad * 0.72),
-               QPointF(r.right() - 1, r.bottom() - 1))
+    p.drawLine(QPointF(cx + rad * 0.72, cy + rad * 0.72), QPointF(r.right() - 1, r.bottom() - 1))
     arm = rad * 0.52
     p.drawLine(QPointF(cx - arm, cy), QPointF(cx + arm, cy))
     if plus:
@@ -589,30 +578,42 @@ def _draw_chevron_down(p: QPainter, r: QRectF, c: QColor) -> None:
     """Mũi nhọn hướng xuống."""
     w, h = r.width(), r.height()
     _outline(p, c)
-    p.drawLine(QPointF(r.left() + w * 0.22, r.top() + h * 0.36),
-               QPointF(r.center().x(), r.top() + h * 0.64))
-    p.drawLine(QPointF(r.center().x(), r.top() + h * 0.64),
-               QPointF(r.right() - w * 0.22, r.top() + h * 0.36))
+    p.drawLine(
+        QPointF(r.left() + w * 0.22, r.top() + h * 0.36),
+        QPointF(r.center().x(), r.top() + h * 0.64),
+    )
+    p.drawLine(
+        QPointF(r.center().x(), r.top() + h * 0.64),
+        QPointF(r.right() - w * 0.22, r.top() + h * 0.36),
+    )
 
 
 def _draw_chevron_right(p: QPainter, r: QRectF, c: QColor) -> None:
     """Mũi nhọn hướng sang phải."""
     w, h = r.width(), r.height()
     _outline(p, c)
-    p.drawLine(QPointF(r.left() + w * 0.36, r.top() + h * 0.22),
-               QPointF(r.left() + w * 0.64, r.center().y()))
-    p.drawLine(QPointF(r.left() + w * 0.64, r.center().y()),
-               QPointF(r.left() + w * 0.36, r.bottom() - h * 0.22))
+    p.drawLine(
+        QPointF(r.left() + w * 0.36, r.top() + h * 0.22),
+        QPointF(r.left() + w * 0.64, r.center().y()),
+    )
+    p.drawLine(
+        QPointF(r.left() + w * 0.64, r.center().y()),
+        QPointF(r.left() + w * 0.36, r.bottom() - h * 0.22),
+    )
 
 
 def _draw_chevron_left(p: QPainter, r: QRectF, c: QColor) -> None:
     """Mũi nhọn hướng sang trái."""
     w, h = r.width(), r.height()
     _outline(p, c)
-    p.drawLine(QPointF(r.left() + w * 0.64, r.top() + h * 0.22),
-               QPointF(r.left() + w * 0.36, r.center().y()))
-    p.drawLine(QPointF(r.left() + w * 0.36, r.center().y()),
-               QPointF(r.left() + w * 0.64, r.bottom() - h * 0.22))
+    p.drawLine(
+        QPointF(r.left() + w * 0.64, r.top() + h * 0.22),
+        QPointF(r.left() + w * 0.36, r.center().y()),
+    )
+    p.drawLine(
+        QPointF(r.left() + w * 0.36, r.center().y()),
+        QPointF(r.left() + w * 0.64, r.bottom() - h * 0.22),
+    )
 
 
 def _draw_upload_cloud(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -621,19 +622,18 @@ def _draw_upload_cloud(p: QPainter, r: QRectF, c: QColor) -> None:
     _outline(p, c)
     cloud = QPainterPath()
     cloud.moveTo(r.left() + w * 0.22, r.top() + h * 0.68)
-    cloud.arcTo(QRectF(r.left() + w * 0.06, r.top() + h * 0.40,
-                       w * 0.32, h * 0.32), 270, -180)
-    cloud.arcTo(QRectF(r.left() + w * 0.20, r.top() + h * 0.18,
-                       w * 0.38, h * 0.38), 180, -170)
-    cloud.arcTo(QRectF(r.left() + w * 0.54, r.top() + h * 0.36,
-                       w * 0.38, h * 0.34), 120, -210)
+    cloud.arcTo(QRectF(r.left() + w * 0.06, r.top() + h * 0.40, w * 0.32, h * 0.32), 270, -180)
+    cloud.arcTo(QRectF(r.left() + w * 0.20, r.top() + h * 0.18, w * 0.38, h * 0.38), 180, -170)
+    cloud.arcTo(QRectF(r.left() + w * 0.54, r.top() + h * 0.36, w * 0.38, h * 0.34), 120, -210)
     p.drawPath(cloud)
     cx = r.center().x()
     p.drawLine(QPointF(cx, r.bottom() - 1), QPointF(cx, r.center().y() - h * 0.02))
-    p.drawLine(QPointF(cx - w * 0.13, r.center().y() + h * 0.11),
-               QPointF(cx, r.center().y() - h * 0.02))
-    p.drawLine(QPointF(cx, r.center().y() - h * 0.02),
-               QPointF(cx + w * 0.13, r.center().y() + h * 0.11))
+    p.drawLine(
+        QPointF(cx - w * 0.13, r.center().y() + h * 0.11), QPointF(cx, r.center().y() - h * 0.02)
+    )
+    p.drawLine(
+        QPointF(cx, r.center().y() - h * 0.02), QPointF(cx + w * 0.13, r.center().y() + h * 0.11)
+    )
 
 
 def _draw_merge(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -641,16 +641,17 @@ def _draw_merge(p: QPainter, r: QRectF, c: QColor) -> None:
     w, h = r.width(), r.height()
     _outline(p, c)
     mid_x = r.center().x()
-    p.drawLine(QPointF(r.left() + w * 0.10, r.top() + h * 0.16),
-               QPointF(mid_x, r.center().y()))
-    p.drawLine(QPointF(r.left() + w * 0.10, r.bottom() - h * 0.16),
-               QPointF(mid_x, r.center().y()))
-    p.drawLine(QPointF(mid_x, r.center().y()),
-               QPointF(r.right() - w * 0.06, r.center().y()))
-    p.drawLine(QPointF(r.right() - w * 0.24, r.center().y() - h * 0.13),
-               QPointF(r.right() - w * 0.06, r.center().y()))
-    p.drawLine(QPointF(r.right() - w * 0.24, r.center().y() + h * 0.13),
-               QPointF(r.right() - w * 0.06, r.center().y()))
+    p.drawLine(QPointF(r.left() + w * 0.10, r.top() + h * 0.16), QPointF(mid_x, r.center().y()))
+    p.drawLine(QPointF(r.left() + w * 0.10, r.bottom() - h * 0.16), QPointF(mid_x, r.center().y()))
+    p.drawLine(QPointF(mid_x, r.center().y()), QPointF(r.right() - w * 0.06, r.center().y()))
+    p.drawLine(
+        QPointF(r.right() - w * 0.24, r.center().y() - h * 0.13),
+        QPointF(r.right() - w * 0.06, r.center().y()),
+    )
+    p.drawLine(
+        QPointF(r.right() - w * 0.24, r.center().y() + h * 0.13),
+        QPointF(r.right() - w * 0.06, r.center().y()),
+    )
 
 
 def _draw_waveform(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -662,8 +663,7 @@ def _draw_waveform(p: QPainter, r: QRectF, c: QColor) -> None:
     for i, ratio in enumerate(ratios):
         x = r.left() + step * (i + 1)
         half = h * ratio / 2
-        p.drawLine(QPointF(x, r.center().y() - half),
-                   QPointF(x, r.center().y() + half))
+        p.drawLine(QPointF(x, r.center().y() - half), QPointF(x, r.center().y() + half))
 
 
 def file_plus(color: str | None = None) -> QIcon:
@@ -744,6 +744,7 @@ def waveform(color: str | None = None) -> QIcon:
 def _draw_star(p: QPainter, r: QRectF, c: QColor) -> None:
     """Ngôi sao năm cánh — mục yêu thích / nổi bật."""
     import math
+
     _outline(p, c)
     cx, cy = r.center().x(), r.center().y()
     outer = r.width() * 0.44
@@ -796,12 +797,9 @@ def _draw_captions(p: QPainter, r: QRectF, c: QColor) -> None:
     p.drawRoundedRect(box, 3, 3)
     y1 = box.top() + box.height() * 0.40
     y2 = box.top() + box.height() * 0.68
-    p.drawLine(QPointF(box.left() + w * 0.12, y1),
-               QPointF(box.left() + w * 0.42, y1))
-    p.drawLine(QPointF(box.left() + w * 0.52, y1),
-               QPointF(box.right() - w * 0.12, y1))
-    p.drawLine(QPointF(box.left() + w * 0.12, y2),
-               QPointF(box.left() + w * 0.60, y2))
+    p.drawLine(QPointF(box.left() + w * 0.12, y1), QPointF(box.left() + w * 0.42, y1))
+    p.drawLine(QPointF(box.left() + w * 0.52, y1), QPointF(box.right() - w * 0.12, y1))
+    p.drawLine(QPointF(box.left() + w * 0.12, y2), QPointF(box.left() + w * 0.60, y2))
 
 
 def _draw_user(p: QPainter, r: QRectF, c: QColor) -> None:
@@ -810,8 +808,7 @@ def _draw_user(p: QPainter, r: QRectF, c: QColor) -> None:
     _outline(p, c)
     head_r = w * 0.20
     p.drawEllipse(QPointF(r.center().x(), r.top() + h * 0.30), head_r, head_r)
-    shoulders = QRectF(r.left() + w * 0.16, r.top() + h * 0.56,
-                       w * 0.68, h * 0.66)
+    shoulders = QRectF(r.left() + w * 0.16, r.top() + h * 0.56, w * 0.68, h * 0.66)
     p.drawArc(shoulders, 0, 180 * 16)
 
 
@@ -839,7 +836,7 @@ def _draw_chart_bar(p: QPainter, r: QRectF, c: QColor) -> None:
     """Biểu đồ cột — 3 cột cao thấp khác nhau."""
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(c)
-    cw = r.width() * 0.22   # chiều rộng mỗi cột
+    cw = r.width() * 0.22  # chiều rộng mỗi cột
     gap = r.width() * 0.07  # khoảng cách giữa cột
     # Cột 1 (50%)
     h1 = r.height() * 0.50
@@ -900,8 +897,14 @@ def brand_logo(size: int = 32) -> QPixmap:
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor(tokens.BRAND_LOGO_BG))
     p.drawRoundedRect(QRectF(0, 0, size, size), radius, radius)
-    p.setPen(QPen(QColor(tokens.ACCENT_BLUE), max(1.6, size * 0.075),
-                  Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.setPen(
+        QPen(
+            QColor(tokens.ACCENT_BLUE),
+            max(1.6, size * 0.075),
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+        )
+    )
     ratios = (0.34, 0.66, 0.50, 0.26)
     step = size / (len(ratios) + 1)
     for i, ratio in enumerate(ratios):

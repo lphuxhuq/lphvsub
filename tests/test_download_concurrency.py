@@ -1,7 +1,5 @@
 """Tests for AdaptiveConcurrencyController."""
 
-import time
-
 from autodub.media.download.concurrency import AdaptiveConcurrencyController
 from autodub.media.download.contract import BandwidthMode, ErrorType
 
@@ -61,10 +59,10 @@ def test_concurrency_additive_increase():
 
     # 2 successful chunks of 1MB over 0.5s (2MB/s)
     controller.record_success(1024 * 1024, 0.5)
-    assert controller.get_concurrency() == 2 # Need 2 successes for streak
+    assert controller.get_concurrency() == 2  # Need 2 successes for streak
 
     controller.record_success(1024 * 1024, 0.5)
-    assert controller.get_concurrency() == 3 # Scaled up to 3!
+    assert controller.get_concurrency() == 3  # Scaled up to 3!
 
     # Another streak
     controller.record_success(1024 * 1024, 0.5)
@@ -74,7 +72,7 @@ def test_concurrency_additive_increase():
     # Another streak
     controller.record_success(1024 * 1024, 0.5)
     controller.record_success(1024 * 1024, 0.5)
-    assert controller.get_concurrency() == 5 # Reached max
+    assert controller.get_concurrency() == 5  # Reached max
 
     # Stays clamped at max
     controller.record_success(1024 * 1024, 0.5)

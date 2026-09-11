@@ -4,11 +4,16 @@
 chỉ chọn được một chip, giống `SegmentedControl` nhưng các nút tách rời nhau
 và bo tròn hẳn.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup, QHBoxLayout, QLabel, QPushButton, QWidget,
+    QButtonGroup,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QWidget,
 )
 
 from autodub_gui import tokens
@@ -31,10 +36,9 @@ class FilterChip(QPushButton):
 class ChipRow(QWidget):
     """Một hàng chip có nhãn ở đầu; chip "Tất cả" được thêm ngầm."""
 
-    selection_changed = Signal(str)      # key đang chọn, "" nghĩa là tất cả
+    selection_changed = Signal(str)  # key đang chọn, "" nghĩa là tất cả
 
-    def __init__(self, label: str, options: list[tuple[str, str]],
-                 parent: QWidget | None = None):
+    def __init__(self, label: str, options: list[tuple[str, str]], parent: QWidget | None = None):
         super().__init__(parent)
         clear_background(self)
         self._chips: list[FilterChip] = []
@@ -48,7 +52,8 @@ class ChipRow(QWidget):
         caption = QLabel(label)
         caption.setStyleSheet(
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         # Rộng tối thiểu để các hàng chip thẳng cột với nhau; nhãn dài hơn
         # vẫn tự nở ra chứ không bị cắt.
         caption.setMinimumWidth(86)
@@ -62,8 +67,7 @@ class ChipRow(QWidget):
         layout.addStretch()
 
         self._chips[0].setChecked(True)
-        self._group.buttonClicked.connect(
-            lambda btn: self.selection_changed.emit(btn.key))
+        self._group.buttonClicked.connect(lambda btn: self.selection_changed.emit(btn.key))
 
     def current_key(self) -> str:
         """Key của chip đang chọn ("" là Tất cả)."""

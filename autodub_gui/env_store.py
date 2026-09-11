@@ -4,6 +4,7 @@ Các hàm cơ bản (``read_env``, ``write_env``, ``env_bool``, ``bool_to_env``)
 đã được chuyển sang ``autodub.env_io`` (core, không phụ thuộc GUI). Module
 này re-export chúng cho backward-compat và thêm các tiện ích GUI-only.
 """
+
 from __future__ import annotations
 
 # Re-export core functions — existing GUI callers không cần đổi import.
@@ -32,6 +33,7 @@ def api_keys_to_multiline(value: str) -> str:
     Mỗi key chiếm một dòng riêng, giúp người dùng dễ đọc và chỉnh sửa.
     """
     import re
+
     tokens = [t.strip() for t in re.split(r"[,;\n]+", value.replace("\\n", "\n")) if t.strip()]
     return "\n".join(tokens)
 
@@ -39,6 +41,6 @@ def api_keys_to_multiline(value: str) -> str:
 def multiline_to_api_keys(value: str) -> str:
     """Gộp danh sách API Key nhiều dòng thành một dòng dấu phẩy để lưu .env."""
     import re
+
     tokens = [t.strip() for t in re.split(r"[,;\n]+", value) if t.strip()]
     return ",".join(tokens)
-

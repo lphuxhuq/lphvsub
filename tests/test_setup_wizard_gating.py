@@ -6,12 +6,11 @@ Không dùng Qt, không mở cửa sổ. Chỉ test:
   - Tất cả components cốt lõi đã sẵn sàng → đánh dấu done, không hiện
   - Chưa có components → cần wizard (_is_setup_needed = True)
 """
+
 from __future__ import annotations
 
 import importlib
-import os
 import sys
-from pathlib import Path
 from unittest import mock
 
 
@@ -25,6 +24,7 @@ def _reload_wizard():
 # ---------------------------------------------------------------------------
 # _is_setup_needed
 # ---------------------------------------------------------------------------
+
 
 def test_marker_exists_not_needed(tmp_path, monkeypatch):
     """Marker file tồn tại → wizard không cần hiện."""
@@ -51,6 +51,7 @@ def test_no_marker_needed(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # maybe_show_setup_wizard — gating logic
 # ---------------------------------------------------------------------------
+
 
 def test_smoke_env_skips_wizard(tmp_path, monkeypatch):
     """AUTODUB_SMOKE=1 → wizard không hiện ngay cả khi chưa setup."""
@@ -126,6 +127,7 @@ def test_missing_components_needs_wizard(tmp_path, monkeypatch):
 # Helper functions
 # ---------------------------------------------------------------------------
 
+
 def test_mark_done_creates_file(tmp_path, monkeypatch):
     """_mark_done() phải tạo file marker."""
     wiz = _reload_wizard()
@@ -141,9 +143,12 @@ def test_mark_done_creates_file(tmp_path, monkeypatch):
 def test_ffmpeg_ready_system_path(monkeypatch):
     """_ffmpeg_ready() trả True khi shutil.which tìm thấy ffmpeg."""
     wiz = _reload_wizard()
-    monkeypatch.setattr(wiz, "_ffmpeg_ready",
-                        lambda: True,  # mock trực tiếp để không cần PATH thật
-                        raising=False)
+    monkeypatch.setattr(
+        wiz,
+        "_ffmpeg_ready",
+        lambda: True,  # mock trực tiếp để không cần PATH thật
+        raising=False,
+    )
     # Gọi hàm được mock
     assert wiz._ffmpeg_ready() is True
 
@@ -153,8 +158,10 @@ def test_ffmpeg_not_ready(monkeypatch):
     import shutil as _shutil
 
     wiz = _reload_wizard()
-    with mock.patch.object(_shutil, "which", return_value=None), \
-         mock.patch("autodub_gui.setup_wizard.os.path.isfile", return_value=False):
+    with (
+        mock.patch.object(_shutil, "which", return_value=None),
+        mock.patch("autodub_gui.setup_wizard.os.path.isfile", return_value=False),
+    ):
         result = wiz._ffmpeg_ready()
 
     assert result is False
@@ -165,15 +172,11 @@ def test_paraformer_ready_checks_marker(tmp_path, monkeypatch):
     wiz = _reload_wizard()
 
     # Giả lập chưa cài
-    with mock.patch(
-        "autodub_gui.setup_wizard._paraformer_ready", return_value=False
-    ):
+    with mock.patch("autodub_gui.setup_wizard._paraformer_ready", return_value=False):
         assert wiz._paraformer_ready() is False
 
     # Giả lập đã cài
-    with mock.patch(
-        "autodub_gui.setup_wizard._paraformer_ready", return_value=True
-    ):
+    with mock.patch("autodub_gui.setup_wizard._paraformer_ready", return_value=True):
         assert wiz._paraformer_ready() is True
 
 
@@ -182,13 +185,17 @@ def test_core_ready_requires_all_three(monkeypatch):
     wiz = _reload_wizard()
 
     # Thiếu 1 → False
-    with mock.patch("autodub_gui.setup_wizard._ffmpeg_ready", return_value=True), \
-         mock.patch("autodub_gui.setup_wizard._vieneu_ready", return_value=False), \
-         mock.patch("autodub_gui.setup_wizard._whisper_ready", return_value=True):
+    with (
+        mock.patch("autodub_gui.setup_wizard._ffmpeg_ready", return_value=True),
+        mock.patch("autodub_gui.setup_wizard._vieneu_ready", return_value=False),
+        mock.patch("autodub_gui.setup_wizard._whisper_ready", return_value=True),
+    ):
         assert wiz._core_ready() is False
 
     # Đủ 3 → True
-    with mock.patch("autodub_gui.setup_wizard._ffmpeg_ready", return_value=True), \
-         mock.patch("autodub_gui.setup_wizard._vieneu_ready", return_value=True), \
-         mock.patch("autodub_gui.setup_wizard._whisper_ready", return_value=True):
+    with (
+        mock.patch("autodub_gui.setup_wizard._ffmpeg_ready", return_value=True),
+        mock.patch("autodub_gui.setup_wizard._vieneu_ready", return_value=True),
+        mock.patch("autodub_gui.setup_wizard._whisper_ready", return_value=True),
+    ):
         assert wiz._core_ready() is True

@@ -1,12 +1,13 @@
-import pytest
 from dataclasses import asdict
 
+import pytest
+
 from autodub.speech.voice_models import (
+    CastingResult,
     PitchStats,
     SpeakerProfile,
-    VoiceProfile,
     VoiceAssignment,
-    CastingResult,
+    VoiceProfile,
 )
 
 

@@ -4,6 +4,7 @@ Chữ phụ đề được ghi thẳng lên video bằng libass, mà libass ch�
 thư mục `fonts/` của dự án. Nếu giao diện cho chọn phông có sẵn trong máy,
 video xuất ra trên máy khác sẽ sai phông hoặc mất dấu tiếng Việt.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,8 +23,7 @@ _FORBIDDEN = (
 
 # fonts.py được phép nhắc tới QFontDatabase để nạp phông của dự án,
 # nhưng vẫn không được gọi hai thứ ở trên.
-_SOURCE_FILES = tuple(p for p in _GUI.rglob("*.py")
-                      if "__pycache__" not in p.parts)
+_SOURCE_FILES = tuple(p for p in _GUI.rglob("*.py") if "__pycache__" not in p.parts)
 
 
 def test_no_system_font_listing_in_gui() -> None:
@@ -31,14 +31,13 @@ def test_no_system_font_listing_in_gui() -> None:
     offenders: list[str] = []
     for path in _SOURCE_FILES:
         rel = path.relative_to(_ROOT).as_posix()
-        for lineno, line in enumerate(
-                path.read_text(encoding="utf-8").splitlines(), 1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if any(pattern.search(line) for pattern in _FORBIDDEN):
                 offenders.append(f"{rel}:{lineno}: {line.strip()}")
     if offenders:
         pytest.fail(
-            "Phông phụ đề chỉ được lấy từ thư mục fonts/ của dự án:\n"
-            + "\n".join(offenders))
+            "Phông phụ đề chỉ được lấy từ thư mục fonts/ của dự án:\n" + "\n".join(offenders)
+        )
 
 
 def test_fonts_module_no_longer_exports_system_helper() -> None:
@@ -52,8 +51,13 @@ def test_fonts_module_exposes_project_helpers() -> None:
     """Các hàm thay thế phải có mặt."""
     from autodub_gui import fonts
 
-    for name in ("app_font_families", "default_subtitle_font",
-                 "font_choices", "has_app_fonts", "fonts_dir"):
+    for name in (
+        "app_font_families",
+        "default_subtitle_font",
+        "font_choices",
+        "has_app_fonts",
+        "fonts_dir",
+    ):
         assert hasattr(fonts, name), f"fonts.py thiếu {name}"
 
 

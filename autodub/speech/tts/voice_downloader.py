@@ -5,6 +5,7 @@ thường chỉ cần bước enroll. Module này lo cả hai việc: tải ``vo
 từ GitHub release khi thư mục trống, rồi enroll toàn bộ giọng vào
 ``custom_voices.json`` qua VieNeu worker.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,6 @@ import subprocess
 import tempfile
 import urllib.request
 import zipfile
-from pathlib import Path
 
 from autodub.config import Settings
 from autodub.utils import app_root, setup_logging
@@ -23,7 +23,9 @@ logger = setup_logging("autodub.voice_downloader")
 
 # URL voices.zip trên GitHub release — chỉ dùng khi thư mục voices/ trống
 # (bản đóng gói exe, hoặc người dùng tải mã nguồn dạng zip thiếu thư mục).
-VOICES_RELEASE_URL = "https://github.com/ttthanh2044/voxdub/releases/download/voices-v1.0.0/preset_voices_vn.zip"
+VOICES_RELEASE_URL = (
+    "https://github.com/ttthanh2044/voxdub/releases/download/voices-v1.0.0/preset_voices_vn.zip"
+)
 VOICES_TARGET_DIR = "voices/preset_voices_vn"
 MANIFEST_NAME = "voices_manifest.json"
 
@@ -82,7 +84,7 @@ def extract_voices(zip_path: str) -> str:
     """
     target = os.path.join(app_root(), VOICES_TARGET_DIR)
 
-    logger.info(f"Đang giải nén voices.zip...")
+    logger.info("Đang giải nén voices.zip...")
 
     with tempfile.TemporaryDirectory() as tmp:
         # Extract toàn bộ vào temp trước
@@ -133,7 +135,6 @@ def enroll_voices(settings: Settings, progress_callback=None) -> dict:
         {"ok": bool, "added": list, "failed": list}
     """
     from autodub.speech.tts import voice_library
-    from autodub.speech.tts.vieneu_vi import _WORKER_SCRIPT
 
     pending = voice_library.pending(settings)
     if not pending:
@@ -155,11 +156,10 @@ def enroll_voices(settings: Settings, progress_callback=None) -> dict:
         try:
             os.remove(batch_file)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong voice_downloader.py", exc_info=True)
 
 
-def _run_enroll_worker(settings: Settings, batch_file: str,
-                       progress_callback=None) -> dict:
+def _run_enroll_worker(settings: Settings, batch_file: str, progress_callback=None) -> dict:
     """Chạy worker enroll một lượt; caller lo việc dọn ``batch_file``."""
     from autodub.speech.tts.vieneu_vi import _WORKER_SCRIPT
 
@@ -167,10 +167,14 @@ def _run_enroll_worker(settings: Settings, batch_file: str,
     cmd = [
         settings.vieneu_venv_python_path(),
         _WORKER_SCRIPT,
-        "--enroll-batch", batch_file,
-        "--model-dir", settings.vieneu_model_dir_path(),
-        "--custom-voices", settings.vieneu_custom_voices_path(),
-        "--style", "tu_nhien",
+        "--enroll-batch",
+        batch_file,
+        "--model-dir",
+        settings.vieneu_model_dir_path(),
+        "--custom-voices",
+        settings.vieneu_custom_voices_path(),
+        "--style",
+        "tu_nhien",
     ]
 
     logger.info(f"Chạy worker: {' '.join(cmd[:3])}...")
@@ -201,7 +205,9 @@ def _run_enroll_worker(settings: Settings, batch_file: str,
                         name = line.split("«")[1].split("»")[0] if "«" in line else ""
                         progress_callback(current, total, name)
                     except Exception:
-                        pass
+                        logger.debug(
+                            "Bỏ qua lỗi Exception trong voice_downloader.py", exc_info=True
+                        )
         except (ValueError, OSError):
             pass  # pipe bị đóng khi process kết thúc
 
@@ -229,6 +235,7 @@ def _run_enroll_worker(settings: Settings, batch_file: str,
         logger.info(f"Đã enroll {len(result.get('added', []))} giọng")
         # Danh mục giọng vừa đổi — bỏ cache để giao diện thấy giọng mới ngay.
         from autodub.speech.tts.voices import invalidate_catalog_cache
+
         invalidate_catalog_cache()
     else:
         logger.error(f"Enroll thất bại: {result}")
@@ -278,7 +285,7 @@ def ensure_voices_available(settings: Settings, progress_callback=None) -> bool:
             try:
                 os.remove(zip_path)
             except OSError:
-                pass
+                logger.debug("Bỏ qua lỗi OSError trong voice_downloader.py", exc_info=True)
 
         # 3. Dùng embeddings đóng sẵn nếu zip kèm custom_voices.json —
         #    bỏ qua bước enroll (chạy ONNX model × 120 giọng) tốn nhiều phút.
@@ -286,10 +293,13 @@ def ensure_voices_available(settings: Settings, progress_callback=None) -> bool:
         #    mọi máy, không cần tính lại.
         bundled_json = os.path.join(voices_dir, "custom_voices.json")
         custom_path = settings.vieneu_custom_voices_path()
-        if os.path.isfile(bundled_json) and os.path.abspath(bundled_json) != os.path.abspath(custom_path):
+        if os.path.isfile(bundled_json) and os.path.abspath(bundled_json) != os.path.abspath(
+            custom_path
+        ):
             os.makedirs(os.path.dirname(custom_path), exist_ok=True)
             shutil.copy2(bundled_json, custom_path)
             from autodub.speech.tts.voices import invalidate_catalog_cache
+
             invalidate_catalog_cache()
             logger.info("Dùng embeddings đóng sẵn — bỏ qua bước enroll")
             if progress_callback:
@@ -299,6 +309,7 @@ def ensure_voices_available(settings: Settings, progress_callback=None) -> bool:
         # 4. Fallback: enroll thủ công (khi zip cũ không kèm embeddings)
         if progress_callback:
             from autodub.speech.tts import voice_library
+
             pending_count = len(voice_library.pending(settings))
             progress_callback("enroll_start", pending_count, None)
 

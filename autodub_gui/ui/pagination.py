@@ -1,4 +1,5 @@
 """Hàng chuyển trang cho danh sách dài."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -9,8 +10,8 @@ from autodub_gui.ui.buttons import IconButton
 
 _BUTTON = 32
 _ELLIPSIS = -1
-_MAX_PLAIN_PAGES = 7      # ít hơn mức này thì hiện hết, không cần dấu ba chấm
-_NEIGHBOURS = 1           # số trang hiện hai bên trang đang xem
+_MAX_PLAIN_PAGES = 7  # ít hơn mức này thì hiện hết, không cần dấu ba chấm
+_NEIGHBOURS = 1  # số trang hiện hai bên trang đang xem
 
 
 def page_numbers(current: int, total: int) -> list[int]:
@@ -72,8 +73,7 @@ class Pagination(QWidget):
     def _rebuild(self) -> None:
         self._clear()
         self._layout.addStretch()
-        prev = IconButton(icons.chevron_left(tokens.TEXT_SECONDARY),
-                          "Trang trước", size=_BUTTON)
+        prev = IconButton(icons.chevron_left(tokens.TEXT_SECONDARY), "Trang trước", size=_BUTTON)
         prev.setEnabled(self._current > 1)
         prev.clicked.connect(lambda: self.go_to(self._current - 1))
         self._layout.addWidget(prev)
@@ -81,8 +81,7 @@ class Pagination(QWidget):
         for page in page_numbers(self._current, self._total):
             self._layout.addWidget(self._page_widget(page))
 
-        nxt = IconButton(icons.chevron_right(tokens.TEXT_SECONDARY),
-                         "Trang sau", size=_BUTTON)
+        nxt = IconButton(icons.chevron_right(tokens.TEXT_SECONDARY), "Trang sau", size=_BUTTON)
         nxt.setEnabled(self._current < self._total)
         nxt.clicked.connect(lambda: self.go_to(self._current + 1))
         self._layout.addWidget(nxt)
@@ -93,8 +92,7 @@ class Pagination(QWidget):
             label = QLabel("…")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setFixedSize(_BUTTON, _BUTTON)
-            label.setStyleSheet(
-                f"color: {tokens.TEXT_MUTED}; background: transparent;")
+            label.setStyleSheet(f"color: {tokens.TEXT_MUTED}; background: transparent;")
             return label
         button = QPushButton(str(page))
         button.setFixedSize(_BUTTON, _BUTTON)
@@ -108,6 +106,7 @@ class Pagination(QWidget):
             f"color: {tokens.TEXT_ON_ACCENT if active else tokens.TEXT_SECONDARY}; }}"
             f"QPushButton:hover {{ background: "
             f"{tokens.PRIMARY if active else tokens.BG_PANEL_HOVER}; "
-            f"color: {tokens.TEXT_ON_ACCENT if active else tokens.TEXT_PRIMARY}; }}")
+            f"color: {tokens.TEXT_ON_ACCENT if active else tokens.TEXT_PRIMARY}; }}"
+        )
         button.clicked.connect(lambda _c=False, p=page: self.go_to(p))
         return button

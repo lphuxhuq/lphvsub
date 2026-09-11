@@ -6,45 +6,31 @@ Targeting:
 3. Subtitle block drag, collision enforcement, minimum duration invariants, and edge grab behavior.
 4. Successive rapid split (Ctrl+B), merge (Ctrl+J), and undo/redo state integrity.
 """
+
 from __future__ import annotations
 
 import json
 import math
 import os
 import wave
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from autodub.config import Settings
 from autodub_gui import waveform
 from autodub_gui.pages.editor_page import EditorPage
-from autodub_gui.shortcuts import (
-    ALL_SHORTCUTS,
-    EDITOR_SHORTCUTS,
-    GLOBAL_SHORTCUTS,
-    Shortcut,
-    bind,
-    install_editor_shortcuts,
-    typing_in_text_field,
-)
 from autodub_gui.video.timeline import (
-    BAND_H,
+    _MIN_BLOCK_S,
     LABEL_W,
     MAX_ZOOM,
     MIN_ZOOM,
-    RULER_H,
-    THUMB_H,
-    TRACK_H,
     Timeline,
     TimelineCanvas,
-    _MIN_BLOCK_S,
-    _snap,
 )
 
 
@@ -71,10 +57,38 @@ def mock_adversarial_project(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 0.0, "end": 2.0, "duration": 2.0, "text": "seg1", "text_vi": "Câu thoại một"},
-        {"id": 2, "start": 2.5, "end": 5.0, "duration": 2.5, "text": "seg2", "text_vi": "Câu thoại hai"},
-        {"id": 3, "start": 5.5, "end": 8.0, "duration": 2.5, "text": "seg3", "text_vi": "Câu thoại ba"},
-        {"id": 4, "start": 8.5, "end": 10.0, "duration": 1.5, "text": "seg4", "text_vi": "Câu thoại bốn"},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 2.0,
+            "duration": 2.0,
+            "text": "seg1",
+            "text_vi": "Câu thoại một",
+        },
+        {
+            "id": 2,
+            "start": 2.5,
+            "end": 5.0,
+            "duration": 2.5,
+            "text": "seg2",
+            "text_vi": "Câu thoại hai",
+        },
+        {
+            "id": 3,
+            "start": 5.5,
+            "end": 8.0,
+            "duration": 2.5,
+            "text": "seg3",
+            "text_vi": "Câu thoại ba",
+        },
+        {
+            "id": 4,
+            "start": 8.5,
+            "end": 10.0,
+            "duration": 1.5,
+            "text": "seg4",
+            "text_vi": "Câu thoại bốn",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -88,6 +102,7 @@ def mock_adversarial_project(tmp_path):
 # ========================================================================
 # Suite 1: Waveform Adversarial & Stress Testing
 # ========================================================================
+
 
 class TestWaveformAdversarial:
     """Stress-test peak extraction against malformed files, weird bit-depths, and cache anomalies."""
@@ -109,7 +124,9 @@ class TestWaveformAdversarial:
 
             res = waveform.peaks(str(path), buckets=50, use_cache=False)
             assert len(res) == 50, f"Failed for {num_channels} channels"
-            assert all(0.48 <= v <= 0.52 for v in res), f"Incorrect peak average for {num_channels} channels"
+            assert all(0.48 <= v <= 0.52 for v in res), (
+                f"Incorrect peak average for {num_channels} channels"
+            )
 
     def test_waveform_non_power_of_two_chunk_alignment(self, tmp_path) -> None:
         """Audio with frame count not divisible by chunks or buckets."""
@@ -169,24 +186,34 @@ class TestWaveformAdversarial:
         assert len(res1) == 20
 
         # Case 2: Peaks field is not a list
-        cache_path.write_text(json.dumps({
-            "version": 1,
-            "src": "audio.wav",
-            "mtime": os.path.getmtime(str(path)),
-            "n": 20,
-            "peaks": "not a list",
-        }), encoding="utf-8")
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "src": "audio.wav",
+                    "mtime": os.path.getmtime(str(path)),
+                    "n": 20,
+                    "peaks": "not a list",
+                }
+            ),
+            encoding="utf-8",
+        )
         res2 = waveform.peaks(str(path), buckets=20)
         assert len(res2) == 20
 
         # Case 3: Wrong version
-        cache_path.write_text(json.dumps({
-            "version": 999,
-            "src": "audio.wav",
-            "mtime": os.path.getmtime(str(path)),
-            "n": 20,
-            "peaks": [0.5] * 20,
-        }), encoding="utf-8")
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "version": 999,
+                    "src": "audio.wav",
+                    "mtime": os.path.getmtime(str(path)),
+                    "n": 20,
+                    "peaks": [0.5] * 20,
+                }
+            ),
+            encoding="utf-8",
+        )
         res3 = waveform.peaks(str(path), buckets=20)
         assert len(res3) == 20
         assert res3[0] == 0.0  # Freshly computed from zeroed audio
@@ -197,7 +224,7 @@ class TestWaveformAdversarial:
         rate = 8000
         frames = 8000
         scale = np.iinfo(np.int16).max
-        data = (np.ones(frames, dtype=np.int16) * int(scale * 0.4))
+        data = np.ones(frames, dtype=np.int16) * int(scale * 0.4)
         with wave.open(str(path), "wb") as out:
             out.setnchannels(1)
             out.setsampwidth(2)
@@ -217,6 +244,7 @@ class TestWaveformAdversarial:
 # ========================================================================
 # Suite 2: Timeline Canvas Coordinates & Math Stress
 # ========================================================================
+
 
 class TestTimelineCanvasMathAdversarial:
     """Stress-test geometry, coordinate conversion, zooming, and extreme parameters."""
@@ -278,7 +306,10 @@ class TestTimelineCanvasMathAdversarial:
         # Extreme duration with many segments
         timeline_canvas.set_duration(50000.0)
         timeline_canvas.set_peaks([0.5] * 4000)
-        segs = [{"id": i, "start": i * 10.0, "end": i * 10.0 + 8.0, "text_vi": f"Seg {i}"} for i in range(1000)]
+        segs = [
+            {"id": i, "start": i * 10.0, "end": i * 10.0 + 8.0, "text_vi": f"Seg {i}"}
+            for i in range(1000)
+        ]
         timeline_canvas.set_segments(segs)
         timeline_canvas.set_position(25000.0)
         img1 = QImage(888, 200, QImage.Format.Format_ARGB32_Premultiplied)
@@ -289,6 +320,7 @@ class TestTimelineCanvasMathAdversarial:
 # ========================================================================
 # Suite 3: Subtitle Block Drag, Collisions & Snapping Stress
 # ========================================================================
+
 
 class TestSubtitleBlockAdversarial:
     """Stress-test interactive block dragging, boundary limits, minimum duration invariant."""
@@ -356,6 +388,7 @@ class TestSubtitleBlockAdversarial:
 # Suite 4: Successive Rapid Split / Merge & Undo/Redo Stress
 # ========================================================================
 
+
 class TestEditorShortcutsAdversarial:
     """Stress-test rapid split (Ctrl+B), merge (Ctrl+J), and undo/redo stacks."""
 
@@ -395,7 +428,9 @@ class TestEditorShortcutsAdversarial:
 
         page.cleanup()
 
-    def test_rapid_consecutive_merges_to_single_segment(self, qapp, mock_adversarial_project) -> None:
+    def test_rapid_consecutive_merges_to_single_segment(
+        self, qapp, mock_adversarial_project
+    ) -> None:
         """Merge all segments in the project consecutively until only 1 remains."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_adversarial_project)
@@ -459,7 +494,9 @@ class TestEditorShortcutsAdversarial:
 
         page.cleanup()
 
-    def test_split_fallback_to_selected_segment_midpoint(self, qapp, mock_adversarial_project) -> None:
+    def test_split_fallback_to_selected_segment_midpoint(
+        self, qapp, mock_adversarial_project
+    ) -> None:
         """Playhead is at 99.0s (outside all segments), but segment 2 is selected in subtitle list."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_adversarial_project)
@@ -485,10 +522,26 @@ class TestEditorShortcutsAdversarial:
         seg_dir = data / "segments"
         seg_dir.mkdir(parents=True)
         segs = [
-            {"id": 1, "start": 0.0, "end": 0.39, "duration": 0.39, "text": "short", "text_vi": "Ngắn"},
-            {"id": 2, "start": 1.0, "end": 1.40, "duration": 0.40, "text": "exact", "text_vi": "Đủ"},
+            {
+                "id": 1,
+                "start": 0.0,
+                "end": 0.39,
+                "duration": 0.39,
+                "text": "short",
+                "text_vi": "Ngắn",
+            },
+            {
+                "id": 2,
+                "start": 1.0,
+                "end": 1.40,
+                "duration": 0.40,
+                "text": "exact",
+                "text_vi": "Đủ",
+            },
         ]
-        (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
+        (data / "transcript_vi.json").write_text(
+            json.dumps(segs, ensure_ascii=False), encoding="utf-8"
+        )
         (data / "quality_report.json").write_text("{}", encoding="utf-8")
         (data / "audio_vi_full.wav").write_bytes(b"RIFF....WAVE")
         (work / "source.mp4").write_bytes(b"fake-mp4")
@@ -512,10 +565,30 @@ class TestEditorShortcutsAdversarial:
 
     def test_timeline_mouse_press_outside_bounds(self, timeline_canvas) -> None:
         """Mouse click at extreme negative or out-of-bounds coordinates."""
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(-50, -50))
-        QTest.mouseRelease(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(-50, -50))
-        QTest.mousePress(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(5000, 5000))
-        QTest.mouseRelease(timeline_canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(5000, 5000))
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(-50, -50),
+        )
+        QTest.mouseRelease(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(-50, -50),
+        )
+        QTest.mousePress(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(5000, 5000),
+        )
+        QTest.mouseRelease(
+            timeline_canvas,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+            QPoint(5000, 5000),
+        )
 
     def test_timeline_slider_zoom_sync_extremes(self, qapp) -> None:
         """Zoom slider synchronization at MIN_ZOOM and MAX_ZOOM."""
@@ -529,4 +602,3 @@ class TestEditorShortcutsAdversarial:
         assert tl.zoom_label.text() == f"{MAX_ZOOM:.1f}x"
         assert abs(tl.canvas.zoom() - MAX_ZOOM) < 1e-4
         tl.deleteLater()
-

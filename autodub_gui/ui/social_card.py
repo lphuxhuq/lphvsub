@@ -8,15 +8,22 @@ Hiển thị trực quan:
 - Danh sách Hashtags dạng Pill Badges kèm nút «Chép Hashtags».
 - Hàng nút hành động: «Chép Toàn bộ», «Mở video», «Mở thư mục», «Chỉnh sửa dự án».
 """
+
 from __future__ import annotations
 
 import os
-from typing import Sequence
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QCursor, QPixmap
+
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import tokens
@@ -173,7 +180,9 @@ class SocialMetadataCard(QFrame):
             f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; font-weight: 600;"
         )
         self.btn_copy_tags = GhostButton("Chép Hashtags")
-        self.btn_copy_tags.setToolTip("Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard")
+        self.btn_copy_tags.setToolTip(
+            "Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard"
+        )
         self.btn_copy_tags.clicked.connect(self._copy_tags)
         tags_header.addWidget(lbl_tags_tag)
         tags_header.addStretch()
@@ -198,7 +207,9 @@ class SocialMetadataCard(QFrame):
         actions_row.setSpacing(tokens.SP_2)
 
         self.btn_copy_all = PrimaryButton("Chép Toàn bộ")
-        self.btn_copy_all.setToolTip("Sao chép Tiêu đề, Caption và Hashtags vào Clipboard để đăng bài ngay")
+        self.btn_copy_all.setToolTip(
+            "Sao chép Tiêu đề, Caption và Hashtags vào Clipboard để đăng bài ngay"
+        )
         self.btn_copy_all.clicked.connect(self._copy_all)
         actions_row.addWidget(self.btn_copy_all)
 
@@ -208,12 +219,16 @@ class SocialMetadataCard(QFrame):
         actions_row.addWidget(self.btn_open_video)
 
         self.btn_open_folder = GhostButton("Mở thư mục")
-        self.btn_open_folder.setToolTip("Mở thư mục chứa video và chọn sẵn tệp video trong File Explorer")
+        self.btn_open_folder.setToolTip(
+            "Mở thư mục chứa video và chọn sẵn tệp video trong File Explorer"
+        )
         self.btn_open_folder.clicked.connect(self._on_open_folder)
         actions_row.addWidget(self.btn_open_folder)
 
         self.btn_edit = GhostButton("Chỉnh sửa dự án")
-        self.btn_edit.setToolTip("Chuyển sang Trình chỉnh sửa Studio để tinh chỉnh phụ đề / âm thanh")
+        self.btn_edit.setToolTip(
+            "Chuyển sang Trình chỉnh sửa Studio để tinh chỉnh phụ đề / âm thanh"
+        )
         self.btn_edit.clicked.connect(self.edit_requested.emit)
         actions_row.addWidget(self.btn_edit)
 
@@ -302,7 +317,9 @@ class SocialMetadataCard(QFrame):
                 f"  background: {tokens.BG_PANEL_HOVER}; border-color: {tokens.PRIMARY};"
                 f"}}"
             )
-            tag_btn.clicked.connect(lambda _c=False, s=tag_str, b=tag_btn: self._copy_single_tag(s, b))
+            tag_btn.clicked.connect(
+                lambda _c=False, s=tag_str, b=tag_btn: self._copy_single_tag(s, b)
+            )
             self.tags_layout.addWidget(tag_btn)
 
         # Thumbnail
@@ -315,7 +332,8 @@ class SocialMetadataCard(QFrame):
             pix = QPixmap(self._thumb_path)
             if not pix.isNull():
                 scaled = pix.scaled(
-                    160, 90,
+                    160,
+                    90,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )

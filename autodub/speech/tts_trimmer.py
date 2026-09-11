@@ -5,20 +5,22 @@ Module này tính toán RMS energy trên các frame 10ms để phát hiện chí
 thời điểm bắt đầu và kết thúc phát âm thật, sau đó cắt bớt khoảng lặng thừa
 (có giữ lại margin an toàn 80ms để bảo vệ các phụ âm đầu/đuôi có năng lượng thấp).
 """
+
 from __future__ import annotations
 
 import os
 import wave
+
 import numpy as np
 
 from autodub.utils import ensure_dir, setup_logging
 
 logger = setup_logging("autodub.tts_trimmer")
 
-FRAME_S = 0.010          # Khung RMS 10ms
-ENERGY_RATIO = 0.02      # Ngưỡng năng lượng = 2% peak RMS (bảo vệ phụ âm xát/vô thanh th, s, x, ph, kh)
-ABS_FLOOR = 0.0015       # Ngưỡng sàn năng lượng tối thiểu (không nuốt tiếng thì thầm)
-DEFAULT_MARGIN_S = 0.080 # Margin an toàn giữ lại hai đầu (80ms)
+FRAME_S = 0.010  # Khung RMS 10ms
+ENERGY_RATIO = 0.02  # Ngưỡng năng lượng = 2% peak RMS (bảo vệ phụ âm xát/vô thanh th, s, x, ph, kh)
+ABS_FLOOR = 0.0015  # Ngưỡng sàn năng lượng tối thiểu (không nuốt tiếng thì thầm)
+DEFAULT_MARGIN_S = 0.080  # Margin an toàn giữ lại hai đầu (80ms)
 
 
 def compute_speech_extents(
@@ -38,8 +40,8 @@ def compute_speech_extents(
     if n_frames == 0:
         return 0.0, len(arr) / rate
 
-    frames = arr[:n_frames * frame_len].reshape(n_frames, frame_len)
-    rms = np.sqrt(np.mean(frames ** 2, axis=1))
+    frames = arr[: n_frames * frame_len].reshape(n_frames, frame_len)
+    rms = np.sqrt(np.mean(frames**2, axis=1))
 
     peak = float(np.max(rms)) if len(rms) > 0 else 0.0
     if peak < abs_floor:
@@ -124,7 +126,9 @@ def trim_tts_silence(
             out_w.setframerate(rate)
             out_w.writeframes(trimmed_int16.tobytes())
 
-        logger.debug(f"Trimmed {os.path.basename(wav_path)}: -{lead_trim:.3f}s lead, -{tail_trim:.3f}s tail")
+        logger.debug(
+            f"Trimmed {os.path.basename(wav_path)}: -{lead_trim:.3f}s lead, -{tail_trim:.3f}s tail"
+        )
         return out_path, lead_trim, tail_trim
     except Exception as e:
         logger.warning(f"Không trim được khoảng lặng {wav_path}: {e}")

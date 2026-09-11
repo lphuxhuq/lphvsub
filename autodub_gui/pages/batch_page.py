@@ -4,6 +4,7 @@ Các video được xử lý lần lượt từng cái một chứ không song s
 nền, nghe lời và tạo giọng đều dùng chung card đồ họa; chạy cùng lúc sẽ hết
 bộ nhớ. Điều này được nói rõ trên giao diện.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,8 +12,15 @@ import os
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QMenu,
-    QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox,
+    QGridLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMenu,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub.batch import BatchItem
@@ -20,13 +28,16 @@ from autodub.pipeline import DubRequest
 from autodub.utils import save_json_atomic
 from autodub_gui import dub_constants as consts
 from autodub_gui import icons, tokens
+from autodub_gui.log_text import Narrator, error_line
 from autodub_gui.pages import BasePage
-from autodub_gui.run_state import REGISTRY, ActiveJob
-from autodub_gui.run_state import step_percent
+from autodub_gui.run_state import REGISTRY, ActiveJob, step_percent
 from autodub_gui.system_open import open_folder
 from autodub_gui.ui.badges import StatusBadge
 from autodub_gui.ui.buttons import (
-    DangerButton, GhostButton, IconButton, PrimaryButton,
+    DangerButton,
+    GhostButton,
+    IconButton,
+    PrimaryButton,
 )
 from autodub_gui.ui.collapsible import CollapsibleSection
 from autodub_gui.ui.dropzone import DragDropZone, is_video_file
@@ -34,12 +45,11 @@ from autodub_gui.ui.inputs import LabeledCombo, LabeledSlider, LabeledWidget
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.modal import ConfirmDialog
 from autodub_gui.ui.progress import ThinProgressBar
+from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.table import Column, DataTable
 from autodub_gui.ui.toast import TOASTS
 from autodub_gui.widgets import LogPanel
 from autodub_gui.workers import BatchWorker
-from autodub_gui.ui.style import clear_background
-from autodub_gui.log_text import Narrator, error_line
 
 _PAGE_MARGIN = 28
 _THUMB_W, _THUMB_H = 56, 32
@@ -47,12 +57,11 @@ _ACTION_ICON = 28
 _STATUS_COL_W = 150
 _PROGRESS_COL_W = 190
 _ACTION_COL_W = 96
-_TABLE_MIN_H = 220      # bảng luôn đủ chỗ cho vài dòng, kể cả khi phải cuộn
-_OPTION_COLS = 2        # tùy chọn xếp hai cột cho đỡ dài
+_TABLE_MIN_H = 220  # bảng luôn đủ chỗ cho vài dòng, kể cả khi phải cuộn
+_OPTION_COLS = 2  # tùy chọn xếp hai cột cho đỡ dài
 
 # Trạng thái nội bộ của một dòng trong bảng
-WAITING, RUNNING, DONE, FAILED, PAUSED = ("waiting", "running", "done",
-                                          "failed", "paused")
+WAITING, RUNNING, DONE, FAILED, PAUSED = ("waiting", "running", "done", "failed", "paused")
 
 _STATUS_VIEW: dict[str, tuple[str, str, str]] = {
     # trạng thái -> (nhãn, kiểu huy hiệu, màu thanh tiến trình)
@@ -63,10 +72,11 @@ _STATUS_VIEW: dict[str, tuple[str, str, str]] = {
     PAUSED: ("Đã dừng", "warning", tokens.WARNING),
 }
 
-_PAUSE_TOOLTIP = ("Dừng lại — video đang xử lý sẽ tiếp tục từ chỗ dừng khi "
-                  "bạn chạy lại, phần đã làm không mất.")
+_PAUSE_TOOLTIP = (
+    "Dừng lại — video đang xử lý sẽ tiếp tục từ chỗ dừng khi bạn chạy lại, phần đã làm không mất."
+)
 
-QUEUE_FILE = "batch_queue.json"     # danh sách chờ, sống qua các lần mở app
+QUEUE_FILE = "batch_queue.json"  # danh sách chờ, sống qua các lần mở app
 
 
 class BatchPage(BasePage):
@@ -84,8 +94,8 @@ class BatchPage(BasePage):
         self._detail: dict[str, str] = {}
         self._done_steps: dict[str, set[str]] = {}
         self._current_key = ""
-        self._chain_next = False       # lượt trước xong, còn video mới chờ
-        self._pending_adds: set[str] = set()   # video thêm vào khi đang chạy
+        self._chain_next = False  # lượt trước xong, còn video mới chờ
+        self._pending_adds: set[str] = set()  # video thêm vào khi đang chạy
         self._shared_style: dict | None = None
         self._shared_regions: list[dict] = []
         self._shared_banner_opts: dict | None = None
@@ -99,6 +109,7 @@ class BatchPage(BasePage):
     # -- Lưu hàng chờ qua các lần mở app -------------------------------
     def _queue_path(self) -> str:
         from autodub_gui.pages.new_project_page import cache_dir
+
         return os.path.join(cache_dir(), QUEUE_FILE)
 
     def _load_queue(self) -> None:
@@ -116,7 +127,7 @@ class BatchPage(BasePage):
             url = entry.get("url") or None
             file_path = entry.get("file_path") or None
             if file_path and not os.path.isfile(file_path):
-                continue           # tệp đã bị xóa/di chuyển thì bỏ dòng đó
+                continue  # tệp đã bị xóa/di chuyển thì bỏ dòng đó
             if not url and not file_path:
                 continue
             item = BatchItem(url=url, file_path=file_path)
@@ -128,8 +139,7 @@ class BatchPage(BasePage):
             # tiếp tục từ chỗ dừng nhờ thư mục dự án còn nguyên.
             if state == RUNNING:
                 state = PAUSED
-            self._state[item.key] = (state if state in (WAITING, DONE, FAILED,
-                                                        PAUSED) else WAITING)
+            self._state[item.key] = state if state in (WAITING, DONE, FAILED, PAUSED) else WAITING
             if self._state[item.key] == DONE:
                 self._percent[item.key] = 100
             detail = entry.get("detail")
@@ -138,14 +148,19 @@ class BatchPage(BasePage):
 
     def _save_queue(self) -> None:
         """Ghi danh sách chờ xuống đĩa (nguyên tử) mỗi khi nó thay đổi."""
-        items = [{"url": it.url, "file_path": it.file_path,
-                  "state": self._state.get(it.key, WAITING),
-                  "detail": self._detail.get(it.key, "")}
-                 for it in self._items]
+        items = [
+            {
+                "url": it.url,
+                "file_path": it.file_path,
+                "state": self._state.get(it.key, WAITING),
+                "detail": self._detail.get(it.key, ""),
+            }
+            for it in self._items
+        ]
         try:
             save_json_atomic({"items": items}, self._queue_path())
         except OSError:
-            pass      # không lưu được hàng chờ thì cũng không cản việc chính
+            pass  # không lưu được hàng chờ thì cũng không cản việc chính
 
     # -- Dựng giao diện ------------------------------------------------
     def _build(self) -> None:
@@ -160,8 +175,7 @@ class BatchPage(BasePage):
         root.setSpacing(0)
         root.addWidget(self._wrap(self._build_header(), bottom=0))
         root.addWidget(self._build_body(), 1)
-        root.addWidget(self._wrap(self._build_footer(), top=tokens.SP_3,
-                                  bottom=tokens.SP_5))
+        root.addWidget(self._wrap(self._build_footer(), top=tokens.SP_3, bottom=tokens.SP_5))
 
     @staticmethod
     def _wrap(layout, *, top: int = tokens.SP_2, bottom: int = 0) -> QWidget:
@@ -178,8 +192,7 @@ class BatchPage(BasePage):
         body = QWidget()
         clear_background(body)
         inner = QVBoxLayout(body)
-        inner.setContentsMargins(_PAGE_MARGIN, tokens.SP_4,
-                                 _PAGE_MARGIN, tokens.SP_2)
+        inner.setContentsMargins(_PAGE_MARGIN, tokens.SP_4, _PAGE_MARGIN, tokens.SP_2)
         inner.setSpacing(tokens.SP_4)
 
         self.dropzone = DragDropZone(compact=True)
@@ -194,19 +207,22 @@ class BatchPage(BasePage):
         note = QLabel("Các video được xử lý lần lượt từng cái để máy không quá tải.")
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         inner.addWidget(note)
 
         self.table = DataTable(
-            [Column("Video", stretch=True),
-             Column("Trạng thái", width=_STATUS_COL_W),
-             Column("Tiến trình", width=_PROGRESS_COL_W),
-             Column("Thao tác", width=_ACTION_COL_W)],
+            [
+                Column("Video", stretch=True),
+                Column("Trạng thái", width=_STATUS_COL_W),
+                Column("Tiến trình", width=_PROGRESS_COL_W),
+                Column("Thao tác", width=_ACTION_COL_W),
+            ],
             empty_title="Chưa có video nào trong danh sách",
             empty_description="Kéo thả video vào ô phía trên, chọn tệp từ máy "
-                              "hoặc dán liên kết để bắt đầu.",
-            empty_action="Thêm video")
+            "hoặc dán liên kết để bắt đầu.",
+            empty_action="Thêm video",
+        )
         self.table.empty.action_clicked.connect(self._pick_files)
         self.table.setMinimumHeight(_TABLE_MIN_H)
         inner.addWidget(self.table, 1)
@@ -218,8 +234,7 @@ class BatchPage(BasePage):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(body)
         return scroll
 
@@ -228,8 +243,7 @@ class BatchPage(BasePage):
         row.setSpacing(tokens.SP_2)
         row.addStretch()
         self.btn_add = PrimaryButton("Thêm video")
-        self.btn_add.setToolTip("Chọn tệp từ máy, dán liên kết hoặc nhập từ "
-                                "tệp danh sách")
+        self.btn_add.setToolTip("Chọn tệp từ máy, dán liên kết hoặc nhập từ tệp danh sách")
         self.btn_add.clicked.connect(self._show_add_menu)
         self.btn_clear = GhostButton("Xóa tất cả")
         self.btn_clear.clicked.connect(self._clear_all)
@@ -238,45 +252,66 @@ class BatchPage(BasePage):
         return row
 
     def _build_options(self, section) -> None:
-        self.opt_lang = LabeledCombo("Ngôn ngữ gốc", consts.SOURCE_LANGS,
-                                     "Ngôn ngữ nói trong các video này")
+        self.opt_lang = LabeledCombo(
+            "Ngôn ngữ gốc", consts.SOURCE_LANGS, "Ngôn ngữ nói trong các video này"
+        )
         from autodub_gui.voice_picker import VoicePicker
 
         self.opt_voice = VoicePicker("Giọng đọc", show_preview=False)
-        self.opt_bg = LabeledCombo("Nhạc nền", consts.BG_MODES,
-                                   "Cách xử lý âm thanh gốc")
+        self.opt_bg = LabeledCombo("Nhạc nền", consts.BG_MODES, "Cách xử lý âm thanh gốc")
         self.opt_bg.changed.connect(
-            lambda: self.opt_duck.setEnabled(
-                self.opt_bg.current_key() == "duck"))
+            lambda: self.opt_duck.setEnabled(self.opt_bg.current_key() == "duck")
+        )
         self.opt_duck = LabeledSlider(
-            "Mức giảm tiếng gốc", -40.0, 0.0, 1.0,
+            "Mức giảm tiếng gốc",
+            -40.0,
+            0.0,
+            1.0,
             "Càng âm thì tiếng gốc càng nhỏ khi có lời thoại tiếng Việt.",
-            " dB", decimals=0)
+            " dB",
+            decimals=0,
+        )
         self.opt_duck.set_value(-12.0)
         self.opt_duck.setEnabled(False)
-        self.opt_subtitle = LabeledCombo("Phụ đề", consts.SUBTITLE_MODES,
-                                         "Cách hiện phụ đề trên video kết quả")
+        self.opt_subtitle = LabeledCombo(
+            "Phụ đề", consts.SUBTITLE_MODES, "Cách hiện phụ đề trên video kết quả"
+        )
         # Chọn sẵn theo Cài đặt — trước đây luôn rơi về "Không" dù người
         # dùng đã đặt kiểu phụ đề mặc định khác.
         try:
             self.opt_subtitle.set_key(self._settings_provider().subtitle_mode)
-        except Exception:  # noqa: BLE001 — cấu hình hỏng thì giữ mặc định
+        except Exception:
             pass
         self.opt_concurrency = LabeledSlider(
-            "Số luồng xử lý song song", 1.0, 4.0, 1.0,
-            "Số video được tải và lồng tiếng đồng thời cùng lúc", " luồng", decimals=0)
+            "Số luồng xử lý song song",
+            1.0,
+            4.0,
+            1.0,
+            "Số video được tải và lồng tiếng đồng thời cùng lúc",
+            " luồng",
+            decimals=0,
+        )
         self.opt_concurrency.set_value(2.0)
 
-        section.add_layout(self._grid(
-            [self.opt_lang, self.opt_voice, self.opt_bg, self.opt_duck,
-             self.opt_subtitle, self._build_style_block(), self.opt_concurrency]))
+        section.add_layout(
+            self._grid(
+                [
+                    self.opt_lang,
+                    self.opt_voice,
+                    self.opt_bg,
+                    self.opt_duck,
+                    self.opt_subtitle,
+                    self._build_style_block(),
+                    self.opt_concurrency,
+                ]
+            )
+        )
 
         self.chk_audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề")
         self.chk_reuse = QCheckBox("Giữ bộ giọng giữa các video để chạy nhanh hơn")
         self.chk_reuse.setChecked(True)
         self.chk_retry = QCheckBox("Làm lại cả những video đã xong")
-        section.add_layout(self._grid(
-            [self.chk_audio_only, self.chk_reuse, self.chk_retry]))
+        section.add_layout(self._grid([self.chk_audio_only, self.chk_reuse, self.chk_retry]))
 
     @staticmethod
     def _grid(widgets: list[QWidget]) -> QGridLayout:
@@ -303,8 +338,8 @@ class BatchPage(BasePage):
         self.btn_style.clicked.connect(self._customize_all)
         self.lbl_style = ElidedLabel("Kiểu mặc định cho cả danh sách")
         self.lbl_style.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         holder = QWidget()
         clear_background(holder)
         box = QVBoxLayout(holder)
@@ -317,8 +352,8 @@ class BatchPage(BasePage):
         box.addLayout(row)
         box.addWidget(self.lbl_style)
         return LabeledWidget(
-            "Kiểu chữ phụ đề", holder,
-            "Đặt phông chữ, cỡ chữ và vùng che cho cả danh sách")
+            "Kiểu chữ phụ đề", holder, "Đặt phông chữ, cỡ chữ và vùng che cho cả danh sách"
+        )
 
     def _build_footer(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -327,7 +362,8 @@ class BatchPage(BasePage):
         self.summary.setWordWrap(True)
         self.summary.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         row.addWidget(self.summary, 1)
         self.btn_stop = DangerButton("Dừng")
         self.btn_stop.setToolTip(_PAUSE_TOOLTIP)
@@ -353,17 +389,19 @@ class BatchPage(BasePage):
         from autodub_gui.ui.dropzone import VIDEO_FILTER
 
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER)
+            self, "Chọn video", os.path.expanduser("~"), VIDEO_FILTER
+        )
         self._add_files(paths)
 
     def _add_link(self) -> None:
         url, ok = QInputDialog.getText(
-            self, "Thêm liên kết video",
-            "Dán liên kết YouTube, TikTok, Douyin hoặc Bilibili:")
+            self, "Thêm liên kết video", "Dán liên kết YouTube, TikTok, Douyin hoặc Bilibili:"
+        )
         url = (url or "").strip()
         if not ok or not url:
             return
         from autodub.media.douyin import extract_clean_url
+
         clean = extract_clean_url(url)
         if not clean.lower().startswith(("http://", "https://")):
             TOASTS.warn("Liên kết phải bắt đầu bằng http:// hoặc https://")
@@ -373,11 +411,12 @@ class BatchPage(BasePage):
     def _import_list(self) -> None:
         """Đọc một tệp chữ, mỗi dòng một liên kết, bỏ dòng bắt đầu bằng dấu thăng."""
         from PySide6.QtWidgets import QFileDialog
+
         from autodub.media.douyin import extract_clean_url
 
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn tệp danh sách liên kết", "",
-            "Tệp văn bản (*.txt);;Tất cả tệp (*.*)")
+            self, "Chọn tệp danh sách liên kết", "", "Tệp văn bản (*.txt);;Tất cả tệp (*.*)"
+        )
         if not path:
             return
         try:
@@ -395,8 +434,10 @@ class BatchPage(BasePage):
             if clean.lower().startswith(("http://", "https://")):
                 urls.append(clean)
         if not urls:
-            TOASTS.warn("Tệp này không có liên kết nào hợp lệ. Mỗi dòng cần "
-                        "một liên kết bắt đầu bằng http:// hoặc https://")
+            TOASTS.warn(
+                "Tệp này không có liên kết nào hợp lệ. Mỗi dòng cần "
+                "một liên kết bắt đầu bằng http:// hoặc https://"
+            )
             return
         self._append([BatchItem(url=u) for u in urls])
         TOASTS.success(f"Đã thêm {len(urls)} liên kết từ tệp danh sách.")
@@ -423,14 +464,14 @@ class BatchPage(BasePage):
         if added:
             self._refresh_table()
             if self.is_running():
-                TOASTS.info(f"Đã thêm {added} video vào hàng chờ — sẽ tự chạy "
-                            "tiếp khi lượt hiện tại xong.")
+                TOASTS.info(
+                    f"Đã thêm {added} video vào hàng chờ — sẽ tự chạy tiếp khi lượt hiện tại xong."
+                )
 
     def _remove(self, key: str) -> None:
         self._items = [it for it in self._items if it.key != key]
         self._pending_adds.discard(key)
-        for store in (self._state, self._percent, self._detail,
-                      self._done_steps):
+        for store in (self._state, self._percent, self._detail, self._done_steps):
             store.pop(key, None)
         self._refresh_table()
 
@@ -441,10 +482,13 @@ class BatchPage(BasePage):
             TOASTS.warn("Đang chạy hàng loạt, hãy dừng trước khi xóa danh sách.")
             return
         confirmed, _ = ConfirmDialog.ask(
-            self, "Xóa danh sách",
+            self,
+            "Xóa danh sách",
             f"Bỏ toàn bộ {len(self._items)} video khỏi danh sách chờ? "
             "Việc này không xóa tệp nào trên máy.",
-            kind="warning", confirm_label="Xóa danh sách")
+            kind="warning",
+            confirm_label="Xóa danh sách",
+        )
         if not confirmed:
             return
         self._items.clear()
@@ -477,12 +521,12 @@ class BatchPage(BasePage):
         title = ElidedLabel(self._title_of(item))
         title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 500; background: transparent;")
-        source = ElidedLabel(
-            "Tệp trên máy" if item.file_path else "Tải từ liên kết")
+            f"font-weight: 500; background: transparent;"
+        )
+        source = ElidedLabel("Tệp trên máy" if item.file_path else "Tải từ liên kết")
         source.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(title)
         layout.addWidget(source)
         return holder
@@ -512,8 +556,8 @@ class BatchPage(BasePage):
         bar.setValue(percent)
         text = QLabel(f"{percent}%")
         text.setStyleSheet(
-            f"color: {color}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {color}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         layout.addWidget(bar)
         layout.addWidget(text)
         self.table.set_widget(row, 2, holder)
@@ -522,30 +566,28 @@ class BatchPage(BasePage):
     def _action_buttons(self, key: str, state: str) -> list[QWidget]:
         """Hai nút thao tác, đổi theo trạng thái của dòng. Không có nút chết."""
         if state == RUNNING:
-            first = IconButton(icons.pause(tokens.WARNING),
-                               "Dừng sau video này", size=_ACTION_ICON)
+            first = IconButton(icons.pause(tokens.WARNING), "Dừng sau video này", size=_ACTION_ICON)
             first.clicked.connect(self._cancel)
-            second = IconButton(icons.trash(tokens.TEXT_DISABLED),
-                                "Không xóa được khi đang chạy",
-                                size=_ACTION_ICON)
+            second = IconButton(
+                icons.trash(tokens.TEXT_DISABLED), "Không xóa được khi đang chạy", size=_ACTION_ICON
+            )
             second.setEnabled(False)
             return [first, second]
         if state == DONE:
-            first = IconButton(icons.folder(tokens.TEXT_SECONDARY),
-                               "Mở thư mục kết quả", size=_ACTION_ICON)
+            first = IconButton(
+                icons.folder(tokens.TEXT_SECONDARY), "Mở thư mục kết quả", size=_ACTION_ICON
+            )
             first.clicked.connect(lambda _c=False, k=key: self._open_result(k))
         elif state == FAILED:
-            first = IconButton(icons.reload(tokens.WARNING),
-                               "Chạy lại video này", size=_ACTION_ICON)
+            first = IconButton(
+                icons.reload(tokens.WARNING), "Chạy lại video này", size=_ACTION_ICON
+            )
             first.clicked.connect(lambda _c=False, k=key: self._run_single(k))
         else:
-            tooltip = ("Chạy tiếp video này ngay" if state == PAUSED
-                       else "Chạy riêng video này ngay")
-            first = IconButton(icons.play(tokens.SUCCESS), tooltip,
-                               size=_ACTION_ICON)
+            tooltip = "Chạy tiếp video này ngay" if state == PAUSED else "Chạy riêng video này ngay"
+            first = IconButton(icons.play(tokens.SUCCESS), tooltip, size=_ACTION_ICON)
             first.clicked.connect(lambda _c=False, k=key: self._run_single(k))
-        second = IconButton(icons.trash(tokens.DANGER),
-                            "Bỏ khỏi danh sách", size=_ACTION_ICON)
+        second = IconButton(icons.trash(tokens.DANGER), "Bỏ khỏi danh sách", size=_ACTION_ICON)
         second.clicked.connect(lambda _c=False, k=key: self._remove(k))
         return [first, second]
 
@@ -561,62 +603,96 @@ class BatchPage(BasePage):
         running = sum(1 for s in self._state.values() if s == RUNNING)
         failed = sum(1 for s in self._state.values() if s == FAILED)
         self.summary.setText(
-            f"Tổng: {total} video    Hoàn thành: {done}    "
-            f"Đang xử lý: {running}    Lỗi: {failed}")
+            f"Tổng: {total} video    Hoàn thành: {done}    Đang xử lý: {running}    Lỗi: {failed}"
+        )
         self.btn_start.setEnabled(bool(total) and not self.is_running())
 
     # -- Kiểu phụ đề chung ---------------------------------------------
     def _customize_all(self) -> None:
         from autodub_gui.style_dialog import StyleDialog
 
-        video = next((it.file_path for it in self._items
-                      if it.file_path and os.path.isfile(it.file_path)), None)
+        video = next(
+            (it.file_path for it in self._items if it.file_path and os.path.isfile(it.file_path)),
+            None,
+        )
         settings = self._settings_provider()
         style = self._shared_style or settings.subtitle_style()
         logo_opts = {
-            "logo_path": getattr(self, "_shared_logo_path", "") or getattr(settings, "logo_path", ""),
+            "logo_path": getattr(self, "_shared_logo_path", "")
+            or getattr(settings, "logo_path", ""),
             "logo_position": getattr(self, "_shared_logo_position", "top_right"),
             "logo_scale": getattr(self, "_shared_logo_scale", 0.12),
             "logo_opacity": getattr(self, "_shared_logo_opacity", 0.85),
             "logo_motion": getattr(self, "_shared_logo_motion", "static"),
         }
         wm_opts = {
-            "watermark_text": getattr(self, "_shared_wm_text", "") or getattr(settings, "watermark_text", ""),
+            "watermark_text": getattr(self, "_shared_wm_text", "")
+            or getattr(settings, "watermark_text", ""),
             "watermark_motion": getattr(self, "_shared_wm_motion", "bounce"),
             "watermark_opacity": getattr(self, "_shared_wm_opacity", 0.28),
             "watermark_font_size": getattr(self, "_shared_wm_font_size", 26),
             "watermark_speed": getattr(self, "_shared_wm_speed", 40),
         }
         mask_opts = {
-            "mask_method": getattr(self, "_shared_mask_method", getattr(settings, "mask_method", "blur")),
-            "inpaint_engine": getattr(self, "_shared_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")),
-            "inpaint_device": getattr(self, "_shared_inpaint_device", getattr(settings, "inpaint_device", "auto")),
+            "mask_method": getattr(
+                self, "_shared_mask_method", getattr(settings, "mask_method", "blur")
+            ),
+            "inpaint_engine": getattr(
+                self, "_shared_inpaint_engine", getattr(settings, "inpaint_engine", "lama_onnx")
+            ),
+            "inpaint_device": getattr(
+                self, "_shared_inpaint_device", getattr(settings, "inpaint_device", "auto")
+            ),
         }
         banner_opts = getattr(self, "_shared_banner_opts", None) or {
             "frame_banner_enabled": getattr(settings, "frame_banner_enabled", False),
             "frame_banner_color": getattr(settings, "frame_banner_color", "#000000"),
             "frame_banner_height_ratio": getattr(settings, "frame_banner_height_ratio", 0.16),
-            "frame_header_text": getattr(settings, "frame_header_text", getattr(settings, "frame_banner_top_text", "")),
-            "frame_header_font_size": getattr(settings, "frame_header_font_size", getattr(settings, "frame_banner_top_size", 32)),
-            "frame_header_color": getattr(settings, "frame_header_color", getattr(settings, "frame_banner_top_color", "#FFFFFF")),
-            "frame_footer_text": getattr(settings, "frame_footer_text", getattr(settings, "frame_banner_bottom_text", "")),
-            "frame_footer_font_size": getattr(settings, "frame_footer_font_size", getattr(settings, "frame_banner_bottom_size", 24)),
-            "frame_footer_color": getattr(settings, "frame_footer_color", getattr(settings, "frame_banner_bottom_color", "#FFD54A")),
+            "frame_header_text": getattr(
+                settings, "frame_header_text", getattr(settings, "frame_banner_top_text", "")
+            ),
+            "frame_header_font_size": getattr(
+                settings, "frame_header_font_size", getattr(settings, "frame_banner_top_size", 32)
+            ),
+            "frame_header_color": getattr(
+                settings,
+                "frame_header_color",
+                getattr(settings, "frame_banner_top_color", "#FFFFFF"),
+            ),
+            "frame_footer_text": getattr(
+                settings, "frame_footer_text", getattr(settings, "frame_banner_bottom_text", "")
+            ),
+            "frame_footer_font_size": getattr(
+                settings,
+                "frame_footer_font_size",
+                getattr(settings, "frame_banner_bottom_size", 24),
+            ),
+            "frame_footer_color": getattr(
+                settings,
+                "frame_footer_color",
+                getattr(settings, "frame_banner_bottom_color", "#FFD54A"),
+            ),
         }
         try:
             dialog = StyleDialog(
-                video, style, list(self._shared_regions), self,
+                video,
+                style,
+                list(self._shared_regions),
+                self,
                 logo_options=logo_opts,
                 watermark_options=wm_opts,
                 mask_options=mask_opts,
                 banner_options=banner_opts,
             )
-        except Exception as e:  # noqa: BLE001 — thường do thiếu ffmpeg
+        except Exception as e:
             ConfirmDialog.show_error(
-                self, "Không mở được khung xem trước",
+                self,
+                "Không mở được khung xem trước",
                 "Ứng dụng cần một khung hình từ video để bạn canh chữ, nhưng "
                 "lần này không lấy được. Hãy thêm ít nhất một tệp video từ máy "
-                "rồi thử lại.", detail=str(e))
+                "rồi thử lại.",
+                detail=str(e),
+            )
             return
         if not dialog.exec():
             return
@@ -645,16 +721,18 @@ class BatchPage(BasePage):
 
         self._shared_banner_opts = dialog.banner_options()
 
-
         count = len(self._shared_regions)
         self.lbl_style.setText(
             f"Cỡ chữ {self._shared_style.get('font_size', 22)}, "
             + (f"che {count} vùng" if count else "chưa che vùng nào")
-            + " — áp dụng cho cả danh sách")
+            + " — áp dụng cho cả danh sách"
+        )
         if self.opt_subtitle.current_key() != "burn":
             self.opt_subtitle.set_key("burn")
-            TOASTS.info("Kiểu chữ tự chỉnh cần ghi thẳng vào hình, nên phụ đề "
-                        "đã chuyển sang Ghi thẳng vào hình.")
+            TOASTS.info(
+                "Kiểu chữ tự chỉnh cần ghi thẳng vào hình, nên phụ đề "
+                "đã chuyển sang Ghi thẳng vào hình."
+            )
 
     # -- Chạy ----------------------------------------------------------
     def _template(self) -> DubRequest:
@@ -678,15 +756,41 @@ class BatchPage(BasePage):
             micro_zoom=getattr(settings, "micro_zoom", False),
             color_filter=getattr(settings, "color_filter", "none"),
             randomize_metadata=getattr(settings, "randomize_metadata", True),
-            frame_banner_enabled=banner_opts.get("frame_banner_enabled", banner_opts.get("enabled", getattr(settings, "frame_banner_enabled", False))),
-            frame_banner_color=banner_opts.get("frame_banner_color", banner_opts.get("color", getattr(settings, "frame_banner_color", "#000000"))),
-            frame_banner_height_ratio=banner_opts.get("frame_banner_height_ratio", getattr(settings, "frame_banner_height_ratio", 0.16)),
-            frame_banner_top_text=banner_opts.get("frame_header_text", banner_opts.get("top_text", getattr(settings, "frame_header_text", ""))),
-            frame_banner_top_size=banner_opts.get("frame_header_font_size", banner_opts.get("top_size", getattr(settings, "frame_header_font_size", 32))),
-            frame_banner_top_color=banner_opts.get("frame_header_color", banner_opts.get("top_color", getattr(settings, "frame_header_color", "#FFFFFF"))),
-            frame_banner_bottom_text=banner_opts.get("frame_footer_text", banner_opts.get("bottom_text", getattr(settings, "frame_footer_text", ""))),
-            frame_banner_bottom_size=banner_opts.get("frame_footer_font_size", banner_opts.get("bottom_size", getattr(settings, "frame_footer_font_size", 24))),
-            frame_banner_bottom_color=banner_opts.get("frame_footer_color", banner_opts.get("bottom_color", getattr(settings, "frame_footer_color", "#FFD54A"))),
+            frame_banner_enabled=banner_opts.get(
+                "frame_banner_enabled",
+                banner_opts.get("enabled", getattr(settings, "frame_banner_enabled", False)),
+            ),
+            frame_banner_color=banner_opts.get(
+                "frame_banner_color",
+                banner_opts.get("color", getattr(settings, "frame_banner_color", "#000000")),
+            ),
+            frame_banner_height_ratio=banner_opts.get(
+                "frame_banner_height_ratio", getattr(settings, "frame_banner_height_ratio", 0.16)
+            ),
+            frame_banner_top_text=banner_opts.get(
+                "frame_header_text",
+                banner_opts.get("top_text", getattr(settings, "frame_header_text", "")),
+            ),
+            frame_banner_top_size=banner_opts.get(
+                "frame_header_font_size",
+                banner_opts.get("top_size", getattr(settings, "frame_header_font_size", 32)),
+            ),
+            frame_banner_top_color=banner_opts.get(
+                "frame_header_color",
+                banner_opts.get("top_color", getattr(settings, "frame_header_color", "#FFFFFF")),
+            ),
+            frame_banner_bottom_text=banner_opts.get(
+                "frame_footer_text",
+                banner_opts.get("bottom_text", getattr(settings, "frame_footer_text", "")),
+            ),
+            frame_banner_bottom_size=banner_opts.get(
+                "frame_footer_font_size",
+                banner_opts.get("bottom_size", getattr(settings, "frame_footer_font_size", 24)),
+            ),
+            frame_banner_bottom_color=banner_opts.get(
+                "frame_footer_color",
+                banner_opts.get("bottom_color", getattr(settings, "frame_footer_color", "#FFD54A")),
+            ),
         )
 
     def _start_all(self) -> None:
@@ -726,16 +830,20 @@ class BatchPage(BasePage):
             return True
 
         confirmed, _ = ConfirmDialog.ask(
-            self, "Có thể không đủ Vox",
-            (f"Bạn còn {balance:,} Vox. Chạy {count} video thường tốn khoảng "
-             f"{needed:,} Vox trở lên (tính theo số câu thoại của từng "
-             "video), nên lượt chạy có thể dừng giữa chừng vì hết Vox."
-             "\n\nVideo đã xong vẫn giữ nguyên; các video sau dừng ngay sau "
-             "bước nghe-chép (chưa bị trừ Vox) và chạy tiếp được sau khi "
-             "bạn nạp thêm."
-             ).replace(",", "."),
-            kind="warning", confirm_label="Vẫn chạy",
-            cancel_label="Để tôi nạp thêm")
+            self,
+            "Có thể không đủ Vox",
+            (
+                f"Bạn còn {balance:,} Vox. Chạy {count} video thường tốn khoảng "
+                f"{needed:,} Vox trở lên (tính theo số câu thoại của từng "
+                "video), nên lượt chạy có thể dừng giữa chừng vì hết Vox."
+                "\n\nVideo đã xong vẫn giữ nguyên; các video sau dừng ngay sau "
+                "bước nghe-chép (chưa bị trừ Vox) và chạy tiếp được sau khi "
+                "bạn nạp thêm."
+            ).replace(",", "."),
+            kind="warning",
+            confirm_label="Vẫn chạy",
+            cancel_label="Để tôi nạp thêm",
+        )
         return confirmed
 
     def _launch(self, items: list[BatchItem]) -> None:
@@ -744,8 +852,9 @@ class BatchPage(BasePage):
             return
         if REGISTRY.is_busy():
             job = REGISTRY.current()
-            TOASTS.warn(f"Đang chạy «{job.title}» ở trang khác. "
-                        "Hãy đợi xong hoặc dừng việc đó trước.")
+            TOASTS.warn(
+                f"Đang chạy «{job.title}» ở trang khác. Hãy đợi xong hoặc dừng việc đó trước."
+            )
             return
         if not self._warn_if_low_credit(len(items)):
             return
@@ -760,10 +869,13 @@ class BatchPage(BasePage):
         self._set_running(True)
 
         worker = BatchWorker(
-            self._settings_provider(), self._template(), items,
+            self._settings_provider(),
+            self._template(),
+            items,
             retry_done=self.chk_retry.isChecked(),
             reuse_tts=self.chk_reuse.isChecked(),
-            concurrency=int(self.opt_concurrency.value()))
+            concurrency=int(self.opt_concurrency.value()),
+        )
         worker.progress.connect(self._on_progress)
         worker.item_status.connect(self._on_item_status)
         worker.log.connect(self.log.append_log)
@@ -774,9 +886,9 @@ class BatchPage(BasePage):
         worker.finished.connect(self._on_worker_done)
         self._worker = worker
         REGISTRY.start_job(
-            ActiveJob(kind="batch",
-                      title=f"Xử lý hàng loạt {len(items)} video"),
-            on_cancel=self._cancel)
+            ActiveJob(kind="batch", title=f"Xử lý hàng loạt {len(items)} video"),
+            on_cancel=self._cancel,
+        )
         worker.start()
 
     def _cancel(self) -> None:
@@ -792,8 +904,13 @@ class BatchPage(BasePage):
         self.btn_stop.setText("Dừng")
         # Vẫn cho thêm video khi đang chạy (vào hàng chờ); chỉ khóa những gì
         # ảnh hưởng đến lượt đang chạy: xóa danh sách, kiểu chữ và tùy chọn.
-        for widget in (self.btn_clear, self.btn_style,
-                       self.chk_retry, self.chk_reuse, self.options):
+        for widget in (
+            self.btn_clear,
+            self.btn_style,
+            self.chk_retry,
+            self.chk_reuse,
+            self.options,
+        ):
             widget.setEnabled(not running)
         if not running:
             self._current_key = ""
@@ -815,9 +932,11 @@ class BatchPage(BasePage):
         REGISTRY.update_job(event)
         # Pipeline báo work_dir trong sự kiện «acquire/start» — gắn vào việc
         # đang chạy để chuông thông báo mở được thư mục của video hiện tại.
-        if (getattr(event, "step", "") == "acquire"
-                and getattr(event, "status", "") == "start"
-                and getattr(event, "detail", "")):
+        if (
+            getattr(event, "step", "") == "acquire"
+            and getattr(event, "status", "") == "start"
+            and getattr(event, "detail", "")
+        ):
             job = REGISTRY.current()
             if job is not None:
                 job.work_dir = event.detail
@@ -829,15 +948,17 @@ class BatchPage(BasePage):
         finished = self._done_steps.setdefault(key, set())
         if status in ("done", "skip"):
             finished.add(step)
-        percent = step_percent(finished, step,
-                               int(getattr(event, "current", 0) or 0),
-                               int(getattr(event, "total", 0) or 0))
+        percent = step_percent(
+            finished,
+            step,
+            int(getattr(event, "current", 0) or 0),
+            int(getattr(event, "total", 0) or 0),
+        )
         # Chỉ cho phần trăm tăng lên, tránh nhảy giật khi bước sau bắt đầu.
         self._percent[key] = max(self._percent.get(key, 0), percent)
         self._update_row(key)
 
-    def _on_item_status(self, _index: int, _total: int, key: str,
-                        status: str, detail: str) -> None:
+    def _on_item_status(self, _index: int, _total: int, key: str, status: str, detail: str) -> None:
         mapping = {"start": RUNNING, "success": DONE, "failed": FAILED}
         state = mapping.get(status, WAITING)
         self._state[key] = state
@@ -854,20 +975,17 @@ class BatchPage(BasePage):
         self._save_queue()
 
     def _on_finished(self, summary) -> None:
-        REGISTRY.finish_job(True,
-                            f"{summary.success}/{summary.total} video xong")
-        skipped = (f", bỏ qua {summary.skipped} video đã xong"
-                   if summary.skipped else "")
+        REGISTRY.finish_job(True, f"{summary.success}/{summary.total} video xong")
+        skipped = f", bỏ qua {summary.skipped} video đã xong" if summary.skipped else ""
         TOASTS.success(
-            f"Xong hàng loạt: {summary.success} thành công, "
-            f"{summary.failed} lỗi{skipped}.")
+            f"Xong hàng loạt: {summary.success} thành công, {summary.failed} lỗi{skipped}."
+        )
         self._refresh_table()
         # Chỉ lượt kết thúc bình thường mới nối tiếp hàng chờ; lượt bị dừng
         # hay lỗi thì để người dùng tự quyết chạy tiếp hay không.
         self._chain_next = bool(self._pending_adds)
 
     def _on_failed(self, message: str) -> None:
-        import logging as _log
         text, level = error_line(message)
         self.log.append_log(text, level)
         REGISTRY.finish_job(False, message[:120])
@@ -877,20 +995,23 @@ class BatchPage(BasePage):
             ConfirmDialog.show_error(self, title, advice, detail=message)
             return
         ConfirmDialog.show_error(
-            self, "Không chạy được danh sách",
+            self,
+            "Không chạy được danh sách",
             "Có lỗi ngoài dự tính nên cả lượt chạy phải dừng. Những video đã "
-            "xong vẫn còn nguyên kết quả trên máy.", detail=message)
+            "xong vẫn còn nguyên kết quả trên máy.",
+            detail=message,
+        )
 
     def _on_cancelled(self) -> None:
         import logging as _log
+
         self.log.append_log("Đã dừng theo yêu cầu của bạn.", _log.WARNING)
         for key, state in self._state.items():
             if state == RUNNING:
                 self._state[key] = PAUSED
         REGISTRY.finish_job(False, "bạn đã bấm dừng")
         self._refresh_table()
-        TOASTS.info("Đã dừng. Video đang dở sẽ chạy tiếp từ chỗ dừng khi bạn "
-                    "bấm chạy lại.")
+        TOASTS.info("Đã dừng. Video đang dở sẽ chạy tiếp từ chỗ dừng khi bạn bấm chạy lại.")
 
     def _on_progress_log(self, event) -> None:
         """Kể lại tiến trình bằng lời thường vào Nhật ký."""
@@ -911,11 +1032,11 @@ class BatchPage(BasePage):
             TOASTS.warn(message)
 
     # -- Kéo thả -------------------------------------------------------
-    def dragEnterEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
-    def dropEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def dropEvent(self, event) -> None:
         paths = [u.toLocalFile() for u in event.mimeData().urls()]
         self._add_files(paths)
 
@@ -927,4 +1048,3 @@ class BatchPage(BasePage):
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
             self._worker.wait(5000)
-

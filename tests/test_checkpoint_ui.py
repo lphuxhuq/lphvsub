@@ -1,15 +1,16 @@
 """Kiểm thử cho thanh công cụ Checkpoint và quy trình lưu/nạp cấu hình."""
-import os
-import json
+
 import pytest
 from PySide6.QtWidgets import QApplication
-from autodub.config import Settings
+
 from autodub.checkpoint_store import (
-    save_checkpoint, load_checkpoint, delete_checkpoint,
-    get_checkpoint_names, get_active_checkpoint_name,
+    get_active_checkpoint_name,
+    get_checkpoint_names,
+    save_checkpoint,
 )
-from autodub_gui.pages.new_project_steps import VoiceStep
+from autodub.config import Settings
 from autodub_gui.pages.new_project_page import NewProjectPage
+from autodub_gui.pages.new_project_steps import VoiceStep
 
 
 @pytest.fixture(scope="session")
@@ -47,6 +48,7 @@ def test_voice_step_checkpoint_bar(qapp, tmp_path, monkeypatch):
     step.checkpoint_save_requested.connect(lambda name: saved.append(name))
     step.cb_checkpoints.setEditText("Kênh Mới")
     from PySide6.QtWidgets import QInputDialog
+
     monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("Kênh Mới", True))
     step.btn_save_checkpoint.click()
     assert saved == ["Kênh Mới"]
@@ -56,6 +58,7 @@ def test_voice_step_checkpoint_bar(qapp, tmp_path, monkeypatch):
     step.checkpoint_delete_requested.connect(lambda name: deleted.append(name))
     step.cb_checkpoints.setCurrentText("Kênh Shorts")
     from autodub_gui.ui.modal import ConfirmDialog
+
     monkeypatch.setattr(ConfirmDialog, "ask", lambda *args, **kwargs: (True, None))
     step.btn_delete_checkpoint.click()
     assert deleted == ["Kênh Shorts"]
@@ -66,13 +69,15 @@ def test_voice_step_set_and_load_options(qapp):
     step = VoiceStep()
 
     # 1. Logo
-    step.set_logo_options({
-        "logo_path": "d:/branding/watermark_logo.png",
-        "logo_position": "bottom_left",
-        "logo_scale": 0.20,
-        "logo_opacity": 0.90,
-        "logo_motion": "bounce",
-    })
+    step.set_logo_options(
+        {
+            "logo_path": "d:/branding/watermark_logo.png",
+            "logo_position": "bottom_left",
+            "logo_scale": 0.20,
+            "logo_opacity": 0.90,
+            "logo_motion": "bounce",
+        }
+    )
     vals = step.values()
     assert vals["logo_path"] == "d:/branding/watermark_logo.png"
     assert vals["logo_position"] == "bottom_left"
@@ -81,12 +86,14 @@ def test_voice_step_set_and_load_options(qapp):
     assert vals["logo_motion"] == "bounce"
 
     # 2. Watermark
-    step.set_watermark_options({
-        "watermark_text": "PHIM HAY 247",
-        "watermark_motion": "bottom_right",
-        "watermark_opacity": 0.50,
-        "watermark_speed": 60,
-    })
+    step.set_watermark_options(
+        {
+            "watermark_text": "PHIM HAY 247",
+            "watermark_motion": "bottom_right",
+            "watermark_opacity": 0.50,
+            "watermark_speed": 60,
+        }
+    )
     vals = step.values()
     assert vals["watermark_text"] == "PHIM HAY 247"
     assert vals["watermark_motion"] == "bottom_right"
@@ -94,12 +101,14 @@ def test_voice_step_set_and_load_options(qapp):
     assert vals["watermark_speed"] == 60
 
     # 3. Anti-Content ID
-    step.set_anti_id_options({
-        "smart_flip": True,
-        "micro_zoom": True,
-        "color_filter": "cinematic_warm",
-        "randomize_metadata": False,
-    })
+    step.set_anti_id_options(
+        {
+            "smart_flip": True,
+            "micro_zoom": True,
+            "color_filter": "cinematic_warm",
+            "randomize_metadata": False,
+        }
+    )
     vals = step.values()
     assert vals["smart_flip"] is True
     assert vals["micro_zoom"] is True
@@ -123,8 +132,12 @@ def test_new_project_page_checkpoint_workflow(qapp, tmp_path, monkeypatch):
 
     # 1. Giả lập người dùng chỉnh sửa thiết lập
     page.step_voice.set_logo_options({"logo_path": "custom_logo.png", "logo_position": "top_left"})
-    page.step_voice.set_watermark_options({"watermark_text": "VIP SUB", "watermark_motion": "bounce"})
-    page.step_voice.set_anti_id_options({"smart_flip": True, "micro_zoom": True, "color_filter": "vintage"})
+    page.step_voice.set_watermark_options(
+        {"watermark_text": "VIP SUB", "watermark_motion": "bounce"}
+    )
+    page.step_voice.set_anti_id_options(
+        {"smart_flip": True, "micro_zoom": True, "color_filter": "vintage"}
+    )
     page._aspect_preset = "9:16"
     page._reframe_mode = "blur"
     page._banner_opts = {
@@ -144,7 +157,9 @@ def test_new_project_page_checkpoint_workflow(qapp, tmp_path, monkeypatch):
     # 3. Thay đổi các giá trị trên giao diện sang giá trị khác
     page.step_voice.set_logo_options({"logo_path": ""})
     page.step_voice.set_watermark_options({"watermark_text": ""})
-    page.step_voice.set_anti_id_options({"smart_flip": False, "micro_zoom": False, "color_filter": "none"})
+    page.step_voice.set_anti_id_options(
+        {"smart_flip": False, "micro_zoom": False, "color_filter": "none"}
+    )
     page._aspect_preset = "16:9"
     page._banner_opts = {}
     page._blur_regions = []

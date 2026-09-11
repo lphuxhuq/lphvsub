@@ -1,8 +1,8 @@
 """Trim khoảng lặng đầu clip TTS — giọng Việt vào đúng động tác miệng."""
+
 import wave
 
 import numpy as np
-import pytest
 
 from autodub.media.audio import lead_silence_s, postprocess_voice_clip, wav_duration_s
 
@@ -15,22 +15,25 @@ def _write_wav(path, lead_s, tone_s, rate=24000, click_at=None):
     x = 0.4 * np.sin(2 * np.pi * 220 * t) * env
     if click_at is not None:
         i = int(click_at * rate)
-        x[i:i + int(0.02 * rate)] = 0.5  # click 20ms rồi lại im
+        x[i : i + int(0.02 * rate)] = 0.5  # click 20ms rồi lại im
     with wave.open(str(path), "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
         w.writeframes((x * 32767).astype(np.int16).tobytes())
     return x, rate
 
 
 def test_lead_silence_detected_with_guard():
-    x, rate = _write_wav("/tmp/trim_probe.wav" if False else
-                         _tmp(), lead_s=0.6, tone_s=1.5)
+    x, rate = _write_wav("/tmp/trim_probe.wav" if False else _tmp(), lead_s=0.6, tone_s=1.5)
     trim = lead_silence_s(x, rate)
-    assert 0.38 <= trim <= 0.52   # 0.6 - guard 0.12 (± sai số cửa sổ)
+    assert 0.38 <= trim <= 0.52  # 0.6 - guard 0.12 (± sai số cửa sổ)
 
 
 def _tmp():
-    import tempfile, os
+    import os
+    import tempfile
+
     return os.path.join(tempfile.mkdtemp(), "probe.wav")
 
 
@@ -42,7 +45,7 @@ def test_no_lead_silence_returns_zero():
 def test_isolated_click_not_treated_as_speech():
     x, rate = _write_wav(_tmp(), lead_s=0.7, tone_s=1.0, click_at=0.1)
     trim = lead_silence_s(x, rate)
-    assert 0.45 <= trim <= 0.62   # bỏ qua click, bắt đầu ở 0.7s
+    assert 0.45 <= trim <= 0.62  # bỏ qua click, bắt đầu ở 0.7s
 
 
 def test_all_silent_returns_zero():
@@ -63,6 +66,7 @@ def test_postprocess_trims_real_ffmpeg(tmp_path):
     # giọng bật trong vòng guard (~0.12s) — không còn 0.8s lặng đầu
     with wave.open(str(dst)) as w:
         rate = w.getframerate()
-        head = (np.frombuffer(w.readframes(int(0.25 * rate)),
-                              dtype=np.int16).astype(np.float32) / 32768)
+        head = (
+            np.frombuffer(w.readframes(int(0.25 * rate)), dtype=np.int16).astype(np.float32) / 32768
+        )
     assert lead_silence_s(head, rate) <= 0.13

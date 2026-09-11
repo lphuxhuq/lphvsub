@@ -5,24 +5,24 @@ Hiển thị:
 - Danh sách 8 project gần đây
 - Nút "Mở thư mục..." fallback
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel, QScrollArea,
-                                QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from autodub_gui import tokens
 from autodub_gui.pages import BasePage
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 from autodub_gui.ui.cards import Card
-from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.empty import EmptyState, LoadingState
+from autodub_gui.ui.style import clear_background
 
 
 class EditorLauncherPage(BasePage):
     """Trang trung gian: hiện khi ROW_EDITOR được chọn nhưng chưa có project."""
 
-    open_requested = Signal(str)   # work_dir để mở editor
+    open_requested = Signal(str)  # work_dir để mở editor
 
     def __init__(self, settings_provider, parent: QWidget | None = None):
         super().__init__(parent)
@@ -31,8 +31,7 @@ class EditorLauncherPage(BasePage):
         self._worker = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_6, tokens.SP_5,
-                                tokens.SP_6, tokens.SP_6)
+        root.setContentsMargins(tokens.SP_6, tokens.SP_5, tokens.SP_6, tokens.SP_6)
         root.setSpacing(tokens.SP_4)
 
         title = QLabel("Trình chỉnh sửa")
@@ -96,7 +95,8 @@ class EditorLauncherPage(BasePage):
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet(
             f"font-size: 16px; font-weight: bold; color: {tokens.PRIMARY};"
-            f"background: {tokens.BG_SELECTED}; border-radius: 8px;")
+            f"background: {tokens.BG_SELECTED}; border-radius: 8px;"
+        )
         layout.addWidget(icon)
 
         col = QVBoxLayout()
@@ -105,7 +105,8 @@ class EditorLauncherPage(BasePage):
         self._banner_title.setObjectName("cardTitle")
         self._banner_sub = QLabel("Đang mở")
         self._banner_sub.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px;"
+        )
         col.addWidget(self._banner_title)
         col.addWidget(self._banner_sub)
         layout.addLayout(col, 1)
@@ -118,8 +119,7 @@ class EditorLauncherPage(BasePage):
         return banner
 
     # -- Logic -----------------------------------------------------------
-    def set_current_project(self, work_dir: str | None,
-                            title: str = "") -> None:
+    def set_current_project(self, work_dir: str | None, title: str = "") -> None:
         """Gọi từ app.py khi editor mở/đóng project để cập nhật banner."""
         self._current_project_dir = work_dir
         if work_dir:
@@ -135,8 +135,8 @@ class EditorLauncherPage(BasePage):
 
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
-            self, "Chọn thư mục dự án", "",
-            QFileDialog.Option.ShowDirsOnly)
+            self, "Chọn thư mục dự án", "", QFileDialog.Option.ShowDirsOnly
+        )
         if folder:
             self.open_requested.emit(folder)
 
@@ -153,6 +153,7 @@ class EditorLauncherPage(BasePage):
         output_dir = getattr(settings, "output_dir", "") or "output"
         if not os.path.isabs(output_dir):
             from autodub.utils import app_root
+
             output_dir = os.path.join(app_root(), output_dir)
 
         if self._worker is not None:
@@ -195,14 +196,14 @@ class EditorLauncherPage(BasePage):
             empty = EmptyState(
                 "Chưa có dự án nào",
                 "Tạo dự án mới để bắt đầu, hoặc mở thư mục dự án có sẵn.",
-                parent=self)
+                parent=self,
+            )
             self._list_layout.insertWidget(0, empty)
             return
         for project in recent:
             card = _ProjectRow(project)
             card.open_requested.connect(self.open_requested.emit)
-            self._list_layout.insertWidget(
-                self._list_layout.count() - 1, card)
+            self._list_layout.insertWidget(self._list_layout.count() - 1, card)
 
     def _on_scan_failed(self, msg: str) -> None:
         # Reset con trỏ để lần mở trang tiếp theo có thể quét lại.
@@ -212,6 +213,7 @@ class EditorLauncherPage(BasePage):
             worker.deleteLater()
         self._loading.setVisible(False)
         from autodub_gui.ui.empty import ErrorState
+
         err = ErrorState("Không quét được danh sách dự án", msg)
         self._list_layout.insertWidget(0, err)
 
@@ -227,7 +229,7 @@ class EditorLauncherPage(BasePage):
 class _ProjectRow(QWidget):
     """Một dòng trong danh sách dự án gần đây."""
 
-    open_requested = Signal(str)    # work_dir
+    open_requested = Signal(str)  # work_dir
 
     def __init__(self, project, parent: QWidget | None = None):
         super().__init__(parent)
@@ -244,9 +246,9 @@ class _ProjectRow(QWidget):
         frame.body.addLayout(row)
 
         # Trạng thái màu
-        from autodub_gui.projects import (STATUS_COMPLETED, STATUS_FAILED,
-                                           STATUS_PROCESSING)
         from autodub_gui import tokens as t
+        from autodub_gui.projects import STATUS_COMPLETED, STATUS_FAILED, STATUS_PROCESSING
+
         color = {
             STATUS_COMPLETED: t.SUCCESS,
             STATUS_FAILED: t.DANGER,
@@ -265,8 +267,7 @@ class _ProjectRow(QWidget):
         if project.date_label:
             sub_parts.append(project.date_label)
         sub = QLabel("  ·  ".join(sub_parts))
-        sub.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px;")
+        sub.setStyleSheet(f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px;")
         col.addWidget(title)
         col.addWidget(sub)
         row.addLayout(col, 1)
@@ -276,5 +277,5 @@ class _ProjectRow(QWidget):
         btn.clicked.connect(lambda: self.open_requested.emit(self._work_dir))
         row.addWidget(btn)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def mousePressEvent(self, event) -> None:
         self.open_requested.emit(self._work_dir)

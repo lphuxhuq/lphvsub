@@ -6,4 +6,5 @@ Mọi thành phần trong thư mục này đều tuân thủ ba điều:
     đang nhập, bị khóa, đang tải, lỗi, trống);
   - không đặt chiều rộng cố định cho phần chứa chữ, tránh cắt mất chữ.
 """
+
 from __future__ import annotations

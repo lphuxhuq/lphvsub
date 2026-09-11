@@ -5,6 +5,7 @@ Cho phép chọn dự án từ danh sách, hiển thị các chỉ số chất l
 - Token sử dụng cho dịch thuật (nếu có)
 - Danh sách chi tiết các câu có vấn đề (nếu có)
 """
+
 from __future__ import annotations
 
 import json
@@ -12,8 +13,14 @@ import os
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QScrollArea, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub.workdir import data_path
@@ -23,7 +30,7 @@ from autodub_gui.ui.cards import Card, StatCard
 from autodub_gui.ui.empty import EmptyState, LoadingState
 from autodub_gui.ui.style import clear_background
 
-_TABLE_MIN_H = 300   # chiều cao tối thiểu bảng chi tiết segment
+_TABLE_MIN_H = 300  # chiều cao tối thiểu bảng chi tiết segment
 
 
 class QualityPage(BasePage):
@@ -38,16 +45,17 @@ class QualityPage(BasePage):
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_6, tokens.SP_4,
-                                tokens.SP_6, tokens.SP_6)
+        root.setContentsMargins(tokens.SP_6, tokens.SP_4, tokens.SP_6, tokens.SP_6)
         root.setSpacing(tokens.SP_4)
 
         title = QLabel("Báo cáo chất lượng")
         title.setObjectName("pageTitle")
         root.addWidget(title)
 
-        hint = QLabel("Xem chi tiết chất lượng xử lý của một dự án: "
-                      "câu dịch quá dài, timeline bị nén, token đã dùng.")
+        hint = QLabel(
+            "Xem chi tiết chất lượng xử lý của một dự án: "
+            "câu dịch quá dài, timeline bị nén, token đã dùng."
+        )
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -57,7 +65,8 @@ class QualityPage(BasePage):
         picker_row.setSpacing(tokens.SP_2)
         picker_label = QLabel("Dự án:")
         picker_label.setStyleSheet(
-            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px;")
+            f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px;"
+        )
         self.project_combo = QComboBox()
         self.project_combo.setMinimumWidth(400)
         self.project_combo.currentIndexChanged.connect(self._on_project_changed)
@@ -68,8 +77,7 @@ class QualityPage(BasePage):
         # Vùng nội dung chính — scroll area để chứa các thẻ thống kê và bảng
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         clear_background(scroll)
         clear_background(scroll.viewport())
@@ -92,7 +100,6 @@ class QualityPage(BasePage):
 
     def _scan_projects(self) -> None:
         """Quét thư mục output để tìm các dự án có quality_report.json."""
-        import os
 
         from autodub.utils import app_root
         from autodub_gui.projects import scan
@@ -119,7 +126,8 @@ class QualityPage(BasePage):
         if not self._projects:
             empty = EmptyState(
                 "Chưa có báo cáo nào",
-                "Tạo và hoàn thành một dự án để xem báo cáo chất lượng tại đây.")
+                "Tạo và hoàn thành một dự án để xem báo cáo chất lượng tại đây.",
+            )
             self._body_layout.insertWidget(0, empty)
             return
 
@@ -164,8 +172,9 @@ class QualityPage(BasePage):
                 w.deleteLater()
 
         if not self._current_report:
-            err = EmptyState("Báo cáo không hợp lệ",
-                             "Không đọc được dữ liệu từ quality_report.json.")
+            err = EmptyState(
+                "Báo cáo không hợp lệ", "Không đọc được dữ liệu từ quality_report.json."
+            )
             self._body_layout.insertWidget(0, err)
             return
 
@@ -197,18 +206,42 @@ class QualityPage(BasePage):
         grid.setSpacing(tokens.SP_3)
 
         stats = [
-            ("Tổng số câu", icons.layers, tokens.TEXT_SECONDARY,
-             str(summary.get("segments_total", 0))),
-            ("Câu không có vấn đề", icons.check, tokens.SUCCESS,
-             str(summary.get("segments_ok", 0))),
-            ("Câu bị dời chỗ", icons.merge, tokens.WARNING,
-             str(summary.get("segments_shifted", 0))),
-            ("Câu bị đọc nhanh lên", icons.waveform, tokens.ACCENT_BLUE,
-             str(summary.get("segments_compressed", 0))),
-            ("Câu chồng tiếng", icons.warning, tokens.DANGER,
-             str(summary.get("segments_overlapped", 0))),
-            ("Câu dịch quá dài", icons.edit, tokens.ACCENT_PURPLE,
-             str(summary.get("segments_over_budget", 0))),
+            (
+                "Tổng số câu",
+                icons.layers,
+                tokens.TEXT_SECONDARY,
+                str(summary.get("segments_total", 0)),
+            ),
+            (
+                "Câu không có vấn đề",
+                icons.check,
+                tokens.SUCCESS,
+                str(summary.get("segments_ok", 0)),
+            ),
+            (
+                "Câu bị dời chỗ",
+                icons.merge,
+                tokens.WARNING,
+                str(summary.get("segments_shifted", 0)),
+            ),
+            (
+                "Câu bị đọc nhanh lên",
+                icons.waveform,
+                tokens.ACCENT_BLUE,
+                str(summary.get("segments_compressed", 0)),
+            ),
+            (
+                "Câu chồng tiếng",
+                icons.warning,
+                tokens.DANGER,
+                str(summary.get("segments_overlapped", 0)),
+            ),
+            (
+                "Câu dịch quá dài",
+                icons.edit,
+                tokens.ACCENT_PURPLE,
+                str(summary.get("segments_over_budget", 0)),
+            ),
         ]
 
         for i, (label, icon_fn, color, value) in enumerate(stats):
@@ -234,13 +267,17 @@ class QualityPage(BasePage):
             row = QHBoxLayout()
             row.setSpacing(tokens.SP_2)
             lbl = QLabel(label + ":")
-            lbl.setStyleSheet(f"color: {tokens.TEXT_SECONDARY}; "
-                              f"font-size: {tokens.FS_BODY}px; "
-                              f"background: transparent;")
+            lbl.setStyleSheet(
+                f"color: {tokens.TEXT_SECONDARY}; "
+                f"font-size: {tokens.FS_BODY}px; "
+                f"background: transparent;"
+            )
             val = QLabel(f"{count:,}" if count else "—")
-            val.setStyleSheet(f"color: {tokens.TEXT_PRIMARY}; "
-                              f"font-size: {tokens.FS_BODY}px; "
-                              f"font-weight: 600; background: transparent;")
+            val.setStyleSheet(
+                f"color: {tokens.TEXT_PRIMARY}; "
+                f"font-size: {tokens.FS_BODY}px; "
+                f"font-weight: 600; background: transparent;"
+            )
             row.addWidget(lbl)
             row.addWidget(val)
             row.addStretch()
@@ -254,12 +291,10 @@ class QualityPage(BasePage):
 
         table = QTableWidget()
         table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(
-            ["Câu", "Thời điểm", "Vấn đề", "Nội dung"])
+        table.setHorizontalHeaderLabels(["Câu", "Thời điểm", "Vấn đề", "Nội dung"])
         table.setRowCount(len(segments))
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        table.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.verticalHeader().setVisible(False)
 
         for i, seg in enumerate(segments):
@@ -278,10 +313,13 @@ class QualityPage(BasePage):
                 issues.append(f"dư {int(over)} ký tự")
 
             start = seg.get("start")
-            start_text = (f"{float(start):.1f}s"
-                          if isinstance(start, (int, float)) else "—")
-            values = (str(seg.get("id", "")), start_text,
-                      ", ".join(issues) or "—", seg.get("text", ""))
+            start_text = f"{float(start):.1f}s" if isinstance(start, (int, float)) else "—"
+            values = (
+                str(seg.get("id", "")),
+                start_text,
+                ", ".join(issues) or "—",
+                seg.get("text", ""),
+            )
             for col, text in enumerate(values):
                 table.setItem(i, col, QTableWidgetItem(text))
 

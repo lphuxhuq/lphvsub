@@ -13,6 +13,7 @@ Kết quả là chuỗi SHA-256 64 ký tự. Cài lại ứng dụng, xóa ``.en
 mục — mã vẫn thế, nên credit đã mua không mất. Cài lại Windows thì GUID mới,
 mã mới: trường hợp đó người dùng liên hệ hỗ trợ để chuyển credit sang máy.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -53,11 +54,13 @@ def get_fingerprint() -> str:
     if _cached_fingerprint is not None:
         return _cached_fingerprint
 
-    raw = "|".join((
-        _machine_guid(),
-        platform.node(),
-        platform.machine(),
-    ))
+    raw = "|".join(
+        (
+            _machine_guid(),
+            platform.node(),
+            platform.machine(),
+        )
+    )
     _cached_fingerprint = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     return _cached_fingerprint
 

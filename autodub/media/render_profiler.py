@@ -1,9 +1,10 @@
 """Render profiler để đo kiểm và chẩn đoán hiệu năng xuất video."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import time
+from dataclasses import dataclass, field
 
 logger = logging.getLogger("autodub.render_profiler")
 
@@ -48,7 +49,9 @@ class RenderProfiler:
             return
         self._checkpoints[name] = time.perf_counter()
 
-    def finish(self, video_duration_s: float, encoder: str = "", resolution: str = "") -> RenderMetrics:
+    def finish(
+        self, video_duration_s: float, encoder: str = "", resolution: str = ""
+    ) -> RenderMetrics:
         if not self.enabled:
             return RenderMetrics()
         now = time.perf_counter()

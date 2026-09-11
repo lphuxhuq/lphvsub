@@ -2,6 +2,7 @@
 
 ffmpeg/ffprobe are monkeypatched — no real encoding happens.
 """
+
 import pytest
 
 from autodub.media import video as video_mod
@@ -18,7 +19,9 @@ def paths(tmp_path):
     for p in (v, a, s):
         p.write_bytes(b"x")
     return {
-        "video": str(v), "audio": str(a), "srt": str(s),
+        "video": str(v),
+        "audio": str(a),
+        "srt": str(s),
         "out": str(tmp_path / "out.mp4"),
     }
 
@@ -42,9 +45,11 @@ def captured(monkeypatch):
 
     monkeypatch.setattr(video_mod.subprocess, "run", fake_run)
     monkeypatch.setattr(video_mod, "probe_dimensions", lambda p: (1920, 1080))
-    monkeypatch.setattr(video_mod, "_resolve_encoder", lambda: (
-        "CPU (libx264)",
-        ("-c:v", "libx264", "-preset", "veryfast", "-crf", "20")))
+    monkeypatch.setattr(
+        video_mod,
+        "_resolve_encoder",
+        lambda: ("CPU (libx264)", ("-c:v", "libx264", "-preset", "veryfast", "-crf", "20")),
+    )
     return calls
 
 
@@ -53,6 +58,7 @@ def get_opt(cmd: list[str], flag: str) -> str | None:
 
 
 # --------------------------- default: audio only --------------------------- #
+
 
 def test_default_stream_copies_video(paths, captured):
     video_mod.merge_video(paths["video"], paths["audio"], paths["out"])
@@ -64,30 +70,37 @@ def test_default_stream_copies_video(paths, captured):
 
 # --------------------------- soft subs --------------------------- #
 
+
 def test_soft_subs_mux_without_reencode(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="soft")
+        paths["video"], paths["audio"], paths["out"], srt_path=paths["srt"], subtitle_mode="soft"
+    )
     cmd = captured[0]
-    assert get_opt(cmd, "-c:v") == "copy"       # key benefit of soft subs
+    assert get_opt(cmd, "-c:v") == "copy"  # key benefit of soft subs
     assert get_opt(cmd, "-c:s") == "mov_text"
-    assert cmd.count("-i") == 3                 # video + audio + srt
-    assert "language=und" in cmd                # default when no lang passed
+    assert cmd.count("-i") == 3  # video + audio + srt
+    assert "language=und" in cmd  # default when no lang passed
 
 
 def test_soft_subs_language_tag(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="soft", subtitle_lang="vie")
+        paths["video"],
+        paths["audio"],
+        paths["out"],
+        srt_path=paths["srt"],
+        subtitle_mode="soft",
+        subtitle_lang="vie",
+    )
     assert "language=vie" in captured[0]
 
 
 # --------------------------- burn subs --------------------------- #
 
+
 def test_burn_reencodes_and_maps_vout(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="burn")
+        paths["video"], paths["audio"], paths["out"], srt_path=paths["srt"], subtitle_mode="burn"
+    )
     cmd = captured[0]
     assert get_opt(cmd, "-c:v") == "libx264"
     assert get_opt(cmd, "-map") == "[vout]"
@@ -97,9 +110,9 @@ def test_burn_reencodes_and_maps_vout(paths, captured):
 
 # --------------------------- blur --------------------------- #
 
+
 def test_blur_forces_reencode_even_without_subs(paths, captured):
-    video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"], blur_regions=[BAND])
+    video_mod.merge_video(paths["video"], paths["audio"], paths["out"], blur_regions=[BAND])
     cmd = captured[0]
     assert get_opt(cmd, "-c:v") == "libx264"
     fc = get_opt(cmd, "-filter_complex")
@@ -109,28 +122,34 @@ def test_blur_forces_reencode_even_without_subs(paths, captured):
 def test_blur_with_soft_subs_combines_both(paths, captured):
     """Soft subs + blur: filtergraph for blur, plus a real subtitle track."""
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="soft", blur_regions=[BAND])
+        paths["video"],
+        paths["audio"],
+        paths["out"],
+        srt_path=paths["srt"],
+        subtitle_mode="soft",
+        blur_regions=[BAND],
+    )
     cmd = captured[0]
     fc = get_opt(cmd, "-filter_complex")
     assert "delogo" in fc or "boxblur" in fc
     assert get_opt(cmd, "-c:s") == "mov_text"
-    assert get_opt(cmd, "-c:v") == "libx264"     # blur still needs re-encode
+    assert get_opt(cmd, "-c:v") == "libx264"  # blur still needs re-encode
 
 
 def test_blur_skipped_when_regions_empty(paths, captured):
-    video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"], blur_regions=[])
+    video_mod.merge_video(paths["video"], paths["audio"], paths["out"], blur_regions=[])
     assert get_opt(captured[0], "-c:v") == "copy"
 
 
 def test_reencode_uses_nvenc_when_available(paths, captured, monkeypatch):
-    monkeypatch.setattr(video_mod, "_resolve_encoder", lambda: (
-        "NVIDIA NVENC",
-        ("-c:v", "h264_nvenc", "-preset", "p5", "-cq", "23", "-b:v", "0")))
+    monkeypatch.setattr(
+        video_mod,
+        "_resolve_encoder",
+        lambda: ("NVIDIA NVENC", ("-c:v", "h264_nvenc", "-preset", "p5", "-cq", "23", "-b:v", "0")),
+    )
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="burn")
+        paths["video"], paths["audio"], paths["out"], srt_path=paths["srt"], subtitle_mode="burn"
+    )
     cmd = captured[0]
     assert get_opt(cmd, "-c:v") == "h264_nvenc"
     assert get_opt(cmd, "-pix_fmt") == "yuv420p"
@@ -138,23 +157,26 @@ def test_reencode_uses_nvenc_when_available(paths, captured, monkeypatch):
 
 # --------------------------- validation --------------------------- #
 
+
 def test_rejects_unknown_mode(paths, captured):
     with pytest.raises(ValueError, match="Invalid subtitle_mode"):
-        video_mod.merge_video(
-            paths["video"], paths["audio"], paths["out"], subtitle_mode="hard")
+        video_mod.merge_video(paths["video"], paths["audio"], paths["out"], subtitle_mode="hard")
 
 
 def test_rejects_mode_without_srt(paths, captured):
     with pytest.raises(ValueError, match="requires srt_path"):
-        video_mod.merge_video(
-            paths["video"], paths["audio"], paths["out"], subtitle_mode="burn")
+        video_mod.merge_video(paths["video"], paths["audio"], paths["out"], subtitle_mode="burn")
 
 
 def test_rejects_missing_srt_file(paths, captured):
     with pytest.raises(FileNotFoundError, match="Subtitle file"):
         video_mod.merge_video(
-            paths["video"], paths["audio"], paths["out"],
-            srt_path=paths["srt"] + ".nope", subtitle_mode="burn")
+            paths["video"],
+            paths["audio"],
+            paths["out"],
+            srt_path=paths["srt"] + ".nope",
+            subtitle_mode="burn",
+        )
 
 
 def test_ffmpeg_failure_raises(paths, monkeypatch):
@@ -169,6 +191,7 @@ def test_ffmpeg_failure_raises(paths, monkeypatch):
 
 
 # --------------------------- probe --------------------------- #
+
 
 def test_probe_dimensions_parses_json(monkeypatch):
     class Ok:
@@ -193,7 +216,9 @@ def test_probe_dimensions_raises_on_bad_output(monkeypatch):
 
 def test_aspect_preset_forces_reencode(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
+        paths["video"],
+        paths["audio"],
+        paths["out"],
         aspect_preset="tiktok_9_16",
     )
     cmd = captured[0]
@@ -206,7 +231,9 @@ def test_aspect_preset_forces_reencode(paths, captured):
 
 def test_merge_video_with_frame_banner(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
+        paths["video"],
+        paths["audio"],
+        paths["out"],
         frame_banner_enabled=True,
         frame_banner_color="#000000",
         frame_header_text="TẬP 1: BÍ MẬT",
@@ -228,7 +255,9 @@ def test_merge_video_with_randomize_metadata(paths, captured):
         f.write(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00isommp42")
 
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
+        paths["video"],
+        paths["audio"],
+        paths["out"],
         randomize_metadata=True,
     )
     cmd = captured[0]
@@ -244,8 +273,11 @@ def test_merge_video_with_randomize_metadata(paths, captured):
 
 def test_merge_video_filter_complex_threads(paths, captured):
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
-        srt_path=paths["srt"], subtitle_mode="burn",
+        paths["video"],
+        paths["audio"],
+        paths["out"],
+        srt_path=paths["srt"],
+        subtitle_mode="burn",
     )
     cmd = captured[0]
     assert "-filter_complex_threads" in cmd
@@ -255,7 +287,9 @@ def test_merge_video_filter_complex_threads(paths, captured):
 def test_merge_video_faststart_toggle(paths, captured):
     # Test faststart=False disables -movflags +faststart
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
+        paths["video"],
+        paths["audio"],
+        paths["out"],
         faststart=False,
     )
     cmd = captured[0]
@@ -264,7 +298,9 @@ def test_merge_video_faststart_toggle(paths, captured):
     # Test faststart=True (default) enables -movflags +faststart
     captured.clear()
     video_mod.merge_video(
-        paths["video"], paths["audio"], paths["out"],
+        paths["video"],
+        paths["audio"],
+        paths["out"],
         faststart=True,
     )
     cmd = captured[0]

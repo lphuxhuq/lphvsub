@@ -1,4 +1,3 @@
-import pytest
 from autodub.media.encoder_profile import EncoderProfile, QualityMode
 
 

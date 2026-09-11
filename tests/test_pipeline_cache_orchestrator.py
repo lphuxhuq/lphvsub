@@ -1,10 +1,9 @@
-import os
 from pathlib import Path
+
 import pytest
 
 import autodub.pipeline_cache as pc
 from autodub.pipeline_cache import (
-    PipelineCacheOrchestrator,
     get_pipeline_orchestrator,
 )
 
@@ -22,7 +21,9 @@ def create_dummy_wav(path: Path, content: bytes = b"wav_orchestrator_bytes" * 15
         f.write(b"RIFF")
         total_size = len(content) + 44
         f.write((total_size - 8).to_bytes(4, "little"))
-        f.write(b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data")
+        f.write(
+            b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data"
+        )
         f.write(len(content).to_bytes(4, "little"))
         f.write(content)
     return path
@@ -39,10 +40,14 @@ def test_orchestrator_inspect_video_cache(tmp_path):
     # Populate demucs
     vocals = create_dummy_wav(tmp_path / "v.wav")
     no_vocals = create_dummy_wav(tmp_path / "nv.wav")
-    pc.get_demucs_cache().store_result(str(audio), str(vocals), str(no_vocals), "htdemucs", 44100, 2)
+    pc.get_demucs_cache().store_result(
+        str(audio), str(vocals), str(no_vocals), "htdemucs", 44100, 2
+    )
 
     # Populate asr
-    pc.get_asr_cache().store(str(audio), "base", "zh", "whisper", [{"start": 0, "end": 1, "text": "hello"}])
+    pc.get_asr_cache().store(
+        str(audio), "base", "zh", "whisper", [{"start": 0, "end": 1, "text": "hello"}]
+    )
 
     status2 = orch.inspect_cache(str(audio), lang="zh", asr_model="base", voice="nam_bac_1")
     assert status2["demucs"] is True
@@ -56,7 +61,9 @@ def test_orchestrator_cache_stats_and_clean(tmp_path):
     audio = create_dummy_wav(tmp_path / "video_audio.wav")
     vocals = create_dummy_wav(tmp_path / "v.wav")
     no_vocals = create_dummy_wav(tmp_path / "nv.wav")
-    pc.get_demucs_cache().store_result(str(audio), str(vocals), str(no_vocals), "htdemucs", 44100, 2)
+    pc.get_demucs_cache().store_result(
+        str(audio), str(vocals), str(no_vocals), "htdemucs", 44100, 2
+    )
 
     stats = orch.cache_stats()
     assert stats["demucs_entries"] >= 1

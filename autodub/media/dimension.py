@@ -6,12 +6,13 @@ Guarantees:
 - 100% compatible with YUV420p encoders (libx264, h264_nvenc, hevc_nvenc, QSV, AMF).
 - Handles arbitrary portrait, landscape, and square video inputs.
 """
+
 from __future__ import annotations
 
 
 def make_even(dimension: int) -> int:
     """Round up an integer dimension to the nearest even number.
-    
+
     Examples:
         make_even(1080) -> 1080
         make_even(1079) -> 1080
@@ -34,7 +35,7 @@ def normalize_dimensions(width: int, height: int) -> tuple[int, int]:
 
 def build_dimension_filter() -> str:
     """Generate an FFmpeg filter expression that pads width/height to even dimensions.
-    
+
     Using `pad=ceil(iw/2)*2:ceil(ih/2)*2` ensures:
     - If already even (e.g. 1920x1080), ceil(1920/2)*2 == 1920 -> zero extra padding (no-op).
     - If odd (e.g. 1079x1920 or 721x1281), adds 1 pixel pad at the edge -> strictly even.

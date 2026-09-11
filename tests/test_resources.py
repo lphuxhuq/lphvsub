@@ -5,6 +5,7 @@ test) mà là hai tính chất: số ffmpeg sống cùng lúc không bao giờ v
 bao nhiêu luồng cùng ép, và cpu_share không bao giờ trả 0 (0 thread ONNX =
 không chạy được gì).
 """
+
 import threading
 
 from autodub import resources
@@ -60,8 +61,8 @@ def test_ffmpeg_slots_caps_concurrency_under_pressure():
         t.join(10)
 
     assert peak <= limit
-    assert peak > 1          # có song song thật, không phải tuần tự hóa
-    assert live == 0         # mọi slot đã được nhả
+    assert peak > 1  # có song song thật, không phải tuần tự hóa
+    assert live == 0  # mọi slot đã được nhả
 
 
 def test_ffmpeg_slots_is_bounded():

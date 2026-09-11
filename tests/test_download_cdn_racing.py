@@ -1,8 +1,6 @@
 """Tests for CdnRacingEngine and PreflightAnalyzer."""
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from autodub.media.download.cdn_racer import CdnRacingEngine
 from autodub.media.download.contract import Platform
@@ -14,11 +12,16 @@ def test_platform_detector():
 
     assert detector.detect("https://www.bilibili.com/video/BV1xx411c7mD") == Platform.BILIBILI
     assert detector.detect("https://b23.tv/BV1xx411c7mD") == Platform.BILIBILI
-    assert detector.extract_media_id("https://www.bilibili.com/video/BV1xx411c7mD") == "BV1xx411c7mD"
+    assert (
+        detector.extract_media_id("https://www.bilibili.com/video/BV1xx411c7mD") == "BV1xx411c7mD"
+    )
 
     assert detector.detect("https://www.douyin.com/video/7123456789012345678") == Platform.DOUYIN
     assert detector.detect("https://v.douyin.com/iJklmno/") == Platform.DOUYIN
-    assert detector.extract_media_id("https://www.douyin.com/video/7123456789012345678") == "7123456789012345678"
+    assert (
+        detector.extract_media_id("https://www.douyin.com/video/7123456789012345678")
+        == "7123456789012345678"
+    )
 
     assert detector.detect("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == Platform.YOUTUBE
     assert detector.extract_media_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
@@ -59,6 +62,7 @@ def test_cdn_racing_ranks_faster_candidate_first():
             resp.headers = {"Content-Length": "1000", "Accept-Ranges": "bytes"}
         elif "slow" in url:
             import time
+
             time.sleep(0.02)
             resp.status_code = 206
             resp.headers = {"Content-Length": "1000"}

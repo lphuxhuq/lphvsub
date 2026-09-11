@@ -3,15 +3,18 @@
 Chiều rộng luôn theo `sizeHint()`, không đặt cứng, để chữ tiếng Việt có dấu
 không bao giờ bị cắt mất.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QButtonGroup, QHBoxLayout, QPushButton, QSizePolicy, QWidget,
+    QButtonGroup,
+    QHBoxLayout,
+    QPushButton,
+    QSizePolicy,
+    QWidget,
 )
-
-from autodub_gui import tokens
 
 _ICON_BTN_SIZE = 36
 _SPIN_FRAMES = ("Đang xử lý.", "Đang xử lý..", "Đang xử lý...")
@@ -24,20 +27,19 @@ class _BaseButton(QPushButton):
     def __init__(self, text: str = "", parent: QWidget | None = None):
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Policy.Minimum,
-                           QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self._idle_text = text
         self._busy_text = _SPIN_FRAMES[0]
         self._loading = False
         self._timer_id = 0
         self._frame = 0
 
-    def setText(self, text: str) -> None:  # noqa: N802 — theo quy ước của Qt
+    def setText(self, text: str) -> None:
         if not self._loading:
             self._idle_text = text
         super().setText(text)
 
-    def setIcon(self, icon: QIcon) -> None:  # noqa: N802 — theo quy ước của Qt
+    def setIcon(self, icon: QIcon) -> None:
         super().setIcon(icon)
         if not icon.isNull():
             self.setIconSize(QSize(18, 18))
@@ -59,6 +61,7 @@ class _BaseButton(QPushButton):
             self._timer_id = self.startTimer(_SPIN_INTERVAL_MS)
             # Dim the button visually to reinforce "busy" state
             from PySide6.QtWidgets import QGraphicsOpacityEffect
+
             effect = QGraphicsOpacityEffect(self)
             effect.setOpacity(0.65)
             self.setGraphicsEffect(effect)
@@ -71,7 +74,7 @@ class _BaseButton(QPushButton):
             # Remove opacity effect — restore full visual weight
             self.setGraphicsEffect(None)
 
-    def timerEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def timerEvent(self, event) -> None:
         if event.timerId() != self._timer_id:
             super().timerEvent(event)
             return
@@ -83,8 +86,7 @@ class _BaseButton(QPushButton):
 class PrimaryButton(_BaseButton):
     """Nút hành động chính, nền chuyển sắc xanh sang tím."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None,
-                 icon: QIcon | None = None):
+    def __init__(self, text: str = "", parent: QWidget | None = None, icon: QIcon | None = None):
         super().__init__(text, parent)
         self.setObjectName("primary")
         if icon is not None:
@@ -94,8 +96,7 @@ class PrimaryButton(_BaseButton):
 class GhostButton(_BaseButton):
     """Nút phụ, nền trong suốt chỉ có viền mờ."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None,
-                 icon: QIcon | None = None):
+    def __init__(self, text: str = "", parent: QWidget | None = None, icon: QIcon | None = None):
         super().__init__(text, parent)
         self.setObjectName("ghost")
         if icon is not None:
@@ -105,8 +106,7 @@ class GhostButton(_BaseButton):
 class DangerButton(_BaseButton):
     """Nút cho thao tác dừng hoặc xóa."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None,
-                 icon: QIcon | None = None):
+    def __init__(self, text: str = "", parent: QWidget | None = None, icon: QIcon | None = None):
         super().__init__(text, parent)
         self.setObjectName("danger")
         if icon is not None:
@@ -116,8 +116,7 @@ class DangerButton(_BaseButton):
 class SecondaryButton(_BaseButton):
     """Nút mặc định, viền mờ trên nền tối."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None,
-                 icon: QIcon | None = None):
+    def __init__(self, text: str = "", parent: QWidget | None = None, icon: QIcon | None = None):
         super().__init__(text, parent)
         if icon is not None:
             self.setIcon(icon)
@@ -126,9 +125,15 @@ class SecondaryButton(_BaseButton):
 class IconButton(QPushButton):
     """Nút vuông chỉ có biểu tượng. Bắt buộc phải kèm chú giải bằng lời."""
 
-    def __init__(self, icon: QIcon, tooltip: str,
-                 parent: QWidget | None = None, *,
-                 size: int = _ICON_BTN_SIZE, checkable: bool = False):
+    def __init__(
+        self,
+        icon: QIcon,
+        tooltip: str,
+        parent: QWidget | None = None,
+        *,
+        size: int = _ICON_BTN_SIZE,
+        checkable: bool = False,
+    ):
         super().__init__(parent)
         self.setObjectName("iconbtn")
         self.setIcon(icon)
@@ -148,8 +153,7 @@ class SegmentedControl(QWidget):
 
     selection_changed = Signal(str)
 
-    def __init__(self, options: list[tuple[str, str]],
-                 parent: QWidget | None = None):
+    def __init__(self, options: list[tuple[str, str]], parent: QWidget | None = None):
         super().__init__(parent)
         self._options = list(options)
         self._buttons: list[QPushButton] = []
@@ -197,7 +201,7 @@ class SegmentedControl(QWidget):
                 self._buttons[i].setChecked(True)
                 return
 
-    def setEnabled(self, enabled: bool) -> None:  # noqa: N802 — quy ước Qt
+    def setEnabled(self, enabled: bool) -> None:
         super().setEnabled(enabled)
         for btn in self._buttons:
             btn.setEnabled(enabled)

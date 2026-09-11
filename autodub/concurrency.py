@@ -5,12 +5,12 @@ Cung cấp:
   để chống lỗi CUDA OOM khi chạy 2–4 luồng song song.
 - Tự động nhận diện cấu hình phần cứng (RAM, VRAM, CPU) để gợi ý mức luồng tối ưu.
 """
+
 from __future__ import annotations
 
 import contextlib
 import os
-import threading
-from typing import Generator
+from collections.abc import Generator
 
 from autodub.resources import GPU_LOCK
 
@@ -34,11 +34,12 @@ def detect_system_capabilities() -> dict[str, int | float | str]:
 
     try:
         import torch
+
         if torch.cuda.is_available():
             has_cuda = True
             device_name = torch.cuda.get_device_name(0)
             props = torch.cuda.get_device_properties(0)
-            vram_gb = round(props.total_memory / (1024 ** 3), 1)
+            vram_gb = round(props.total_memory / (1024**3), 1)
     except Exception:
         pass
 
@@ -46,10 +47,7 @@ def detect_system_capabilities() -> dict[str, int | float | str]:
     if has_cuda and vram_gb >= 8.0 and cpu_count >= 8:
         recommended_threads = 3
         max_threads = 4
-    elif has_cuda and vram_gb >= 6.0:
-        recommended_threads = 2
-        max_threads = 3
-    elif cpu_count >= 8:
+    elif (has_cuda and vram_gb >= 6.0) or cpu_count >= 8:
         recommended_threads = 2
         max_threads = 3
     else:

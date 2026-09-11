@@ -1,10 +1,10 @@
-import time
-import pytest
-from autodub.utils import ProgressTracker, format_eta
+from autodub.utils import ProgressTracker
 
 
 def test_progress_tracker_sentence_mode():
-    tracker = ProgressTracker(total=10, step_name="Dịch câu", unit="câu", log_step=2, min_log_interval=10.0)
+    tracker = ProgressTracker(
+        total=10, step_name="Dịch câu", unit="câu", log_step=2, min_log_interval=10.0
+    )
     assert tracker.total == 10.0
     assert tracker.unit == "câu"
 
@@ -59,7 +59,7 @@ def test_progress_tracker_thread_safety():
     from concurrent.futures import ThreadPoolExecutor
 
     tracker = ProgressTracker(total=100, step_name="Song song", unit="câu")
-    
+
     def worker(_):
         tracker.step(1)
 

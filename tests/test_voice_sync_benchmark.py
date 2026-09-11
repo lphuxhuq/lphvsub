@@ -1,4 +1,4 @@
-﻿"""Benchmark voice-sync trên fixtures tổng hợp (TASK-6) + AC-14 placement.
+"""Benchmark voice-sync trên fixtures tổng hợp (TASK-6) + AC-14 placement.
 
 Fixture mô phỏng 3 loại video (spec Phase 15):
 - A "nói chậm": slot dài, TTS ≈ 0.8× slot → hầu hết natural.
@@ -10,15 +10,14 @@ speech/dub onset-end error, max/avg drift, số overlap, số forced
 compression, video speed (luôn 1.0 — không retime). Kết quả ghi ra
 docs/VOICE_SYNC_BENCHMARK.md.
 """
+
 import wave
 
 import numpy as np
-import pytest
 
 from autodub.media.timing import plan_voice_placements
 
-KW = dict(max_start_drift_s=0.15, min_gap_s=0.12,
-          min_speed=0.90, max_speed=1.15)
+KW = dict(max_start_drift_s=0.15, min_gap_s=0.12, min_speed=0.90, max_speed=1.15)
 
 
 def _fixture(name, n, slot, spacing, tts_ratio, jitter=0.0, seed=7):
@@ -27,9 +26,17 @@ def _fixture(name, n, slot, spacing, tts_ratio, jitter=0.0, seed=7):
     for i in range(n):
         start = i * spacing
         dur = slot * float(np.clip(tts_ratio + rng.normal(0, jitter), 0.3, 3.0))
-        segs.append({"id": i + 1, "speech_start": start,
-                     "speech_end": start + slot, "speech_duration": slot,
-                     "start": start, "end": start + slot, "duration": slot})
+        segs.append(
+            {
+                "id": i + 1,
+                "speech_start": start,
+                "speech_end": start + slot,
+                "speech_duration": slot,
+                "start": start,
+                "end": start + slot,
+                "duration": slot,
+            }
+        )
         durations.append(round(dur, 3))
     return name, segs, durations
 
@@ -85,13 +92,15 @@ def test_long_vi_capped_and_reported():
     name, segs, durs = FIXTURES[2]
     placements, report = plan_voice_placements(segs, durs, **KW)
     assert all(p["atempo"] <= 1.15 + 1e-9 for p in placements)
-    assert (report.segments_overlapped > 0
-            or any(p["reason"] == "needs_compaction" for p in placements))
+    assert report.segments_overlapped > 0 or any(
+        p["reason"] == "needs_compaction" for p in placements
+    )
 
 
 def test_benchmark_doc_written():
     """Sinh docs/VOICE_SYNC_BENCHMARK.md từ kết quả đo (AC-12)."""
     import os
+
     lines = [
         "# VOICE SYNC — BENCHMARK (fixtures tổng hợp)",
         "",
@@ -108,7 +117,8 @@ def test_benchmark_doc_written():
             f"| {name} | {m['segments']} | {m['avg_drift']:.3f} | "
             f"{m['max_drift']:.3f} | {m['avg_end_err']:.3f} | "
             f"{m['max_end_err']:.3f} | {m['overlaps']} | "
-            f"{m['forced_compression']} | {m['video_speed']} |")
+            f"{m['forced_compression']} | {m['video_speed']} |"
+        )
     lines += [
         "",
         "## So sánh với scheduler cũ (shift→compress→overlap)",
@@ -125,14 +135,18 @@ def test_benchmark_doc_written():
         "này dùng fixtures tổng hợp để CI lặp lại được.",
         "",
     ]
-    out = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "docs", "VOICE_SYNC_BENCHMARK.md")
+    out = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "docs",
+        "VOICE_SYNC_BENCHMARK.md",
+    )
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     assert os.path.isfile(out)
 
 
 # --- AC-14: merge đặt clip tại start + wav thật ----------------------------
+
 
 def _write_tone(path, dur, rate=16000):
     t = np.arange(int(dur * rate)) / rate
@@ -146,9 +160,9 @@ def _write_tone(path, dur, rate=16000):
 
 def test_merge_places_clip_at_dub_start(tmp_path):
     """AC-14: im lặng trước dub_start, có tiếng sau đó — đúng (start, wav)."""
+
     from autodub.media.audio import merge_segments
     from autodub.utils import seg_wav_path
-    import os
 
     seg_dir = tmp_path / "segs"
     seg_dir.mkdir()
@@ -159,13 +173,12 @@ def test_merge_places_clip_at_dub_start(tmp_path):
 
     with wave.open(str(out), "rb") as w:
         rate, ch, n = w.getframerate(), w.getnchannels(), w.getnframes()
-        arr = np.frombuffer(w.readframes(n), dtype=np.int16) \
-            .reshape(-1, ch).mean(axis=1)
+        arr = np.frombuffer(w.readframes(n), dtype=np.int16).reshape(-1, ch).mean(axis=1)
 
     def _rms(a, b):
-        seg = arr[int(a * rate):int(b * rate)]
+        seg = arr[int(a * rate) : int(b * rate)]
         return float(np.sqrt((seg.astype(np.float32) ** 2).mean()))
 
-    assert _rms(0.0, 4.0) < 50        # trước dub_start: im
-    assert _rms(5.1, 5.9) > 500       # đúng chỗ clip: có tiếng
-    assert _rms(6.5, 7.5) < 50        # sau clip hết: im
+    assert _rms(0.0, 4.0) < 50  # trước dub_start: im
+    assert _rms(5.1, 5.9) > 500  # đúng chỗ clip: có tiếng
+    assert _rms(6.5, 7.5) < 50  # sau clip hết: im

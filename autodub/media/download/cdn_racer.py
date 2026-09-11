@@ -7,7 +7,6 @@ import logging
 import time
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -22,7 +21,7 @@ class CdnProbeResult:
     status_code: int
     accepts_ranges: bool
     content_length: int = 0
-    error: Optional[str] = None
+    error: str | None = None
     score: float = 0.0
 
 
@@ -44,7 +43,7 @@ class CdnRacingEngine:
         self,
         url: str,
         session: requests.Session,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> CdnProbeResult:
         """Sends a lightweight byte-range probe (first 1024 bytes) to measure TTFB and range support."""
         host = self.extract_host(url)
@@ -57,14 +56,16 @@ class CdnRacingEngine:
             latency_ms = (time.perf_counter() - start_time) * 1000.0
 
             status = resp.status_code
-            accepts_ranges = (status == 206) or ("bytes" in resp.headers.get("Accept-Ranges", "").lower())
+            accepts_ranges = (status == 206) or (
+                "bytes" in resp.headers.get("Accept-Ranges", "").lower()
+            )
             content_length = int(resp.headers.get("Content-Length", 0))
 
             _ = resp.raw.read(1024)
             resp.close()
 
             if status in (200, 206):
-                score = (10000.0 / max(1.0, latency_ms))
+                score = 10000.0 / max(1.0, latency_ms)
                 if accepts_ranges:
                     score += 50.0
             else:
@@ -93,10 +94,10 @@ class CdnRacingEngine:
 
     def race_candidates(
         self,
-        candidate_urls: List[str],
+        candidate_urls: list[str],
         session: requests.Session,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> List[CdnProbeResult]:
+        headers: dict[str, str] | None = None,
+    ) -> list[CdnProbeResult]:
         """Races top candidates concurrently and returns results sorted from best to worst."""
         if not candidate_urls:
             return []
@@ -105,13 +106,14 @@ class CdnRacingEngine:
             res = self.probe_candidate(candidate_urls[0], session, headers)
             return [res]
 
-        probes_to_run = candidate_urls[:self.max_probes]
-        results: List[CdnProbeResult] = []
+        probes_to_run = candidate_urls[: self.max_probes]
+        results: list[CdnProbeResult] = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(probes_to_run), 4)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(probes_to_run), 4)
+        ) as executor:
             future_to_url = {
-                executor.submit(self.probe_candidate, u, session, headers): u
-                for u in probes_to_run
+                executor.submit(self.probe_candidate, u, session, headers): u for u in probes_to_run
             }
             for future in concurrent.futures.as_completed(future_to_url):
                 try:
@@ -119,27 +121,31 @@ class CdnRacingEngine:
                     results.append(res)
                 except Exception as e:
                     u = future_to_url[future]
-                    results.append(CdnProbeResult(
-                        url=u,
-                        host=self.extract_host(u),
-                        latency_ms=9999.0,
-                        status_code=0,
-                        accepts_ranges=False,
-                        error=str(e),
-                        score=-1000.0,
-                    ))
+                    results.append(
+                        CdnProbeResult(
+                            url=u,
+                            host=self.extract_host(u),
+                            latency_ms=9999.0,
+                            status_code=0,
+                            accepts_ranges=False,
+                            error=str(e),
+                            score=-1000.0,
+                        )
+                    )
 
         tested_urls = {r.url for r in results}
         for u in candidate_urls:
             if u not in tested_urls:
-                results.append(CdnProbeResult(
-                    url=u,
-                    host=self.extract_host(u),
-                    latency_ms=500.0,
-                    status_code=200,
-                    accepts_ranges=True,
-                    score=0.0,
-                ))
+                results.append(
+                    CdnProbeResult(
+                        url=u,
+                        host=self.extract_host(u),
+                        latency_ms=500.0,
+                        status_code=200,
+                        accepts_ranges=True,
+                        score=0.0,
+                    )
+                )
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results

@@ -3,6 +3,7 @@
 Gọi ``init()`` một lần thật sớm trong ``app.main()``. Khi chạy từ source
 các bước gần như no-op (chỉ thêm PATH phụ), nên dev không bị ảnh hưởng.
 """
+
 from __future__ import annotations
 
 import functools

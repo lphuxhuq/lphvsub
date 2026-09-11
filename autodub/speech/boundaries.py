@@ -16,6 +16,7 @@ Output: bản copy của segments với thêm ``vad_start/vad_end`` (coarse) và
 ``speech_start/speech_end/speech_duration`` (refined). Field
 ``start/end/duration`` KHÔNG bị đụng — mọi consumer cũ giữ nguyên ý nghĩa.
 """
+
 from __future__ import annotations
 
 import wave
@@ -27,15 +28,15 @@ from autodub.utils import setup_logging
 logger = setup_logging("autodub.boundaries")
 
 # --- Hằng số refine — named để chỉnh không đụng logic ---------------------
-FRAME_S = 0.025            # cửa sổ RMS
-HOP_S = 0.010              # bước nhảy frame
-ENERGY_RATIO = 0.12        # ngưỡng = peak × 0.12 (≈ -18 dB dưới đỉnh)
-ABS_FLOOR = 0.004          # peak dưới đây coi như window im lặng
-LEAD_MARGIN_S = 0.06       # giữ thêm trước speech đầu tiên
-TAIL_MARGIN_S = 0.06       # giữ thêm sau speech cuối cùng
+FRAME_S = 0.025  # cửa sổ RMS
+HOP_S = 0.010  # bước nhảy frame
+ENERGY_RATIO = 0.12  # ngưỡng = peak × 0.12 (≈ -18 dB dưới đỉnh)
+ABS_FLOOR = 0.004  # peak dưới đây coi như window im lặng
+LEAD_MARGIN_S = 0.06  # giữ thêm trước speech đầu tiên
+TAIL_MARGIN_S = 0.06  # giữ thêm sau speech cuối cùng
 REFINE_MIN_DELTA_S = 0.08  # thu hẹp ít hơn thế này → biên "đã tốt"
-MIN_SPEECH_S = 0.2         # speech_duration tối thiểu sau refine
-MIN_SPEECH_RATIO = 0.25    # ... hoặc ≥ 25% vad_duration
+MIN_SPEECH_S = 0.2  # speech_duration tối thiểu sau refine
+MIN_SPEECH_RATIO = 0.25  # ... hoặc ≥ 25% vad_duration
 
 
 def _load_mono16k(path: str) -> tuple[np.ndarray, int]:
@@ -53,8 +54,9 @@ def _load_mono16k(path: str) -> tuple[np.ndarray, int]:
     return arr, rate
 
 
-def _frame_rms(arr: np.ndarray, rate: int, t0: float, t1: float
-               ) -> tuple[np.ndarray, np.ndarray] | None:
+def _frame_rms(
+    arr: np.ndarray, rate: int, t0: float, t1: float
+) -> tuple[np.ndarray, np.ndarray] | None:
     """Frame RMS trên [t0, t1] giây. Trả (frame_start_times, rms) hoặc None
     khi window ngắn hơn một frame."""
     win = int(FRAME_S * rate)
@@ -69,8 +71,7 @@ def _frame_rms(arr: np.ndarray, rate: int, t0: float, t1: float
     return starts / rate, rms
 
 
-def refine_speech_boundaries(segments: list[dict], wav_path: str,
-                             settings=None) -> list[dict]:
+def refine_speech_boundaries(segments: list[dict], wav_path: str, settings=None) -> list[dict]:
     """Thu hẹp biên mỗi segment về biên speech thật (không mutate input).
 
     ``wav_path``: WAV dùng cho ASR (16 kHz mono). Lỗi đọc file → warning +
@@ -79,8 +80,7 @@ def refine_speech_boundaries(segments: list[dict], wav_path: str,
     try:
         arr, rate = _load_mono16k(wav_path)
     except (OSError, EOFError, wave.Error, ValueError) as e:
-        logger.warning(f"Boundary refine: không đọc được audio ({e}) — "
-                       "giữ biên VAD")
+        logger.warning(f"Boundary refine: không đọc được audio ({e}) — giữ biên VAD")
         return [dict(s) for s in segments]
 
     out: list[dict] = []
@@ -103,15 +103,13 @@ def refine_speech_boundaries(segments: list[dict], wav_path: str,
                 above = np.nonzero(rms >= thresh)[0]
                 if len(above):
                     s0 = max(v0, float(times[above[0]]) - LEAD_MARGIN_S)
-                    e1 = min(v1, float(times[above[-1]]) + FRAME_S
-                             + TAIL_MARGIN_S)
+                    e1 = min(v1, float(times[above[-1]]) + FRAME_S + TAIL_MARGIN_S)
                     # Side nào "đã tốt" (delta nhỏ) → giữ biên VAD của side đó.
                     if s0 - v0 < REFINE_MIN_DELTA_S:
                         s0 = v0
                     if v1 - e1 < REFINE_MIN_DELTA_S:
                         e1 = v1
-                    if e1 - s0 >= max(MIN_SPEECH_S,
-                                      MIN_SPEECH_RATIO * vad_dur):
+                    if e1 - s0 >= max(MIN_SPEECH_S, MIN_SPEECH_RATIO * vad_dur):
                         new["vad_start"] = round(v0, 3)
                         new["vad_end"] = round(v1, 3)
                         new["speech_start"] = round(s0, 3)
@@ -121,6 +119,7 @@ def refine_speech_boundaries(segments: list[dict], wav_path: str,
         out.append(new)
 
     if n_refined:
-        logger.info("Boundary refine: %d/%d câu thu hẹp biên về speech thật",
-                    n_refined, len(segments))
+        logger.info(
+            "Boundary refine: %d/%d câu thu hẹp biên về speech thật", n_refined, len(segments)
+        )
     return out

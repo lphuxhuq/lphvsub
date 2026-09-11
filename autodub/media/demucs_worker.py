@@ -20,6 +20,7 @@ chỉ chia nhỏ phần TÍNH TOÁN chứ vẫn đòi nguyên tensor trong RAM �
 đứng. Khúc ~180 s + chồng lấn 6 s, làm mượt chỗ nối bằng crossfade tuyến
 tính, ghi dần ra đĩa — RAM đỉnh chỉ còn cỡ MỘT khúc bất kể video dài bao lâu.
 """
+
 import argparse
 import json
 import sys
@@ -27,12 +28,11 @@ import sys
 #: Ngưỡng thời lượng bật chế độ theo khúc (giây). Dưới ngưỡng này đường một
 #: phát giữ nguyên hành vi cũ — không đổi gì cho video ngắn thường gặp.
 CHUNK_THRESHOLD_S = 480.0
-CHUNK_S = 180.0        # độ dài lõi mỗi khúc
-OVERLAP_S = 6.0        # phần chồng lấn giữa hai khúc kề nhau
+CHUNK_S = 180.0  # độ dài lõi mỗi khúc
+OVERLAP_S = 6.0  # phần chồng lấn giữa hai khúc kề nhau
 
 
-def plan_chunks(total_frames: int, chunk_frames: int,
-                overlap_frames: int) -> list[tuple[int, int]]:
+def plan_chunks(total_frames: int, chunk_frames: int, overlap_frames: int) -> list[tuple[int, int]]:
     """Chia ``total_frames`` thành các khoảng [start, stop) chồng lấn nhau.
 
     Hai khoảng kề nhau chia sẻ đúng ``overlap_frames`` khung. Khoảng cuối luôn
@@ -79,8 +79,7 @@ def _stream_stats(path) -> tuple[float, float]:
     n = 0
     s = 0.0
     ss = 0.0
-    for block in sf.blocks(path, blocksize=1_048_576, always_2d=True,
-                           dtype="float32"):
+    for block in sf.blocks(path, blocksize=1_048_576, always_2d=True, dtype="float32"):
         mono = block.mean(axis=1, dtype=np.float64)
         n += mono.size
         s += float(mono.sum())
@@ -89,7 +88,7 @@ def _stream_stats(path) -> tuple[float, float]:
         return 0.0, 0.0
     mean = s / n
     var = max(ss / n - mean * mean, 0.0)
-    return mean, var ** 0.5
+    return mean, var**0.5
 
 
 def _split_stems(sources, model, np):
@@ -121,9 +120,15 @@ def load_model(model_name: str = "htdemucs", device: str | None = None):
     return model, device
 
 
-def separate_file(input_path: str, vocals_path: str, no_vocals_path: str,
-                  model_name: str = "htdemucs", device: str | None = None,
-                  force_chunked: bool = False, model=None) -> str:
+def separate_file(
+    input_path: str,
+    vocals_path: str,
+    no_vocals_path: str,
+    model_name: str = "htdemucs",
+    device: str | None = None,
+    force_chunked: bool = False,
+    model=None,
+) -> str:
     """Tách ``input_path`` thành hai stem; trả về tên device đã dùng.
 
     Video ngắn đi đường một phát (hành vi cũ, không đổi một bit); video dài
@@ -139,11 +144,9 @@ def separate_file(input_path: str, vocals_path: str, no_vocals_path: str,
     info = sf.info(input_path)
     duration_s = info.frames / float(info.samplerate)
     if force_chunked or duration_s > CHUNK_THRESHOLD_S:
-        _separate_chunked(input_path, vocals_path, no_vocals_path,
-                          model, device, info)
+        _separate_chunked(input_path, vocals_path, no_vocals_path, model, device, info)
     else:
-        _separate_single(input_path, vocals_path, no_vocals_path,
-                         model, device)
+        _separate_single(input_path, vocals_path, no_vocals_path, model, device)
     return device
 
 
@@ -165,8 +168,9 @@ def _separate_single(input_path, vocals_path, no_vocals_path, model, device):
     wav = (wav - ref.mean()) / (ref.std() + 1e-8)
 
     with torch.no_grad():
-        sources = apply_model(model, wav[None].to(device), split=True,
-                              overlap=0.25, progress=False)[0].cpu()
+        sources = apply_model(
+            model, wav[None].to(device), split=True, overlap=0.25, progress=False
+        )[0].cpu()
     del wav
     # Denormalize tại chỗ — tránh nhân đôi tensor 4 stem.
     sources.mul_(ref.std() + 1e-8).add_(ref.mean())
@@ -176,8 +180,7 @@ def _separate_single(input_path, vocals_path, no_vocals_path, model, device):
     _write_stem(no_vocals_path, no_vocals, model.samplerate, np, sf)
 
 
-def _separate_chunked(input_path, vocals_path, no_vocals_path, model,
-                      device, info):
+def _separate_chunked(input_path, vocals_path, no_vocals_path, model, device, info):
     """Đường theo khúc — RAM đỉnh cỡ một khúc, ghi dần ra đĩa."""
     import numpy as np
     import soundfile as sf
@@ -190,27 +193,35 @@ def _separate_chunked(input_path, vocals_path, no_vocals_path, model,
     denom = std + 1e-8
     ratio = model.samplerate / float(src_sr)
 
-    ranges = plan_chunks(info.frames, int(CHUNK_S * src_sr),
-                         int(OVERLAP_S * src_sr))
-    tails = None   # (vocals_tail, no_vocals_tail) chờ crossfade với khúc sau
+    ranges = plan_chunks(info.frames, int(CHUNK_S * src_sr), int(OVERLAP_S * src_sr))
+    tails = None  # (vocals_tail, no_vocals_tail) chờ crossfade với khúc sau
 
-    with sf.SoundFile(vocals_path, "w", samplerate=model.samplerate,
-                      channels=model.audio_channels,
-                      subtype="PCM_16") as f_v, \
-         sf.SoundFile(no_vocals_path, "w", samplerate=model.samplerate,
-                      channels=model.audio_channels,
-                      subtype="PCM_16") as f_nv:
+    with (
+        sf.SoundFile(
+            vocals_path,
+            "w",
+            samplerate=model.samplerate,
+            channels=model.audio_channels,
+            subtype="PCM_16",
+        ) as f_v,
+        sf.SoundFile(
+            no_vocals_path,
+            "w",
+            samplerate=model.samplerate,
+            channels=model.audio_channels,
+            subtype="PCM_16",
+        ) as f_nv,
+    ):
         for ci, (start, stop) in enumerate(ranges):
-            block, _ = sf.read(input_path, start=start, stop=stop,
-                               always_2d=True, dtype="float32")
+            block, _ = sf.read(input_path, start=start, stop=stop, always_2d=True, dtype="float32")
             wav = torch.from_numpy(block.T)
             del block
-            wav = convert_audio(wav, src_sr, model.samplerate,
-                                model.audio_channels)
+            wav = convert_audio(wav, src_sr, model.samplerate, model.audio_channels)
             wav = (wav - mean) / denom
             with torch.no_grad():
-                sources = apply_model(model, wav[None].to(device), split=True,
-                                      overlap=0.25, progress=False)[0].cpu()
+                sources = apply_model(
+                    model, wav[None].to(device), split=True, overlap=0.25, progress=False
+                )[0].cpu()
             del wav
             sources.mul_(denom).add_(mean)
             vocals, no_vocals = _split_stems(sources, model, np)
@@ -221,12 +232,14 @@ def _separate_chunked(input_path, vocals_path, no_vocals_path, model,
                 crossfade_into(tails[1], no_vocals)
 
             last = ci == len(ranges) - 1
-            keep = vocals.shape[1] if last else (
-                vocals.shape[1] - int(round(OVERLAP_S * src_sr * ratio)))
+            keep = (
+                vocals.shape[1]
+                if last
+                else (vocals.shape[1] - int(round(OVERLAP_S * src_sr * ratio)))
+            )
             _append_stem(f_v, vocals[:, :keep], np)
             _append_stem(f_nv, no_vocals[:, :keep], np)
-            tails = None if last else (vocals[:, keep:].copy(),
-                                       no_vocals[:, keep:].copy())
+            tails = None if last else (vocals[:, keep:].copy(), no_vocals[:, keep:].copy())
 
 
 def _write_stem(path, arr, samplerate, np, sf) -> None:
@@ -253,9 +266,8 @@ def serve() -> int:
 
     try:
         model, device = load_model()
-    except Exception as e:  # noqa: BLE001 — report everything to the parent
-        print(json.dumps({"ready": False,
-                          "error": f"{type(e).__name__}: {e}"}), flush=True)
+    except Exception as e:
+        print(json.dumps({"ready": False, "error": f"{type(e).__name__}: {e}"}), flush=True)
         return 1
     print(json.dumps({"ready": True, "device": device}), flush=True)
 
@@ -265,12 +277,16 @@ def serve() -> int:
             continue
         try:
             req = json.loads(line)
-            used = separate_file(req["input"], req["vocals"],
-                                 req["no_vocals"], device=device,
-                                 force_chunked=bool(req.get("chunked")),
-                                 model=model)
+            used = separate_file(
+                req["input"],
+                req["vocals"],
+                req["no_vocals"],
+                device=device,
+                force_chunked=bool(req.get("chunked")),
+                model=model,
+            )
             resp = {"ok": True, "device": used}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             resp = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         finally:
             # Trả VRAM ngay cả khi lỗi — video sau còn cần GPU cho Whisper.
@@ -283,14 +299,14 @@ def serve() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--serve", action="store_true",
-                        help="Chế độ phục vụ cả lô (JSON qua stdin/stdout)")
+    parser.add_argument(
+        "--serve", action="store_true", help="Chế độ phục vụ cả lô (JSON qua stdin/stdout)"
+    )
     parser.add_argument("--input")
     parser.add_argument("--vocals")
     parser.add_argument("--no-vocals")
     parser.add_argument("--model", default="htdemucs")
-    parser.add_argument("--chunked", action="store_true",
-                        help="Ép tách theo khúc (máy ít RAM)")
+    parser.add_argument("--chunked", action="store_true", help="Ép tách theo khúc (máy ít RAM)")
     args = parser.parse_args()
 
     if args.serve:
@@ -299,14 +315,17 @@ def main() -> int:
         parser.error("--input/--vocals/--no-vocals là bắt buộc khi không --serve")
 
     try:
-        device = separate_file(args.input, args.vocals, args.no_vocals,
-                               model_name=args.model,
-                               force_chunked=args.chunked)
+        device = separate_file(
+            args.input,
+            args.vocals,
+            args.no_vocals,
+            model_name=args.model,
+            force_chunked=args.chunked,
+        )
         print(json.dumps({"ok": True, "device": device}), flush=True)
         return 0
-    except Exception as e:  # noqa: BLE001 — report everything to the parent
-        print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}),
-              flush=True)
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}), flush=True)
         return 1
 
 

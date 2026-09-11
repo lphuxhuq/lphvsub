@@ -3,25 +3,35 @@
 Dùng cho phản hồi ngắn như đã lưu, đã xong hay cảnh báo nhẹ. Việc xác nhận
 thao tác phá hủy và báo lỗi nghiêm trọng vẫn dùng hộp thoại trong `ui/modal.py`.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import (
-    QEasingCurve, QObject, QPoint, QPropertyAnimation, QTimer, Qt,
+    QEasingCurve,
+    QObject,
+    QPoint,
+    QPropertyAnimation,
+    Qt,
+    QTimer,
 )
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import tokens
-from autodub_gui.ui.effects import soft_shadow
 
 _WIDTH = 348
 _MARGIN = 20
 _GAP = 8
 _TTL_MS = 4000
 _TTL_ERROR_MS = 8000
-_ANIM_MS = 160   # slide + fade — InOutCubic
-_SLIDE_PX = 12   # px trượt lên khi xuất hiện
+_ANIM_MS = 160  # slide + fade — InOutCubic
+_SLIDE_PX = 12  # px trượt lên khi xuất hiện
 _MAX_STACK = 3
 
 # loại thông báo -> màu vạch dọc bên trái
@@ -36,8 +46,16 @@ _KIND_COLOR: dict[str, str] = {
 class _Toast(QFrame):
     """Một thẻ thông báo đơn lẻ."""
 
-    def __init__(self, parent: QWidget, kind: str, text: str, *,
-                 detail: str = "", action_label: str = "", on_action=None):
+    def __init__(
+        self,
+        parent: QWidget,
+        kind: str,
+        text: str,
+        *,
+        detail: str = "",
+        action_label: str = "",
+        on_action=None,
+    ):
         super().__init__(parent)
         color = _KIND_COLOR.get(kind, tokens.ACCENT_BLUE)
         # Glass panel look — BORDER_TOP là hairline highlight, BORDER_LEFT là color indicator
@@ -46,14 +64,15 @@ class _Toast(QFrame):
             f"border: 1px solid {tokens.BORDER_DEFAULT}; "
             f"border-top: 1px solid {tokens.GLASS_BORDER}; "
             f"border-left: 3px solid {color}; "
-            f"border-radius: {tokens.RADIUS_LG}px; }}")
+            f"border-radius: {tokens.RADIUS_LG}px; }}"
+        )
         self.setFixedWidth(_WIDTH)
         from autodub_gui.ui.effects import popup_shadow
+
         popup_shadow(self)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_4, tokens.SP_3,
-                                tokens.SP_2, tokens.SP_3)
+        root.setContentsMargins(tokens.SP_4, tokens.SP_3, tokens.SP_2, tokens.SP_3)
         root.setSpacing(tokens.SP_2)
 
         top = QHBoxLayout()
@@ -62,10 +81,11 @@ class _Toast(QFrame):
         label.setWordWrap(True)
         label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent; border: none;")
+            f"background: transparent; border: none;"
+        )
         top.addWidget(label, 1)
 
-        close = QPushButton("×")   # dấu nhân — ký tự chữ, không phải biểu tượng cảm xúc
+        close = QPushButton("×")  # dấu nhân — ký tự chữ, không phải biểu tượng cảm xúc
         close.setObjectName("iconbtn")
         close.setFixedSize(22, 22)
         close.setToolTip("Đóng thông báo")
@@ -98,9 +118,16 @@ class _Toast(QFrame):
 
     def _show_detail(self, title: str, detail: str) -> None:
         from autodub_gui.ui.modal import ConfirmDialog
-        ConfirmDialog.ask(self.window(), "Chi tiết lỗi kỹ thuật", title,
-                          kind="error", detail=detail,
-                          confirm_label="Đóng", cancel_label="")
+
+        ConfirmDialog.ask(
+            self.window(),
+            "Chi tiết lỗi kỹ thuật",
+            title,
+            kind="error",
+            detail=detail,
+            confirm_label="Đóng",
+            cancel_label="",
+        )
 
     def start(self) -> None:
         """Bắt đầu đếm giờ tự tắt."""
@@ -135,10 +162,8 @@ class ToastManager(QObject):
     def warn(self, text: str, action_label: str = "", on_action=None) -> None:
         self._push("warn", text, action_label=action_label, on_action=on_action)
 
-    def error(self, text: str, detail: str = "",
-              action_label: str = "", on_action=None) -> None:
-        self._push("error", text, detail=detail,
-                   action_label=action_label, on_action=on_action)
+    def error(self, text: str, detail: str = "", action_label: str = "", on_action=None) -> None:
+        self._push("error", text, detail=detail, action_label=action_label, on_action=on_action)
 
     def _push(self, kind: str, text: str, **kwargs) -> None:
         host = self._host
@@ -198,8 +223,7 @@ class ToastManager(QObject):
         for toast in reversed(self._items):
             height = toast.sizeHint().height()
             y -= height
-            toast.setGeometry(host.width() - _WIDTH - _MARGIN, y,
-                              _WIDTH, height)
+            toast.setGeometry(host.width() - _WIDTH - _MARGIN, y, _WIDTH, height)
             toast.raise_()
             y -= _GAP
 

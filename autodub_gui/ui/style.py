@@ -8,6 +8,7 @@ nó nằm trong một khung đã đặt nền.
 Cách chữa là luôn viết bộ chọn theo tên riêng của widget. Các hàm dưới đây tự
 đặt tên nếu widget chưa có, rồi mới gắn bảng kiểu.
 """
+
 from __future__ import annotations
 
 from itertools import count
@@ -26,8 +27,7 @@ def _ensure_name(widget: QWidget, prefix: str) -> str:
     return name
 
 
-def scoped_style(widget: QWidget, body: str, *,
-                 selector: str = "") -> None:
+def scoped_style(widget: QWidget, body: str, *, selector: str = "") -> None:
     """Gắn bảng kiểu chỉ áp cho riêng widget này.
 
     `body` là phần bên trong dấu ngoặc nhọn, ví dụ "background: {tokens.BG_PANEL};".
@@ -42,8 +42,7 @@ def clear_background(widget: QWidget) -> None:
     scoped_style(widget, "background: transparent;")
 
 
-def panel_background(widget: QWidget, color: str, *,
-                     border: str = "", radius: int = 0) -> None:
+def panel_background(widget: QWidget, color: str, *, border: str = "", radius: int = 0) -> None:
     """Nền đặc cho riêng một khung chứa, kèm viền và bo góc nếu cần."""
     parts = [f"background: {color};"]
     parts.append(f"border: {border};" if border else "border: none;")

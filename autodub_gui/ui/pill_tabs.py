@@ -4,13 +4,12 @@ Một hàng nút bo tròn trong khung nền mờ; nút đang chọn có nền ch
 Giao diện giống ảnh mẫu, còn hành vi giữ nguyên kiểu tab: `changed(int)` phát
 ra chỉ số của tab vừa chọn.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
-
-from autodub_gui import tokens
 
 
 class PillTabBar(QWidget):

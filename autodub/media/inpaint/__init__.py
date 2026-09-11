@@ -1,10 +1,10 @@
-"""Gói AI Inpainting Subtitle Remover cho VoxDub / LPHVsub.
-"""
+"""Gói AI Inpainting Subtitle Remover cho VoxDub / LPHVsub."""
+
 from __future__ import annotations
 
 import os
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from autodub.media.inpaint.base import (
     BaseInpaintEngine,
@@ -26,9 +26,11 @@ def get_inpaint_engine(engine_type: str = "lama_onnx", **kwargs) -> BaseInpaintE
     et = engine_type.strip().lower()
     if et in ("vsr", "vsr_cli", "vsr_bridge"):
         from autodub.media.inpaint.vsr_bridge import VSRBridgeEngine
+
         return VSRBridgeEngine(**kwargs)
     # Mặc định: LaMa ONNX
     from autodub.media.inpaint.lama_onnx import LaMaOnnxEngine
+
     return LaMaOnnxEngine(**kwargs)
 
 
@@ -89,7 +91,7 @@ def inpaint_video_with_cache(
                 try:
                     os.remove(target_path)
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong __init__.py", exc_info=True)
             os.rename(temp_target, target_path)
             logger.info(f"Đã hoàn thành AI Inpaint và lưu vào cache: {target_path}")
             return target_path
@@ -100,15 +102,15 @@ def inpaint_video_with_cache(
             try:
                 os.remove(temp_target)
             except OSError:
-                pass
+                logger.debug("Bỏ qua lỗi OSError trong __init__.py", exc_info=True)
         raise e
 
 
 __all__ = [
     "BaseInpaintEngine",
+    "compute_inpaint_hash",
     "convert_normalized_regions_to_mask",
     "get_bounding_box_for_regions",
-    "compute_inpaint_hash",
     "get_cached_clean_video",
     "get_inpaint_cache_target",
     "get_inpaint_engine",

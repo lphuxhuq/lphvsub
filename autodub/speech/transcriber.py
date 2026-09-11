@@ -4,11 +4,21 @@ import os
 import subprocess
 import threading
 from collections import deque
+from typing import TYPE_CHECKING
 
 from autodub.config import Settings
 from autodub.languages import WHISPER_LANG_MAP
 from autodub.resources import GPU_LOCK
-from autodub.utils import bundled_file, gpu_venv_dir, save_json_atomic, setup_logging, ProgressTracker
+from autodub.utils import (
+    ProgressTracker,
+    bundled_file,
+    gpu_venv_dir,
+    save_json_atomic,
+    setup_logging,
+)
+
+if TYPE_CHECKING:
+    from autodub.pipeline_cache import AsrGlobalCache as ParaformerCache
 
 logger = setup_logging("autodub.transcriber")
 
@@ -55,9 +65,11 @@ def asr_will_use_gpu(settings: Settings, language: str) -> bool:
     song song với ASR hay không — sai về phía True là an toàn (chỉ mất cơ
     hội song song, không bao giờ làm hai việc giành nhau GPU).
     """
-    if (settings.asr_engine == "paraformer"
-            and (language or "").lower().startswith("zh")
-            and settings.paraformer_configured()):
+    if (
+        settings.asr_engine == "paraformer"
+        and (language or "").lower().startswith("zh")
+        and settings.paraformer_configured()
+    ):
         return False
     return _enable_cuda_dlls()
 
@@ -77,6 +89,7 @@ def _load_whisper_model(model_name: str, settings: Settings):
 
     if _enable_cuda_dlls():
         from autodub.sysinfo import available_vram_gb
+
         free_vram = available_vram_gb()
         if free_vram is not None:
             logger.info(f"VRAM khả dụng trước khi nạp Whisper: {free_vram:.1f} GB")
@@ -96,12 +109,10 @@ def _load_whisper_model(model_name: str, settings: Settings):
                     if dl_root:
                         kw["download_root"] = dl_root
                     model = WhisperModel(resolved, **kw)
-                    logger.info(f"Whisper '{resolved}' chạy trên GPU "
-                                f"(CUDA, {compute})")
+                    logger.info(f"Whisper '{resolved}' chạy trên GPU (CUDA, {compute})")
                     return model, "cuda"
                 except Exception as e:
-                    logger.warning(
-                        f"Whisper GPU {compute} không chạy được ({e})")
+                    logger.warning(f"Whisper GPU {compute} không chạy được ({e})")
         logger.warning("Không chạy được Whisper trên GPU — dùng CPU")
     resolved = settings.resolved_whisper_model(cuda_available=False)
     cpu_kw = {"device": "cpu", "compute_type": "int8"}
@@ -114,9 +125,9 @@ def _load_whisper_model(model_name: str, settings: Settings):
 def _gpu_total_vram_gb() -> float:
     """Tổng VRAM (GB) của card lớn nhất; 0.0 nếu không đọc được."""
     from autodub.sysinfo import gpu_vram_status_gb
+
     st = gpu_vram_status_gb()
     return st[0] if st is not None else 0.0
-
 
 
 class WhisperCache:
@@ -164,10 +175,14 @@ class WhisperCache:
             _release_vram()
 
 
-def transcribe(audio_path: str, language: str, settings: Settings,
-               whisper_cache: "WhisperCache | None" = None,
-               paraformer_cache: "ParaformerCache | None" = None,
-               meta: dict | None = None) -> list[dict]:
+def transcribe(
+    audio_path: str,
+    language: str,
+    settings: Settings,
+    whisper_cache: "WhisperCache | None" = None,
+    paraformer_cache: "ParaformerCache | None" = None,
+    meta: dict | None = None,
+) -> list[dict]:
     """Transcribe audio with the configured local ASR (free, offline).
 
     Engines: Whisper (default, multilingual) or Paraformer (Chinese only,
@@ -184,24 +199,28 @@ def transcribe(audio_path: str, language: str, settings: Settings,
     """
     segments = None
     # Nếu đang chọn Paraformer hoặc ngôn ngữ là tiếng Trung và Paraformer có sẵn
-    use_paraformer = (
-        settings.asr_engine == "paraformer"
-        or (settings.asr_engine == "auto" and (language or "").lower().startswith("zh") and settings.paraformer_configured())
+    use_paraformer = settings.asr_engine == "paraformer" or (
+        settings.asr_engine == "auto"
+        and (language or "").lower().startswith("zh")
+        and settings.paraformer_configured()
     )
     if use_paraformer:
         if not (language or "").lower().startswith("zh"):
-            logger.warning("Paraformer chỉ hỗ trợ tiếng Trung — dùng Whisper "
-                           f"cho ngôn ngữ '{language}'")
+            logger.warning(
+                f"Paraformer chỉ hỗ trợ tiếng Trung — dùng Whisper cho ngôn ngữ '{language}'"
+            )
         elif not settings.paraformer_configured():
-            logger.warning("Paraformer chưa cài (đúp chuột 'Cai dat ASR tieng "
-                           "Trung (Paraformer).bat') — dùng Whisper")
+            logger.warning(
+                "Paraformer chưa cài (đúp chuột 'Cai dat ASR tieng "
+                "Trung (Paraformer).bat') — dùng Whisper"
+            )
         else:
             try:
-                from autodub.speech.paraformer_transcriber import (
-                    transcribe_paraformer)
-                segments = transcribe_paraformer(audio_path, settings,
-                                                 meta=meta,
-                                                 paraformer_cache=paraformer_cache)
+                from autodub.speech.paraformer_transcriber import transcribe_paraformer
+
+                segments = transcribe_paraformer(
+                    audio_path, settings, meta=meta, paraformer_cache=paraformer_cache
+                )
             except Exception as e:
                 logger.warning(f"Paraformer lỗi ({e}) — chuyển sang Whisper")
     if segments is None:
@@ -210,15 +229,12 @@ def transcribe(audio_path: str, language: str, settings: Settings,
         # Fallback về in-process khi venv chưa cài (dev) hoặc cache đang giữ.
         if whisper_cache is None and settings.whisper_venv_configured():
             try:
-                segments = _transcribe_whisper_subprocess(
-                    audio_path, language, settings)
+                segments = _transcribe_whisper_subprocess(audio_path, language, settings)
             except Exception as e:
-                logger.warning(
-                    f"Whisper subprocess lỗi ({e}) — thử in-process")
+                logger.warning(f"Whisper subprocess lỗi ({e}) — thử in-process")
                 segments = None
         if segments is None:
-            segments = _transcribe_whisper(audio_path, language, settings,
-                                           whisper_cache)
+            segments = _transcribe_whisper(audio_path, language, settings, whisper_cache)
 
     logger.info(f"Transcription complete: {len(segments)} raw segments")
 
@@ -254,11 +270,16 @@ def _transcribe_whisper_subprocess(
     cmd = [
         settings.whisper_venv_python_path(),
         _WHISPER_WORKER_SCRIPT,
-        "--audio",     audio_path,
-        "--model",     settings.whisper_model,
-        "--language",  language or "",
-        "--beam-size", str(settings.whisper_beam_size),
-        "--model-dir", settings.whisper_model_dir_path(),
+        "--audio",
+        audio_path,
+        "--model",
+        settings.whisper_model,
+        "--language",
+        language or "",
+        "--beam-size",
+        str(settings.whisper_beam_size),
+        "--model-dir",
+        settings.whisper_model_dir_path(),
     ]
     if cuda_dll_dir:
         cmd += ["--cuda-dll-dir", cuda_dll_dir]
@@ -291,21 +312,19 @@ def _transcribe_whisper_subprocess(
     ready_line = proc.stdout.readline().strip()
     try:
         ready = json.loads(ready_line)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as e:
         proc.kill()
         raise RuntimeError(
-            f"Whisper worker không phản hồi ready: {ready_line!r}\n"
-            + "\n".join(stderr_tail))
+            f"Whisper worker không phản hồi ready: {ready_line!r}\n" + "\n".join(stderr_tail)
+        ) from e
     if not ready.get("ready"):
         proc.kill()
-        raise RuntimeError(
-            f"Whisper worker báo lỗi: {ready}\n" + "\n".join(stderr_tail))
+        raise RuntimeError(f"Whisper worker báo lỗi: {ready}\n" + "\n".join(stderr_tail))
 
     logger.info("Whisper worker sẵn sàng — gửi request nhận dạng")
 
     # Gửi request
-    req = {"audio": audio_path, "language": language or "",
-           "beam_size": settings.whisper_beam_size}
+    req = {"audio": audio_path, "language": language or "", "beam_size": settings.whisper_beam_size}
     proc.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
     proc.stdin.flush()
     proc.stdin.close()
@@ -313,8 +332,12 @@ def _transcribe_whisper_subprocess(
     from autodub.media.audio import wav_duration_s
 
     total_audio_dur = wav_duration_s(audio_path) or 0.0
-    tracker = ProgressTracker(total_audio_dur if total_audio_dur > 0 else 1.0,
-                              "Nhận dạng giọng nói (ASR)", unit="s", min_log_interval=2.5)
+    tracker = ProgressTracker(
+        total_audio_dur if total_audio_dur > 0 else 1.0,
+        "Nhận dạng giọng nói (ASR)",
+        unit="s",
+        min_log_interval=2.5,
+    )
     segments: list[dict] = []
     done = False
     try:
@@ -330,14 +353,14 @@ def _transcribe_whisper_subprocess(
                 raise RuntimeError(f"Whisper worker: {msg['error']}")
             if msg.get("seg"):
                 start = float(msg["start"])
-                end   = float(msg["end"])
+                end = float(msg["end"])
                 seg_id = msg.get("id", len(segments) + 1)
                 txt = str(msg.get("text", "")).strip()
                 seg: dict = {
-                    "id":       seg_id,
-                    "text":     txt,
-                    "start":    round(start, 3),
-                    "end":      round(end, 3),
+                    "id": seg_id,
+                    "text": txt,
+                    "start": round(start, 3),
+                    "end": round(end, 3),
                     "duration": round(end - start, 3),
                 }
                 words = msg.get("words")
@@ -345,7 +368,7 @@ def _transcribe_whisper_subprocess(
                     seg["words"] = words
                 segments.append(seg)
                 preview = (txt[:30] + "...") if len(txt) > 30 else txt
-                detail = f"Câu #{seg_id} [{start:.1f}s-{end:.1f}s]: \"{preview}\""
+                detail = f'Câu #{seg_id} [{start:.1f}s-{end:.1f}s]: "{preview}"'
                 should_log, log_msg = tracker.update_to(end, detail=detail)
                 if should_log:
                     logger.info(f"  {log_msg}")
@@ -353,9 +376,7 @@ def _transcribe_whisper_subprocess(
                 done = True
                 lang = msg.get("language", "")
                 if lang:
-                    logger.info(
-                        f"Ngôn ngữ: {lang} "
-                        f"({msg.get('language_prob', 0):.0%})")
+                    logger.info(f"Ngôn ngữ: {lang} ({msg.get('language_prob', 0):.0%})")
         proc.wait(timeout=7200)
         if done:
             logger.info(f"  {tracker.summary()}")
@@ -367,17 +388,18 @@ def _transcribe_whisper_subprocess(
                 try:
                     s.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong transcriber.py", exc_info=True)
 
     tail = "\n".join(stderr_tail)
     if not done:
         raise RuntimeError(
             f"Whisper worker thoát bất thường (exit {proc.returncode})"
-            + (f"\n{tail}" if tail else ""))
+            + (f"\n{tail}" if tail else "")
+        )
     if not segments:
         raise RuntimeError(
-            "Whisper worker không nhận dạng được câu nào"
-            + (f"\n{tail}" if tail else ""))
+            "Whisper worker không nhận dạng được câu nào" + (f"\n{tail}" if tail else "")
+        )
     return segments
 
 
@@ -395,8 +417,9 @@ def _release_vram() -> None:
     logger.info("Đã giải phóng bộ nhớ Whisper cho bước tạo giọng")
 
 
-def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
-                        whisper_cache: "WhisperCache | None" = None) -> list[dict]:
+def _transcribe_whisper(
+    audio_path: str, language: str, settings: Settings, whisper_cache: "WhisperCache | None" = None
+) -> list[dict]:
     """Local ASR via faster-whisper — free, offline, no API key needed.
 
     ``word_timestamps=True``: mỗi segment mang kèm mảng ``words``
@@ -413,7 +436,11 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         logger.info(f"Loading Whisper model: {model_name} (first run downloads the model)")
         model, _device = _load_whisper_model(model_name, settings)
 
-    initial_prompt = "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。" if (whisper_lang or "").startswith("zh") else None
+    initial_prompt = (
+        "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。"
+        if (whisper_lang or "").startswith("zh")
+        else None
+    )
     logger.info(f"Starting transcription: {audio_path} (language: {whisper_lang})")
     raw_segments, info = model.transcribe(
         audio_path,
@@ -433,14 +460,20 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         log_prob_threshold=-1.0,
     )
     if whisper_lang is None and getattr(info, "language", None):
-        logger.info(f"Ngôn ngữ tự nhận dạng: {info.language} "
-                    f"(độ tin cậy {getattr(info, 'language_probability', 0):.0%})")
+        logger.info(
+            f"Ngôn ngữ tự nhận dạng: {info.language} "
+            f"(độ tin cậy {getattr(info, 'language_probability', 0):.0%})"
+        )
 
     from autodub.media.audio import wav_duration_s
 
     total_audio_dur = getattr(info, "duration", None) or wav_duration_s(audio_path) or 0.0
-    tracker = ProgressTracker(total_audio_dur if total_audio_dur > 0 else 1.0,
-                              "Nhận dạng giọng nói (ASR)", unit="s", min_log_interval=2.5)
+    tracker = ProgressTracker(
+        total_audio_dur if total_audio_dur > 0 else 1.0,
+        "Nhận dạng giọng nói (ASR)",
+        unit="s",
+        min_log_interval=2.5,
+    )
 
     segments = []
     segment_id = 0
@@ -461,14 +494,12 @@ def _transcribe_whisper(audio_path: str, language: str, settings: Settings,
         words = getattr(seg, "words", None)
         if words:
             segment["words"] = [
-                {"word": w.word, "start": round(w.start, 3),
-                 "end": round(w.end, 3)}
-                for w in words
+                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)} for w in words
             ]
         segment = _anchor_segment_to_words(segment)
         segments.append(segment)
         preview = (text[:30] + "...") if len(text) > 30 else text
-        detail = f"Câu #{segment_id} [{start:.1f}s-{end:.1f}s]: \"{preview}\""
+        detail = f'Câu #{segment_id} [{start:.1f}s-{end:.1f}s]: "{preview}"'
         should_log, log_msg = tracker.update_to(end, detail=detail)
         if should_log:
             logger.info(f"  {log_msg}")
@@ -544,6 +575,7 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
     lip-sync drift.
     """
     import re
+
     result = []
     new_id = 0
 
@@ -556,12 +588,12 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
         # Split text at sentence boundaries. CJK marks (。！？；) carry no
         # trailing space, so match with \s* — benefits both Paraformer output
         # and Whisper zh transcripts.
-        sentences = re.split(r'(?<=[.!?;。！？；])\s*', seg["text"].strip())
+        sentences = re.split(r"(?<=[.!?;。！？；])\s*", seg["text"].strip())
         sentences = [s for s in sentences if s]
-        
+
         # If no sentence boundaries found, fallback to commas/colons/dashes
         if len(sentences) <= 1:
-            sentences = re.split(r'(?<=[,，、：:\-])\s*', seg["text"].strip())
+            sentences = re.split(r"(?<=[,，、：:\-])\s*", seg["text"].strip())
             sentences = [s for s in sentences if s]
 
         if len(sentences) <= 1:
@@ -577,7 +609,7 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
 
         chunk_sentences = []
         chunk_chars = 0
-        consumed_chars = 0   # ký tự đã chốt vào các chunk trước (tra words)
+        consumed_chars = 0  # ký tự đã chốt vào các chunk trước (tra words)
 
         for sentence in sentences:
             estimated_chunk_duration = (chunk_chars + len(sentence)) / total_chars * total_duration
@@ -592,13 +624,15 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
                 end = _word_boundary_time(seg, consumed_chars, est_end)
                 end = round(min(max(end, start + 0.1), seg["end"] - 0.1), 3)
                 new_id += 1
-                result.append({
-                    "id": new_id,
-                    "text": " ".join(chunk_sentences),
-                    "start": round(start, 3),
-                    "end": end,
-                    "duration": round(end - start, 3),
-                })
+                result.append(
+                    {
+                        "id": new_id,
+                        "text": " ".join(chunk_sentences),
+                        "start": round(start, 3),
+                        "end": end,
+                        "duration": round(end - start, 3),
+                    }
+                )
                 start = end
                 chunk_sentences = []
                 chunk_chars = 0
@@ -614,13 +648,15 @@ def split_long_segments(segments: list[dict], max_duration: float = 10.0) -> lis
             end = seg["end"]
             start = min(start, end - 0.1)
             new_id += 1
-            result.append({
-                "id": new_id,
-                "text": " ".join(chunk_sentences),
-                "start": round(start, 3),
-                "end": round(end, 3),
-                "duration": round(end - start, 3),
-            })
+            result.append(
+                {
+                    "id": new_id,
+                    "text": " ".join(chunk_sentences),
+                    "start": round(start, 3),
+                    "end": round(end, 3),
+                    "duration": round(end - start, 3),
+                }
+            )
 
     return result
 

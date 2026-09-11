@@ -1,4 +1,5 @@
 """Mục có thể gập lại để giấu bớt tùy chọn nâng cao."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -16,8 +17,7 @@ class CollapsibleSection(QWidget):
 
     toggled = Signal(bool)
 
-    def __init__(self, title: str, expanded: bool = False,
-                 parent: QWidget | None = None):
+    def __init__(self, title: str, expanded: bool = False, parent: QWidget | None = None):
         super().__init__(parent)
         self._expanded = expanded
         # Nhóm này luôn nằm trong một thẻ hoặc một trang đã có nền — để trong
@@ -33,16 +33,16 @@ class CollapsibleSection(QWidget):
         row = QHBoxLayout(header)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(tokens.SP_2)
-        self._toggle = IconButton(self._arrow(), "Mở rộng hoặc thu gọn mục này",
-                                  size=_TOGGLE_SIZE)
+        self._toggle = IconButton(self._arrow(), "Mở rộng hoặc thu gọn mục này", size=_TOGGLE_SIZE)
         self._toggle.clicked.connect(self.toggle)
         self._title = QLabel(title)
         self._title.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         row.addWidget(self._toggle)
         row.addWidget(self._title, 1)
-        header.mousePressEvent = lambda _e: self.toggle()   # noqa: SLF001
+        header.mousePressEvent = lambda _e: self.toggle()
         root.addWidget(header)
 
         # Phải gắn cha NGAY từ lúc tạo: một widget chưa có cha mà bị cho hiện
@@ -54,15 +54,17 @@ class CollapsibleSection(QWidget):
         self._layout = QVBoxLayout(self._content)
         # Thụt vào đúng bằng bề ngang nút mũi tên cộng khoảng cách, để nội dung
         # thẳng hàng với chữ tiêu đề chứ không lệch một quãng lửng lơ.
-        self._layout.setContentsMargins(_TOGGLE_SIZE + tokens.SP_2, 0,
-                                        0, tokens.SP_2)
+        self._layout.setContentsMargins(_TOGGLE_SIZE + tokens.SP_2, 0, 0, tokens.SP_2)
         self._layout.setSpacing(tokens.SP_3)
         root.addWidget(self._content)
         self._content.setVisible(expanded)
 
     def _arrow(self):
-        return (icons.chevron_down(tokens.TEXT_SECONDARY) if self._expanded
-                else icons.chevron_right(tokens.TEXT_SECONDARY))
+        return (
+            icons.chevron_down(tokens.TEXT_SECONDARY)
+            if self._expanded
+            else icons.chevron_right(tokens.TEXT_SECONDARY)
+        )
 
     def toggle(self) -> None:
         """Đổi giữa mở rộng và thu gọn."""
@@ -84,8 +86,7 @@ class CollapsibleSection(QWidget):
         (như thẻ Quản lý giọng) đặt 0 để nút chiếm trọn bề ngang, không lệch.
         """
         margins = self._layout.contentsMargins()
-        self._layout.setContentsMargins(indent, margins.top(),
-                                        margins.right(), margins.bottom())
+        self._layout.setContentsMargins(indent, margins.top(), margins.right(), margins.bottom())
 
     def set_title(self, title: str) -> None:
         """Đổi dòng tiêu đề của mục."""

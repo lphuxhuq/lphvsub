@@ -7,19 +7,18 @@ Targets:
 4. QUndoStack integration (deep multi-action undo/redo cycles, state restoration, timing reversibility, transcript file sync).
 5. GUI stability (zoom slider synchronization, typing protection, canvas edge-case rendering, clean shutdown).
 """
+
 from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QPlainTextEdit, QTextEdit, QWidget
 
 from autodub.config import Settings
-from autodub_gui.pages.editor_commands import MergeSegmentCommand, SplitSegmentCommand
+from autodub_gui.pages.editor_commands import MergeSegmentCommand
 from autodub_gui.pages.editor_page import EditorPage
 from autodub_gui.shortcuts import (
     ALL_SHORTCUTS,
@@ -30,13 +29,6 @@ from autodub_gui.shortcuts import (
 )
 from autodub_gui.ui.toast import TOASTS
 from autodub_gui.video.timeline import (
-    BAND_H,
-    LABEL_W,
-    MAX_ZOOM,
-    MIN_ZOOM,
-    RULER_H,
-    THUMB_H,
-    TRACK_H,
     Timeline,
     TimelineCanvas,
 )
@@ -57,9 +49,31 @@ def mock_project_dir(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 0.0, "end": 4.0, "duration": 4.0, "text": "seg 1", "text_vi": "Câu thứ nhất", "voice": "hn_female"},
-        {"id": 2, "start": 5.0, "end": 8.0, "duration": 3.0, "text": "seg 2", "text_vi": "Câu thứ hai"},
-        {"id": 3, "start": 9.0, "end": 12.0, "duration": 3.0, "text": "seg 3", "text_vi": "Câu thứ ba"},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 4.0,
+            "duration": 4.0,
+            "text": "seg 1",
+            "text_vi": "Câu thứ nhất",
+            "voice": "hn_female",
+        },
+        {
+            "id": 2,
+            "start": 5.0,
+            "end": 8.0,
+            "duration": 3.0,
+            "text": "seg 2",
+            "text_vi": "Câu thứ hai",
+        },
+        {
+            "id": 3,
+            "start": 9.0,
+            "end": 12.0,
+            "duration": 3.0,
+            "text": "seg 3",
+            "text_vi": "Câu thứ ba",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -77,7 +91,14 @@ def single_seg_project_dir(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 1.0, "end": 5.0, "duration": 4.0, "text": "only seg", "text_vi": "Câu duy nhất"},
+        {
+            "id": 1,
+            "start": 1.0,
+            "end": 5.0,
+            "duration": 4.0,
+            "text": "only seg",
+            "text_vi": "Câu duy nhất",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -94,8 +115,22 @@ def short_seg_project_dir(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 1.0, "end": 1.35, "duration": 0.35, "text": "short seg", "text_vi": "Ngắn"},
-        {"id": 2, "start": 2.0, "end": 6.0, "duration": 4.0, "text": "normal seg", "text_vi": "Bình thường"},
+        {
+            "id": 1,
+            "start": 1.0,
+            "end": 1.35,
+            "duration": 0.35,
+            "text": "short seg",
+            "text_vi": "Ngắn",
+        },
+        {
+            "id": 2,
+            "start": 2.0,
+            "end": 6.0,
+            "duration": 4.0,
+            "text": "normal seg",
+            "text_vi": "Bình thường",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -185,7 +220,9 @@ class TestShortcutRegistrationAndEventHandling:
 # 2. split_current_segment Edge Case Verification
 # =========================================================================
 class TestSplitCurrentSegmentEdgeCases:
-    def test_split_playhead_outside_segment_without_selection(self, qapp, mock_project_dir, monkeypatch) -> None:
+    def test_split_playhead_outside_segment_without_selection(
+        self, qapp, mock_project_dir, monkeypatch
+    ) -> None:
         """Playhead at 4.5s (gap between seg 1 [0-4s] and seg 2 [5-8s]), no selection."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_project_dir)
@@ -202,7 +239,9 @@ class TestSplitCurrentSegmentEdgeCases:
         assert len(page._segments) == 3
         page.cleanup()
 
-    def test_split_playhead_outside_segment_with_selection_midpoint_fallback(self, qapp, mock_project_dir) -> None:
+    def test_split_playhead_outside_segment_with_selection_midpoint_fallback(
+        self, qapp, mock_project_dir
+    ) -> None:
         """Playhead at 4.5s, but Segment 1 [0-4s] is selected -> splits Seg 1 at midpoint 2.0s."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_project_dir)
@@ -219,7 +258,9 @@ class TestSplitCurrentSegmentEdgeCases:
         assert abs(float(page._segments[1]["end"]) - 4.0) < 1e-4
         page.cleanup()
 
-    def test_split_selected_segment_too_short_for_midpoint_split(self, qapp, short_seg_project_dir, monkeypatch) -> None:
+    def test_split_selected_segment_too_short_for_midpoint_split(
+        self, qapp, short_seg_project_dir, monkeypatch
+    ) -> None:
         """Segment 1 is 0.35s long [1.0, 1.35]. Midpoint 1.175 is 0.175s from edges (< 0.2s) -> rejected."""
         page = EditorPage(Settings.load)
         page.open_work_dir(short_seg_project_dir)
@@ -236,19 +277,24 @@ class TestSplitCurrentSegmentEdgeCases:
         assert len(page._segments) == 2
         page.cleanup()
 
-    @pytest.mark.parametrize("playhead_offset, expected_allowed", [
-        (0.00, False),   # exactly on start
-        (0.05, False),   # < 0.2s from start
-        (0.19, False),   # < 0.2s from start
-        (0.20, True),    # boundary threshold >= 0.2s
-        (0.21, True),    # allowed
-        (3.79, True),    # allowed
-        (3.80, True),    # boundary threshold end - 0.2s
-        (3.81, False),   # < 0.2s from end
-        (3.95, False),   # < 0.2s from end
-        (4.00, False),   # exactly on end
-    ])
-    def test_split_near_and_on_boundary(self, qapp, mock_project_dir, playhead_offset, expected_allowed, monkeypatch) -> None:
+    @pytest.mark.parametrize(
+        "playhead_offset, expected_allowed",
+        [
+            (0.00, False),  # exactly on start
+            (0.05, False),  # < 0.2s from start
+            (0.19, False),  # < 0.2s from start
+            (0.20, True),  # boundary threshold >= 0.2s
+            (0.21, True),  # allowed
+            (3.79, True),  # allowed
+            (3.80, True),  # boundary threshold end - 0.2s
+            (3.81, False),  # < 0.2s from end
+            (3.95, False),  # < 0.2s from end
+            (4.00, False),  # exactly on end
+        ],
+    )
+    def test_split_near_and_on_boundary(
+        self, qapp, mock_project_dir, playhead_offset, expected_allowed, monkeypatch
+    ) -> None:
         """Seg 1 is [0.0, 4.0]s. Test various playhead positions."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_project_dir)
@@ -327,7 +373,9 @@ class TestMergeCurrentSegmentEdgeCases:
         assert len(page._segments) == 3
         page.cleanup()
 
-    def test_merge_no_selection_and_playhead_outside_segments(self, qapp, mock_project_dir, monkeypatch) -> None:
+    def test_merge_no_selection_and_playhead_outside_segments(
+        self, qapp, mock_project_dir, monkeypatch
+    ) -> None:
         """Playhead at 4.5s (gap), no selection in list."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_project_dir)
@@ -360,7 +408,9 @@ class TestMergeCurrentSegmentEdgeCases:
         assert page._segments[0]["text_vi"] == "Câu thứ nhất Câu thứ hai"
         page.cleanup()
 
-    def test_merge_non_adjacent_segments_command_rejection(self, qapp, mock_project_dir, monkeypatch) -> None:
+    def test_merge_non_adjacent_segments_command_rejection(
+        self, qapp, mock_project_dir, monkeypatch
+    ) -> None:
         """Direct push of MergeSegmentCommand with non-adjacent ids [1, 3] reports error without crash."""
         page = EditorPage(Settings.load)
         page.open_work_dir(mock_project_dir)

@@ -16,6 +16,7 @@ Chỗ khó nhất là thoát đường dẫn cho bộ lọc ``subtitles`` trên 
 đi qua bộ đọc filtergraph của ffmpeg RỒI mới tới bộ đọc tùy chọn của bộ lọc,
 nên ``C:\\out\\a.srt`` phải thành ``C\\:/out/a.srt``.
 """
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,7 @@ BLUR_POWER = 2
 #: Kiểu phụ đề đầy đủ — mọi khóa đều có mặt để không nơi nào phải đoán.
 DEFAULT_STYLE: dict = {
     "preset": "clean",
-    "position": "bottom",       # "bottom" | "middle" | "top"
+    "position": "bottom",  # "bottom" | "middle" | "top"
     "font": "Arial",
     "font_size": 22,
     "margin_v": 40,
@@ -38,64 +39,135 @@ DEFAULT_STYLE: dict = {
     "bold": True,
     "color": "#FFFFFF",
     "outline_color": "#000000",
-    "box": "none",              # "none" (chỉ viền) | "box" (khối nền đặc)
+    "box": "none",  # "none" (chỉ viền) | "box" (khối nền đặc)
     "box_color": "#000000",
-    "box_opacity": 60,          # 0–100, chỉ dùng khi box = "box"
-    "line_words": 0,            # 0 = tự xuống dòng theo bề rộng
+    "box_opacity": 60,  # 0–100, chỉ dùng khi box = "box"
+    "line_words": 0,  # 0 = tự xuống dòng theo bề rộng
     "max_lines": 2,
     "all_caps": False,
-    "display": "sentence",      # "sentence" | "karaoke"
+    "display": "sentence",  # "sentence" | "karaoke"
     "words_per_cue": 3,
-    "effect": "pop",            # "pop" | "fade" | "karaoke" | "none"
+    "effect": "pop",  # "pop" | "fade" | "karaoke" | "none"
     "highlight_color": "#FFD54A",
 }
 
 #: Bộ kiểu dựng sẵn — (khóa, tên hiển thị, mô tả ngắn, phần ghi đè).
 #: Người dùng chọn một bộ rồi tinh chỉnh; mọi khóa không nêu giữ mặc định.
 PRESETS: tuple[tuple[str, str, str, dict], ...] = (
-    ("clean", "Gọn gàng", "Chữ trắng viền đen, hợp mọi loại video", {
-        "font_size": 22, "outline": 2, "shadow": 0, "bold": True,
-        "color": "#FFFFFF", "outline_color": "#000000", "box": "none",
-        "line_words": 0, "max_lines": 2, "display": "sentence",
-    }),
-    ("bold_yellow", "Nổi bật", "Chữ vàng viền dày, hợp video giải trí", {
-        "font_size": 26, "outline": 3, "shadow": 1, "bold": True,
-        "color": "#FFE24A", "outline_color": "#101010", "box": "none",
-        "line_words": 0, "max_lines": 2, "display": "sentence",
-    }),
-    ("box", "Nền mờ", "Khối nền tối sau chữ, dễ đọc trên nền rối", {
-        "font_size": 22, "outline": 4, "shadow": 0, "bold": False,
-        "color": "#FFFFFF", "box": "box", "box_color": "#000000",
-        "box_opacity": 65, "line_words": 0, "max_lines": 2,
-        "display": "sentence",
-    }),
-    ("tiktok", "Video dọc", "Chữ to, ít chữ mỗi hàng, nằm cao hơn mép dưới", {
-        "font_size": 30, "outline": 3, "shadow": 0, "bold": True,
-        "color": "#FFFFFF", "outline_color": "#000000", "box": "none",
-        "line_words": 5, "max_lines": 2, "margin_v": 70,
-        "display": "sentence",
-    }),
-    ("karaoke", "Cụm chữ theo lời", "Từng cụm ngắn sáng lên đúng nhịp đọc", {
-        "font_size": 30, "outline": 3, "shadow": 0, "bold": True,
-        "color": "#FFFFFF", "outline_color": "#000000", "box": "none",
-        "margin_v": 70, "display": "karaoke", "words_per_cue": 3,
-        "effect": "karaoke", "highlight_color": "#FFD54A",
-    }),
-    ("cinema", "Điện ảnh", "Chữ nhỏ, viền mảnh, sát mép dưới", {
-        "font_size": 18, "outline": 1, "shadow": 1, "bold": False,
-        "color": "#F2F2F2", "outline_color": "#000000", "box": "none",
-        "line_words": 0, "max_lines": 2, "margin_v": 24,
-        "display": "sentence",
-    }),
+    (
+        "clean",
+        "Gọn gàng",
+        "Chữ trắng viền đen, hợp mọi loại video",
+        {
+            "font_size": 22,
+            "outline": 2,
+            "shadow": 0,
+            "bold": True,
+            "color": "#FFFFFF",
+            "outline_color": "#000000",
+            "box": "none",
+            "line_words": 0,
+            "max_lines": 2,
+            "display": "sentence",
+        },
+    ),
+    (
+        "bold_yellow",
+        "Nổi bật",
+        "Chữ vàng viền dày, hợp video giải trí",
+        {
+            "font_size": 26,
+            "outline": 3,
+            "shadow": 1,
+            "bold": True,
+            "color": "#FFE24A",
+            "outline_color": "#101010",
+            "box": "none",
+            "line_words": 0,
+            "max_lines": 2,
+            "display": "sentence",
+        },
+    ),
+    (
+        "box",
+        "Nền mờ",
+        "Khối nền tối sau chữ, dễ đọc trên nền rối",
+        {
+            "font_size": 22,
+            "outline": 4,
+            "shadow": 0,
+            "bold": False,
+            "color": "#FFFFFF",
+            "box": "box",
+            "box_color": "#000000",
+            "box_opacity": 65,
+            "line_words": 0,
+            "max_lines": 2,
+            "display": "sentence",
+        },
+    ),
+    (
+        "tiktok",
+        "Video dọc",
+        "Chữ to, ít chữ mỗi hàng, nằm cao hơn mép dưới",
+        {
+            "font_size": 30,
+            "outline": 3,
+            "shadow": 0,
+            "bold": True,
+            "color": "#FFFFFF",
+            "outline_color": "#000000",
+            "box": "none",
+            "line_words": 5,
+            "max_lines": 2,
+            "margin_v": 70,
+            "display": "sentence",
+        },
+    ),
+    (
+        "karaoke",
+        "Cụm chữ theo lời",
+        "Từng cụm ngắn sáng lên đúng nhịp đọc",
+        {
+            "font_size": 30,
+            "outline": 3,
+            "shadow": 0,
+            "bold": True,
+            "color": "#FFFFFF",
+            "outline_color": "#000000",
+            "box": "none",
+            "margin_v": 70,
+            "display": "karaoke",
+            "words_per_cue": 3,
+            "effect": "karaoke",
+            "highlight_color": "#FFD54A",
+        },
+    ),
+    (
+        "cinema",
+        "Điện ảnh",
+        "Chữ nhỏ, viền mảnh, sát mép dưới",
+        {
+            "font_size": 18,
+            "outline": 1,
+            "shadow": 1,
+            "bold": False,
+            "color": "#F2F2F2",
+            "outline_color": "#000000",
+            "box": "none",
+            "line_words": 0,
+            "max_lines": 2,
+            "margin_v": 24,
+            "display": "sentence",
+        },
+    ),
     ("custom", "Tự chỉnh", "Bạn tự quyết mọi thông số bên dưới", {}),
 )
 
 _PRESET_MAP = {key: overrides for key, _label, _hint, overrides in PRESETS}
 
 #: Danh sách (nhãn, khóa) cho ô chọn của giao diện.
-PRESET_CHOICES: list[tuple[str, str]] = [
-    (label, key) for key, label, _hint, _o in PRESETS
-]
+PRESET_CHOICES: list[tuple[str, str]] = [(label, key) for key, label, _hint, _o in PRESETS]
 
 # Alignment của libass (theo bàn phím số): 2 = dưới-giữa, 5 = giữa, 8 = trên.
 _POSITION_ALIGN = {"bottom": 2, "middle": 5, "top": 8}
@@ -161,8 +233,8 @@ def escape_subtitles_path(path: str) -> str:
     thoát đường dẫn cho mọi bộ lọc FFmpeg.
     """
     from autodub.utils import ffmpeg_escape_path
-    return ffmpeg_escape_path(path)
 
+    return ffmpeg_escape_path(path)
 
 
 def build_force_style(style: dict | None = None) -> str:
@@ -177,8 +249,11 @@ def build_force_style(style: dict | None = None) -> str:
     # BorderStyle 3 = khối nền đặc, vẽ bằng chính OutlineColour; lúc đó
     # Outline đóng vai trò khoảng đệm quanh chữ.
     border_style = 3 if boxed else 1
-    outline_colour = (hex_to_ass_color(s["box_color"], int(s["box_opacity"]))
-                      if boxed else hex_to_ass_color(s["outline_color"]))
+    outline_colour = (
+        hex_to_ass_color(s["box_color"], int(s["box_opacity"]))
+        if boxed
+        else hex_to_ass_color(s["outline_color"])
+    )
     max_lines = int(s.get("max_lines", 2) or 2)
     wrap_style = 2 if max_lines == 1 else 0
     return (
@@ -235,6 +310,7 @@ def build_aspect_ratio_filter(
     Trả về (filter_str, target_w, target_h) hoặc None nếu giữ nguyên tỷ lệ gốc.
     """
     from autodub.media.render_plan import RenderPlan
+
     plan = RenderPlan.build(
         video_w=video_w,
         video_h=video_h,
@@ -256,11 +332,11 @@ def _logo_overlay_coords(position: str, margin: int) -> tuple[str, str]:
     if pos in ("bottom_right", "br"):
         return f"main_w-overlay_w-{margin}", f"main_h-overlay_h-{margin}"
     if pos in ("top_center", "tc"):
-        return f"(main_w-overlay_w)/2", f"{margin}"
+        return "(main_w-overlay_w)/2", f"{margin}"
     if pos in ("bottom_center", "bc"):
-        return f"(main_w-overlay_w)/2", f"main_h-overlay_h-{margin}"
+        return "(main_w-overlay_w)/2", f"main_h-overlay_h-{margin}"
     if pos in ("center", "middle"):
-        return f"(main_w-overlay_w)/2", f"(main_h-overlay_h)/2"
+        return "(main_w-overlay_w)/2", "(main_h-overlay_h)/2"
     # Mặc định top_right
     return f"main_w-overlay_w-{margin}", f"{margin}"
 
@@ -275,7 +351,10 @@ def _build_drawtext_watermark_filter(
 ) -> str:
     """Tạo bộ lọc drawtext cho chữ watermark chìm chuyển động quanh video."""
     from autodub.utils import bundled_font_files
-    escaped_text = text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
+
+    escaped_text = (
+        text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
+    )
     op = max(0.05, min(1.0, float(opacity if opacity is not None else 0.28)))
     fs = max(12, min(120, int(font_size if font_size is not None else 26)))
     sp_x = max(10, int(speed if speed is not None else 40))
@@ -295,8 +374,8 @@ def _build_drawtext_watermark_filter(
     font_color_arg = f"{clean_color}@{op:.2f}"
 
     if motion == "bounce":
-        x_expr = f"{margin}+abs(mod(t*{sp_x},2*(w-tw-{2*margin}))-(w-tw-{2*margin}))"
-        y_expr = f"{margin}+abs(mod(t*{sp_y},2*(h-th-{2*margin}))-(h-th-{2*margin}))"
+        x_expr = f"{margin}+abs(mod(t*{sp_x},2*(w-tw-{2 * margin}))-(w-tw-{2 * margin}))"
+        y_expr = f"{margin}+abs(mod(t*{sp_y},2*(h-th-{2 * margin}))-(h-th-{2 * margin}))"
     elif motion == "bottom_left":
         x_expr = f"{margin}"
         y_expr = f"h-th-{margin}"
@@ -310,9 +389,11 @@ def _build_drawtext_watermark_filter(
         x_expr = f"w-tw-{margin}"
         y_expr = f"{margin}"
 
-    return (f"drawtext=text='{escaped_text}'{font_arg}:fontsize={fs}"
-            f":fontcolor={font_color_arg}:shadowcolor=black@{op*0.5:.2f}:shadowx=1:shadowy=1"
-            f":x='{x_expr}':y='{y_expr}'")
+    return (
+        f"drawtext=text='{escaped_text}'{font_arg}:fontsize={fs}"
+        f":fontcolor={font_color_arg}:shadowcolor=black@{op * 0.5:.2f}:shadowx=1:shadowy=1"
+        f":x='{x_expr}':y='{y_expr}'"
+    )
 
 
 def _build_color_filter(filter_name: str | None) -> str | None:
@@ -325,7 +406,9 @@ def _build_color_filter(filter_name: str | None) -> str | None:
     if fn in ("teal_orange", "blockbuster"):
         return "colorbalance=rs=0.12:gs=0.02:bs=-0.08:rh=-0.08:gh=0.04:bh=0.10,eq=contrast=1.10:saturation=1.15"
     if fn in ("vintage", "retro"):
-        return "eq=contrast=0.96:brightness=0.02:saturation=0.86,colorbalance=rs=0.06:gs=0.03:bs=-0.04"
+        return (
+            "eq=contrast=0.96:brightness=0.02:saturation=0.86,colorbalance=rs=0.06:gs=0.03:bs=-0.04"
+        )
     if fn in ("moody_dark", "dark"):
         return "eq=contrast=1.14:brightness=-0.03:saturation=0.92,colorbalance=rs=-0.02:gs=-0.02:bs=0.04"
     if fn in ("clean_film", "sharp"):
@@ -441,11 +524,13 @@ def build_filter_complex(
     has_footer = has_banner and bool(frame_footer_text and str(frame_footer_text).strip())
 
     actual_reframe_mode = (
-        "banner" if (has_banner and reframe_mode not in ("top_split", "center_crop"))
+        "banner"
+        if (has_banner and reframe_mode not in ("top_split", "center_crop"))
         else reframe_mode
     )
     actual_aspect_preset = (
-        "tiktok_9_16" if (has_banner and (not aspect_preset or aspect_preset in ("original", "none")))
+        "tiktok_9_16"
+        if (has_banner and (not aspect_preset or aspect_preset in ("original", "none")))
         else aspect_preset
     )
     asp_res = build_aspect_ratio_filter(
@@ -460,9 +545,17 @@ def build_filter_complex(
     has_wm = bool(watermark_text and str(watermark_text).strip())
     c_flt = _build_color_filter(color_filter)
 
-    if (not regions and not srt_path and not asp_res and not has_logo
-            and not has_wm and not smart_flip and not micro_zoom and not c_flt
-            and not has_banner):
+    if (
+        not regions
+        and not srt_path
+        and not asp_res
+        and not has_logo
+        and not has_wm
+        and not smart_flip
+        and not micro_zoom
+        and not c_flt
+        and not has_banner
+    ):
         return None
 
     parts: list[str] = []
@@ -535,7 +628,11 @@ def build_filter_complex(
         reg_method = region.get("method") or mask_method
         x, y, w, h = _to_pixels(region, video_w, video_h)
         t_start, t_end = region.get("t_start"), region.get("t_end")
-        timing = f":enable='between(t,{float(t_start)},{float(t_end)})'" if (t_start is not None and t_end is not None) else ""
+        timing = (
+            f":enable='between(t,{float(t_start)},{float(t_end)})'"
+            if (t_start is not None and t_end is not None)
+            else ""
+        )
         blur_like.append((x, y, w, h, timing, reg_method))
 
     inline_regions = [r for r in blur_like if r[5] == "delogo"]
@@ -573,12 +670,14 @@ def build_filter_complex(
         if logo_motion == "bounce":
             sp_x = max(10, int(watermark_speed or 40))
             sp_y = max(8, int(sp_x * 0.72))
-            ox = f"{margin}+abs(mod(t*{sp_x},2*(main_w-overlay_w-{2*margin}))-(main_w-overlay_w-{2*margin}))"
-            oy = f"{margin}+abs(mod(t*{sp_y},2*(main_h-overlay_h-{2*margin}))-(main_h-overlay_h-{2*margin}))"
+            ox = f"{margin}+abs(mod(t*{sp_x},2*(main_w-overlay_w-{2 * margin}))-(main_w-overlay_w-{2 * margin}))"
+            oy = f"{margin}+abs(mod(t*{sp_y},2*(main_h-overlay_h-{2 * margin}))-(main_h-overlay_h-{2 * margin}))"
         else:
             ox, oy = _logo_overlay_coords(logo_position or "top_right", margin)
 
-        parts.append(f"movie='{escaped_logo}',scale={target_w}:-1,format=rgba,colorchannelmixer=aa={opacity:.2f}[logo]")
+        parts.append(
+            f"movie='{escaped_logo}',scale={target_w}:-1,format=rgba,colorchannelmixer=aa={opacity:.2f}[logo]"
+        )
         parts.append(f"[{current}][logo]overlay={ox}:{oy}[vlogo]")
         current = "vlogo"
 
@@ -602,6 +701,7 @@ def build_filter_complex(
         # phông hệ thống, nên phông người dùng thả vào fonts/ hiện đúng trên
         # mọi máy mà không cần cài vào Windows.
         from autodub.utils import bundled_font_files, fonts_dir
+
         if bundled_font_files():
             subs += f":fontsdir='{escape_subtitles_path(fonts_dir())}'"
         if not srt_path.lower().endswith(".ass"):
@@ -610,8 +710,8 @@ def build_filter_complex(
         current = "vsub"
 
     from autodub.media.dimension import build_dimension_filter
+
     dim_flt = build_dimension_filter()
     parts.append(f"[{current}]{dim_flt}[vout]")
 
     return ";".join(parts)
-

@@ -9,6 +9,7 @@ Chữ hiển thị lấy từ :func:`subtitle_text`: nếu câu có trường ph
 (``sub_vi``) thì dùng nó, không thì dùng chính lời đọc. Nhờ vậy sửa một lỗi
 chính tả trên phụ đề không bắt phải đọc lại giọng cho câu đó.
 """
+
 import os
 
 from autodub.utils import format_timestamp, setup_logging
@@ -42,8 +43,9 @@ def has_subtitle_override(seg: dict, text_field: str = "text_vi") -> bool:
     return bool(override) and override != str(seg.get(text_field, "") or "").strip()
 
 
-def _wrap_lines(text: str, width: int = MAX_LINE_CHARS,
-                line_words: int = 0, max_lines: int = 0) -> list[str]:
+def _wrap_lines(
+    text: str, width: int = MAX_LINE_CHARS, line_words: int = 0, max_lines: int = 0
+) -> list[str]:
     """Ngắt dòng: theo SỐ CHỮ mỗi hàng khi ``line_words`` > 0, không thì gói
     tham lam theo bề rộng ký tự (chuẩn 42) — không bao giờ cắt giữa một chữ."""
     text = " ".join(str(text or "").split())
@@ -51,8 +53,7 @@ def _wrap_lines(text: str, width: int = MAX_LINE_CHARS,
         return []
     if line_words > 0:
         words = text.split()
-        res = [" ".join(words[i:i + line_words])
-               for i in range(0, len(words), line_words)] or []
+        res = [" ".join(words[i : i + line_words]) for i in range(0, len(words), line_words)] or []
     else:
         lines: list[str] = []
         cur = ""
@@ -72,9 +73,13 @@ def _wrap_lines(text: str, width: int = MAX_LINE_CHARS,
     return res
 
 
-def split_for_display(seg: dict, text_field: str, line_words: int = 0,
-                      max_lines: int = MAX_LINES_PER_CUE,
-                      all_caps: bool = False) -> list[dict]:
+def split_for_display(
+    seg: dict,
+    text_field: str,
+    line_words: int = 0,
+    max_lines: int = MAX_LINES_PER_CUE,
+    all_caps: bool = False,
+) -> list[dict]:
     """Chia một câu (có thể dài) thành các dòng hiển thị ngắn.
 
     Ranh giới ưu tiên dấu câu; thời gian chia đều cho các mảnh theo số ký tự.
@@ -101,19 +106,22 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
 
     # Đơn vị đo theo chế độ: chữ (khi chỉnh tay) hoặc ký tự (khi tự động).
     if line_words > 0:
+
         def measure(s: str) -> int:
             return len(s.split())
+
         max_cue = line_words * max_lines
     else:
         measure = len
         max_cue = char_width * max_lines
 
     def _wrapped(chunk: str) -> str:
-        return "\n".join(_wrap_lines(chunk, width=char_width, line_words=line_words, max_lines=max_lines))
+        return "\n".join(
+            _wrap_lines(chunk, width=char_width, line_words=line_words, max_lines=max_lines)
+        )
 
     if measure(text) <= max_cue:
-        return [{"start": seg["start"], "end": seg["end"],
-                 "text": _wrapped(text)}]
+        return [{"start": seg["start"], "end": seg["end"], "text": _wrapped(text)}]
 
     # Cắt ở dấu ngắt mệnh đề trước, rồi dồn thành các mảnh vừa một dòng hiện.
     parts = [p.strip() for p in re.split(r"(?<=[,.!?;…])\s+", text) if p.strip()]
@@ -129,7 +137,7 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
             else:
                 lines_wrapped = _wrap_lines(part, width=char_width, max_lines=max_lines)
                 head = lines_wrapped[0] if lines_wrapped else part[:char_width]
-                part = part[len(head):].strip()
+                part = part[len(head) :].strip()
             if cur:
                 chunks.append(cur)
                 cur = ""
@@ -150,23 +158,26 @@ def split_for_display(seg: dict, text_field: str, line_words: int = 0,
     t = seg["start"]
     for i, chunk in enumerate(chunks):
         share = duration * len(chunk) / total_chars
-        share = max(share, MIN_CUE_SECONDS
-                    if duration >= MIN_CUE_SECONDS * len(chunks) else share)
+        share = max(share, MIN_CUE_SECONDS if duration >= MIN_CUE_SECONDS * len(chunks) else share)
         end = seg["end"] if i == len(chunks) - 1 else min(t + share, seg["end"])
-        cues.append({"start": round(t, 3), "end": round(end, 3),
-                     "text": _wrapped(chunk)})
+        cues.append({"start": round(t, 3), "end": round(end, 3), "text": _wrapped(chunk)})
         t = end
     return cues
 
 
-def generate_srt(segments: list[dict], output_path: str,
-                 text_field: str = "text", line_words: int = 0,
-                 max_lines: int = MAX_LINES_PER_CUE,
-                 all_caps: bool = False) -> str:
+def generate_srt(
+    segments: list[dict],
+    output_path: str,
+    text_field: str = "text",
+    line_words: int = 0,
+    max_lines: int = MAX_LINES_PER_CUE,
+    all_caps: bool = False,
+) -> str:
     all_cues: list[dict] = []
     for seg in segments:
-        for cue in split_for_display(seg, text_field, line_words=line_words,
-                                     max_lines=max_lines, all_caps=all_caps):
+        for cue in split_for_display(
+            seg, text_field, line_words=line_words, max_lines=max_lines, all_caps=all_caps
+        ):
             all_cues.append(dict(cue))
 
     # Khử triệt để chồng phụ đề giữa các dòng hiển thị liên tiếp (Zero Overlap Invariant)
@@ -190,13 +201,13 @@ def generate_srt(segments: list[dict], output_path: str,
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    logger.info(f"Đã ghi phụ đề: {output_path} ({len(all_cues)} dòng hiện từ "
-                f"{len(segments)} câu)")
+    logger.info(f"Đã ghi phụ đề: {output_path} ({len(all_cues)} dòng hiện từ {len(segments)} câu)")
     return output_path
 
 
-def generate_srt_styled(segments: list[dict], output_path: str,
-                        text_field: str, style: dict | None) -> str:
+def generate_srt_styled(
+    segments: list[dict], output_path: str, text_field: str, style: dict | None
+) -> str:
     """Sinh .srt theo đúng kiểu phụ đề người dùng đã chọn.
 
     Gói lại ba tùy chọn ảnh hưởng tới NỘI DUNG dòng phụ đề (số chữ mỗi hàng,
@@ -206,10 +217,14 @@ def generate_srt_styled(segments: list[dict], output_path: str,
     from autodub.media.subtitle import normalize_style
 
     s = normalize_style(style)
-    return generate_srt(segments, output_path, text_field=text_field,
-                        line_words=int(s["line_words"]),
-                        max_lines=int(s["max_lines"]),
-                        all_caps=bool(s["all_caps"]))
+    return generate_srt(
+        segments,
+        output_path,
+        text_field=text_field,
+        line_words=int(s["line_words"]),
+        max_lines=int(s["max_lines"]),
+        all_caps=bool(s["all_caps"]),
+    )
 
 
 def sanitize_srt_file(srt_path: str) -> int:
@@ -217,14 +232,15 @@ def sanitize_srt_file(srt_path: str) -> int:
     Trả về số cặp cue đã được xử lý chống chồng lấn.
     """
     import re
+
     if not os.path.isfile(srt_path):
         return 0
-    with open(srt_path, "r", encoding="utf-8") as f:
+    with open(srt_path, encoding="utf-8") as f:
         content = f.read()
 
     pattern = re.compile(
         r"(\d+)\s*\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\s*\n(.*?)(?=\n\s*\n\d+\s*\n|\Z)",
-        re.DOTALL
+        re.DOTALL,
     )
     matches = list(pattern.finditer(content))
     if not matches:
@@ -237,11 +253,9 @@ def sanitize_srt_file(srt_path: str) -> int:
 
     cues = []
     for m in matches:
-        cues.append({
-            "start": to_s(m.group(2)),
-            "end": to_s(m.group(3)),
-            "text": m.group(4).strip()
-        })
+        cues.append(
+            {"start": to_s(m.group(2)), "end": to_s(m.group(3)), "text": m.group(4).strip()}
+        )
 
     MIN_CUE_DUR = 0.200
     MIN_CUE_GAP = 0.010

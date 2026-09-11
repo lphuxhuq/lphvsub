@@ -1,4 +1,5 @@
-﻿"""Unit test cho cache + selective behavior của run_selective_ocr (TASK-3)."""
+"""Unit test cho cache + selective behavior của run_selective_ocr (TASK-3)."""
+
 import json
 import os
 
@@ -19,23 +20,34 @@ class _Settings(Settings):
 
 
 _WORKER_MSGS = [
-    {"frame": "", "lines": [{"text": "你为什么不告诉我", "score": 0.95,
-                             "top_y": 1, "box": [[0, 0], [1, 1], [2, 2],
-                                                 [3, 3]]}]},
+    {
+        "frame": "",
+        "lines": [
+            {
+                "text": "你为什么不告诉我",
+                "score": 0.95,
+                "top_y": 1,
+                "box": [[0, 0], [1, 1], [2, 2], [3, 3]],
+            }
+        ],
+    },
 ]
 
 
 def test_no_suspects_zero_cost(tmp_path, monkeypatch):
     """AC-6: không suspect → không gọi ffmpeg, không gọi worker."""
     calls = {"ffmpeg": 0, "worker": 0}
-    monkeypatch.setattr(ocr, "_extract_frames",
-                        lambda *a, **k: calls.__setitem__(
-                            "ffmpeg", calls["ffmpeg"] + 1) or [])
-    monkeypatch.setattr(ocr, "_run_ocr_worker",
-                        lambda *a, **k: calls.__setitem__(
-                            "worker", calls["worker"] + 1) or [])
-    result = ocr.run_selective_ocr("video.mp4", [], _Settings(),
-                                   str(tmp_path))
+    monkeypatch.setattr(
+        ocr,
+        "_extract_frames",
+        lambda *a, **k: calls.__setitem__("ffmpeg", calls["ffmpeg"] + 1) or [],
+    )
+    monkeypatch.setattr(
+        ocr,
+        "_run_ocr_worker",
+        lambda *a, **k: calls.__setitem__("worker", calls["worker"] + 1) or [],
+    )
+    result = ocr.run_selective_ocr("video.mp4", [], _Settings(), str(tmp_path))
     assert result == []
     assert calls == {"ffmpeg": 0, "worker": 0}
 
@@ -79,17 +91,16 @@ def test_cache_invalidated_by_different_windows(tmp_path, monkeypatch):
     video = tmp_path / "video.mp4"
     video.write_bytes(b"x" * 10)
     monkeypatch.setattr(
-        ocr, "_extract_frames",
-        lambda *a, **k: calls.__setitem__("ffmpeg", calls["ffmpeg"] + 1)
-        or [])
+        ocr,
+        "_extract_frames",
+        lambda *a, **k: calls.__setitem__("ffmpeg", calls["ffmpeg"] + 1) or [],
+    )
     monkeypatch.setattr(ocr, "_run_ocr_worker", lambda *a, **k: [])
     monkeypatch.setattr(ocr, "_probe_duration", lambda v: 30.0)
 
     s = _Settings()
-    ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}],
-                          s, str(tmp_path))
-    ocr.run_selective_ocr(str(video), [{"start": 10.0, "end": 12.0}],
-                          s, str(tmp_path))
+    ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}], s, str(tmp_path))
+    ocr.run_selective_ocr(str(video), [{"start": 10.0, "end": 12.0}], s, str(tmp_path))
     assert calls["ffmpeg"] == 2  # window khác → cache miss
 
 
@@ -101,13 +112,11 @@ def test_worker_error_raises_for_caller(tmp_path, monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("OCR worker chết")
 
-    monkeypatch.setattr(ocr, "_extract_frames",
-                        lambda *a, **k: [("/tmp/x.jpg", 1.0)])
+    monkeypatch.setattr(ocr, "_extract_frames", lambda *a, **k: [("/tmp/x.jpg", 1.0)])
     monkeypatch.setattr(ocr, "_run_ocr_worker", _boom)
     monkeypatch.setattr(ocr, "_probe_duration", lambda v: 30.0)
     with pytest.raises(RuntimeError, match="OCR worker"):
-        ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}],
-                              _Settings(), str(tmp_path))
+        ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}], _Settings(), str(tmp_path))
 
 
 def test_cache_file_schema(tmp_path, monkeypatch):
@@ -116,8 +125,7 @@ def test_cache_file_schema(tmp_path, monkeypatch):
     video.write_bytes(b"x" * 10)
     monkeypatch.setattr(ocr, "_extract_frames", lambda *a, **k: [])
     monkeypatch.setattr(ocr, "_probe_duration", lambda v: 30.0)
-    ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}],
-                          _Settings(), str(tmp_path))
+    ocr.run_selective_ocr(str(video), [{"start": 2.0, "end": 4.0}], _Settings(), str(tmp_path))
     cache = tmp_path / "data" / "ocr_result.json"
     assert cache.exists()
     data = json.loads(cache.read_text(encoding="utf-8"))

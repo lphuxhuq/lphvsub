@@ -34,10 +34,11 @@ autodub/media/
       target_w: int
       target_h: int
       pixel_budget: int = 2_073_600  # Full HD cap mặc định
-      
+
       @classmethod
-      def from_source_and_preset(cls, src_w: int, src_h: int, preset: str | None, custom_w=None, custom_h=None) -> OutputProfile:
-          ...
+      def from_source_and_preset(
+          cls, src_w: int, src_h: int, preset: str | None, custom_w=None, custom_h=None
+      ) -> OutputProfile: ...
   ```
 - **Quy tắc chuẩn hóa**:
   - `9:16`: nếu video ngang 16:9 (`1920x1080`) $\rightarrow$ canvas chuẩn là **1080x1920**. Tuyệt đối không phình lên 3.4K (1920x3414).

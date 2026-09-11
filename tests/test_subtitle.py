@@ -14,10 +14,11 @@ FULL_WIDTH_BAND = {"x": 0.0, "y": 0.85, "w": 1.0, "h": 0.12}
 
 # --------------------------- path escaping --------------------------- #
 
+
 def test_escape_windows_path():
     out = escape_subtitles_path(r"C:\Users\me\out\sub.srt")
     assert out == "C\\:/Users/me/out/sub.srt"
-    assert "\\U" not in out          # no stray backslash escapes
+    assert "\\U" not in out  # no stray backslash escapes
 
 
 def test_escape_posix_path_only_touches_colon():
@@ -32,10 +33,11 @@ def test_escape_single_quote():
 
 # --------------------------- style --------------------------- #
 
+
 def test_force_style_defaults_and_override():
     assert "FontSize=22" in build_force_style()
     assert "FontSize=40" in build_force_style({"font_size": 40})
-    assert "Alignment=2" in build_force_style()      # bottom-centre
+    assert "Alignment=2" in build_force_style()  # bottom-centre
 
 
 def test_force_style_position_maps_to_alignment():
@@ -49,16 +51,17 @@ def test_hex_to_ass_color_bgr_order():
     assert hex_to_ass_color("#FF0000") == "&H000000FF&"
     assert hex_to_ass_color("#FFFFFF") == "&H00FFFFFF&"
     assert hex_to_ass_color("#000000") == "&H00000000&"
-    assert hex_to_ass_color("bad") == "&H00FFFFFF&"    # invalid → white
+    assert hex_to_ass_color("bad") == "&H00FFFFFF&"  # invalid → white
 
 
 def test_force_style_custom_colors():
     style = build_force_style({"color": "#FF0000", "outline_color": "#00FF00"})
-    assert "PrimaryColour=&H000000FF&" in style       # red text
-    assert "OutlineColour=&H0000FF00&" in style       # green outline
+    assert "PrimaryColour=&H000000FF&" in style  # red text
+    assert "OutlineColour=&H0000FF00&" in style  # green outline
 
 
 # --------------------------- no-op --------------------------- #
+
 
 def test_no_filter_when_nothing_requested():
     assert build_filter_complex(None, W, H) is None
@@ -66,6 +69,7 @@ def test_no_filter_when_nothing_requested():
 
 
 # --------------------------- subtitles only --------------------------- #
+
 
 def test_subtitles_only_graph():
     graph = build_filter_complex(None, W, H, "/tmp/vi.srt")
@@ -75,6 +79,7 @@ def test_subtitles_only_graph():
 
 
 # --------------------------- blur only --------------------------- #
+
 
 def test_blur_only_ends_at_vout_via_null():
     graph = build_filter_complex([FULL_WIDTH_BAND], W, H)
@@ -107,14 +112,13 @@ def test_region_clamped_to_frame():
 
 
 def test_multiple_regions_chain_sequentially():
-    graph = build_filter_complex(
-        [FULL_WIDTH_BAND, {"x": 0.0, "y": 0.0, "w": 0.3, "h": 0.1}], W, H)
+    graph = build_filter_complex([FULL_WIDTH_BAND, {"x": 0.0, "y": 0.0, "w": 0.3, "h": 0.1}], W, H)
     assert graph.count("boxblur") == 2
     # Tối ưu batch: 1 split=n+1 duy nhất thay vì N chuỗi split lồng nhau
     # — mọi region crop từ bản copy riêng rồi overlay tuần tự lên nhánh chính.
     assert "split=3[bmain][br0] [br1]" in graph
-    assert "[bmain][bl0]overlay=0:918[vov0]" in graph   # region 1 lên nhánh chính
-    assert "[vov0][bl1]overlay=0:0[vov1]" in graph    # region 2 nối tiếp
+    assert "[bmain][bl0]overlay=0:918[vov0]" in graph  # region 1 lên nhánh chính
+    assert "[vov0][bl1]overlay=0:0[vov1]" in graph  # region 2 nối tiếp
     assert graph.endswith("[vout]")
 
 
@@ -124,15 +128,15 @@ def test_blur_radius_capped_for_small_regions():
     Regression: boxblur=10 on a 192x36 band failed with
     "Invalid chroma_param radius value 10, must be >= 0 and < 9".
     """
-    assert blur_filter(1920, 130) == "boxblur=10:2"     # large: full strength
-    assert blur_filter(192, 36) == "boxblur=8:2"        # 36//4-1 = 8
-    assert blur_filter(20, 4) == "boxblur=1:2"          # tiny: floor at 1
-    assert blur_filter(2, 2) == "boxblur=1:2"           # never 0
+    assert blur_filter(1920, 130) == "boxblur=10:2"  # large: full strength
+    assert blur_filter(192, 36) == "boxblur=8:2"  # 36//4-1 = 8
+    assert blur_filter(20, 4) == "boxblur=1:2"  # tiny: floor at 1
+    assert blur_filter(2, 2) == "boxblur=1:2"  # never 0
 
 
 def test_small_region_graph_uses_reduced_radius():
     graph = build_filter_complex([{"x": 0, "y": 0, "w": 0.1, "h": 0.03}], W, H)
-    assert "boxblur=7:2" in graph                       # 32//4-1 = 7
+    assert "boxblur=7:2" in graph  # 32//4-1 = 7
 
 
 def test_time_window_adds_enable_expression():
@@ -148,6 +152,7 @@ def test_no_enable_without_full_time_window():
 
 # --------------------------- combined --------------------------- #
 
+
 def test_blur_then_subtitles_order():
     """Subtitles must draw on top of the blur, not underneath it."""
     graph = build_filter_complex([FULL_WIDTH_BAND], W, H, "/tmp/vi.srt")
@@ -157,6 +162,7 @@ def test_blur_then_subtitles_order():
 
 
 # --------------------------- logo overlay --------------------------- #
+
 
 def test_build_filter_complex_with_logo_top_right():
     graph = build_filter_complex(
@@ -201,6 +207,7 @@ def test_build_filter_complex_with_logo_bottom_left_and_subtitles():
 
 # --------------------------- dynamic moving watermark --------------------------- #
 
+
 def test_build_filter_complex_with_dynamic_bouncing_watermark():
     graph = build_filter_complex(
         blur_regions=[],
@@ -238,6 +245,7 @@ def test_build_filter_complex_with_bouncing_logo():
 
 
 # --------------------------- anti-content ID filters --------------------------- #
+
 
 def test_build_filter_complex_with_smart_flip_and_subtitles():
     graph = build_filter_complex(
@@ -293,6 +301,7 @@ def test_build_aspect_ratio_filter_reframe_modes():
     flt_crop, tw_crop, th_crop = res_crop
     assert "crop=" in flt_crop
     assert abs((tw_crop / th_crop) - (9.0 / 16.0)) < 0.02
+
 
 def test_build_aspect_ratio_filter_banner_mode():
     from autodub.media.subtitle import build_aspect_ratio_filter

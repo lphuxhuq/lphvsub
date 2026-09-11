@@ -11,6 +11,7 @@ nên ứng dụng "chết im lặng" và người dùng không biết chuyện g
 Lỗi trong luồng nền (``threading.excepthook``) chỉ ghi log — không được đụng
 vào GUI từ ngoài luồng chính.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,7 @@ def _support_url() -> str:
         from autodub.config import Settings
 
         return Settings.load(override=True).support_url
-    except Exception:  # noqa: BLE001 — cấu hình hỏng thì đành bỏ nút gửi
+    except Exception:
         return ""
 
 
@@ -53,19 +54,28 @@ def _show_dialog(detail: str) -> None:
         message = (
             "VoxDub vừa gặp một lỗi ngoài dự kiến. Công việc đang chạy có thể "
             "bị gián đoạn — hãy lưu lại rồi khởi động lại ứng dụng.\n\n"
-            "Chi tiết lỗi đã được ghi vào tệp log. ")
+            "Chi tiết lỗi đã được ghi vào tệp log. "
+        )
         if support:
-            message += ("Bấm Gửi báo lỗi để mở biểu mẫu hỗ trợ — nhớ đính kèm "
-                        "tệp log mới nhất (thư mục log sẽ được mở sẵn).")
+            message += (
+                "Bấm Gửi báo lỗi để mở biểu mẫu hỗ trợ — nhớ đính kèm "
+                "tệp log mới nhất (thư mục log sẽ được mở sẵn)."
+            )
             confirm = "Gửi báo lỗi"
         else:
-            message += ("Nếu lỗi lặp lại, hãy gửi tệp log mới nhất trong thư "
-                        "mục log cho người hỗ trợ.")
+            message += (
+                "Nếu lỗi lặp lại, hãy gửi tệp log mới nhất trong thư mục log cho người hỗ trợ."
+            )
             confirm = "Mở thư mục log"
         accepted, _ = ConfirmDialog.ask(
-            None, "Ứng dụng gặp lỗi không mong muốn", message,
-            kind="error", confirm_label=confirm,
-            cancel_label="Đóng", detail=detail)
+            None,
+            "Ứng dụng gặp lỗi không mong muốn",
+            message,
+            kind="error",
+            confirm_label=confirm,
+            cancel_label="Đóng",
+            detail=detail,
+        )
         if accepted:
             open_folder(logs_dir())
             if support:
@@ -90,8 +100,7 @@ def _excepthook(exc_type, exc_value, exc_tb) -> None:
 def _thread_excepthook(hook_args) -> None:
     if hook_args.exc_type is SystemExit:
         return
-    detail = _format(hook_args.exc_type, hook_args.exc_value,
-                     hook_args.exc_traceback)
+    detail = _format(hook_args.exc_type, hook_args.exc_value, hook_args.exc_traceback)
     name = getattr(hook_args.thread, "name", "?")
     logger.critical("Lỗi không được xử lý trong luồng %s:\n%s", name, detail)
 

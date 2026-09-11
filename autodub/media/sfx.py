@@ -4,10 +4,12 @@ Module này tạo trực tiếp các hiệu ứng âm thanh chuyển cảnh đi�
 Swish, Cinematic Boom) bằng thuật toán sóng âm PCM chất lượng cao (NumPy) mà không
 cần tải tệp nhị phân bên ngoài, hoạt động 100% offline.
 """
+
 from __future__ import annotations
 
 import os
 import wave
+
 import numpy as np
 
 

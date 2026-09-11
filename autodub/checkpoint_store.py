@@ -3,6 +3,7 @@
 Lưu trữ danh sách các cấu hình mẫu theo tên kênh / mục đích sử dụng để người dùng
 chỉ cần cấu hình một lần và tái sử dụng bất cứ khi nào.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -74,7 +75,7 @@ load_checkpoint = get_checkpoint
 def get_checkpoint_names() -> list[str]:
     """Danh sách tên các checkpoint hiện có."""
     all_ckpts = load_checkpoints()
-    names = [k for k in all_ckpts.keys() if k != ACTIVE_CHECKPOINT_KEY]
+    names = [k for k in all_ckpts if k != ACTIVE_CHECKPOINT_KEY]
     # Sắp xếp để "Mặc định" lên đầu nếu có
     if "Mặc định" in names:
         names.remove("Mặc định")
@@ -149,21 +150,37 @@ def bundle_checkpoint_data(
             "reframe_mode": reframe.get("reframe_mode") or vals.get("reframe_mode", "blur"),
         },
         "banner": {
-            "frame_banner_enabled": bool(banner.get("frame_banner_enabled", vals.get("frame_banner_enabled", False))),
-            "frame_banner_color": banner.get("frame_banner_color", vals.get("frame_banner_color", "#000000")),
+            "frame_banner_enabled": bool(
+                banner.get("frame_banner_enabled", vals.get("frame_banner_enabled", False))
+            ),
+            "frame_banner_color": banner.get(
+                "frame_banner_color", vals.get("frame_banner_color", "#000000")
+            ),
             "frame_header_text": banner.get("frame_header_text", vals.get("frame_header_text", "")),
-            "frame_header_font_size": int(banner.get("frame_header_font_size", vals.get("frame_header_font_size", 32))),
-            "frame_header_color": banner.get("frame_header_color", vals.get("frame_header_color", "#FFFFFF")),
+            "frame_header_font_size": int(
+                banner.get("frame_header_font_size", vals.get("frame_header_font_size", 32))
+            ),
+            "frame_header_color": banner.get(
+                "frame_header_color", vals.get("frame_header_color", "#FFFFFF")
+            ),
             "frame_footer_text": banner.get("frame_footer_text", vals.get("frame_footer_text", "")),
-            "frame_footer_font_size": int(banner.get("frame_footer_font_size", vals.get("frame_footer_font_size", 24))),
-            "frame_footer_color": banner.get("frame_footer_color", vals.get("frame_footer_color", "#FFD54A")),
-            "frame_banner_height_ratio": float(banner.get("frame_banner_height_ratio", vals.get("frame_banner_height_ratio", 0.16))),
+            "frame_footer_font_size": int(
+                banner.get("frame_footer_font_size", vals.get("frame_footer_font_size", 24))
+            ),
+            "frame_footer_color": banner.get(
+                "frame_footer_color", vals.get("frame_footer_color", "#FFD54A")
+            ),
+            "frame_banner_height_ratio": float(
+                banner.get("frame_banner_height_ratio", vals.get("frame_banner_height_ratio", 0.16))
+            ),
         },
         "mask": {
             "mask_method": mask.get("mask_method") or vals.get("mask_method", "blur"),
             "inpaint_engine": mask.get("inpaint_engine") or vals.get("inpaint_engine", "lama_onnx"),
             "inpaint_device": mask.get("inpaint_device") or vals.get("inpaint_device", "auto"),
-            "blur_regions": list(blur_regions if blur_regions is not None else vals.get("blur_regions", [])),
+            "blur_regions": list(
+                blur_regions if blur_regions is not None else vals.get("blur_regions", [])
+            ),
         },
         "subtitle": {
             "subtitle_mode": vals.get("subtitle_mode", "burn"),
@@ -179,7 +196,9 @@ def bundle_checkpoint_data(
     }
 
 
-def apply_checkpoint_to_env(checkpoint_data: dict[str, Any] | str, env_path: str | None = None) -> None:
+def apply_checkpoint_to_env(
+    checkpoint_data: dict[str, Any] | str, env_path: str | None = None
+) -> None:
     """Ghi trực tiếp các thiết lập trong checkpoint vào tệp .env để trở thành mặc định cho ứng dụng."""
     if isinstance(checkpoint_data, str):
         data = get_checkpoint(checkpoint_data)
@@ -303,7 +322,7 @@ def apply_checkpoint_to_env(checkpoint_data: dict[str, Any] | str, env_path: str
             updates["KARAOKE_HIGHLIGHT_COLOR"] = str(style["highlight_color"])
 
     voice = checkpoint_data.get("voice", {})
-    if "voice" in voice and voice["voice"]:
+    if voice.get("voice"):
         updates["VIENEU_VOICE"] = str(voice["voice"])
     if "voice_speed" in voice:
         updates["VOICE_SPEED"] = f"{float(voice['voice_speed']):.2f}"
@@ -319,10 +338,12 @@ def apply_checkpoint_to_env(checkpoint_data: dict[str, Any] | str, env_path: str
             else:
                 target_path = None
                 import sys
+
                 if "autodub_gui.env_store" in sys.modules:
                     target_path = getattr(sys.modules["autodub_gui.env_store"], "ENV_PATH", None)
                 if not target_path:
                     import autodub.env_io as env_io
+
                     target_path = env_io.ENV_PATH
                 write_env(updates, path=target_path)
         except OSError:

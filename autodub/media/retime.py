@@ -14,6 +14,7 @@ regions stay frame-locked to the picture.
 :func:`apply_video_speed` returns ``None`` on any ffmpeg failure — the
 pipeline then proceeds with the original video and timeline unchanged.
 """
+
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ logger = setup_logging("autodub.retime")
 
 # --------------------------------------------------------------- probes ---- #
 
+
 def probe_video_info(video_path: str) -> tuple[float, str]:
     """(duration_seconds, fps_string) of the first video stream.
 
@@ -34,10 +36,21 @@ def probe_video_info(video_path: str) -> tuple[float, str]:
     slowed encode reproduces the source rate without float rounding.
     """
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=avg_frame_rate:format=duration",
-         "-of", "json", video_path],
-        capture_output=True, text=True, timeout=60,
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=avg_frame_rate:format=duration",
+            "-of",
+            "json",
+            video_path,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe failed on {video_path}: {result.stderr[:200]}")
@@ -52,9 +65,10 @@ def probe_video_info(video_path: str) -> tuple[float, str]:
 def probe_duration(path: str) -> float | None:
     """Container duration in seconds, or None if it cannot be read."""
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "json", path],
-        capture_output=True, text=True, timeout=60,
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", path],
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         return None
@@ -66,61 +80,84 @@ def probe_duration(path: str) -> float | None:
 
 # --------------------------------------------------------------- ffmpeg ---- #
 
-def slow_video(video_path: str, output_path: str, speed: float,
-               fps: str, codec_args: list[str]) -> bool:
+
+def slow_video(
+    video_path: str, output_path: str, speed: float, fps: str, codec_args: list[str]
+) -> bool:
     """Re-encode the whole video at ``speed`` (< 1.0 = slower, longer).
 
     ``fps=<r>`` + ``-fps_mode cfr`` pin constant frame rate so players and
     the mux behave; audio is dropped (the dub track is muxed separately).
     """
     cmd = [
-        "ffmpeg", "-v", "error", "-i", video_path, "-an",
-        "-vf", f"setpts=PTS/{speed},fps={fps}",
-        "-fps_mode", "cfr",
+        "ffmpeg",
+        "-v",
+        "error",
+        "-i",
+        video_path,
+        "-an",
+        "-vf",
+        f"setpts=PTS/{speed},fps={fps}",
+        "-fps_mode",
+        "cfr",
         *codec_args,
-        "-pix_fmt", "yuv420p",
-        "-y", output_path,
+        "-pix_fmt",
+        "yuv420p",
+        "-y",
+        output_path,
     ]
     # Encode lại toàn bộ video — trần theo thời lượng nguồn, CPU yếu vẫn dư.
     dur = probe_duration(video_path)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=max(900, int(dur * 8)) if dur
-                                else ffmpeg_timeout_s(None))
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=max(900, int(dur * 8)) if dur else ffmpeg_timeout_s(None),
+        )
         err = result.stderr[:200]
         failed = result.returncode != 0
     except subprocess.TimeoutExpired:
         failed, err = True, "ffmpeg treo (quá trần thời gian)"
-    if (failed or not os.path.exists(output_path)
-            or os.path.getsize(output_path) == 0):
+    if failed or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         logger.error(f"Slow video {speed}x failed: {err}")
         return False
     return True
 
 
-def slow_background(background_path: str, output_path: str,
-                    speed: float) -> bool:
+def slow_background(background_path: str, output_path: str, speed: float) -> bool:
     """Slow the background track by the same factor (atempo accepts ≥0.5)."""
     try:
         result = subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", background_path,
-             "-filter:a", f"atempo={max(0.5, min(2.0, speed)):.6f}",
-             "-acodec", "pcm_s16le", "-y", output_path],
-            capture_output=True, text=True,
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-i",
+                background_path,
+                "-filter:a",
+                f"atempo={max(0.5, min(2.0, speed)):.6f}",
+                "-acodec",
+                "pcm_s16le",
+                "-y",
+                output_path,
+            ],
+            capture_output=True,
+            text=True,
             timeout=ffmpeg_timeout_s(probe_duration(background_path)),
         )
         err = result.stderr[:200]
         failed = result.returncode != 0
     except subprocess.TimeoutExpired:
         failed, err = True, "ffmpeg treo (quá trần thời gian)"
-    if (failed or not os.path.exists(output_path)
-            or os.path.getsize(output_path) == 0):
+    if failed or not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         logger.error(f"Slow background {speed}x failed: {err}")
         return False
     return True
 
 
 # ------------------------------------------------------------- rescale ----- #
+
 
 def rescale_segments(segments: list[dict], scale: float) -> None:
     """Stretch every timestamp by ``scale`` (>1 = longer timeline), in place.
@@ -138,14 +175,12 @@ def rescale_segments(segments: list[dict], scale: float) -> None:
         seg["start"] = round(float(seg["start"]) * scale, 3)
         seg["end"] = round(float(seg["end"]) * scale, 3)
         seg["duration"] = round(seg["end"] - seg["start"], 3)
-        for a, b in (("speech_start", "speech_end"),
-                     ("vad_start", "vad_end")):
+        for a, b in (("speech_start", "speech_end"), ("vad_start", "vad_end")):
             if a in seg and b in seg:
                 seg[a] = round(float(seg[a]) * scale, 3)
                 seg[b] = round(float(seg[b]) * scale, 3)
         if "speech_duration" in seg:
-            seg["speech_duration"] = round(
-                float(seg["speech_duration"]) * scale, 3)
+            seg["speech_duration"] = round(float(seg["speech_duration"]) * scale, 3)
 
 
 def rescale_blur_regions(blur_regions: list[dict], scale: float) -> list[dict]:
@@ -161,6 +196,7 @@ def rescale_blur_regions(blur_regions: list[dict], scale: float) -> list[dict]:
 
 
 # ---------------------------------------------------------- orchestrator --- #
+
 
 def apply_video_speed(
     video_path: str,
@@ -199,8 +235,7 @@ def apply_video_speed(
                 cached = False
 
         if cached:
-            logger.info(f"Dùng lại video đã làm chậm ({speed}x) từ lần chạy "
-                        "trước — đỡ chờ")
+            logger.info(f"Dùng lại video đã làm chậm ({speed}x) từ lần chạy trước — đỡ chờ")
         else:
             logger.info(
                 f"Đang làm chậm video xuống {speed}x để giọng đọc tiếng Việt "
@@ -208,8 +243,7 @@ def apply_video_speed(
                 f"~{orig_duration / speed:.0f} giây) — mất vài phút, "
                 "chờ chút nhé..."
             )
-            if not slow_video(video_path, out_video, speed, fps,
-                              video_codec_args()):
+            if not slow_video(video_path, out_video, speed, fps, video_codec_args()):
                 logger.warning("Làm chậm video thất bại — dùng video gốc")
                 return None
             with open(marker, "w", encoding="utf-8") as f:
@@ -224,8 +258,7 @@ def apply_video_speed(
         new_duration = probe_duration(out_video)
         # Measured ratio beats theoretical 1/speed: frame rounding shifts the
         # tail by a few ms and subs/audio must match the real file.
-        scale = (new_duration / orig_duration
-                 if new_duration and orig_duration else 1.0 / speed)
+        scale = new_duration / orig_duration if new_duration and orig_duration else 1.0 / speed
 
         out_bg: str | None = None
         if background_path and os.path.exists(background_path):
@@ -236,8 +269,9 @@ def apply_video_speed(
 
         rescale_segments(segments, scale)
         annotate_slots(segments)
-        logger.info(f"Video đã chậm xong ({new_duration or 0:.0f} giây) — "
-                    "giọng đọc vẫn giữ tốc độ tự nhiên")
+        logger.info(
+            f"Video đã chậm xong ({new_duration or 0:.0f} giây) — giọng đọc vẫn giữ tốc độ tự nhiên"
+        )
         return out_video, out_bg, scale
     except Exception as e:
         logger.warning(f"Làm chậm video lỗi ({e}) — dùng video gốc")
@@ -277,18 +311,17 @@ def defer_video_speed(
 
         out_bg: str | None = None
         if background_path and os.path.exists(background_path):
-            out_bg = data_path(work_dir, "slowed_background.wav",
-                               create_dir=True)
+            out_bg = data_path(work_dir, "slowed_background.wav", create_dir=True)
             if not slow_background(background_path, out_bg, speed):
-                logger.warning("Làm chậm nhạc nền thất bại — quay về đường "
-                               "làm chậm rời")
+                logger.warning("Làm chậm nhạc nền thất bại — quay về đường làm chậm rời")
                 return None
 
         # Marker cho trình chỉnh sửa: video gốc + speed/fps để lần xuất lại
         # cũng gộp setpts vào lượt mã hóa của nó. Xóa marker của đường rời
         # (nếu lần chạy trước dùng nó) để hai marker không cãi nhau.
-        with open(data_path(work_dir, "deferred_speed.json", create_dir=True),
-                  "w", encoding="utf-8") as f:
+        with open(
+            data_path(work_dir, "deferred_speed.json", create_dir=True), "w", encoding="utf-8"
+        ) as f:
             json.dump({"speed": speed, "fps": fps}, f)
         stale = data_path(work_dir, "slowed_video.json")
         if os.path.isfile(stale):
@@ -299,9 +332,9 @@ def defer_video_speed(
         logger.info(
             f"Làm chậm video ({speed}x) sẽ gộp vào lượt xuất video cuối — "
             f"đỡ nguyên một lần mã hóa (video {orig_duration:.0f} giây thành "
-            f"~{orig_duration * scale:.0f} giây)")
+            f"~{orig_duration * scale:.0f} giây)"
+        )
         return out_bg, scale, fps
     except Exception as e:
-        logger.warning(f"Không gộp được làm chậm vào lượt xuất ({e}) — "
-                       "dùng đường làm chậm rời")
+        logger.warning(f"Không gộp được làm chậm vào lượt xuất ({e}) — dùng đường làm chậm rời")
         return None

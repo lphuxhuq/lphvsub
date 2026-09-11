@@ -7,54 +7,35 @@ Targeting:
 4. QUndoStack integration: 15-cycle undo/redo, chained multi-operation undo trees, disk transcript synchronization, voice/sub_vi preservation.
 5. GUI stability: zoom slider synchronization, extreme timeline coordinates, audio peak edge cases, file locking release/restore.
 """
+
 from __future__ import annotations
 
 import json
-import math
 import os
-import wave
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
-from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QImage, QKeySequence, QShortcut
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLineEdit, QPlainTextEdit, QTextEdit, QWidget
+from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
 
 from autodub.config import Settings
-from autodub.editor import EditorError
-from autodub_gui import waveform
 from autodub_gui.pages.editor_commands import (
     AddSegmentCommand,
-    DeleteSegmentCommand,
     MergeSegmentCommand,
-    MoveSegmentCommand,
-    SplitSegmentCommand,
 )
 from autodub_gui.pages.editor_page import EditorPage
 from autodub_gui.shortcuts import (
     ALL_SHORTCUTS,
     EDITOR_SHORTCUTS,
     GLOBAL_SHORTCUTS,
-    Shortcut,
     bind,
     install_editor_shortcuts,
-    install_global_shortcuts,
     typing_in_text_field,
 )
 from autodub_gui.ui.toast import TOASTS
 from autodub_gui.video.timeline import (
-    BAND_H,
-    LABEL_W,
-    MAX_ZOOM,
-    MIN_ZOOM,
-    RULER_H,
-    THUMB_H,
-    TRACK_H,
     Timeline,
     TimelineCanvas,
-    _snap,
 )
 
 
@@ -73,9 +54,32 @@ def mock_challenge_project(tmp_path):
     seg_dir = data / "segments"
     seg_dir.mkdir(parents=True)
     segs = [
-        {"id": 1, "start": 0.0, "end": 4.0, "duration": 4.0, "text": "Hello world", "text_vi": "Xin chào thế giới", "voice": "vi-VN-Standard-A"},
-        {"id": 2, "start": 5.0, "end": 8.0, "duration": 3.0, "text": "How are you", "text_vi": "Bạn khỏe không", "sub_vi": "Bạn thế nào"},
-        {"id": 3, "start": 9.0, "end": 12.0, "duration": 3.0, "text": "Goodbye", "text_vi": "Tạm biệt"},
+        {
+            "id": 1,
+            "start": 0.0,
+            "end": 4.0,
+            "duration": 4.0,
+            "text": "Hello world",
+            "text_vi": "Xin chào thế giới",
+            "voice": "vi-VN-Standard-A",
+        },
+        {
+            "id": 2,
+            "start": 5.0,
+            "end": 8.0,
+            "duration": 3.0,
+            "text": "How are you",
+            "text_vi": "Bạn khỏe không",
+            "sub_vi": "Bạn thế nào",
+        },
+        {
+            "id": 3,
+            "start": 9.0,
+            "end": 12.0,
+            "duration": 3.0,
+            "text": "Goodbye",
+            "text_vi": "Tạm biệt",
+        },
     ]
     (data / "transcript_vi.json").write_text(json.dumps(segs, ensure_ascii=False), encoding="utf-8")
     (data / "quality_report.json").write_text(json.dumps({"issues": []}), encoding="utf-8")
@@ -98,6 +102,7 @@ def editor_page(qapp, mock_challenge_project):
 # ============================================================================
 # Section 1: Adversarial Shortcut Registration & Dispatch Testing
 # ============================================================================
+
 
 class TestAdversarialShortcutDispatch:
     """Stress tests shortcut registry, QShortcut creation, and text-field protection."""
@@ -205,6 +210,7 @@ class TestAdversarialShortcutDispatch:
 # Section 2: Adversarial Split At Playhead Testing
 # ============================================================================
 
+
 class TestAdversarialSplitAtPlayhead:
     """Stress tests all boundary conditions and edge cases for split_current_segment."""
 
@@ -278,7 +284,14 @@ class TestAdversarialSplitAtPlayhead:
     def test_split_when_selected_segment_too_short_less_than_0_4s(self, editor_page) -> None:
         transcript_file = os.path.join(editor_page.work_dir(), "data", "transcript_vi.json")
         segs = [
-            {"id": 1, "start": 0.0, "end": 0.35, "duration": 0.35, "text": "Short", "text_vi": "Ngắn"}
+            {
+                "id": 1,
+                "start": 0.0,
+                "end": 0.35,
+                "duration": 0.35,
+                "text": "Short",
+                "text_vi": "Ngắn",
+            }
         ]
         with open(transcript_file, "w", encoding="utf-8") as f:
             json.dump(segs, f, ensure_ascii=False)
@@ -332,6 +345,7 @@ class TestAdversarialSplitAtPlayhead:
 # Section 3: Adversarial Merge With Next Testing
 # ============================================================================
 
+
 class TestAdversarialMergeWithNext:
     """Stress tests merge_current_segment and MergeSegmentCommand under adversarial conditions."""
 
@@ -346,7 +360,7 @@ class TestAdversarialMergeWithNext:
 
     def test_merge_from_subtitle_selection(self, editor_page) -> None:
         editor_page.player.position = lambda: 0.5  # In seg 1
-        editor_page.subtitles.list.setCurrentRow(1) # Selected seg 2
+        editor_page.subtitles.list.setCurrentRow(1)  # Selected seg 2
         assert editor_page.subtitles.selected_id() == 2
         editor_page.merge_current_segment()
         assert len(editor_page._segments) == 2
@@ -355,7 +369,7 @@ class TestAdversarialMergeWithNext:
         assert "Bạn khỏe không Tạm biệt" in editor_page._segments[1]["text_vi"]
 
     def test_merge_on_last_segment_rejected(self, editor_page) -> None:
-        editor_page.subtitles.list.setCurrentRow(2) # Last seg id 3
+        editor_page.subtitles.list.setCurrentRow(2)  # Last seg id 3
         assert editor_page.subtitles.selected_id() == 3
         with patch.object(TOASTS, "warn") as mock_warn:
             editor_page.merge_current_segment()
@@ -375,7 +389,14 @@ class TestAdversarialMergeWithNext:
     def test_merge_in_single_segment_project(self, editor_page) -> None:
         transcript_file = os.path.join(editor_page.work_dir(), "data", "transcript_vi.json")
         segs = [
-            {"id": 1, "start": 0.0, "end": 4.0, "duration": 4.0, "text": "Single", "text_vi": "Duy nhất"}
+            {
+                "id": 1,
+                "start": 0.0,
+                "end": 4.0,
+                "duration": 4.0,
+                "text": "Single",
+                "text_vi": "Duy nhất",
+            }
         ]
         with open(transcript_file, "w", encoding="utf-8") as f:
             json.dump(segs, f, ensure_ascii=False)
@@ -410,6 +431,7 @@ class TestAdversarialMergeWithNext:
 # ============================================================================
 # Section 4: Adversarial QUndoStack Consistency & Cycle Testing
 # ============================================================================
+
 
 class TestAdversarialQUndoStackConsistency:
     """Stress tests deep undo/redo cycles, chained operations, and transcript integrity."""
@@ -519,6 +541,7 @@ class TestAdversarialQUndoStackConsistency:
 # Section 5: Adversarial GUI & Timeline Stability Testing
 # ============================================================================
 
+
 class TestAdversarialGUIStability:
     """Stress tests UI components, zoom synchronization, and graphics rendering."""
 
@@ -563,9 +586,7 @@ class TestAdversarialGUIStability:
         canvas = TimelineCanvas()
         canvas.resize(888, 200)
         canvas.set_duration(10.0)
-        canvas.set_segments([
-            {"id": 1, "start": 2.0, "end": 4.0, "text_vi": "Test"}
-        ])
+        canvas.set_segments([{"id": 1, "start": 2.0, "end": 4.0, "text_vi": "Test"}])
 
         canvas._drag = {"mode": "move", "id": 1, "start": 2.0, "end": 4.0, "grab": 3.0}
         canvas._apply_drag(-5.0)

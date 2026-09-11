@@ -21,6 +21,7 @@ Các bước:
 Bản phân phối KHÔNG chứa: model, các venv phụ, ffmpeg — người dùng
 cài theo HUONG_DAN_CAI_DAT.md.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,6 +70,7 @@ def run(cmd: list[str], **kw) -> None:
 
 # ------------------------------------------------------------------ steps --
 
+
 def read_env_value(key: str) -> str:
     """Đọc 1 khóa từ .env của máy build (không dùng python-dotenv để script
     chạy được cả khi thiếu package)."""
@@ -93,8 +95,9 @@ def step_embed_api_url() -> str:
     if url:
         log(f"nhúng VOXDUB_API_URL vào exe: {url}")
     else:
-        log("(.env không có VOXDUB_API_URL — exe dùng địa chỉ cố định "
-            "trong autodub/saas_client.py)")
+        log(
+            "(.env không có VOXDUB_API_URL — exe dùng địa chỉ cố định trong autodub/saas_client.py)"
+        )
     write_embedded(url)
     return url
 
@@ -105,13 +108,22 @@ def step_pyinstaller() -> None:
         log("xóa dist/VoxDub cũ...")
         try:
             shutil.rmtree(DIST_DIR)
-        except PermissionError:
+        except PermissionError as e:
             raise SystemExit(
                 "!! Không xóa được dist/VoxDub — đóng VoxDub.exe đang chạy, "
-                "cửa sổ Explorer/terminal đang mở thư mục đó, rồi build lại.")
+                "cửa sổ Explorer/terminal đang mở thư mục đó, rồi build lại."
+            ) from e
     log("chạy PyInstaller (vài phút)...")
-    run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-         os.path.join(PROJECT_ROOT, "autodub.spec")])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            os.path.join(PROJECT_ROOT, "autodub.spec"),
+        ]
+    )
     exe = os.path.join(DIST_DIR, "VoxDub.exe")
     if not os.path.isfile(exe):
         raise SystemExit(f"!! PyInstaller xong nhưng không thấy {exe}")
@@ -124,25 +136,28 @@ def step_assemble() -> None:
     # máy người dùng — exe chỉ chứa phần lõi.
     scripts_dst = os.path.join(DIST_DIR, "scripts")
     os.makedirs(scripts_dst, exist_ok=True)
-    for script in ("setup_vieneu.py", "setup_paraformer.py",
-                   "setup_whisper.py", "setup_douyin.py",
-                   "setup_gpu.py"):
-        shutil.copy2(os.path.join(PROJECT_ROOT, "scripts", script),
-                     scripts_dst)
+    for script in (
+        "setup_vieneu.py",
+        "setup_paraformer.py",
+        "setup_whisper.py",
+        "setup_douyin.py",
+        "setup_gpu.py",
+    ):
+        shutil.copy2(os.path.join(PROJECT_ROOT, "scripts", script), scripts_dst)
 
     # Phiên bản Python của máy build — setup_douyin.py kiểm tra để libs/
     # (C-extension) khớp với python trong exe.
-    with open(os.path.join(scripts_dst, "python_tag.txt"), "w",
-              encoding="utf-8") as f:
+    with open(os.path.join(scripts_dst, "python_tag.txt"), "w", encoding="utf-8") as f:
         f.write(f"{sys.version_info[0]}.{sys.version_info[1]}\n")
 
     # .bat để người dùng đúp chuột là cài — không cần biết dòng lệnh.
     for name, content in (
-            ("Cai dat giong VieNeu.bat", SETUP_VIENEU_BAT),
-            ("Cai dat Whisper ASR.bat", SETUP_WHISPER_BAT),
-            ("Cai dat ASR tieng Trung (Paraformer).bat", SETUP_PARAFORMER_BAT),
-            ("Cai dat tinh nang Douyin.bat", SETUP_DOUYIN_BAT),
-            ("Cai dat GPU tach nhac (Demucs).bat", SETUP_GPU_BAT)):
+        ("Cai dat giong VieNeu.bat", SETUP_VIENEU_BAT),
+        ("Cai dat Whisper ASR.bat", SETUP_WHISPER_BAT),
+        ("Cai dat ASR tieng Trung (Paraformer).bat", SETUP_PARAFORMER_BAT),
+        ("Cai dat tinh nang Douyin.bat", SETUP_DOUYIN_BAT),
+        ("Cai dat GPU tach nhac (Demucs).bat", SETUP_GPU_BAT),
+    ):
         with open(os.path.join(DIST_DIR, name), "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -170,16 +185,15 @@ def step_assemble() -> None:
     # tải từ fonts.google.com mà không cần build lại.
     fonts_src = os.path.join(PROJECT_ROOT, "fonts")
     if os.path.isdir(fonts_src):
-        shutil.copytree(fonts_src, os.path.join(DIST_DIR, "fonts"),
-                        dirs_exist_ok=True)
-        n_fonts = sum(1 for f in os.listdir(fonts_src)
-                      if f.lower().endswith((".ttf", ".otf", ".ttc")))
+        shutil.copytree(fonts_src, os.path.join(DIST_DIR, "fonts"), dirs_exist_ok=True)
+        n_fonts = sum(
+            1 for f in os.listdir(fonts_src) if f.lower().endswith((".ttf", ".otf", ".ttc"))
+        )
         log(f"đã kèm {n_fonts} font trong fonts/")
     else:
         os.makedirs(os.path.join(DIST_DIR, "fonts"), exist_ok=True)
 
-    with open(os.path.join(DIST_DIR, "HUONG_DAN_CAI_DAT.md"), "w",
-              encoding="utf-8") as f:
+    with open(os.path.join(DIST_DIR, "HUONG_DAN_CAI_DAT.md"), "w", encoding="utf-8") as f:
         f.write(GUIDE_MD)
 
     # Đảm bảo không có .env nào lọt vào dist.
@@ -203,8 +217,9 @@ def step_smoke_test() -> bool:
     env = dict(os.environ, AUTODUB_SMOKE="1")
     # QT_QPA_PLATFORM=offscreen nếu chạy trên máy không có màn hình:
     # env["QT_QPA_PLATFORM"] = "offscreen"
-    proc = subprocess.run([os.path.join(DIST_DIR, "VoxDub.exe")], env=env,
-                          cwd=DIST_DIR, timeout=180)
+    proc = subprocess.run(
+        [os.path.join(DIST_DIR, "VoxDub.exe")], env=env, cwd=DIST_DIR, timeout=180
+    )
 
     if not os.path.isfile(result_json):
         log("!! exe không ghi smoke_test_result.json — khởi động thất bại?")
@@ -444,10 +459,8 @@ VoxDub Studio/
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--no-test", action="store_true",
-                        help="bỏ qua smoke test sau khi build")
-    parser.add_argument("--no-zip", action="store_true",
-                        help="bỏ qua bước nén .zip phát hành")
+    parser.add_argument("--no-test", action="store_true", help="bỏ qua smoke test sau khi build")
+    parser.add_argument("--no-zip", action="store_true", help="bỏ qua bước nén .zip phát hành")
     args = parser.parse_args()
 
     _force_utf8_stdio()
@@ -465,8 +478,7 @@ def main() -> int:
     if not args.no_test:
         ok = step_smoke_test()
 
-    size = sum(os.path.getsize(os.path.join(dp, f))
-               for dp, _, fs in os.walk(DIST_DIR) for f in fs)
+    size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(DIST_DIR) for f in fs)
     log(f"xong sau {time.time() - start:.0f}s — dist/VoxDub ({size >> 20} MB)")
 
     # Nén sẵn gói phát hành: dist/VoxDub-Studio-v<ver>.zip, giải nén ra
@@ -476,16 +488,15 @@ def main() -> int:
         # Đọc APP_VERSION bằng regex — import autodub_gui.app sẽ kéo cả Qt
         # và chạy _frozen.init(), không đáng cho một chuỗi số.
         import re
-        src = open(os.path.join(PROJECT_ROOT, "autodub_gui", "app.py"),
-                   encoding="utf-8").read()
+
+        src = open(os.path.join(PROJECT_ROOT, "autodub_gui", "app.py"), encoding="utf-8").read()
         m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', src, re.M)
         version = m.group(1) if m else "0.0"
-        zip_path = os.path.join(PROJECT_ROOT, "dist",
-                                f"VoxDub-Studio-v{version}.zip")
+        zip_path = os.path.join(PROJECT_ROOT, "dist", f"VoxDub-Studio-v{version}.zip")
         log(f"đang nén gói phát hành: {os.path.basename(zip_path)} ...")
         import zipfile
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED,
-                             compresslevel=6) as zf:
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for dp, _, fs in os.walk(DIST_DIR):
                 for f in fs:
                     full = os.path.join(dp, f)

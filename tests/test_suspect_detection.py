@@ -1,4 +1,5 @@
-﻿"""Unit test cho detect_suspect_segments — 4 heuristic của TASK-2."""
+"""Unit test cho detect_suspect_segments — 4 heuristic của TASK-2."""
+
 from autodub.text.fusion import (
     REASON_EMPTY_CHUNK,
     REASON_GAP_ANOMALY,
@@ -9,8 +10,7 @@ from autodub.text.fusion import (
 
 
 def _seg(i, start, end, text):
-    return {"id": i, "text": text, "start": start, "end": end,
-            "duration": round(end - start, 3)}
+    return {"id": i, "text": text, "start": start, "end": end, "duration": round(end - start, 3)}
 
 
 def _normal_transcript():
@@ -64,8 +64,7 @@ def test_gap_anomaly_flags_both_neighbours():
 def test_empty_chunk_in_gap_flags_nearest():
     segs = _normal_transcript()
     # Chunk rỗng nằm trọn trong khoảng lặng 1s giữa câu 2 và 3
-    res = detect_suspect_segments(
-        segs, empty_chunks=[{"start": 3.0, "end": 3.9}])
+    res = detect_suspect_segments(segs, empty_chunks=[{"start": 3.0, "end": 3.9}])
     ids = {s["id"] for s in res.suspect}
     assert ids  # câu gần nhất (2 hoặc 3) bị flag
 
@@ -73,8 +72,7 @@ def test_empty_chunk_in_gap_flags_nearest():
 def test_empty_chunk_covered_by_segment_not_flagged():
     segs = _normal_transcript()
     # Chunk rỗng nằm YÊN TRONG câu 1 (bị phủ 100%) → không flag empty
-    res = detect_suspect_segments(
-        segs, empty_chunks=[{"start": 0.2, "end": 0.8}])
+    res = detect_suspect_segments(segs, empty_chunks=[{"start": 0.2, "end": 0.8}])
     for s in res.suspect:
         assert REASON_EMPTY_CHUNK not in s["suspect_reasons"]
 
@@ -82,19 +80,16 @@ def test_empty_chunk_covered_by_segment_not_flagged():
 def test_ocr_unmatched_flags_nearest_and_counts():
     segs = _normal_transcript()
     # OCR nằm trong khoảng lặng 1s giữa câu 1 [0,1] và câu 2 [2,3]
-    ocr = [{"text": "你到底在干什么", "start_time": 1.1, "end_time": 1.8,
-            "confidence": 0.95}]
+    ocr = [{"text": "你到底在干什么", "start_time": 1.1, "end_time": 1.8, "confidence": 0.95}]
     res = detect_suspect_segments(segs, ocr_segments=ocr)
     assert res.stats["ocr_unmatched"] == 1
-    flagged = [s for s in res.suspect
-               if REASON_OCR_NO_ASR in s["suspect_reasons"]]
+    flagged = [s for s in res.suspect if REASON_OCR_NO_ASR in s["suspect_reasons"]]
     assert flagged  # câu kề bên (id 1 hoặc 2) bị flag
 
 
 def test_ocr_matched_no_flag():
     segs = _normal_transcript()
-    ocr = [{"text": "你好世界你好", "start_time": 0.0, "end_time": 1.0,
-            "confidence": 0.9}]
+    ocr = [{"text": "你好世界你好", "start_time": 0.0, "end_time": 1.0, "confidence": 0.9}]
     res = detect_suspect_segments(segs, ocr_segments=ocr)
     assert res.stats["ocr_unmatched"] == 0
 
@@ -116,8 +111,7 @@ def test_empty_input():
 def test_partition_preserves_all_segments():
     segs = _normal_transcript()
     segs[3] = _seg(4, 6.0, 12.0, "好")
-    res = detect_suspect_segments(
-        segs, empty_chunks=[{"start": 3.0, "end": 3.9}])
+    res = detect_suspect_segments(segs, empty_chunks=[{"start": 3.0, "end": 3.9}])
     assert len(res.normal) + len(res.suspect) == len(segs)
     ids = sorted([s["id"] for s in res.normal + res.suspect])
     assert ids == sorted(s["id"] for s in segs)

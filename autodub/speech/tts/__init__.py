@@ -6,6 +6,7 @@ giọng cụ thể (xem :mod:`autodub.speech.tts.voices`). Người dùng không
 lại chạy VieNeu trên máy. Hai engine độc lập — không engine nào dự phòng cho
 engine kia.
 """
+
 from __future__ import annotations
 
 import threading
@@ -18,12 +19,15 @@ from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.tts")
 
-__all__ = ["Synthesizer", "TTSResult", "get_synthesizer", "SynthCache",
-           "NOT_INSTALLED_HINT"]
+__all__ = [
+    "NOT_INSTALLED_HINT",
+    "SynthCache",
+    "Synthesizer",
+    "TTSResult",
+    "get_synthesizer",
+]
 
-NOT_INSTALLED_HINT = (
-    "Chưa cài bộ giọng VieNeu. Chạy một lần: py scripts/setup_vieneu.py"
-)
+NOT_INSTALLED_HINT = "Chưa cài bộ giọng VieNeu. Chạy một lần: py scripts/setup_vieneu.py"
 
 
 class SynthCache:
@@ -38,8 +42,7 @@ class SynthCache:
         self._cache: dict[str, Synthesizer] = {}
         self._lock = threading.Lock()
 
-    def get(self, target: TargetLang, settings: Settings,
-            voice: str | None = None) -> Synthesizer:
+    def get(self, target: TargetLang, settings: Settings, voice: str | None = None) -> Synthesizer:
         name = voice_catalog.resolve(settings, voice)
         with self._lock:
             synth = self._cache.get(name)
@@ -88,8 +91,6 @@ def get_synthesizer(
 
     from autodub.speech.tts.vieneu_vi import VieNeuSynthesizer
 
-    workers = num_workers or min(settings.parallel_workers,
-                                 settings.vieneu_max_workers)
+    workers = num_workers or min(settings.parallel_workers, settings.vieneu_max_workers)
     logger.info(f"Dùng giọng VieNeu «{voice_name}» ({workers} luồng, CPU)")
-    return VieNeuSynthesizer(settings, voice_name=voice_name,
-                             num_workers=workers)
+    return VieNeuSynthesizer(settings, voice_name=voice_name, num_workers=workers)

@@ -1,13 +1,14 @@
 import json
 import os
 import subprocess
+
 _REAL_SUBPROCESS_RUN = subprocess.run
 import threading
 import time
-from functools import lru_cache
-from typing import Callable
+from collections.abc import Callable
+from functools import cache, lru_cache
 
-from autodub.utils import ffmpeg_timeout_s, setup_logging, ProgressTracker
+from autodub.utils import ProgressTracker, ffmpeg_timeout_s, setup_logging
 
 logger = setup_logging("autodub.video_merger")
 
@@ -20,16 +21,26 @@ def probe_duration_s(video_path: str) -> float | None:
     """
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-            capture_output=True, text=True, timeout=60,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         return float(result.stdout.strip()) if result.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return None
 
 
-@lru_cache(maxsize=None)
+@cache
 def _encoder_works(*args: str) -> bool:
     """True nếu ffmpeg mã hóa được thật bằng bộ mã hóa này.
 
@@ -39,9 +50,22 @@ def _encoder_works(*args: str) -> bool:
     """
     try:
         result = subprocess.run(
-            ["ffmpeg", "-v", "error", "-f", "lavfi",
-             "-i", "color=black:s=256x256:d=0.1", *args, "-f", "null", "-"],
-            capture_output=True, text=True, timeout=30,
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=black:s=256x256:d=0.1",
+                *args,
+                "-f",
+                "null",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         return result.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
@@ -52,19 +76,18 @@ def _encoder_works(*args: str) -> bool:
 #: tương đương crf 23 của libx264. NVIDIA → Apple (VideoToolbox) → Intel (QSV) → AMD (AMF) → Linux (VAAPI).
 #: Máy không có GPU nào trong số này rơi về libx264 trên CPU.
 _HW_ENCODERS: tuple[tuple[str, list[str]], ...] = (
-    ("NVIDIA NVENC",
-     ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "23", "-b:v", "0", "-multipass", "0"]),
-    ("Apple VideoToolbox",
-     ["-c:v", "h264_videotoolbox", "-q:v", "55"]),
-    ("Intel QuickSync",
-     ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"]),
-    ("AMD AMF",
-     ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "23",
-      "-qp_p", "23"]),
-    ("Linux VAAPI",
-     ["-c:v", "h264_vaapi", "-qp", "23"]),
+    (
+        "NVIDIA NVENC",
+        ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "23", "-b:v", "0", "-multipass", "0"],
+    ),
+    ("Apple VideoToolbox", ["-c:v", "h264_videotoolbox", "-q:v", "55"]),
+    ("Intel QuickSync", ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"]),
+    (
+        "AMD AMF",
+        ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "23", "-qp_p", "23"],
+    ),
+    ("Linux VAAPI", ["-c:v", "h264_vaapi", "-qp", "23"]),
 )
-
 
 
 @lru_cache(maxsize=1)
@@ -73,8 +96,7 @@ def _resolve_encoder() -> tuple[str, tuple[str, ...]]:
     for name, args in _HW_ENCODERS:
         if _encoder_works(*args):
             return name, tuple(args)
-    return ("CPU (libx264)",
-            ("-c:v", "libx264", "-preset", "veryfast", "-crf", "20"))
+    return ("CPU (libx264)", ("-c:v", "libx264", "-preset", "veryfast", "-crf", "20"))
 
 
 def video_codec_args(quality_mode: str = "fast") -> list[str]:
@@ -83,7 +105,8 @@ def video_codec_args(quality_mode: str = "fast") -> list[str]:
     Ưu tiên mã hóa bằng GPU (NVENC/QSV/AMF) — nhanh gấp nhiều lần libx264 ở
     chất lượng tương đương với video lồng tiếng; máy không có thì dùng CPU.
     """
-    from autodub.media.encoder_profile import EncoderProfile, QualityMode
+    from autodub.media.encoder_profile import EncoderProfile
+
     name, default_args = _resolve_encoder()
     try:
         return EncoderProfile.get_args(name, mode=quality_mode)
@@ -105,10 +128,15 @@ def probe_dimensions(video_path: str) -> tuple[int, int]:
     land in the wrong place and crops can exceed the frame.
     """
     cmd = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,side_data_list",
-        "-of", "json",
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,side_data_list",
+        "-of",
+        "json",
         video_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -167,11 +195,12 @@ def render_preview_clip(
             filters.append(f"fps={fps}")
     # Không phóng to video vốn đã nhỏ hơn 480 điểm; bảo đảm cả 2 chiều luôn chẵn (chia hết cho 2).
     from autodub.media.dimension import build_even_scale_filter
+
     filters.append(build_even_scale_filter(height))
     if srt_path and os.path.exists(srt_path):
-        from autodub.media.subtitle import (build_force_style,
-                                            escape_subtitles_path)
+        from autodub.media.subtitle import build_force_style, escape_subtitles_path
         from autodub.utils import bundled_font_files, fonts_dir
+
         subs = f"subtitles='{escape_subtitles_path(srt_path)}'"
         if bundled_font_files():
             subs += f":fontsdir='{escape_subtitles_path(fonts_dir())}'"
@@ -180,22 +209,44 @@ def render_preview_clip(
         filters.append(subs)
 
     cmd = [
-        "ffmpeg", "-ss", f"{start_s:.3f}", "-to", f"{end_s:.3f}",
-        "-i", video_path, "-i", audio_path,
-        "-filter:v", ",".join(filters),
-        "-map", "0:v:0", "-map", "1:a",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k",
-        "-shortest", "-y", output_path,
+        "ffmpeg",
+        "-ss",
+        f"{start_s:.3f}",
+        "-to",
+        f"{end_s:.3f}",
+        "-i",
+        video_path,
+        "-i",
+        audio_path,
+        "-filter:v",
+        ",".join(filters),
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "28",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-shortest",
+        "-y",
+        output_path,
     ]
-    logger.info(f"Rendering preview clip {start_s:.1f}s–{end_s:.1f}s → "
-                f"{output_path}")
+    logger.info(f"Rendering preview clip {start_s:.1f}s–{end_s:.1f}s → {output_path}")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=ffmpeg_timeout_s(end_s - start_s))
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("FFmpeg treo khi dựng đoạn xem thử")
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=ffmpeg_timeout_s(end_s - start_s)
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("FFmpeg treo khi dựng đoạn xem thử") from e
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg preview failed: {result.stderr[:400]}")
     return output_path
@@ -247,7 +298,6 @@ def merge_video(
     randomize_metadata: bool = True,
     faststart: bool = True,
 ) -> str:
-
     """Mux the dubbed audio into the video, optionally adding subtitles/blur/aspect/logo/watermark/anti-content-id.
 
     ``subtitle_mode``:
@@ -295,6 +345,7 @@ def merge_video(
     if mask_method == "ai_inpaint" and blur_regions:
         try:
             from autodub.media.inpaint import inpaint_video_with_cache
+
             inpaint_kwargs = {
                 "video_path": video_path,
                 "regions": blur_regions,
@@ -310,7 +361,9 @@ def merge_video(
             # Sau khi đã xóa sạch bằng AI Inpaint, bỏ blur_regions trên filtergraph
             effective_blur_regions = []
         except Exception as e:
-            logger.warning(f"Lỗi khi thực hiện AI Inpaint ({e}) — tự động chuyển sang làm mờ Boxblur.")
+            logger.warning(
+                f"Lỗi khi thực hiện AI Inpaint ({e}) — tự động chuyển sang làm mờ Boxblur."
+            )
             effective_blur_regions = blur_regions
 
     from autodub.media.subtitle import build_filter_complex
@@ -319,13 +372,26 @@ def merge_video(
     filter_complex = None
     has_logo = bool(logo_path and str(logo_path).strip())
     has_wm = bool(watermark_text and str(watermark_text).strip())
-    has_anti_id = bool(smart_flip or micro_zoom or (color_filter and color_filter not in ("none", "original", "")))
+    has_anti_id = bool(
+        smart_flip or micro_zoom or (color_filter and color_filter not in ("none", "original", ""))
+    )
     has_banner = bool(frame_banner_enabled)
-    if (effective_blur_regions or burn_srt or has_logo or has_wm or has_anti_id
-            or (aspect_preset and aspect_preset not in ("original", "none")) or has_banner):
+    if (
+        effective_blur_regions
+        or burn_srt
+        or has_logo
+        or has_wm
+        or has_anti_id
+        or (aspect_preset and aspect_preset not in ("original", "none"))
+        or has_banner
+    ):
         width, height = probe_dimensions(actual_video_path)
         filter_complex = build_filter_complex(
-            effective_blur_regions, width, height, burn_srt, subtitle_style,
+            effective_blur_regions,
+            width,
+            height,
+            burn_srt,
+            subtitle_style,
             aspect_preset=aspect_preset,
             logo_path=logo_path,
             logo_position=logo_position,
@@ -354,7 +420,6 @@ def merge_video(
             frame_footer_color=frame_footer_color,
         )
 
-
     apply_speed = speed is not None and speed < 0.999
     if apply_speed:
         if not fps:
@@ -363,10 +428,12 @@ def merge_video(
         if filter_complex:
             # setpts BEFORE blur/subs: their timestamps are on the slowed
             # timeline, so the frames must already be retimed when they apply.
-            filter_complex = (f"[0:v]{setpts}[vslow];"
-                              + filter_complex.replace("[0:v]", "[vslow]", 1))
+            filter_complex = f"[0:v]{setpts}[vslow];" + filter_complex.replace(
+                "[0:v]", "[vslow]", 1
+            )
         else:
             from autodub.media.dimension import build_dimension_filter
+
             filter_complex = f"[0:v]{setpts},{build_dimension_filter()}[vout]"
 
     hw_args = ["-hwaccel", "auto"] if video_encoder_name() != "CPU (libx264)" else []
@@ -380,29 +447,59 @@ def merge_video(
         from autodub.media.parallel_export import _MIN_SPLIT_DURATION_S as _PSEND
     except ImportError:
         _PSEND = 45.0
-    if (parallel_enabled and filter_complex and dur_probe
-            and dur_probe >= _PSEND
-            and subprocess.run is _REAL_SUBPROCESS_RUN):
+    if (
+        parallel_enabled
+        and filter_complex
+        and dur_probe
+        and dur_probe >= _PSEND
+        and subprocess.run is _REAL_SUBPROCESS_RUN
+    ):
         try:
             from autodub.media.parallel_export import parallel_chunked_export
 
-            soft_args = (["-i", srt_path]
-                         + ["-map", "2:s", "-c:s", "mov_text",
-                            "-metadata:s:s:0", f"language={subtitle_lang}",
-                            "-disposition:s:0", "default"]
-                         if subtitle_mode == "soft" else [])
+            soft_args = (
+                [
+                    "-i",
+                    srt_path,
+                    "-map",
+                    "2:s",
+                    "-c:s",
+                    "mov_text",
+                    "-metadata:s:s:0",
+                    f"language={subtitle_lang}",
+                    "-disposition:s:0",
+                    "default",
+                ]
+                if subtitle_mode == "soft"
+                else []
+            )
 
-            def _build_chunk_cmd(src: str, start_s: float, end_s: float,
-                                 chunk_out: str) -> list:
-                chunk_cmd = ["ffmpeg", *hw_args, "-threads", "0",
-                             "-ss", f"{start_s:.3f}", "-to", f"{end_s:.3f}",
-                             "-i", src, "-i", audio_path]
+            def _build_chunk_cmd(src: str, start_s: float, end_s: float, chunk_out: str) -> list:
+                chunk_cmd = [
+                    "ffmpeg",
+                    *hw_args,
+                    "-threads",
+                    "0",
+                    "-ss",
+                    f"{start_s:.3f}",
+                    "-to",
+                    f"{end_s:.3f}",
+                    "-i",
+                    src,
+                    "-i",
+                    audio_path,
+                ]
                 chunk_cmd += [
                     *filter_args_holder["args"],
-                    "-filter_complex_threads", "0",
-                    "-map", "[vout]", "-map", "1:a",
+                    "-filter_complex_threads",
+                    "0",
+                    "-map",
+                    "[vout]",
+                    "-map",
+                    "1:a",
                     *codec_holder["args"],
-                    "-pix_fmt", "yuv420p",
+                    "-pix_fmt",
+                    "yuv420p",
                 ]
                 if apply_speed:
                     chunk_cmd += ["-fps_mode", "cfr"]
@@ -410,14 +507,20 @@ def merge_video(
                     chunk_cmd += soft_args
                 if randomize_metadata:
                     from autodub.media.metadata import build_clean_metadata_args
+
                     chunk_cmd += build_clean_metadata_args()
                 chunk_cmd += ["-c:a", "aac", "-b:a", "192k", "-y", chunk_out]
                 return chunk_cmd
 
             # filter_args / codec cần sẵn cho callback — dùng holder dict
             # vì callback closure được gọi sau khi biến local được gán.
-            if len(filter_complex) > 1024 or "\n" in filter_complex or len(effective_blur_regions or []) > 2:
+            if (
+                len(filter_complex) > 1024
+                or "\n" in filter_complex
+                or len(effective_blur_regions or []) > 2
+            ):
                 import tempfile
+
                 fd, filter_script_file = tempfile.mkstemp(prefix="filtergraph_", suffix=".txt")
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     f.write(filter_complex)
@@ -434,7 +537,9 @@ def merge_video(
             try:
                 result_path = parallel_chunked_export(
                     _build_chunk_cmd,
-                    actual_video_path, audio_path, output_path,
+                    actual_video_path,
+                    audio_path,
+                    output_path,
                     duration_s=dur_probe,
                     progress_cb=progress_cb,
                     cancel_event=cancel_event,
@@ -443,8 +548,7 @@ def merge_video(
                 logger.info(f"Video merged (parallel chunked): {result_path}")
                 return result_path
             except Exception as e:
-                logger.warning(
-                    f"Parallel export thất bại ({e}) — fallback 1 process.")
+                logger.warning(f"Parallel export thất bại ({e}) — fallback 1 process.")
             finally:
                 if filter_script_file and os.path.exists(filter_script_file):
                     try:
@@ -464,8 +568,13 @@ def merge_video(
         codec = video_codec_args()
         # Chuyển sang -filter_complex_script nếu chuỗi quá dài (> 1024 ký tự) hoặc nhiều vùng làm mờ
         # để xóa bỏ hoàn toàn giới hạn 32,767 ký tự trên dòng lệnh Windows.
-        if len(filter_complex) > 1024 or "\n" in filter_complex or len(effective_blur_regions or []) > 2:
+        if (
+            len(filter_complex) > 1024
+            or "\n" in filter_complex
+            or len(effective_blur_regions or []) > 2
+        ):
             import tempfile
+
             fd, filter_script_file = tempfile.mkstemp(prefix="filtergraph_", suffix=".txt")
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(filter_complex)
@@ -474,10 +583,15 @@ def merge_video(
             filter_args = ["-filter_complex", filter_complex]
         cmd += [
             *filter_args,
-            "-filter_complex_threads", "0",
-            "-map", "[vout]", "-map", "1:a",
+            "-filter_complex_threads",
+            "0",
+            "-map",
+            "[vout]",
+            "-map",
+            "1:a",
             *codec,
-            "-pix_fmt", "yuv420p",
+            "-pix_fmt",
+            "yuv420p",
         ]
         if apply_speed:
             cmd += ["-fps_mode", "cfr"]
@@ -492,14 +606,19 @@ def merge_video(
         ext = os.path.splitext(output_path)[1].lower()
         sub_codec = "mov_text" if ext in (".mp4", ".m4v", ".mov") else "srt"
         cmd += [
-            "-map", "2:s",
-            "-c:s", sub_codec,
-            f"-metadata:s:s:0", f"language={subtitle_lang}",
-            "-disposition:s:0", "default",
+            "-map",
+            "2:s",
+            "-c:s",
+            sub_codec,
+            "-metadata:s:s:0",
+            f"language={subtitle_lang}",
+            "-disposition:s:0",
+            "default",
         ]
 
     if randomize_metadata:
         from autodub.media.metadata import build_clean_metadata_args
+
         cmd += build_clean_metadata_args()
 
     movflags = ["-movflags", "+faststart"] if faststart else []
@@ -519,8 +638,7 @@ def merge_video(
     # Trần timeout theo thời lượng thật: stream-copy thì 4x là quá rộng;
     # re-encode CPU trên máy yếu có thể chậm hơn realtime nên nhân 8.
     dur = dur_probe or probe_duration_s(video_path) or 0.0
-    timeout = (max(900, int(dur * 8)) if filter_complex and dur
-               else ffmpeg_timeout_s(dur))
+    timeout = max(900, int(dur * 8)) if filter_complex and dur else ffmpeg_timeout_s(dur)
 
     try:
         # Tương thích với các unit test giả lập mock / monkeypatch subprocess.run
@@ -531,18 +649,20 @@ def merge_video(
             if randomize_metadata:
                 try:
                     from autodub.media.metadata import randomize_file_hash
+
                     randomize_file_hash(output_path)
                 except Exception:
                     pass
             logger.info(f"Video merged: {output_path}")
             return output_path
 
-
-        tracker = ProgressTracker(dur if dur > 0 else 1.0, "Xuất video & ghép phụ đề", unit="s", min_log_interval=2.5)
+        tracker = ProgressTracker(
+            dur if dur > 0 else 1.0, "Xuất video & ghép phụ đề", unit="s", min_log_interval=2.5
+        )
 
         # Thêm -progress pipe:1 để theo dõi tiến độ thời gian thực
         idx_y = cmd.index("-y") if "-y" in cmd else len(cmd) - 1
-        run_cmd = cmd[:idx_y] + ["-progress", "pipe:1", "-nostats"] + cmd[idx_y:]
+        run_cmd = [*cmd[:idx_y], "-progress", "pipe:1", "-nostats", *cmd[idx_y:]]
         no_win_flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.Popen(
             run_cmd,
@@ -589,11 +709,12 @@ def merge_video(
             rem_t = max(5, int(timeout - (time.time() - t_start)))
             proc.wait(timeout=rem_t)
             err_thread.join(timeout=3.0)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             proc.kill()
             raise RuntimeError(
                 f"FFmpeg treo quá {timeout}s khi ghép video — kiểm tra file "
-                f"nguồn có bị khóa hoặc driver GPU có ổn định không")
+                f"nguồn có bị khóa hoặc driver GPU có ổn định không"
+            ) from e
         except BaseException:
             proc.kill()
             raise
@@ -607,6 +728,7 @@ def merge_video(
         if randomize_metadata:
             try:
                 from autodub.media.metadata import randomize_file_hash
+
                 new_hash = randomize_file_hash(output_path)
                 logger.info(f"Đã làm sạch metadata và đổi mã băm MD5 duy nhất: {new_hash}")
             except Exception as e:
@@ -620,5 +742,3 @@ def merge_video(
                 os.remove(filter_script_file)
             except OSError:
                 pass
-
-

@@ -8,6 +8,7 @@ Tên hiển thị trong ``Voice.json`` có dạng «Thanh Lan - Nữ ngọt ngà
 trước dấu gạch là TÊN giọng (định danh trong app, phải là duy nhất), phần
 sau chỉ để mô tả.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -28,8 +29,7 @@ DEFAULT_CAPCUT_VOICE = "Cô Gái Hoạt Ngôn"
 def _gender_of(voice_type: str) -> str:
     """Suy giới tính từ ``voice_type``; giọng hiệu ứng dựng trên nền nam."""
     vt = voice_type.lower()
-    if "female" in vt or vt.startswith("bv421") or vt.startswith("bv074") \
-            or vt.startswith("bv562"):
+    if "female" in vt or vt.startswith("bv421") or vt.startswith("bv074") or vt.startswith("bv562"):
         return "female"
     return "male"
 
@@ -71,13 +71,15 @@ def entries() -> list[dict]:
         if not name or not voice_type or name in seen:
             continue
         seen.add(name)
-        result.append({
-            "name": name,
-            "description": description,
-            "gender": _gender_of(voice_type),
-            "voice_type": voice_type,
-            "resource_id": str(item.get("resource_id", "")),
-        })
+        result.append(
+            {
+                "name": name,
+                "description": description,
+                "gender": _gender_of(voice_type),
+                "voice_type": voice_type,
+                "resource_id": str(item.get("resource_id", "")),
+            }
+        )
     _entries = result
     return _entries
 
@@ -97,8 +99,7 @@ def lookup(name: str) -> dict | None:
 
 def device_file() -> str:
     """Nơi cất hồ sơ thiết bị CapCut (ghi được cả khi chạy từ bản đóng gói)."""
-    return os.path.join(os.path.expanduser("~"), ".voxdub_cache",
-                        "capcut_device.json")
+    return os.path.join(os.path.expanduser("~"), ".voxdub_cache", "capcut_device.json")
 
 
 def _fresh_ids(seed: str | None = None) -> dict:
@@ -113,11 +114,9 @@ def _fresh_ids(seed: str | None = None) -> dict:
 
     def _id(chunk: str) -> str:
         # Cùng dạng ID thật của CapCut: 19 chữ số, mở đầu bằng 7.
-        return "7" + str(int(chunk, 16) % 10 ** 18).zfill(18)
+        return "7" + str(int(chunk, 16) % 10**18).zfill(18)
 
-    return {"device_id": _id(digest[:16]),
-            "iid": _id(digest[16:32]),
-            "tdid": _id(digest[32:48])}
+    return {"device_id": _id(digest[:16]), "iid": _id(digest[16:32]), "tdid": _id(digest[32:48])}
 
 
 def device_profile() -> dict:
@@ -141,7 +140,7 @@ def device_profile() -> dict:
         pass
     try:
         seed = get_fingerprint()
-    except Exception:  # noqa: BLE001 — không đọc được vân tay thì lấy ngẫu nhiên
+    except Exception:
         seed = None
     return _write_profile(_fresh_ids(seed))
 
@@ -152,8 +151,7 @@ def rotate_device() -> dict:
 
 
 def _write_profile(ids: dict) -> dict:
-    profile = {**DEFAULT_DEVICE, **ids,
-               "region": "VN", "loc": "VN", "lan": "vi-VN"}
+    profile = {**DEFAULT_DEVICE, **ids, "region": "VN", "loc": "VN", "lan": "vi-VN"}
     try:
         save_json_atomic(profile, device_file())
     except OSError:

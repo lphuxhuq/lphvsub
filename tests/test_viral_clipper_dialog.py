@@ -1,5 +1,5 @@
-import pytest
 from PySide6.QtWidgets import QLabel
+
 from autodub.config import Settings
 from autodub.editor import EditorState
 from autodub.languages import get_target
@@ -46,7 +46,13 @@ def test_viral_clipper_dialog(qtbot, tmp_path):
         target=get_target("vi"),
         segments=[
             {"id": 1, "start": 0.0, "end": 10.0, "text": "Đoạn 1", "text_vi": "Đoạn 1"},
-            {"id": 2, "start": 10.5, "end": 45.0, "text": "Đoạn 2 sốc kinh hoàng", "text_vi": "Đoạn 2 sốc kinh hoàng"},
+            {
+                "id": 2,
+                "start": 10.5,
+                "end": 45.0,
+                "text": "Đoạn 2 sốc kinh hoàng",
+                "text_vi": "Đoạn 2 sốc kinh hoàng",
+            },
         ],
     )
     dialog = ViralClipperDialog(None, state, settings=Settings())

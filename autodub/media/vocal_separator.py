@@ -12,6 +12,7 @@ qua lệnh ``demucs.separate``, để không bao giờ chạm vào ``torchaudio.
 đường đó cần ``torchcodec`` từ torchaudio 2.10 trở lên, mà bản Windows của
 nó lại phụ thuộc đúng một phiên bản FFmpeg. Ở đây ghi tệp bằng ``soundfile``.
 """
+
 import json
 import os
 import subprocess
@@ -47,7 +48,7 @@ class DemucsCache:
 
     def __init__(self):
         self._proc: subprocess.Popen | None = None
-        self._failed = False        # worker chết một lần → thôi, dùng đường cũ
+        self._failed = False  # worker chết một lần → thôi, dùng đường cũ
         self._lock = threading.RLock()
 
     def _ensure(self) -> bool:
@@ -62,13 +63,13 @@ class DemucsCache:
                 self._failed = True
                 return False
             from autodub.sysinfo import available_ram_gb, total_ram_gb
+
             avail = available_ram_gb()
             total = total_ram_gb()
             # Máy thực sự ít RAM (< 8GB total và < 1.5GB trống, hoặc < 1.0GB trống bất kể tổng):
             # giữ worker thường trực làm chật RAM, nên tự rơi về đường chạy đơn.
-            low_ram = (
-                (avail is not None and avail < 1.0)
-                or (total is not None and total < 8.0 and avail is not None and avail < 1.5)
+            low_ram = (avail is not None and avail < 1.0) or (
+                total is not None and total < 8.0 and avail is not None and avail < 1.5
             )
             if low_ram:
                 self._failed = True
@@ -76,12 +77,17 @@ class DemucsCache:
             try:
                 self._proc = subprocess.Popen(
                     [python, _WORKER_SCRIPT, "--serve"],
-                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL, encoding="utf-8", errors="replace")
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    encoding="utf-8",
+                    errors="replace",
+                )
                 ready = json.loads(self._read_line(_SEPARATE_TIMEOUT))
             except Exception as e:
-                logger.warning(f"Demucs cache không khởi động được ({e}) — "
-                               "mỗi video sẽ tự nạp model như cũ")
+                logger.warning(
+                    f"Demucs cache không khởi động được ({e}) — mỗi video sẽ tự nạp model như cũ"
+                )
                 self._shutdown()
                 self._failed = True
                 return False
@@ -90,8 +96,9 @@ class DemucsCache:
                 self._shutdown()
                 self._failed = True
                 return False
-            logger.info(f"Demucs cache sẵn sàng trên {ready.get('device')} — "
-                        "model dùng chung cho cả lô")
+            logger.info(
+                f"Demucs cache sẵn sàng trên {ready.get('device')} — model dùng chung cho cả lô"
+            )
             return True
 
     def _read_line(self, timeout: float) -> str:
@@ -115,37 +122,39 @@ class DemucsCache:
                 try:
                     self._proc.kill()
                 except OSError:
-                    pass
+                    logger.debug("Bỏ qua lỗi OSError trong vocal_separator.py", exc_info=True)
                 t.join(2.0)
             raise RuntimeError("Demucs serve worker timed out or died")
         return result[0]
 
-    def separate(self, input_wav: str, vocals_out: str, no_vocals_out: str,
-                 chunked: bool) -> bool:
+    def separate(self, input_wav: str, vocals_out: str, no_vocals_out: str, chunked: bool) -> bool:
         """Tách một video qua worker bền. False → caller dùng đường cũ."""
         with self._lock:
             if not self._ensure():
                 return False
-            req = {"input": os.path.abspath(input_wav),
-                   "vocals": os.path.abspath(vocals_out),
-                   "no_vocals": os.path.abspath(no_vocals_out),
-                   "chunked": chunked}
+            req = {
+                "input": os.path.abspath(input_wav),
+                "vocals": os.path.abspath(vocals_out),
+                "no_vocals": os.path.abspath(no_vocals_out),
+                "chunked": chunked,
+            }
             try:
                 self._proc.stdin.write(json.dumps(req) + "\n")
                 self._proc.stdin.flush()
                 resp = json.loads(self._read_line(_SEPARATE_TIMEOUT))
             except Exception as e:
-                logger.warning(f"Demucs cache chết giữa chừng ({e}) — "
-                               "video này tách theo đường thường")
+                logger.warning(
+                    f"Demucs cache chết giữa chừng ({e}) — video này tách theo đường thường"
+                )
                 self._shutdown()
                 self._failed = True
                 return False
             if not resp.get("ok"):
-                logger.warning(f"Demucs cache lỗi ({resp.get('error')}) — "
-                               "video này tách theo đường thường")
+                logger.warning(
+                    f"Demucs cache lỗi ({resp.get('error')}) — video này tách theo đường thường"
+                )
                 return False
-            logger.info(f"Demucs separation done on {resp.get('device')} "
-                        "(model dùng lại từ cache)")
+            logger.info(f"Demucs separation done on {resp.get('device')} (model dùng lại từ cache)")
             return True
 
     def _shutdown(self) -> None:
@@ -164,7 +173,7 @@ class DemucsCache:
                     try:
                         s.close()
                     except Exception:
-                        pass
+                        logger.debug("Bỏ qua lỗi Exception trong vocal_separator.py", exc_info=True)
 
     def close(self) -> None:
         with self._lock:
@@ -196,8 +205,12 @@ def separate_vocals(
     vocals_out = os.path.join(output_dir, "vocals.wav")
     no_vocals_out = os.path.join(output_dir, "no_vocals.wav")
 
-    if (os.path.exists(no_vocals_out) and os.path.getsize(no_vocals_out) > 0
-            and os.path.exists(vocals_out) and os.path.getsize(vocals_out) > 0):
+    if (
+        os.path.exists(no_vocals_out)
+        and os.path.getsize(no_vocals_out) > 0
+        and os.path.exists(vocals_out)
+        and os.path.getsize(vocals_out) > 0
+    ):
         logger.info(f"Reusing existing separation: {no_vocals_out}")
         return {"vocals": vocals_out, "no_vocals": no_vocals_out}
 
@@ -209,6 +222,7 @@ def separate_vocals(
     # multi-minute Demucs run for byte-identical audio.
     try:
         from autodub.pipeline_cache import get_demucs_cache
+
         cached = get_demucs_cache().lookup_and_restore(
             input_wav, output_dir, model, sample_rate, channels
         )
@@ -222,11 +236,10 @@ def separate_vocals(
     raw_no_vocals = os.path.join(output_dir, "_no_vocals_raw.wav")
 
     try:
-        done = (demucs_cache is not None
-                and demucs_cache.separate(input_wav, raw_vocals,
-                                          raw_no_vocals, _low_ram()))
-        if not done and not _run_demucs_gpu_worker(
-                input_wav, raw_vocals, raw_no_vocals, model):
+        done = demucs_cache is not None and demucs_cache.separate(
+            input_wav, raw_vocals, raw_no_vocals, _low_ram()
+        )
+        if not done and not _run_demucs_gpu_worker(input_wav, raw_vocals, raw_no_vocals, model):
             _run_demucs(input_wav, raw_vocals, raw_no_vocals, model)
     except Exception as exc:
         logger.warning(f"Demucs separation failed: {exc}; falling back to silent base.")
@@ -260,6 +273,7 @@ def separate_vocals(
 
     try:
         from autodub.pipeline_cache import get_demucs_cache
+
         get_demucs_cache().store_result(
             input_wav, vocals_out, no_vocals_out, model, sample_rate, channels
         )
@@ -282,8 +296,9 @@ def gpu_venv_python() -> str:
     venv = gpu_venv_dir()
     if not venv:
         return ""
-    exe = os.path.join(venv, "Scripts" if os.name == "nt" else "bin",
-                       "python.exe" if os.name == "nt" else "python")
+    exe = os.path.join(
+        venv, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+    )
     return exe if os.path.isfile(exe) else ""
 
 
@@ -307,11 +322,18 @@ def _run_demucs_gpu_worker(
     if not python:
         return False
 
-    cmd = [python, _WORKER_SCRIPT,
-           "--input", os.path.abspath(input_wav),
-           "--vocals", os.path.abspath(vocals_out),
-           "--no-vocals", os.path.abspath(no_vocals_out),
-           "--model", model_name]
+    cmd = [
+        python,
+        _WORKER_SCRIPT,
+        "--input",
+        os.path.abspath(input_wav),
+        "--vocals",
+        os.path.abspath(vocals_out),
+        "--no-vocals",
+        os.path.abspath(no_vocals_out),
+        "--model",
+        model_name,
+    ]
     if _low_ram():
         cmd.append("--chunked")
     logger.info(f"Running Demucs ({model_name}) in GPU worker on {input_wav}")
@@ -322,8 +344,9 @@ def _run_demucs_gpu_worker(
         # timeout: video 1-2h hợp lệ mất nhiều phút, nhưng CUDA init treo
         # hoặc tải model kẹt thì không được khóa pipeline vĩnh viễn.
         with GPU_LOCK:
-            result = subprocess.run(cmd, capture_output=True, encoding="utf-8",
-                                    errors="replace", timeout=3600)
+            result = subprocess.run(
+                cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=3600
+            )
     except subprocess.TimeoutExpired:
         logger.warning("Demucs GPU worker quá 60 phút — chuyển sang CPU")
         return False
@@ -332,8 +355,7 @@ def _run_demucs_gpu_worker(
     except (json.JSONDecodeError, IndexError):
         resp = {"ok": False, "error": (result.stderr or "no output")[-200:]}
     if not resp.get("ok"):
-        logger.warning(
-            f"Demucs GPU worker failed ({resp.get('error')}) — dùng CPU")
+        logger.warning(f"Demucs GPU worker failed ({resp.get('error')}) — dùng CPU")
         return False
     logger.info(f"Demucs separation done on {resp.get('device')}")
     return True
@@ -350,9 +372,14 @@ def _run_demucs(input_wav: str, vocals_out: str, no_vocals_out: str, model_name:
 
     logger.info(f"Loading Demucs model: {model_name}")
     logger.info(f"Running Demucs ({model_name}) on {input_wav}")
-    separate_file(input_wav, vocals_out, no_vocals_out,
-                  model_name=model_name, device="cpu",
-                  force_chunked=_low_ram())
+    separate_file(
+        input_wav,
+        vocals_out,
+        no_vocals_out,
+        model_name=model_name,
+        device="cpu",
+        force_chunked=_low_ram(),
+    )
 
 
 def _normalize(src: str, dst: str, sample_rate: str, channels: int = 1) -> None:
@@ -363,15 +390,24 @@ def _normalize(src: str, dst: str, sample_rate: str, channels: int = 1) -> None:
     pipeline vĩnh viễn và không hủy được.
     """
     cmd = [
-        "ffmpeg", "-y", "-i", src,
-        "-ac", str(channels),
-        "-ar", sample_rate,
-        "-acodec", "pcm_s16le",
+        "ffmpeg",
+        "-y",
+        "-i",
+        src,
+        "-ac",
+        str(channels),
+        "-ar",
+        sample_rate,
+        "-acodec",
+        "pcm_s16le",
         dst,
     ]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, encoding="utf-8", errors="replace",
+            cmd,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=ffmpeg_timeout_s(_probe_duration_s(src)),
         )
     except subprocess.TimeoutExpired as exc:
@@ -389,5 +425,5 @@ def _probe_duration_s(path: str) -> float | None:
         from autodub.media.audio import wav_duration_s
 
         return wav_duration_s(path)
-    except Exception:  # noqa: BLE001 — chỉ để tính timeout, không đáng làm hỏng
+    except Exception:
         return None

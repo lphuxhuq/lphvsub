@@ -8,26 +8,41 @@ vậy sửa ở đâu cũng ra cùng một kết quả, không có hai nguồn s
 Lưu ở trang Công cụ chỉ ghi những khóa thuộc trang đó, nên không đè lên
 những gì người dùng đang sửa dở ở trang Cài đặt.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QColorDialog, QDoubleSpinBox, QHBoxLayout, QLabel, QScrollArea,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QColorDialog,
+    QDoubleSpinBox,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import tokens
 from autodub_gui.env_store import (
-    bool_to_env, env_bool, env_to_multiline, multiline_to_env,
-    api_keys_to_multiline, multiline_to_api_keys,
-    read_env, write_env,
+    api_keys_to_multiline,
+    bool_to_env,
+    env_bool,
+    env_to_multiline,
+    multiline_to_api_keys,
+    multiline_to_env,
+    read_env,
+    write_env,
 )
 from autodub_gui.pages import BasePage
 from autodub_gui.pages import settings_fields as spec
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
 from autodub_gui.ui.collapsible import CollapsibleSection
 from autodub_gui.ui.inputs import (
-    LabeledCombo, LabeledLineEdit, LabeledSlider, LabeledWidget,
+    LabeledCombo,
+    LabeledLineEdit,
+    LabeledSlider,
+    LabeledWidget,
 )
 from autodub_gui.ui.modal import ConfirmDialog
 from autodub_gui.ui.style import clear_background
@@ -75,8 +90,7 @@ class ToolPage(BasePage):
     # -- Dựng giao diện ------------------------------------------------
     def _build(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_4,
-                                _PAGE_MARGIN, tokens.SP_4)
+        root.setContentsMargins(_PAGE_MARGIN, tokens.SP_4, _PAGE_MARGIN, tokens.SP_4)
         root.setSpacing(tokens.SP_3)
 
         if self.TITLE:
@@ -96,8 +110,7 @@ class ToolPage(BasePage):
         """Vùng cuộn chứa các nhóm mục. Trang con có thể thay hẳn phần này."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         clear_background(scroll)
         clear_background(scroll.viewport())
@@ -164,9 +177,15 @@ class ToolPage(BasePage):
         return box
 
     def _build_slider(self, item: spec.Field) -> QWidget:
-        widget = LabeledSlider(item.label, item.minimum, item.maximum,
-                               item.step, item.hint, item.suffix,
-                               decimals=item.decimals)
+        widget = LabeledSlider(
+            item.label,
+            item.minimum,
+            item.maximum,
+            item.step,
+            item.hint,
+            item.suffix,
+            decimals=item.decimals,
+        )
         widget.changed.connect(self._mark_dirty)
         return widget
 
@@ -197,16 +216,19 @@ class ToolPage(BasePage):
     def _build_folder(self, item: spec.Field) -> QWidget:
         from autodub_gui.ui.inputs import FilePicker
 
-        widget = FilePicker(item.label, item.placeholder, item.hint,
-                            directory=True)
+        widget = FilePicker(item.label, item.placeholder, item.hint, directory=True)
         widget.changed.connect(lambda _t: self._mark_dirty())
         return widget
 
     def _build_file(self, item: spec.Field) -> QWidget:
         from autodub_gui.ui.inputs import FilePicker
 
-        widget = FilePicker(item.label, item.placeholder, item.hint,
-                            name_filter="Âm thanh (*.wav *.mp3 *.m4a *.flac)")
+        widget = FilePicker(
+            item.label,
+            item.placeholder,
+            item.hint,
+            name_filter="Âm thanh (*.wav *.mp3 *.m4a *.flac)",
+        )
         widget.changed.connect(lambda _t: self._mark_dirty())
         return widget
 
@@ -220,8 +242,7 @@ class ToolPage(BasePage):
     def _pick_color(self, button) -> None:
         from PySide6.QtGui import QColor
 
-        current = QColor(button.text().strip()
-                         or tokens.SUBTITLE_TEXT_DEFAULT)
+        current = QColor(button.text().strip() or tokens.SUBTITLE_TEXT_DEFAULT)
         chosen = QColorDialog.getColor(current, self, "Chọn màu")
         if chosen.isValid():
             paint_color(button, chosen.name().upper())
@@ -329,10 +350,13 @@ class ToolPage(BasePage):
             write_env(values)
         except OSError as e:
             ConfirmDialog.show_error(
-                self, "Không lưu được thay đổi",
+                self,
+                "Không lưu được thay đổi",
                 "Ứng dụng không ghi được vào tệp cấu hình. Có thể tệp đang bị "
                 "một chương trình khác mở, hoặc thư mục không cho ghi. Hãy "
-                "đóng chương trình đó rồi bấm Lưu lại.", detail=str(e))
+                "đóng chương trình đó rồi bấm Lưu lại.",
+                detail=str(e),
+            )
             return
         self.after_save(values)
         self._snapshot = self._collect()
@@ -347,11 +371,13 @@ class ToolPage(BasePage):
         if not self._dirty:
             return
         confirmed, _ = ConfirmDialog.ask(
-            self, "Bỏ thay đổi",
-            "Mọi thay đổi bạn vừa chỉnh sẽ quay về giá trị đã lưu lần trước. "
-            "Bạn có chắc không?",
-            kind="warning", confirm_label="Bỏ thay đổi",
-            cancel_label="Giữ lại")
+            self,
+            "Bỏ thay đổi",
+            "Mọi thay đổi bạn vừa chỉnh sẽ quay về giá trị đã lưu lần trước. Bạn có chắc không?",
+            kind="warning",
+            confirm_label="Bỏ thay đổi",
+            cancel_label="Giữ lại",
+        )
         if not confirmed:
             return
         for item in self.fields():
@@ -385,9 +411,8 @@ def paint_color(button, hex_color: str) -> None:
 
     button.setText(hex_color)
     color = QColor(hex_color)
-    luminance = (0.299 * color.red() + 0.587 * color.green()
-                 + 0.114 * color.blue())
+    luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
     text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
     button.setStyleSheet(
-        f"QPushButton#ghost {{ background: {hex_color}; "
-        f"color: {text_color}; font-weight: 600; }}")
+        f"QPushButton#ghost {{ background: {hex_color}; color: {text_color}; font-weight: 600; }}"
+    )

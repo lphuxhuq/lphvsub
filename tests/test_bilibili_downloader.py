@@ -1,13 +1,12 @@
 """Tests for Bilibili and general video downloader improvements."""
+
 import os
-import tempfile
-import pytest
 
 from autodub.media.downloader import (
-    normalize_url,
     _get_optimized_opts,
     _is_partial_name,
     _resolve_filepath,
+    normalize_url,
 )
 
 
@@ -84,8 +83,7 @@ def test_download_one_isolated_moves_file_and_meta(tmp_path, monkeypatch):
     """Isolated download: file + video_meta.json về output_dir, tmp được dọn."""
     from autodub.media import downloader
 
-    def fake_download_one(url, output_dir, cookies_from_browser=None,
-                          cookies_file=None):
+    def fake_download_one(url, output_dir, cookies_from_browser=None, cookies_file=None):
         tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
         video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
         with open(video, "w") as f:
@@ -98,18 +96,17 @@ def test_download_one_isolated_moves_file_and_meta(tmp_path, monkeypatch):
 
     monkeypatch.setattr(downloader, "download_one", fake_download_one)
     entry = downloader.download_one_isolated(
-        "https://www.bilibili.com/video/BV1xx411c7mD", str(tmp_path))
+        "https://www.bilibili.com/video/BV1xx411c7mD", str(tmp_path)
+    )
 
     dst = os.path.join(str(tmp_path), "BiliBili_BV1xx411c7mD.mp4")
     assert entry["filepath"] == dst
     assert os.path.isfile(dst)
-    assert os.path.isfile(os.path.join(str(tmp_path), "data",
-                                       "video_meta.json"))
+    assert os.path.isfile(os.path.join(str(tmp_path), "data", "video_meta.json"))
     assert not os.path.exists(os.path.join(str(tmp_path), ".dl_tmp"))
 
 
-def test_download_one_isolated_name_collision_no_overwrite(tmp_path,
-                                                           monkeypatch):
+def test_download_one_isolated_name_collision_no_overwrite(tmp_path, monkeypatch):
     """Trùng tên (tải lại cùng video) → hậu tố thời gian, không ghi đè."""
     from autodub.media import downloader
 
@@ -117,8 +114,7 @@ def test_download_one_isolated_name_collision_no_overwrite(tmp_path,
     with open(existing, "w") as f:
         f.write("old")
 
-    def fake_download_one(url, output_dir, cookies_from_browser=None,
-                          cookies_file=None):
+    def fake_download_one(url, output_dir, cookies_from_browser=None, cookies_file=None):
         tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
         video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
         with open(video, "w") as f:
@@ -129,8 +125,8 @@ def test_download_one_isolated_name_collision_no_overwrite(tmp_path,
     entry = downloader.download_one_isolated("https://x", str(tmp_path))
 
     with open(existing) as f:
-        assert f.read() == "old"          # bản gốc còn nguyên
-    assert os.path.isfile(entry["filepath"])   # bản mới bên cạnh, tên khác
+        assert f.read() == "old"  # bản gốc còn nguyên
+    assert os.path.isfile(entry["filepath"])  # bản mới bên cạnh, tên khác
     assert entry["filepath"] != existing
 
 
@@ -180,18 +176,21 @@ def test_resolve_filepath_direct_and_multipart(tmp_path):
 
 def test_update_ytdlp_success(monkeypatch):
     from autodub.media.downloader import update_ytdlp
+
     class Ok:
         returncode = 0
         stderr = ""
+
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: Ok())
     assert update_ytdlp() is True
 
 
 def test_update_ytdlp_failure(monkeypatch):
     from autodub.media.downloader import update_ytdlp
+
     class Bad:
         returncode = 1
         stderr = "error"
+
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: Bad())
     assert update_ytdlp() is False
-

@@ -10,12 +10,13 @@ Port từ VoxCraftRecap ai_movie_review.py — giữ nguyên cách vận hành:
 - internal error → gửi lại trên cùng trang, rồi mở chat mới
 - stable_ticks >= 3 + Stop button ẩn → trả kết quả
 """
+
 from __future__ import annotations
 
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from autodub.languages import TargetLang
 from autodub.progress import ProgressReporter
@@ -27,7 +28,6 @@ from autodub.text.translate_direct import (
 )
 from autodub.text.translate_hint import (
     annotate_slots,
-    build_translation_prompt,
     context_note,
     context_payload,
     effective_cps,
@@ -68,7 +68,7 @@ def _safe_extract_page_text(page) -> str:
                 // 1. Tìm turn chat model cuối cùng
                 const modelTurns = document.querySelectorAll('ms-chat-turn:not(.user-turn), .model-turn, .chat-turn.model, ms-chat-turn:last-child');
                 const targetTurn = modelTurns.length > 0 ? modelTurns[modelTurns.length - 1] : document.body;
-                
+
                 if (targetTurn) {
                     // Thử tìm các node markdown / code không nằm trong thoughts
                     const mdNodes = targetTurn.querySelectorAll('ms-cmark-node, markdown, .rendered-markdown, pre code, .model-response-text');
@@ -108,14 +108,27 @@ def _safe_extract_page_text(page) -> str:
         return str(text or "")
     except Exception as exc:
         err_lower = str(exc).lower()
-        if any(k in err_lower for k in ("target closed", "browser has been closed", "connection closed", "crashed")):
+        if any(
+            k in err_lower
+            for k in ("target closed", "browser has been closed", "connection closed", "crashed")
+        ):
             raise RuntimeError(f"Cửa sổ Chrome (AI Studio) đã bị crash hoặc đóng: {exc}") from exc
         try:
             return page.locator("body").inner_text(timeout=5000)
         except Exception as exc2:
             err2 = str(exc2).lower()
-            if any(k in err2 for k in ("target closed", "browser has been closed", "connection closed", "crashed")):
-                raise RuntimeError(f"Cửa sổ Chrome (AI Studio) đã bị crash hoặc đóng: {exc2}") from exc2
+            if any(
+                k in err2
+                for k in (
+                    "target closed",
+                    "browser has been closed",
+                    "connection closed",
+                    "crashed",
+                )
+            ):
+                raise RuntimeError(
+                    f"Cửa sổ Chrome (AI Studio) đã bị crash hoặc đóng: {exc2}"
+                ) from exc2
             return ""
 
 
@@ -175,7 +188,7 @@ def _count_google_cookies(cookie_db: str) -> int:
         try:
             os.remove(tmp_db)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong translate_browser.py", exc_info=True)
 
 
 def check_login_status(profile_dir: str | None = None, timeout_s: int = 15) -> dict:
@@ -210,17 +223,19 @@ def check_login_status(profile_dir: str | None = None, timeout_s: int = 15) -> d
 def _save_login_status(logged_in: bool) -> None:
     try:
         from autodub_gui.env_store import read_env, write_env
+
         env = read_env()
         new_val = "true" if logged_in else "false"
         if env.get("AI_STUDIO_LOGGED_IN") != new_val:
             write_env({"AI_STUDIO_LOGGED_IN": new_val})
     except Exception:
-        pass
+        logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
 
 
 def get_cached_login_status() -> str:
     try:
         from autodub_gui.env_store import read_env
+
         return read_env().get("AI_STUDIO_LOGGED_IN", "")
     except Exception:
         return ""
@@ -233,12 +248,15 @@ def _kill_orphaned_chrome_for_profile(profile_dir: str) -> None:
     norm_profile = os.path.normpath(profile_dir).lower()
     try:
         import subprocess
+
         ps_cmd = (
             f"Get-WmiObject Win32_Process -Filter \"name = 'chrome.exe'\" | "
             f"Where-Object {{ $_.CommandLine -like '*{norm_profile}*' }} | "
             f"ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
         )
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=8)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=8
+        )
     except Exception as e:
         logger.debug(f"Dọn dẹp Chrome profile mồ côi lỗi: {e}")
 
@@ -264,6 +282,7 @@ class AiStudioBrowserClient:
         os.makedirs(self.profile_dir, exist_ok=True)
         # Mặc định KHÔNG ẨN CỬA SỔ (hide_window=False) để người dùng nhìn thấy cửa sổ chọn tài khoản Google
         from autodub_gui.env_store import read_env
+
         env_hide = read_env().get("AI_STUDIO_HIDE_WINDOW", "false").lower() in ("1", "true", "yes")
         self.hide_window = bool(hide_window or headless or env_hide)
         self._playwright = None
@@ -271,10 +290,15 @@ class AiStudioBrowserClient:
         self._page = None
 
     def _ensure_playwright(self):
-        if self._playwright is not None and self._browser_context is not None and not self._page.is_closed():
+        if (
+            self._playwright is not None
+            and self._browser_context is not None
+            and not self._page.is_closed()
+        ):
             return
         if self._playwright is None:
             from playwright.sync_api import sync_playwright
+
             self._playwright = sync_playwright().start()
         if self._browser_context is None:
             args = list(CHROME_ANTI_CRASH_ARGS)
@@ -290,7 +314,9 @@ class AiStudioBrowserClient:
                 )
             except Exception as ex:
                 if "ProcessSingleton" in str(ex) or "already in use" in str(ex):
-                    logger.warning("Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng...")
+                    logger.warning(
+                        "Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng..."
+                    )
                     _kill_orphaned_chrome_for_profile(self.profile_dir)
                     time.sleep(1.0)
                     self._browser_context = self._playwright.chromium.launch_persistent_context(
@@ -309,8 +335,9 @@ class AiStudioBrowserClient:
 
     def open_login_window(self) -> None:
         from playwright.sync_api import sync_playwright
+
         pw = sync_playwright().start()
-        args = list(CHROME_ANTI_CRASH_ARGS) + ["--window-size=1200,850", "--window-position=80,80"]
+        args = [*CHROME_ANTI_CRASH_ARGS, "--window-size=1200,850", "--window-position=80,80"]
         try:
             ctx = pw.chromium.launch_persistent_context(
                 user_data_dir=self.profile_dir,
@@ -319,7 +346,9 @@ class AiStudioBrowserClient:
             )
         except Exception as ex:
             if "ProcessSingleton" in str(ex) or "already in use" in str(ex):
-                logger.warning("Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng...")
+                logger.warning(
+                    "Profile Chrome đang bị chiếm dụng bởi phiên cũ — đang giải phóng..."
+                )
                 _kill_orphaned_chrome_for_profile(self.profile_dir)
                 time.sleep(1.0)
                 ctx = pw.chromium.launch_persistent_context(
@@ -337,7 +366,7 @@ class AiStudioBrowserClient:
             try:
                 page.goto(AI_STUDIO_URL, wait_until="commit", timeout=60000)
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         logger.info(
             "Đã mở cửa sổ đăng nhập — hãy đăng nhập Google, "
             "chọn model Flash miễn phí (2.5 Flash / 2.0 Flash / 1.5 Flash), "
@@ -355,11 +384,11 @@ class AiStudioBrowserClient:
             try:
                 ctx.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
             try:
                 pw.stop()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
             if _has_google_session(self.profile_dir):
                 _save_login_status(True)
 
@@ -372,13 +401,13 @@ class AiStudioBrowserClient:
             try:
                 fresh.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
             raise
         try:
             if not self._page.is_closed():
                 self._page.close()
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         self._page = fresh
 
     def _wait_login(self, timeout_s: int = 120) -> None:
@@ -433,12 +462,10 @@ class AiStudioBrowserClient:
                     editor = loc
                     break
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         if not editor:
             try:
-                self._page.wait_for_selector(
-                    "textarea, div[contenteditable='true']", timeout=15000
-                )
+                self._page.wait_for_selector("textarea, div[contenteditable='true']", timeout=15000)
                 editor = self._page.locator("textarea, div[contenteditable='true']").first
             except Exception as exc:
                 raise RuntimeError(
@@ -484,7 +511,7 @@ class AiStudioBrowserClient:
             if len(val.strip()) >= int(len(prompt) * 0.9):
                 filled = True
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
 
         # Method 2: Playwright fill or keyboard chunked insert
         if not filled:
@@ -498,9 +525,7 @@ class AiStudioBrowserClient:
                     self._page.keyboard.press("Backspace")
                     block_size = 10000
                     for offset in range(0, len(prompt), block_size):
-                        self._page.keyboard.insert_text(
-                            prompt[offset : offset + block_size]
-                        )
+                        self._page.keyboard.insert_text(prompt[offset : offset + block_size])
                         time.sleep(0.05)
                     filled = True
             except Exception:
@@ -511,23 +536,23 @@ class AiStudioBrowserClient:
         entered = editor.evaluate("el => el.value || el.innerText || ''")
         if len(entered.strip()) < int(len(prompt) * 0.9):
             try:
-                self._page.evaluate(
-                    "text => navigator.clipboard.writeText(text)", prompt
-                )
+                self._page.evaluate("text => navigator.clipboard.writeText(text)", prompt)
                 editor.focus()
                 self._page.keyboard.press("Control+A")
                 self._page.keyboard.press("Control+V")
                 time.sleep(1.0)
                 entered = editor.evaluate("el => el.value || el.innerText || ''")
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
 
         if len(entered.strip()) < int(len(prompt) * 0.8):
             raise RuntimeError(
                 f"Ô nhập AI Studio không khớp prompt ({len(entered.strip())}/{len(prompt)} ký tự)."
             )
 
-        logger.info("Đã điền đủ %s ký tự. Đang kích hoạt gửi prompt...", f"{len(entered.strip()):,}")
+        logger.info(
+            "Đã điền đủ %s ký tự. Đang kích hoạt gửi prompt...", f"{len(entered.strip()):,}"
+        )
         return editor
 
     def _submit_prompt(self, prompt: str) -> None:
@@ -561,7 +586,7 @@ class AiStudioBrowserClient:
                         started = True
                         break
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
 
         if not started:
             for btn_sel in self._RUN_SELECTORS:
@@ -571,7 +596,7 @@ class AiStudioBrowserClient:
                         btn.click()
                         break
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
 
         for tick in range(30):
             time.sleep(0.5)
@@ -581,7 +606,7 @@ class AiStudioBrowserClient:
                         started = True
                         break
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
             if started:
                 break
             try:
@@ -607,7 +632,7 @@ class AiStudioBrowserClient:
                 if self._page.locator(sel).first.is_visible():
                     return True
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         return False
 
     def _extract_response_text(self, full_text: str, prompt: str) -> str:
@@ -642,9 +667,7 @@ class AiStudioBrowserClient:
 
         has_internal_error = False
         try:
-            err_banner = self._page.locator(
-                "mat-error, .error-banner, div[role='alert']"
-            ).first
+            err_banner = self._page.locator("mat-error, .error-banner, div[role='alert']").first
             if err_banner.is_visible(timeout=100):
                 err_txt = err_banner.inner_text().lower()
                 if "rate limit" in err_txt or "quota" in err_txt:
@@ -654,7 +677,7 @@ class AiStudioBrowserClient:
                 if "permission" in err_txt or "denied" in err_txt:
                     return "permission_denied"
         except Exception:
-            pass
+            logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         if (
             not has_internal_error
             and len(response_text) < 300
@@ -667,15 +690,24 @@ class AiStudioBrowserClient:
             return "permission_denied"
         return None
 
-    def translate_batch(self, system_prompt: str, user_prompt: str,
-                        max_wait_secs: int = 600, max_retries: int = 3) -> str:
+    def translate_batch(
+        self, system_prompt: str, user_prompt: str, max_wait_secs: int = 600, max_retries: int = 3
+    ) -> str:
         full_prompt = f"{system_prompt}\n\n{user_prompt}\n\n{PROMPT_END_MARKER}"
 
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    logger.info("  ↻ Thử lại lần %d/%d — khởi động lại AI Studio...", attempt + 1, max_retries)
-                    if self._browser_context is None or self._page is None or self._page.is_closed():
+                    logger.info(
+                        "  ↻ Thử lại lần %d/%d — khởi động lại AI Studio...",
+                        attempt + 1,
+                        max_retries,
+                    )
+                    if (
+                        self._browser_context is None
+                        or self._page is None
+                        or self._page.is_closed()
+                    ):
                         self.close()
                         self._ensure_playwright()
                     else:
@@ -702,7 +734,9 @@ class AiStudioBrowserClient:
                         logger.warning("  ⚠ AI Studio báo permission denied — mở chat mới...")
                         break
                     if "rate limit" in lower_text or "reached your rate limit" in lower_text:
-                        logger.warning("  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại...")
+                        logger.warning(
+                            "  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại..."
+                        )
                         time.sleep(15)
                         break
 
@@ -715,7 +749,9 @@ class AiStudioBrowserClient:
                         try:
                             self._submit_prompt(full_prompt)
                         except Exception:
-                            pass
+                            logger.debug(
+                                "Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True
+                            )
                         started_at = time.time()
                         stable_ticks = 0
                         last_response_len = -1
@@ -724,13 +760,13 @@ class AiStudioBrowserClient:
                         logger.warning("  ⚠ AI Studio báo permission denied — mở chat mới...")
                         break
                     if err == "rate_limit":
-                        logger.warning("  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại...")
+                        logger.warning(
+                            "  ⚠ AI Studio báo Rate Limit (quá tải) — chờ 15s rồi thử lại..."
+                        )
                         time.sleep(15)
                         break
                     if err == "prohibited":
-                        raise TranslateError(
-                            "Nội dung bị bộ lọc an toàn của AI Studio chặn."
-                        )
+                        raise TranslateError("Nội dung bị bộ lọc an toàn của AI Studio chặn.")
 
                     if response_text and len(response_text) > 30:
                         current_len = len(response_text)
@@ -740,8 +776,12 @@ class AiStudioBrowserClient:
                             stable_ticks = 0
                         last_response_len = current_len
 
-                        has_json = ("[" in response_text and "{" in response_text) or '{"segments"' in response_text or "```" in response_text
-                        is_closed_json = ("]" in response_text or "}" in response_text)
+                        has_json = (
+                            ("[" in response_text and "{" in response_text)
+                            or '{"segments"' in response_text
+                            or "```" in response_text
+                        )
+                        is_closed_json = "]" in response_text or "}" in response_text
 
                         # Nếu đã có cấu trúc JSON hợp lệ và không còn generating hoặc ổn định:
                         if has_json:
@@ -753,9 +793,15 @@ class AiStudioBrowserClient:
                                 return response_text
 
             except Exception as e:
-                logger.warning("  ✗ Lỗi trong lúc xử lý AI Studio (lần %d/%d): %s", attempt + 1, max_retries, e)
+                logger.warning(
+                    "  ✗ Lỗi trong lúc xử lý AI Studio (lần %d/%d): %s", attempt + 1, max_retries, e
+                )
                 # Tự dọn dẹp browser nếu bị crash để lượt sau khởi tạo lại sạch sẽ
-                if "crash" in str(e).lower() or "closed" in str(e).lower() or (self._page and self._page.is_closed()):
+                if (
+                    "crash" in str(e).lower()
+                    or "closed" in str(e).lower()
+                    or (self._page and self._page.is_closed())
+                ):
                     self.close()
                 if attempt + 1 >= max_retries:
                     raise
@@ -773,19 +819,15 @@ class AiStudioBrowserClient:
             try:
                 self._browser_context.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         if self._playwright:
             try:
                 self._playwright.stop()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong translate_browser.py", exc_info=True)
         self._browser_context = None
         self._playwright = None
         self._page = None
-
-
-
-
 
 
 def _phonetic_glossary_lines() -> str:
@@ -799,10 +841,10 @@ def _phonetic_glossary_lines() -> str:
 
 
 def _build_single_user_prompt(
-    segments: List[dict],
+    segments: list[dict],
     target: TargetLang,
     cps: float,
-    context_segs: List[dict],
+    context_segs: list[dict],
 ) -> str:
     payload_items = [payload_segment(s, cps_budget=cps) for s in segments]
     user_lines = []
@@ -821,12 +863,14 @@ def _build_single_user_prompt(
         f"{json.dumps(payload_items, ensure_ascii=False)}"
     )
     return "\n".join(user_lines)
+
+
 def _apply_translated_map(
-    batch: List[dict],
-    translated_items: List[dict],
+    batch: list[dict],
+    translated_items: list[dict],
     target: TargetLang,
     fallback_text_field: str = "text",
-) -> List[dict]:
+) -> list[dict]:
     trans_map = {
         item["id"]: item[target.text_field]
         for item in translated_items
@@ -868,13 +912,13 @@ NGUYÊN TẮC BẮT BUỘC:
 
 
 def translate_segments_browser(
-    segments: List[dict],
+    segments: list[dict],
     target: TargetLang,
     source_lang: str,
     settings: Any,
-    reporter: Optional[ProgressReporter] = None,
-    checkpoint_path: Optional[str] = None,
-) -> List[dict]:
+    reporter: ProgressReporter | None = None,
+    checkpoint_path: str | None = None,
+) -> list[dict]:
     """Dịch toàn bộ các câu thoại qua Google AI Studio bằng trình duyệt (Playwright)."""
     annotate_slots(segments)
     cps = effective_cps(settings)
@@ -898,13 +942,15 @@ def translate_segments_browser(
 
     logger.info(
         "Bắt đầu dịch qua Google AI Studio (trình duyệt) %d câu — single_chat=%s (headless=%s)...",
-        len(segments), single_chat, headless,
+        len(segments),
+        single_chat,
+        headless,
     )
     if reporter:
         reporter.emit("translate", "start", detail=f"0/{len(segments)} câu (AI Studio)")
 
     client = AiStudioBrowserClient(profile_dir=profile_dir, headless=headless)
-    translated_segments_map: Dict[int, dict] = {}
+    translated_segments_map: dict[int, dict] = {}
     t_trans_start = time.time()
 
     # Restore checkpoint
@@ -941,7 +987,7 @@ def translate_segments_browser(
                 user_prompt = _build_single_user_prompt(chunk, target, cps, context_segs)
 
                 # Retry loop cho riêng từng chunk nếu AI Studio trả về văn bản hội thoại/lỗi JSON
-                translated_items: List[dict] = []
+                translated_items: list[dict] = []
                 for try_i in range(3):
                     try:
                         if try_i > 0:
@@ -951,8 +997,12 @@ def translate_segments_browser(
                                 chunk[-1]["id"],
                                 try_i + 1,
                             )
-                        raw_reply = client.translate_batch(system_prompt, user_prompt, max_wait_secs=180)
-                        translated_items = parse_response_segments(raw_reply, text_field=target.text_field)
+                        raw_reply = client.translate_batch(
+                            system_prompt, user_prompt, max_wait_secs=180
+                        )
+                        translated_items = parse_response_segments(
+                            raw_reply, text_field=target.text_field
+                        )
                         if translated_items:
                             break
                     except Exception as e:
@@ -980,7 +1030,7 @@ def translate_segments_browser(
                     )
         else:
             # Batch mode (legacy)
-            batches: List[Tuple[int, List[dict], int]] = []
+            batches: list[tuple[int, list[dict], int]] = []
             for i in range(0, len(segments), batch_size):
                 b_idx = (i // batch_size) + 1
                 batches.append((b_idx, segments[i : i + batch_size], i))
@@ -998,7 +1048,11 @@ def translate_segments_browser(
                 seg_ids = [s["id"] for s in batch]
                 logger.info(
                     "  ▶ Lô %d/%d bắt đầu (%d câu: %s..%s)",
-                    b_idx, total_batches, len(batch), seg_ids[0], seg_ids[-1],
+                    b_idx,
+                    total_batches,
+                    len(batch),
+                    seg_ids[0],
+                    seg_ids[-1],
                 )
                 _t0 = time.time()
 
@@ -1017,7 +1071,7 @@ def translate_segments_browser(
                 )
                 user_prompt = "\n".join(user_lines)
 
-                translated_items: List[dict] = []
+                translated_items: list[dict] = []
                 last_err = None
                 for try_i in range(2):
                     try:
@@ -1047,25 +1101,31 @@ def translate_segments_browser(
                 elapsed = time.time() - _t0
                 logger.info(
                     "  ✓ Lô %d/%d hoàn thành — %.1fs",
-                    b_idx, total_batches, elapsed,
+                    b_idx,
+                    total_batches,
+                    elapsed,
                 )
                 if reporter:
                     reporter.emit(
-                        "translate", "progress",
-                        detail=f"{len(translated_segments_map)}/{len(segments)} câu"
+                        "translate",
+                        "progress",
+                        detail=f"{len(translated_segments_map)}/{len(segments)} câu",
                     )
 
             # Tự động sinh tiêu đề, mô tả, hashtag qua AI Studio (tái sử dụng tab chat đang mở)
             if getattr(settings, "generate_metadata", True) and checkpoint_path:
                 try:
                     work_dir = os.path.dirname(os.path.dirname(os.path.abspath(checkpoint_path)))
-                    from autodub.workdir import youtube_dir, load_video_meta
+                    from autodub.workdir import load_video_meta, youtube_dir
+
                     yt_dir = youtube_dir(work_dir, create=True)
                     yt_meta_file = os.path.join(yt_dir, "youtube_metadata.json")
                     if not os.path.exists(yt_meta_file):
                         logger.info("Đang tạo tiêu đề, mô tả, hashtag qua Google AI Studio...")
                         script_trans = " ".join(
-                            str(translated_segments_map.get(s["id"], s).get(target.text_field, "")).strip()
+                            str(
+                                translated_segments_map.get(s["id"], s).get(target.text_field, "")
+                            ).strip()
                             for s in segments
                             if translated_segments_map.get(s["id"], s).get(target.text_field)
                         )
@@ -1108,16 +1168,26 @@ Bắt buộc trả về đúng DUY NHẤT định dạng JSON sau:
 }}
 Chỉ trả về JSON thuần túy."""
                         raw_meta = client.translate_batch("", post_prompt, max_wait_secs=90)
-                        from autodub.text.translate_direct import _slice_to_payload, _strip_fences_and_citations
+                        from autodub.text.translate_direct import (
+                            _slice_to_payload,
+                            _strip_fences_and_citations,
+                        )
+
                         clean_meta = _strip_fences_and_citations(raw_meta)
                         meta_data = json.loads(_slice_to_payload(clean_meta))
                         if isinstance(meta_data, dict) and "title" in meta_data:
-                            from autodub.content.generator import _clean_social_metadata, _write_post_file
+                            from autodub.content.generator import (
+                                _clean_social_metadata,
+                                _write_post_file,
+                            )
+
                             meta_data = _clean_social_metadata(meta_data, script_trans)
                             with open(yt_meta_file, "w", encoding="utf-8") as f:
                                 json.dump(meta_data, f, ensure_ascii=False, indent=2)
                             _write_post_file(os.path.join(yt_dir, "youtube_post.txt"), meta_data)
-                            logger.info(f"Đã tạo xong tiêu đề, mô tả AI Studio: «{meta_data.get('title', '')[:50]}»")
+                            logger.info(
+                                f"Đã tạo xong tiêu đề, mô tả AI Studio: «{meta_data.get('title', '')[:50]}»"
+                            )
                 except Exception as e:
                     logger.warning(f"Tạo tiêu đề/mô tả qua AI Studio không thành công ({e})")
 
@@ -1172,7 +1242,7 @@ Chỉ trả về JSON thuần túy."""
         try:
             os.remove(checkpoint_path)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong translate_browser.py", exc_info=True)
 
     total_elapsed = time.time() - t_trans_start
     if reporter:

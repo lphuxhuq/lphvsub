@@ -8,36 +8,47 @@ Cho phép:
 - Tùy biến Tiêu đề trên, Tiêu đề dưới, Huy hiệu (Badge), Phong cách (Preset) và Tỷ lệ (16:9 / 9:16).
 - Lưu tệp hoàn chỉnh vào thư mục `youtube/` và cập nhật metadata đồng nhất.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import tempfile
 import time
-from PIL import Image
 
-from PySide6.QtCore import QSize, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PIL import Image
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog,
-    QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QScrollArea, QSlider, QSplitter, QTextEdit, QVBoxLayout, QWidget,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QScrollArea,
+    QSlider,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub.media.thumbnail import (
-    PRESETS,
     detect_badge_from_context,
     extract_frame_at_timestamp,
     extract_info_from_link_or_text,
     find_best_frame,
     get_video_duration,
     render_thumbnail,
-    score_frame_quality,
 )
 from autodub.workdir import load_social_metadata, save_social_metadata
 from autodub_gui import tokens
 from autodub_gui.ui.buttons import GhostButton, PrimaryButton
-from autodub_gui.ui.inputs import LabeledCombo, polish_combo
+from autodub_gui.ui.inputs import polish_combo
 from autodub_gui.ui.toast import TOASTS
 
 
@@ -53,6 +64,7 @@ def _format_time(sec: float) -> str:
 
 class _FrameExtractWorker(QThread):
     """Trích xuất frame ngầm ngoài UI thread để không giật lag."""
+
     frame_ready = Signal(str, float)
     failed = Signal(str)
 
@@ -72,6 +84,7 @@ class _FrameExtractWorker(QThread):
 
 class _AutoBestFrameWorker(QThread):
     """Tìm frame đẹp nhất chạy ngầm."""
+
     best_frame_found = Signal(str, float)
     failed = Signal(str)
 
@@ -106,7 +119,9 @@ class ThumbnailStudioDialog(QDialog):
         super().__init__(parent)
         self._work_dir = work_dir
         self._video_path = video_path
-        self._duration_sec = get_video_duration(video_path) if (video_path and os.path.exists(video_path)) else 30.0
+        self._duration_sec = (
+            get_video_duration(video_path) if (video_path and os.path.exists(video_path)) else 30.0
+        )
         self._custom_frame_path: str | None = None
         self._current_frame_path: str | None = None
         self._frame_cache: dict[int, str] = {}
@@ -204,7 +219,9 @@ class ThumbnailStudioDialog(QDialog):
         frame_btn_row.setSpacing(tokens.SP_2)
 
         self.btn_auto_frame = GhostButton("Auto chọn frame đẹp")
-        self.btn_auto_frame.setToolTip("Quét toàn bộ video và tự nhảy tới khung hình sắc nét, bắt mắt nhất.")
+        self.btn_auto_frame.setToolTip(
+            "Quét toàn bộ video và tự nhảy tới khung hình sắc nét, bắt mắt nhất."
+        )
         self.btn_auto_frame.clicked.connect(self._auto_pick_best_frame)
         frame_btn_row.addWidget(self.btn_auto_frame)
 
@@ -274,7 +291,12 @@ class ThumbnailStudioDialog(QDialog):
         # Quick chips chọn nhanh cho Video dài & Tập lẻ
         chip_row1 = QHBoxLayout()
         chip_row1.setSpacing(tokens.SP_1)
-        for label, val in [("1-100", "1-100"), ("FULL 1-100", "FULL 1-100"), ("TRỌN BỘ", "TRỌN BỘ"), ("1-50", "1-50")]:
+        for label, val in [
+            ("1-100", "1-100"),
+            ("FULL 1-100", "FULL 1-100"),
+            ("TRỌN BỘ", "TRỌN BỘ"),
+            ("1-50", "1-50"),
+        ]:
             b = GhostButton(label)
             b.clicked.connect(lambda _c=False, v=val: self.input_badge.setText(v))
             chip_row1.addWidget(b)
@@ -294,7 +316,9 @@ class ThumbnailStudioDialog(QDialog):
         chip_row2.addWidget(btn_detect)
 
         btn_paste_link = GhostButton("Dán link...")
-        btn_paste_link.setToolTip("Dán trực tiếp liên kết YouTube, Bilibili, Douyin hoặc tiêu đề để tự động nhận diện tập và ảnh")
+        btn_paste_link.setToolTip(
+            "Dán trực tiếp liên kết YouTube, Bilibili, Douyin hoặc tiêu đề để tự động nhận diện tập và ảnh"
+        )
         btn_paste_link.clicked.connect(self._prompt_detect_from_link)
         chip_row2.addWidget(btn_paste_link)
         chip_row2.addStretch()
@@ -370,7 +394,9 @@ class ThumbnailStudioDialog(QDialog):
         soc_copy_row.addWidget(self.btn_copy_caption)
 
         self.btn_copy_tags = GhostButton("Sao chép Hashtag")
-        self.btn_copy_tags.setToolTip("Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard.")
+        self.btn_copy_tags.setToolTip(
+            "Sao chép danh sách hashtags (#shorts #reviewphim...) vào Clipboard."
+        )
         self.btn_copy_tags.clicked.connect(self._copy_tags_to_clipboard)
         soc_copy_row.addWidget(self.btn_copy_tags)
 
@@ -382,7 +408,9 @@ class ThumbnailStudioDialog(QDialog):
         soc_layout.addLayout(soc_copy_row)
 
         self.btn_caption_to_hook = GhostButton("Dùng Caption làm chữ Thumbnail")
-        self.btn_caption_to_hook.setToolTip("Lấy câu mở đầu hoặc tiêu đề từ caption đưa lên chữ ảnh bìa.")
+        self.btn_caption_to_hook.setToolTip(
+            "Lấy câu mở đầu hoặc tiêu đề từ caption đưa lên chữ ảnh bìa."
+        )
         self.btn_caption_to_hook.clicked.connect(self._apply_caption_to_thumbnail)
         soc_layout.addWidget(self.btn_caption_to_hook)
 
@@ -437,7 +465,7 @@ class ThumbnailStudioDialog(QDialog):
         has_saved_badge = False
         if os.path.exists(meta_file):
             try:
-                with open(meta_file, "r", encoding="utf-8") as f:
+                with open(meta_file, encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
                     if data.get("top_title"):
@@ -460,6 +488,7 @@ class ThumbnailStudioDialog(QDialog):
         if not has_saved_badge:
             # Tự động nhận diện từ link / tiêu đề nếu chưa có cấu hình trước đó và có ngữ cảnh nguồn
             from autodub.workdir import load_video_meta
+
             meta = load_video_meta(self._work_dir)
             st = meta.get("title", "")
             su = meta.get("source_url", "") or meta.get("url", "")
@@ -476,10 +505,19 @@ class ThumbnailStudioDialog(QDialog):
                     self.input_badge.setText(auto_badge)
 
         # Tải nội dung đăng bài (Caption & Hashtags)
-        def_t = self.input_bottom.text().strip() or (f"{self.input_top.text()} {self.input_bottom.text()}".strip())
+        def_t = self.input_bottom.text().strip() or (
+            f"{self.input_top.text()} {self.input_bottom.text()}".strip()
+        )
         self._social_cache = load_social_metadata(self._work_dir, default_title=def_t)
-        cap = self._social_cache.get("caption") or self._social_cache.get("tiktok_caption") or self._social_cache.get("description") or ""
-        tags = self._social_cache.get("hashtags_str") or " ".join(self._social_cache.get("hashtags", []))
+        cap = (
+            self._social_cache.get("caption")
+            or self._social_cache.get("tiktok_caption")
+            or self._social_cache.get("description")
+            or ""
+        )
+        tags = self._social_cache.get("hashtags_str") or " ".join(
+            self._social_cache.get("hashtags", [])
+        )
         self.input_caption.setPlainText(cap)
         self.input_tags.setText(tags)
 
@@ -487,15 +525,26 @@ class ThumbnailStudioDialog(QDialog):
         """Đổi mẫu caption và hashtag theo nền tảng được chọn."""
         key = self.combo_platform.currentData() or "tiktok"
         if not hasattr(self, "_social_cache"):
-            def_t = self.input_bottom.text().strip() or (f"{self.input_top.text()} {self.input_bottom.text()}".strip())
+            def_t = self.input_bottom.text().strip() or (
+                f"{self.input_top.text()} {self.input_bottom.text()}".strip()
+            )
             self._social_cache = load_social_metadata(self._work_dir, default_title=def_t)
 
         if key == "tiktok":
-            cap = self._social_cache.get("tiktok_caption") or self._social_cache.get("caption") or ""
-            tags = self._social_cache.get("tiktok_hashtags_str") or self._social_cache.get("hashtags_str") or "#shorts #reviewphim #trending #viral #xuhuong #phimhay"
+            cap = (
+                self._social_cache.get("tiktok_caption") or self._social_cache.get("caption") or ""
+            )
+            tags = (
+                self._social_cache.get("tiktok_hashtags_str")
+                or self._social_cache.get("hashtags_str")
+                or "#shorts #reviewphim #trending #viral #xuhuong #phimhay"
+            )
         elif key == "youtube":
             cap = self._social_cache.get("description") or self._social_cache.get("caption") or ""
-            tags = self._social_cache.get("hashtags_str") or "#shorts #reviewphim #trending #viral #xuhuong #phimhay"
+            tags = (
+                self._social_cache.get("hashtags_str")
+                or "#shorts #reviewphim #trending #viral #xuhuong #phimhay"
+            )
         else:
             cap = self._social_cache.get("caption") or self._social_cache.get("description") or ""
             tags = self._social_cache.get("hashtags_str") or "#reviewphim #phimhay #xuhuong"
@@ -525,7 +574,7 @@ class ThumbnailStudioDialog(QDialog):
         """Sao chép toàn bộ Tiêu đề, Caption và Hashtags vào clipboard."""
         top = self.input_top.text().strip()
         bot = self.input_bottom.text().strip()
-        title = f"{top} - {bot}".strip(" - ") or self.input_bottom.text().strip()
+        title = f"{top} - {bot}".strip().strip("-").strip() or self.input_bottom.text().strip()
         cap = self.input_caption.toPlainText().strip()
         tags = self.input_tags.text().strip()
 
@@ -571,6 +620,7 @@ class ThumbnailStudioDialog(QDialog):
     def _step_episode(self, delta: int) -> None:
         """Tăng hoặc giảm số tập nhanh."""
         import re
+
         curr = self.input_badge.text().strip()
         range_m = re.match(r"^(\d+)\s*[-–~]\s*(\d+)$", curr)
         if range_m:
@@ -585,8 +635,8 @@ class ThumbnailStudioDialog(QDialog):
         if num_m:
             num = int(num_m.group(0))
             new_num = max(1, num + delta)
-            prefix = curr[:num_m.start()]
-            suffix = curr[num_m.end():]
+            prefix = curr[: num_m.start()]
+            suffix = curr[num_m.end() :]
             self.input_badge.setText(f"{prefix}{new_num}{suffix}")
             return
 
@@ -595,10 +645,14 @@ class ThumbnailStudioDialog(QDialog):
 
     def _prompt_detect_from_link(self) -> None:
         """Mở hộp thoại cho phép người dùng dán bất kỳ link video hoặc text chia sẻ nào."""
-        from PySide6.QtWidgets import QInputDialog, QApplication
+        from PySide6.QtWidgets import QApplication, QInputDialog
 
         clip_text = QApplication.clipboard().text().strip()
-        default_val = clip_text if ("http" in clip_text or "第" in clip_text or "tập" in clip_text.lower()) else ""
+        default_val = (
+            clip_text
+            if ("http" in clip_text or "第" in clip_text or "tập" in clip_text.lower())
+            else ""
+        )
 
         text, ok = QInputDialog.getText(
             self,
@@ -628,6 +682,7 @@ class ThumbnailStudioDialog(QDialog):
     def _detect_badge_now(self) -> None:
         """Tự động phân tích từ link dự án, tiêu đề và video; nếu chưa có thì mở popup dán link."""
         from autodub.workdir import load_video_meta
+
         meta = load_video_meta(self._work_dir)
         st = meta.get("title", "")
         su = meta.get("source_url", "") or meta.get("url", "")
@@ -712,10 +767,12 @@ class ThumbnailStudioDialog(QDialog):
         worker = _AutoBestFrameWorker(self._video_path, best_dest, self._duration_sec, parent=self)
         worker.best_frame_found.connect(self._on_best_frame_found)
         worker.failed.connect(lambda err: TOASTS.warn(f"Lỗi quét frame: {err}"))
-        worker.finished.connect(lambda: (
-            self.btn_auto_frame.setEnabled(True),
-            self.btn_auto_frame.setText("Auto chọn frame đẹp")
-        ))
+        worker.finished.connect(
+            lambda: (
+                self.btn_auto_frame.setEnabled(True),
+                self.btn_auto_frame.setText("Auto chọn frame đẹp"),
+            )
+        )
         worker.start()
         self._worker = worker
 
@@ -731,8 +788,7 @@ class ThumbnailStudioDialog(QDialog):
 
     def _pick_custom_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn ảnh poster / nhân vật", "",
-            "Hình ảnh (*.png *.jpg *.jpeg *.webp)"
+            self, "Chọn ảnh poster / nhân vật", "", "Hình ảnh (*.png *.jpg *.jpeg *.webp)"
         )
         if not path:
             return
@@ -788,7 +844,8 @@ class ThumbnailStudioDialog(QDialog):
                 target_w = 260 if is_vertical else 460
                 target_h = 460 if is_vertical else 260
                 scaled_pix = pix.scaled(
-                    target_w, target_h,
+                    target_w,
+                    target_h,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -858,6 +915,7 @@ class ThumbnailStudioDialog(QDialog):
 
             # 3. Lưu frame gốc để dùng lại sau
             import shutil
+
             orig_save = os.path.join(yt_dir, "thumbnail_original.jpg")
             if os.path.abspath(frame_to_use) != os.path.abspath(orig_save):
                 shutil.copyfile(frame_to_use, orig_save)
@@ -885,7 +943,11 @@ class ThumbnailStudioDialog(QDialog):
             save_social_metadata(self._work_dir, meta_data)
 
             self.thumbnail_saved.emit(out_16_9)
-            TOASTS.success("Đã lưu xong ảnh bìa Thumbnail (16:9 & 9:16)!", action_label="Mở xem", on_action=self._open_saved_image)
+            TOASTS.success(
+                "Đã lưu xong ảnh bìa Thumbnail (16:9 & 9:16)!",
+                action_label="Mở xem",
+                on_action=self._open_saved_image,
+            )
             self.accept()
         except Exception as e:
             TOASTS.warn(f"Không thể lưu thumbnail: {e}")
@@ -904,6 +966,7 @@ class ThumbnailStudioDialog(QDialog):
 
     def _open_saved_image(self) -> None:
         from autodub_gui.system_open import open_file
+
         yt_dir = os.path.join(self._work_dir, "youtube")
         cand = os.path.join(yt_dir, "thumbnail_landscape.jpg")
         if os.path.exists(cand):

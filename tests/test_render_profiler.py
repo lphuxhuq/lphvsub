@@ -1,5 +1,5 @@
-import pytest
 import time
+
 from autodub.media.render_profiler import RenderProfiler
 
 

@@ -11,6 +11,7 @@ Riêng phần tệp giọng đọc thì không khôi phục được — hoàn t
 sẽ trả lại lời thoại nhưng câu đó cần được đọc lại. Băng nhắc ở trên cùng luôn
 nói rõ điều này.
 """
+
 from __future__ import annotations
 
 import copy
@@ -43,14 +44,13 @@ class _SegmentCommand(QUndoCommand):
         self._before: list[dict] | None = None
         self._failed = False
 
-    def redo(self) -> None:      # noqa: D102 — Qt gọi cả lần đầu lẫn khi làm lại
+    def redo(self) -> None:
         if self._before is None:
             self._before = copy.deepcopy(self._read())
-        position = (self._page.release_video()
-                    if self.releases_video else None)
+        position = self._page.release_video() if self.releases_video else None
         try:
             self._apply()
-        except Exception as e:  # noqa: BLE001 — hiện thành thông báo thân thiện
+        except Exception as e:
             self._failed = True
             self._page.report_error(str(e))
             self._page.restore_video(position)
@@ -58,11 +58,10 @@ class _SegmentCommand(QUndoCommand):
         self._page.reload_segments()
         self._page.restore_video(position)
 
-    def undo(self) -> None:      # noqa: D102 — Qt gọi khi người dùng hoàn tác
+    def undo(self) -> None:
         if self._failed or self._before is None:
             return
-        position = (self._page.release_video()
-                    if self.releases_video else None)
+        position = self._page.release_video() if self.releases_video else None
         self._write(self._before)
         self._page.reload_segments()
         self._page.restore_video(position)
@@ -84,7 +83,7 @@ class _SegmentCommand(QUndoCommand):
 class EditTextCommand(_SegmentCommand):
     """Sửa lời thoại của một câu."""
 
-    releases_video = False   # chỉ sửa chữ, không đụng tệp video
+    releases_video = False  # chỉ sửa chữ, không đụng tệp video
 
     def __init__(self, page, seg_id: int, text: str):
         super().__init__(page, f"Sửa lời thoại câu {seg_id}")
@@ -94,15 +93,15 @@ class EditTextCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import save_segment_texts
 
-        save_segment_texts(self._page.work_dir(), {self._seg_id: self._text},
-                           self._page.target_key())
+        save_segment_texts(
+            self._page.work_dir(), {self._seg_id: self._text}, self._page.target_key()
+        )
 
 
 class AddSegmentCommand(_SegmentCommand):
     """Chèn một câu mới."""
 
-    def __init__(self, page, after_id: int, start: float, end: float,
-                 text: str = ""):
+    def __init__(self, page, after_id: int, start: float, end: float, text: str = ""):
         super().__init__(page, "Thêm câu thoại")
         self._after_id = after_id
         self._start = start
@@ -112,9 +111,14 @@ class AddSegmentCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import add_segment
 
-        add_segment(self._page.work_dir(), self._after_id, self._start,
-                    self._end, self._text,
-                    target_key=self._page.target_key())
+        add_segment(
+            self._page.work_dir(),
+            self._after_id,
+            self._start,
+            self._end,
+            self._text,
+            target_key=self._page.target_key(),
+        )
 
 
 class DeleteSegmentCommand(_SegmentCommand):
@@ -127,8 +131,7 @@ class DeleteSegmentCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import delete_segment
 
-        delete_segment(self._page.work_dir(), self._seg_id,
-                       self._page.target_key())
+        delete_segment(self._page.work_dir(), self._seg_id, self._page.target_key())
 
 
 class SplitSegmentCommand(_SegmentCommand):
@@ -142,8 +145,7 @@ class SplitSegmentCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import split_segment
 
-        split_segment(self._page.work_dir(), self._seg_id, self._at_time,
-                      self._page.target_key())
+        split_segment(self._page.work_dir(), self._seg_id, self._at_time, self._page.target_key())
 
 
 class MergeSegmentCommand(_SegmentCommand):
@@ -156,8 +158,7 @@ class MergeSegmentCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import merge_segments
 
-        merge_segments(self._page.work_dir(), self._seg_ids,
-                       self._page.target_key())
+        merge_segments(self._page.work_dir(), self._seg_ids, self._page.target_key())
 
 
 class MoveSegmentCommand(_SegmentCommand):
@@ -172,5 +173,6 @@ class MoveSegmentCommand(_SegmentCommand):
     def _apply(self) -> None:
         from autodub.editor import set_segment_time
 
-        set_segment_time(self._page.work_dir(), self._seg_id, self._start,
-                         self._end, self._page.target_key())
+        set_segment_time(
+            self._page.work_dir(), self._seg_id, self._start, self._end, self._page.target_key()
+        )

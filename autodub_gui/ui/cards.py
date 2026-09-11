@@ -1,10 +1,17 @@
 """Các loại thẻ dùng ở Trang chủ và trang Dự án của tôi."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
@@ -15,21 +22,26 @@ from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.progress import ThinProgressBar
 from autodub_gui.ui.style import clear_background
 
-THUMB_W, THUMB_H = 96, 54          # ảnh nhỏ trong thẻ "đang xử lý"
+THUMB_W, THUMB_H = 96, 54  # ảnh nhỏ trong thẻ "đang xử lý"
 CARD_THUMB_RATIO = 9 / 16
 _DUR_BADGE_PAD = 6
 _DUR_BADGE_H = 18
 _DUR_BADGE_ALPHA = 184
 _PLAY_ALPHA = 150
 _ACTION_ICON = 28
-_INFO_BLOCK_H = 78                 # phần chữ bên dưới ảnh của thẻ dự án
+_INFO_BLOCK_H = 78  # phần chữ bên dưới ảnh của thẻ dự án
 
 
 class Card(QFrame):
     """Khung thẻ cơ bản: nền tối, viền mờ, bo góc."""
 
-    def __init__(self, parent: QWidget | None = None, *,
-                 padding: int = tokens.SP_4, spacing: int = tokens.SP_3):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        padding: int = tokens.SP_4,
+        spacing: int = tokens.SP_3,
+    ):
         super().__init__(parent)
         self.setObjectName("card")
         self.body = QVBoxLayout(self)
@@ -53,16 +65,14 @@ class Card(QFrame):
 class ThumbnailLabel(QLabel):
     """Ô ảnh đại diện 16:9, bo góc trên, có huy hiệu thời lượng ở góc dưới phải."""
 
-    def __init__(self, parent: QWidget | None = None, *,
-                 round_top_only: bool = True):
+    def __init__(self, parent: QWidget | None = None, *, round_top_only: bool = True):
         super().__init__(parent)
         self._pixmap: QPixmap | None = None
         self._duration = 0.0
         self._round_top_only = round_top_only
         self._show_play = False
         self.setMinimumHeight(int(tokens.CARD_MIN_W * CARD_THUMB_RATIO))
-        self.setSizePolicy(QSizePolicy.Policy.Expanding,
-                           QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         clear_background(self)
 
     def set_thumbnail(self, pixmap: QPixmap | None) -> None:
@@ -81,7 +91,7 @@ class ThumbnailLabel(QLabel):
             self._show_play = shown
             self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -90,8 +100,7 @@ class ThumbnailLabel(QLabel):
         rect = self.rect()
         if self._round_top_only:
             clip.addRoundedRect(rect.adjusted(0, 0, 0, radius), radius, radius)
-            clip.addRect(QRect(rect.left(), rect.bottom() - radius,
-                               rect.width(), radius + 1))
+            clip.addRect(QRect(rect.left(), rect.bottom() - radius, rect.width(), radius + 1))
             clip = clip.simplified()
         else:
             clip.addRoundedRect(rect, radius, radius)
@@ -100,14 +109,16 @@ class ThumbnailLabel(QLabel):
 
         if self._pixmap is not None and not self._pixmap.isNull():
             scaled = self._pixmap.scaled(
-                self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            painter.drawPixmap((self.width() - scaled.width()) // 2,
-                               (self.height() - scaled.height()) // 2, scaled)
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.drawPixmap(
+                (self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled
+            )
         else:
             pixmap = icons.waveform(tokens.TEXT_DISABLED).pixmap(28, 28)
-            painter.drawPixmap((self.width() - 28) // 2,
-                               (self.height() - 28) // 2, pixmap)
+            painter.drawPixmap((self.width() - 28) // 2, (self.height() - 28) // 2, pixmap)
 
         if self._show_play:
             overlay = QColor(0, 0, 0, _PLAY_ALPHA)
@@ -123,9 +134,9 @@ class ThumbnailLabel(QLabel):
             text = format_duration(self._duration)
             metrics = painter.fontMetrics()
             width = metrics.horizontalAdvance(text) + _DUR_BADGE_PAD * 2
-            badge = QRect(self.width() - width - 8,
-                          self.height() - _DUR_BADGE_H - 8,
-                          width, _DUR_BADGE_H)
+            badge = QRect(
+                self.width() - width - 8, self.height() - _DUR_BADGE_H - 8, width, _DUR_BADGE_H
+            )
             path = QPainterPath()
             path.addRoundedRect(badge, 5, 5)
             painter.fillPath(path, QColor(0, 0, 0, _DUR_BADGE_ALPHA))
@@ -137,12 +148,10 @@ class ThumbnailLabel(QLabel):
 class StatCard(QWidget):
     """Ô số liệu: biểu tượng nhỏ, con số và nhãn mô tả."""
 
-    def __init__(self, label: str, icon_fn, color: str,
-                 parent: QWidget | None = None):
+    def __init__(self, label: str, icon_fn, color: str, parent: QWidget | None = None):
         super().__init__(parent)
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_3, tokens.SP_2,
-                                tokens.SP_3, tokens.SP_2)
+        root.setContentsMargins(tokens.SP_3, tokens.SP_2, tokens.SP_3, tokens.SP_2)
         root.setSpacing(2)
         top = QHBoxLayout()
         top.setSpacing(tokens.SP_2)
@@ -152,7 +161,8 @@ class StatCard(QWidget):
         self.value = QLabel("—")
         self.value.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: 15px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         top.addWidget(icon)
         top.addWidget(self.value)
         top.addStretch()
@@ -160,8 +170,8 @@ class StatCard(QWidget):
         caption = QLabel(label)
         caption.setWordWrap(True)
         caption.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; background: transparent;"
+        )
         root.addWidget(caption)
 
     def set_value(self, text: str) -> None:
@@ -221,24 +231,27 @@ class ProcessingCard(Card):
         row = QHBoxLayout()
         row.setSpacing(tokens.SP_3)
         self._thumb = ThumbnailLabel(round_top_only=False)
-        self._thumb.setFixedSize(THUMB_W, THUMB_H)   # chỉ là ảnh, không chứa chữ
+        self._thumb.setFixedSize(THUMB_W, THUMB_H)  # chỉ là ảnh, không chứa chữ
         row.addWidget(self._thumb)
         info = QVBoxLayout()
         info.setSpacing(3)
         self._title = ElidedLabel("")
         self._title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         step_row = QHBoxLayout()
         step_row.setSpacing(tokens.SP_2)
         self._step = ElidedLabel("")
         self._step.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         self._percent = QLabel("0%")
         self._percent.setStyleSheet(
             f"color: {tokens.PRIMARY}; font-size: {tokens.FS_PAGE_TITLE}px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         step_row.addWidget(self._step, 1)
         step_row.addWidget(self._percent)
         info.addWidget(self._title)
@@ -253,8 +266,8 @@ class ProcessingCard(Card):
         foot.setSpacing(tokens.SP_2)
         self._eta = QLabel("")
         self._eta.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         foot.addWidget(self._eta, 1)
         self._btn_details = GhostButton("Xem chi tiết")
         self._btn_details.clicked.connect(self.details_requested.emit)
@@ -275,8 +288,8 @@ class ProcessingCard(Card):
         empty = QLabel("Chưa có dự án nào đang chạy")
         empty.setWordWrap(True)
         empty.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_LABEL}px; background: transparent;"
+        )
         idle.addWidget(empty)
         btn_row = QHBoxLayout()
         btn_new = GhostButton("Tạo dự án mới")
@@ -292,8 +305,14 @@ class ProcessingCard(Card):
         self._busy.setVisible(False)
         self._idle.setVisible(True)
 
-    def show_job(self, title: str, step_label: str, percent: int,
-                 eta_text: str, thumbnail: QPixmap | None = None) -> None:
+    def show_job(
+        self,
+        title: str,
+        step_label: str,
+        percent: int,
+        eta_text: str,
+        thumbnail: QPixmap | None = None,
+    ) -> None:
         """Hiện thông tin công việc đang chạy."""
         self._idle.setVisible(False)
         self._busy.setVisible(True)
@@ -339,15 +358,16 @@ class ProjectCard(QFrame):
         self.title = ElidedLabel("")
         self.title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         layout.addWidget(self.title)
 
         meta = QHBoxLayout()
         meta.setSpacing(tokens.SP_2)
         self.date = QLabel("")
         self.date.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         self.badge = StatusBadge()
         meta.addWidget(self.date, 1)
         meta.addWidget(self.badge)
@@ -366,17 +386,23 @@ class ProjectCard(QFrame):
         )
         for icon, tip, signal in specs:
             btn = IconButton(icon, tip, size=_ACTION_ICON)
-            btn.clicked.connect(
-                lambda _c=False, s=signal: s.emit(self._key))
+            btn.clicked.connect(lambda _c=False, s=signal: s.emit(self._key))
             act.addWidget(btn)
         act.addStretch()
         self.actions.setVisible(False)
         layout.addWidget(self.actions)
         root.addWidget(info)
 
-    def set_project(self, key: str, title: str, date_label: str,
-                    status: str, status_label: str, duration_s: float,
-                    thumbnail: QPixmap | None = None) -> None:
+    def set_project(
+        self,
+        key: str,
+        title: str,
+        date_label: str,
+        status: str,
+        status_label: str,
+        duration_s: float,
+        thumbnail: QPixmap | None = None,
+    ) -> None:
         """Đổ dữ liệu một dự án vào thẻ."""
         self._key = key
         self.title.setText(title)
@@ -393,12 +419,12 @@ class ProjectCard(QFrame):
         """Gắn ảnh đại diện khi luồng nền tạo xong."""
         self.thumb.set_thumbnail(pixmap)
 
-    def enterEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def enterEvent(self, event) -> None:
         self._set_actions_visible(True)
         self.thumb.set_play_overlay(True)
         super().enterEvent(event)
 
-    def leaveEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def leaveEvent(self, event) -> None:
         self._set_actions_visible(False)
         self.thumb.set_play_overlay(False)
         super().leaveEvent(event)
@@ -407,6 +433,7 @@ class ProjectCard(QFrame):
         """Fade actions row in/out with QPropertyAnimation for smooth reveal."""
         from PySide6.QtCore import QPropertyAnimation
         from PySide6.QtWidgets import QGraphicsOpacityEffect
+
         effect = self.actions.graphicsEffect()
         if not isinstance(effect, QGraphicsOpacityEffect):
             effect = QGraphicsOpacityEffect(self.actions)
@@ -419,6 +446,7 @@ class ProjectCard(QFrame):
         anim = QPropertyAnimation(effect, b"opacity", self.actions)
         anim.setDuration(tokens.ANIM_FAST)
         from PySide6.QtCore import QEasingCurve
+
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.setStartValue(effect.opacity())
         anim.setEndValue(1.0 if visible else 0.0)
@@ -427,12 +455,12 @@ class ProjectCard(QFrame):
         self._actions_anim = anim
         anim.start()
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._key)
         super().mousePressEvent(event)
 
-    def sizeHint(self) -> QSize:  # noqa: N802 — theo quy ước của Qt
+    def sizeHint(self) -> QSize:
         width = max(self.width(), tokens.CARD_MIN_W)
         return QSize(width, int(width * CARD_THUMB_RATIO) + _INFO_BLOCK_H)
 
@@ -442,40 +470,46 @@ class QuickStartCard(QFrame):
 
     clicked = Signal()
 
-    def __init__(self, title: str, description: str, icon_fn, color: str,
-                 bg_color: str, parent: QWidget | None = None):
+    def __init__(
+        self,
+        title: str,
+        description: str,
+        icon_fn,
+        color: str,
+        bg_color: str,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self.setObjectName("card")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_4, tokens.SP_4,
-                                tokens.SP_4, tokens.SP_4)
+        root.setContentsMargins(tokens.SP_4, tokens.SP_4, tokens.SP_4, tokens.SP_4)
         root.setSpacing(tokens.SP_2)
 
         icon = QLabel()
         icon.setFixedSize(36, 36)
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setPixmap(icon_fn(color).pixmap(18, 18))
-        icon.setStyleSheet(
-            f"background: {bg_color}; border-radius: 18px;")
+        icon.setStyleSheet(f"background: {bg_color}; border-radius: 18px;")
         root.addWidget(icon)
 
         label = QLabel(title)
         label.setWordWrap(True)
         label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_BODY}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         root.addWidget(label)
 
         caption = QLabel(description)
         caption.setWordWrap(True)
         caption.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         root.addWidget(caption)
         root.addStretch()
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
@@ -501,7 +535,8 @@ class SystemStatusCard(QFrame):
         title.setWordWrap(True)
         title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         root.addWidget(title)
 
         self._values: dict[str, ElidedLabel] = {}
@@ -511,21 +546,21 @@ class SystemStatusCard(QFrame):
             row.setSpacing(tokens.SP_2)
             dot = QLabel("●")
             dot.setStyleSheet(
-                f"color: {tokens.TEXT_DISABLED}; font-size: 9px; "
-                f"background: transparent;")
+                f"color: {tokens.TEXT_DISABLED}; font-size: 9px; background: transparent;"
+            )
             name = QLabel(self.LABELS[key])
             # Nhãn không được co lại, nếu không chữ sẽ bị cắt cụt.
-            name.setSizePolicy(QSizePolicy.Policy.Fixed,
-                               QSizePolicy.Policy.Preferred)
+            name.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
             name.setStyleSheet(
                 f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_BADGE}px; "
-                f"background: transparent;")
+                f"background: transparent;"
+            )
             value = ElidedLabel("đang kiểm tra")
-            value.setAlignment(Qt.AlignmentFlag.AlignRight |
-                               Qt.AlignmentFlag.AlignVCenter)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             value.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; "
-                f"font-size: {tokens.FS_BADGE}px; background: transparent;")
+                f"font-size: {tokens.FS_BADGE}px; background: transparent;"
+            )
             row.addWidget(dot)
             row.addWidget(name)
             row.addWidget(value, 1)
@@ -541,11 +576,9 @@ class SystemStatusCard(QFrame):
         """Cập nhật một dòng: ok True là xanh, False là đỏ, None là vàng."""
         if key not in self._values:
             return
-        color = (tokens.SUCCESS if ok else
-                 tokens.WARNING if ok is None else tokens.DANGER)
+        color = tokens.SUCCESS if ok else tokens.WARNING if ok is None else tokens.DANGER
         self._values[key].setText(text)
-        self._dots[key].setStyleSheet(
-            f"color: {color}; font-size: 9px; background: transparent;")
+        self._dots[key].setStyleSheet(f"color: {color}; font-size: 9px; background: transparent;")
 
     def set_checking(self) -> None:
         """Khóa nút trong lúc đang đọc lại cấu hình."""
@@ -555,7 +588,7 @@ class SystemStatusCard(QFrame):
         """Mở khóa nút khi đã kiểm tra xong."""
         self._btn.set_loading(False)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)

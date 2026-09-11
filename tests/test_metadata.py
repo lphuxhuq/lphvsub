@@ -1,13 +1,10 @@
 import hashlib
-import os
 import struct
-import tempfile
-import pytest
 
 from autodub.media.metadata import (
+    build_clean_metadata_args,
     calculate_file_hash,
     randomize_file_hash,
-    build_clean_metadata_args,
 )
 
 
@@ -49,7 +46,9 @@ def test_randomize_file_hash_changes_hash_and_preserves_content(tmp_path):
     assert len(data_after) == len(orig_content) + expected_box_size
 
     # The appended atom must be an ISO standard 'free' atom
-    atom_size, atom_type = struct.unpack(">I4s", data_after[len(orig_content):len(orig_content) + 8])
+    atom_size, atom_type = struct.unpack(
+        ">I4s", data_after[len(orig_content) : len(orig_content) + 8]
+    )
     assert atom_size == expected_box_size
     assert atom_type == b"free"
 

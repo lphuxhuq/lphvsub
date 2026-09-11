@@ -29,10 +29,10 @@ Xây dựng tính năng **AI Viral Shorts & Reels Clipper** cho phép tự độ
       min_duration: float = 25.0,
       max_duration: float = 65.0,
       max_clips: int = 5,
-      scene_cuts: list[float] | None = None
+      scene_cuts: list[float] | None = None,
   ) -> list[dict]:
       """Phân tích các đoạn kịch bản tìm các mốc cao trào viral.
-      
+
       Trả về danh sách các clip metadata:
       [
           {
@@ -63,11 +63,7 @@ Xây dựng tính năng **AI Viral Shorts & Reels Clipper** cho phép tự độ
 ### Module 2: Subtitle Slicer & Media Clipper Engine (`autodub/media/clipper.py`)
 - **Cắt phụ đề ASS tương ứng**:
   ```python
-  def slice_ass_subtitles(
-      ass_content: str,
-      start_time: float,
-      end_time: float
-  ) -> str:
+  def slice_ass_subtitles(ass_content: str, start_time: float, end_time: float) -> str:
       """Cắt và shift timestamp của các dòng thoại ASS nằm trong khoảng [start_time, end_time]."""
   ```
 - **Xuất video Shorts 9:16**:
@@ -81,7 +77,7 @@ Xây dựng tính năng **AI Viral Shorts & Reels Clipper** cho phép tự độ
       output_path: str,
       aspect_preset: str = "tiktok_9_16",
       reframe_mode: str = "blur",
-      reporter: ProgressReporter | None = None
+      reporter: ProgressReporter | None = None,
   ) -> str:
       """Render clip 9:16 độc lập bằng FFmpeg."""
   ```

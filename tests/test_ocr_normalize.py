@@ -1,4 +1,5 @@
-﻿"""Unit test cho normalize/merge/join của selective OCR (TASK-3)."""
+"""Unit test cho normalize/merge/join của selective OCR (TASK-3)."""
+
 from autodub.media.ocr import (
     _has_cjk,
     join_frame_lines,
@@ -35,16 +36,17 @@ def test_has_cjk():
 
 def test_join_frame_lines_multi_line():
     # Multi-line subtitle: 2 dòng ghép 1 dòng (zh không cần space)
-    lines = [{"text": "你到底", "score": 0.98, "top_y": 10},
-             {"text": "在干什么", "score": 0.94, "top_y": 40}]
+    lines = [
+        {"text": "你到底", "score": 0.98, "top_y": 10},
+        {"text": "在干什么", "score": 0.94, "top_y": 40},
+    ]
     text, score = join_frame_lines(lines)
     assert text == "你到底在干什么"
     assert abs(score - 0.96) < 0.01
 
 
 def test_join_frame_lines_filters_low_score():
-    lines = [{"text": "好", "score": 0.1},
-             {"text": "你到底在干什么", "score": 0.9}]
+    lines = [{"text": "好", "score": 0.1}, {"text": "你到底在干什么", "score": 0.9}]
     text, _ = join_frame_lines(lines)
     assert text == "你到底在干什么"
 
@@ -55,11 +57,13 @@ def test_join_frame_lines_empty():
 
 def test_merge_consecutive_duplicate_frames():
     # 5 frame @3fps: 4 frame giống nhau, 1 frame khác → 2 segment
-    frames = [{"t": 0.0, "text": "你为什么不告诉我", "score": 0.9},
-              {"t": 1 / 3, "text": "你为什么不告诉我", "score": 0.95},
-              {"t": 2 / 3, "text": "你为什么不告诉我", "score": 0.92},
-              {"t": 1.0, "text": "你为什么不告诉我", "score": 0.88},
-              {"t": 4 / 3, "text": "好的知道了", "score": 0.97}]
+    frames = [
+        {"t": 0.0, "text": "你为什么不告诉我", "score": 0.9},
+        {"t": 1 / 3, "text": "你为什么不告诉我", "score": 0.95},
+        {"t": 2 / 3, "text": "你为什么不告诉我", "score": 0.92},
+        {"t": 1.0, "text": "你为什么不告诉我", "score": 0.88},
+        {"t": 4 / 3, "text": "好的知道了", "score": 0.97},
+    ]
     segs = merge_frame_texts(frames, fps=3, total_frames=5)
     assert len(segs) == 2
     assert segs[0]["text"] == "你为什么不告诉我"
@@ -73,10 +77,12 @@ def test_merge_consecutive_duplicate_frames():
 def test_merge_tolerates_dropout_frame():
     # Phụ đề "mất" đúng 1 frame giữa hai frame giống nhau → coi là OCR
     # dropout, vẫn MỘT segment (chống nhấp nháy phụ đề lặp).
-    frames = [{"t": 0.0, "text": "啊", "score": 0.9},
-              {"t": 0.5, "text": "啊", "score": 0.9},
-              {"t": 1.0, "text": "", "score": 0.0},
-              {"t": 1.5, "text": "啊", "score": 0.9}]
+    frames = [
+        {"t": 0.0, "text": "啊", "score": 0.9},
+        {"t": 0.5, "text": "啊", "score": 0.9},
+        {"t": 1.0, "text": "", "score": 0.0},
+        {"t": 1.5, "text": "啊", "score": 0.9},
+    ]
     segs = merge_frame_texts(frames, fps=2, total_frames=4)
     assert len(segs) == 1
     assert segs[0]["start_time"] == 0.0
@@ -90,9 +96,11 @@ def test_merge_empty_input():
 def test_merge_tolerates_one_bad_frame_in_group():
     # 1 frame OCR lỗi nhẹ (thiếu 1 chữ) giữa các frame giống nhau → vẫn cùng
     # nhóm vì similarity ≥ 0.9
-    frames = [{"t": 0.0, "text": "你为什么不告诉我", "score": 0.9},
-              {"t": 1 / 3, "text": "你为什么不告诉", "score": 0.7},
-              {"t": 2 / 3, "text": "你为什么不告诉我", "score": 0.95}]
+    frames = [
+        {"t": 0.0, "text": "你为什么不告诉我", "score": 0.9},
+        {"t": 1 / 3, "text": "你为什么不告诉", "score": 0.7},
+        {"t": 2 / 3, "text": "你为什么不告诉我", "score": 0.95},
+    ]
     segs = merge_frame_texts(frames, fps=3, total_frames=3)
     assert len(segs) == 1
     # Text đại diện là frame score cao nhất (đầy đủ chữ)
@@ -100,9 +108,11 @@ def test_merge_tolerates_one_bad_frame_in_group():
 
 
 def test_windows_merge_overlap_and_clamp():
-    suspects = [{"start": 2.0, "end": 4.0},   # window [1,5]
-                {"start": 4.5, "end": 6.0},   # window [3.5,7] — giao [1,5]
-                {"start": 10.0, "end": 11.0}]  # window [9,12]
+    suspects = [
+        {"start": 2.0, "end": 4.0},  # window [1,5]
+        {"start": 4.5, "end": 6.0},  # window [3.5,7] — giao [1,5]
+        {"start": 10.0, "end": 11.0},
+    ]  # window [9,12]
     windows = windows_from_suspects(suspects, duration_s=11.5)
     assert windows == [(1.0, 7.0), (9.0, 11.5)]  # clamp cuối video
 

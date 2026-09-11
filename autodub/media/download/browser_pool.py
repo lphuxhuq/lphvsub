@@ -5,9 +5,9 @@ from __future__ import annotations
 import atexit
 import logging
 import threading
-import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ _DEFAULT_UA = (
 class BrowserPool:
     """Singleton pool managing a persistent Playwright Chromium browser."""
 
-    _instance: Optional[BrowserPool] = None
+    _instance: BrowserPool | None = None
     _init_lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
@@ -52,7 +52,8 @@ class BrowserPool:
     def is_available(self) -> bool:
         """Checks if Playwright is installed and importable."""
         try:
-            import playwright
+            import playwright  # noqa: F401 — import probe
+
             return True
         except ImportError:
             return False
@@ -64,7 +65,7 @@ class BrowserPool:
                 if self._browser.is_connected():
                     return self._browser
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong browser_pool.py", exc_info=True)
             logger.warning("Browser instance disconnected or unhealthy, recycling...")
             self._close_browser_quietly()
 
@@ -85,14 +86,14 @@ class BrowserPool:
             try:
                 self._browser.close()
             except Exception:
-                pass
+                logger.debug("Bỏ qua lỗi Exception trong browser_pool.py", exc_info=True)
             self._browser = None
 
     def acquire_context(
         self,
         user_agent: str = _DEFAULT_UA,
         locale: str = "zh-CN",
-        viewport: Optional[dict] = None,
+        viewport: dict | None = None,
     ):
         """Acquires a new, isolated browser context from the pool."""
         with self._lock:
@@ -126,7 +127,7 @@ class BrowserPool:
         self,
         user_agent: str = _DEFAULT_UA,
         locale: str = "zh-CN",
-        viewport: Optional[dict] = None,
+        viewport: dict | None = None,
     ) -> Generator[Any, None, None]:
         """Context manager for acquiring and safely releasing a browser context."""
         ctx = self.acquire_context(user_agent=user_agent, locale=locale, viewport=viewport)
@@ -140,7 +141,7 @@ class BrowserPool:
         self,
         user_agent: str = _DEFAULT_UA,
         locale: str = "zh-CN",
-        viewport: Optional[dict] = None,
+        viewport: dict | None = None,
     ) -> Generator[Any, None, None]:
         """Context manager for acquiring a page in an isolated context and safely cleaning up."""
         with self.borrow_context(user_agent=user_agent, locale=locale, viewport=viewport) as ctx:
@@ -151,7 +152,7 @@ class BrowserPool:
                 try:
                     page.close()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong browser_pool.py", exc_info=True)
 
     def shutdown(self):
         """Gracefully shuts down the browser and stops Playwright."""
@@ -161,7 +162,7 @@ class BrowserPool:
                 try:
                     self._playwright.stop()
                 except Exception:
-                    pass
+                    logger.debug("Bỏ qua lỗi Exception trong browser_pool.py", exc_info=True)
                 self._playwright = None
             self._active_contexts_count = 0
             logger.info("BrowserPool: Chromium and Playwright cleanly shut down.")

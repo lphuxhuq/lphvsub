@@ -4,14 +4,18 @@ Khi câu tiếng Việt dịch ra có số lượng âm tiết vượt quá tố
 (> 4.5 âm tiết/giây), module này sẽ tự động cô đọng câu thoại để diễn viên đọc
 khớp thời lượng mà không bị tăng tốc độ quá cao.
 """
+
 from __future__ import annotations
 
 import re
+
 from autodub.utils import setup_logging
 
 logger = setup_logging("autodub.compact_translator")
 
-_WORDS_RE = re.compile(r"[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+", re.UNICODE)
+_WORDS_RE = re.compile(
+    r"[a-zA-Zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\w]+", re.UNICODE
+)
 
 # Danh sách từ đệm có thể lược bỏ khi cần cô đọng nhanh offline
 _REDUNDANT_FILLERS = [
@@ -66,9 +70,10 @@ def compact_vietnamese_text(
     if gemini_key:
         try:
             from autodub.text.translate_gemini import translate_with_gemini
+
             prompt = (
                 f"Hãy rút gọn câu thoại sau thành bản tiếng Việt súc tích tối đa {max_syllables} từ, "
-                f"giữ nguyên 100% nội dung cốt lõi và cảm xúc: \"{text}\". "
+                f'giữ nguyên 100% nội dung cốt lõi và cảm xúc: "{text}". '
                 f"Chỉ trả về đúng câu đã rút gọn, không thêm bất kỳ giải thích nào."
             )
             res = translate_with_gemini(prompt, api_key=gemini_key, model_name=model)

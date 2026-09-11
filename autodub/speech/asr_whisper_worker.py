@@ -20,6 +20,7 @@ Design note: The worker loads the model once, prints {"ready": true}, then
 reads ONE JSON request from stdin and transcribes. Single-shot like Paraformer
 (ASR is one call per pipeline run — persistent pool would be overkill).
 """
+
 import argparse
 import json
 import os
@@ -29,8 +30,7 @@ _DLL_DIRECTORY_HANDLES = []
 
 
 def _die(proto_out, msg: str) -> None:
-    print(json.dumps({"error": msg}, ensure_ascii=False),
-          file=proto_out, flush=True)
+    print(json.dumps({"error": msg}, ensure_ascii=False), file=proto_out, flush=True)
     sys.exit(1)
 
 
@@ -65,17 +65,19 @@ def main() -> None:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     proto_out = sys.stdout
-    sys.stdout = sys.stderr   # thư viện in ra stderr, không lẫn vào JSON
+    sys.stdout = sys.stderr  # thư viện in ra stderr, không lẫn vào JSON
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--audio",      required=True)
-    parser.add_argument("--model",      default="auto")
-    parser.add_argument("--language",   default="")
-    parser.add_argument("--beam-size",  type=int, default=5)
-    parser.add_argument("--model-dir",  default="",
-                        help="Thư mục cache model; rỗng = HuggingFace default")
-    parser.add_argument("--cuda-dll-dir", default="",
-                        help="Thư mục torch/lib chứa cublas64_*.dll (Windows)")
+    parser.add_argument("--audio", required=True)
+    parser.add_argument("--model", default="auto")
+    parser.add_argument("--language", default="")
+    parser.add_argument("--beam-size", type=int, default=5)
+    parser.add_argument(
+        "--model-dir", default="", help="Thư mục cache model; rỗng = HuggingFace default"
+    )
+    parser.add_argument(
+        "--cuda-dll-dir", default="", help="Thư mục torch/lib chứa cublas64_*.dll (Windows)"
+    )
     args = parser.parse_args()
 
     # --- Thử GPU ---
@@ -98,11 +100,10 @@ def main() -> None:
             # cho card thiếu VRAM.
             for compute in ("float16", "int8_float16", "int8"):
                 try:
-                    model = WhisperModel(model_name, device="cuda",
-                                         compute_type=compute,
-                                         download_root=download_root)
-                    print(f"Whisper '{model_name}' trên GPU "
-                          f"(CUDA, {compute})", flush=True)
+                    model = WhisperModel(
+                        model_name, device="cuda", compute_type=compute, download_root=download_root
+                    )
+                    print(f"Whisper '{model_name}' trên GPU (CUDA, {compute})", flush=True)
                     break
                 except Exception as e:
                     print(f"GPU {compute} thất bại ({e})", flush=True)
@@ -110,13 +111,13 @@ def main() -> None:
                 print("GPU không dùng được, chuyển sang CPU", flush=True)
                 cuda_ok = False
                 model_name = _resolve_model("auto", False)
-                model = WhisperModel(model_name, device="cpu",
-                                     compute_type="int8",
-                                     download_root=download_root)
+                model = WhisperModel(
+                    model_name, device="cpu", compute_type="int8", download_root=download_root
+                )
         else:
-            model = WhisperModel(model_name, device="cpu",
-                                 compute_type="int8",
-                                 download_root=download_root)
+            model = WhisperModel(
+                model_name, device="cpu", compute_type="int8", download_root=download_root
+            )
             print(f"Whisper '{model_name}' trên CPU", flush=True)
     except Exception as e:
         _die(proto_out, f"Không nạp được model Whisper '{model_name}': {e}")
@@ -136,8 +137,8 @@ def main() -> None:
         _die(proto_out, f"Request JSON không hợp lệ: {e}")
 
     audio_path = req.get("audio") or args.audio
-    language   = req.get("language") or args.language or None
-    beam_size  = req.get("beam_size", args.beam_size)
+    language = req.get("language") or args.language or None
+    beam_size = req.get("beam_size", args.beam_size)
 
     # Normalize language: "zh-CN" → "zh"
     if language:
@@ -145,7 +146,11 @@ def main() -> None:
         if language == "auto":
             language = None
 
-    initial_prompt = "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。" if (language or "").startswith("zh") else None
+    initial_prompt = (
+        "这是一段中文影视剧、电影解说或短视频的高清对话与旁白，包含完整标点符号。"
+        if (language or "").startswith("zh")
+        else None
+    )
     try:
         raw_segments, info = model.transcribe(
             audio_path,
@@ -170,8 +175,7 @@ def main() -> None:
     detected_lang = getattr(info, "language", "") or ""
     detected_prob = getattr(info, "language_probability", 0.0)
     if not language and detected_lang:
-        print(f"Ngôn ngữ tự nhận: {detected_lang} ({detected_prob:.0%})",
-              flush=True)
+        print(f"Ngôn ngữ tự nhận: {detected_lang} ({detected_prob:.0%})", flush=True)
 
     seg_id = 0
     for seg in raw_segments:
@@ -180,26 +184,30 @@ def main() -> None:
             continue
         seg_id += 1
         words = []
-        for w in (getattr(seg, "words", None) or []):
-            words.append({"word": w.word,
-                          "start": round(w.start, 3),
-                          "end":   round(w.end, 3)})
+        for w in getattr(seg, "words", None) or []:
+            words.append({"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)})
         out = {
-            "seg":   True,
-            "id":    seg_id,
-            "text":  text,
+            "seg": True,
+            "id": seg_id,
+            "text": text,
             "start": round(seg.start, 3),
-            "end":   round(seg.end, 3),
+            "end": round(seg.end, 3),
             "words": words,
         }
         print(json.dumps(out, ensure_ascii=False), file=proto_out, flush=True)
 
-    print(json.dumps({
-        "done":         True,
-        "num_segments": seg_id,
-        "language":     detected_lang,
-        "language_prob": round(detected_prob, 3),
-    }), file=proto_out, flush=True)
+    print(
+        json.dumps(
+            {
+                "done": True,
+                "num_segments": seg_id,
+                "language": detected_lang,
+                "language_prob": round(detected_prob, 3),
+            }
+        ),
+        file=proto_out,
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

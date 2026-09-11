@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from autodub.media.download.browser_pool import BrowserPool, get_browser_pool
 
 

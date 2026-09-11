@@ -4,13 +4,18 @@ Không dùng tệp ảnh: mỗi tên được băm ổn định (zlib.crc32) đ�
 trong `tokens.AVATAR_GRADIENTS`, nhờ vậy cùng một tên luôn ra cùng một màu
 qua các lần mở ứng dụng.
 """
+
 from __future__ import annotations
 
 import zlib
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import (
-    QColor, QFont, QLinearGradient, QPainter, QPainterPath,
+    QColor,
+    QFont,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
 )
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -33,8 +38,7 @@ def initial_of(name: str) -> str:
 class InitialAvatar(QWidget):
     """Vòng tròn nền chuyển sắc chéo, ở giữa là chữ cái đầu màu trắng."""
 
-    def __init__(self, name: str = "", size: int = 44,
-                 parent: QWidget | None = None):
+    def __init__(self, name: str = "", size: int = 44, parent: QWidget | None = None):
         super().__init__(parent)
         self._name = name
         self._size = size
@@ -50,17 +54,16 @@ class InitialAvatar(QWidget):
     def name(self) -> str:
         return self._name
 
-    def sizeHint(self) -> QSize:  # noqa: N802 — theo quy ước của Qt
+    def sizeHint(self) -> QSize:
         return QSize(self._size, self._size)
 
-    def paintEvent(self, event) -> None:  # noqa: N802 — theo quy ước của Qt
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(0.5, 0.5, self.width() - 1, self.height() - 1)
 
         start, end = gradient_for(self._name)
-        grad = QLinearGradient(QPointF(rect.topLeft()),
-                               QPointF(rect.bottomRight()))
+        grad = QLinearGradient(QPointF(rect.topLeft()), QPointF(rect.bottomRight()))
         grad.setColorAt(0.0, QColor(start))
         grad.setColorAt(1.0, QColor(end))
 
@@ -73,6 +76,5 @@ class InitialAvatar(QWidget):
         font.setWeight(QFont.Weight.Bold)
         painter.setFont(font)
         painter.setPen(QColor(tokens.TEXT_ON_ACCENT))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                         initial_of(self._name))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, initial_of(self._name))
         painter.end()

@@ -1,11 +1,9 @@
 """Unit tests for Douyin CDN domain matching, modal route routing, and DOM video extraction."""
 
-import re
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import MagicMock
 
+from autodub.media.download.contract import DownloadRequest
 from autodub.media.download.douyin_engine import _CDN_HOST_RE, DouyinDownloader
-from autodub.media.download.contract import DownloadRequest, DownloadResult
 from autodub.media.download.validator import ValidationResult
 
 
@@ -98,7 +96,9 @@ def test_douyin_extract_dom_video_fallback():
     mock_page.url = "https://www.douyin.com/video/7681436015344853669"
 
     downloader = DouyinDownloader(browser_pool=mock_pool)
-    res = downloader.extract_via_browser_pool("https://www.douyin.com/jingxuan?modal_id=7681436015344853669", wait_seconds=0.1)
+    res = downloader.extract_via_browser_pool(
+        "https://www.douyin.com/jingxuan?modal_id=7681436015344853669", wait_seconds=0.1
+    )
 
     assert res["mode"] == "progressive"
     assert res["video_url"] == target_cdn_url
@@ -108,9 +108,9 @@ def test_douyin_extract_dom_video_fallback():
 
 def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
     """Verify handling of Douyin user/self URL with modal_id parameter and aweme detail sniffing."""
-    from autodub.pipeline import extract_video_id, normalize_video_url
-    from autodub.media.download.preflight import PlatformDetector, Platform
+    from autodub.media.download.preflight import Platform, PlatformDetector
     from autodub.media.downloader import normalize_url
+    from autodub.pipeline import extract_video_id, normalize_video_url
 
     raw_user_url = "https://www.douyin.com/user/self?from_tab_name=main&modal_id=7680311804580384027&showTab=like"
 
@@ -129,6 +129,7 @@ def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
     mock_pool.borrow_page.return_value.__enter__.return_value = mock_page
 
     handlers = {}
+
     def fake_on(event, handler):
         handlers[event] = handler
 
@@ -137,7 +138,9 @@ def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
     def fake_goto(url, **kwargs):
         # Simulate browser firing aweme detail response
         mock_response = MagicMock()
-        mock_response.url = f"https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=7680311804580384027"
+        mock_response.url = (
+            "https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=7680311804580384027"
+        )
         mock_response.json.return_value = {
             "aweme_detail": {
                 "desc": "Test Video Title",
@@ -145,21 +148,15 @@ def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
                     "bit_rate": [
                         {
                             "bit_rate": 1000,
-                            "play_addr": {
-                                "url_list": ["https://v5-dy.zjcdn.com/low_stream.mp4"]
-                            }
+                            "play_addr": {"url_list": ["https://v5-dy.zjcdn.com/low_stream.mp4"]},
                         },
                         {
                             "bit_rate": 2800,
-                            "play_addr": {
-                                "url_list": ["https://v5-dy.zjcdn.com/high_stream.mp4"]
-                            }
-                        }
+                            "play_addr": {"url_list": ["https://v5-dy.zjcdn.com/high_stream.mp4"]},
+                        },
                     ],
-                    "play_addr": {
-                        "url_list": ["https://v5-dy.zjcdn.com/standard_stream.mp4"]
-                    }
-                }
+                    "play_addr": {"url_list": ["https://v5-dy.zjcdn.com/standard_stream.mp4"]},
+                },
             }
         }
         if "response" in handlers:
@@ -170,11 +167,14 @@ def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
     mock_page.url = "https://www.douyin.com/video/7680311804580384027"
 
     downloader = DouyinDownloader(browser_pool=mock_pool)
-    sniff_res = downloader.extract_via_browser_pool("https://www.douyin.com/video/7680311804580384027", wait_seconds=0.1)
+    sniff_res = downloader.extract_via_browser_pool(
+        "https://www.douyin.com/video/7680311804580384027", wait_seconds=0.1
+    )
 
     assert sniff_res["mode"] == "progressive"
     assert sniff_res["title"] == "Test Video Title"
     # Highest bitrate stream should be captured first
-    assert "https://v5-dy.zjcdn.com/high_stream.mp4" in sniff_res["video_url"] or sniff_res["video_url"].endswith(".mp4")
+    assert "https://v5-dy.zjcdn.com/high_stream.mp4" in sniff_res["video_url"] or sniff_res[
+        "video_url"
+    ].endswith(".mp4")
     assert sniff_res["video_id"] == "7680311804580384027"
-

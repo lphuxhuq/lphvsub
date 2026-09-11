@@ -1,18 +1,17 @@
 import os
-from unittest import mock
-from pathlib import Path
-import pytest
 
 from autodub.config import Settings
 from autodub.languages import get_target
 from autodub.pipeline import DubPipeline
-import autodub.pipeline_cache as pc
 
 
 def _create_wav(path: str):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "wb") as f:
-        f.write(b"RIFF\x24\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00" + b"\x00" * 256)
+        f.write(
+            b"RIFF\x24\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00"
+            + b"\x00" * 256
+        )
 
 
 class DummySynthResult:
@@ -82,5 +81,6 @@ def test_pipeline_tts_global_cache_integration(tmp_path):
     assert dummy_synth.call_count == 0, "TTS synth must NOT be called on UPC cache hit"
     assert os.path.exists(res2[0]["path"])
     from autodub.utils import seg_wav_path
+
     assert res2[0]["path"] == seg_wav_path(proj2_seg_dir, 1)
     assert res2[1]["path"] == seg_wav_path(proj2_seg_dir, 2)

@@ -4,6 +4,7 @@ Giúp thay đổi tốc độ phát của câu thoại mà không làm biến d�
 hoặc gây hiệu ứng robot/kim loại khi tăng tốc > 1.15x.
 Hỗ trợ chuỗi filter thông minh của FFmpeg (atempo cascading + rubberband/asetrate fallback).
 """
+
 from __future__ import annotations
 
 import os
@@ -66,10 +67,14 @@ def apply_formant_preserved_stretch(
 
     tmp = out_path + ".stretch.tmp.wav"
     cmd = [
-        "ffmpeg", "-y",
-        "-i", in_path,
-        "-filter:a", filter_chain,
-        "-ar", str(sample_rate),
+        "ffmpeg",
+        "-y",
+        "-i",
+        in_path,
+        "-filter:a",
+        filter_chain,
+        "-ar",
+        str(sample_rate),
         tmp,
     ]
     try:
@@ -84,7 +89,7 @@ def apply_formant_preserved_stretch(
         try:
             os.remove(tmp)
         except OSError:
-            pass
+            logger.debug("Bỏ qua lỗi OSError trong voice_stretch.py", exc_info=True)
     if in_path != out_path:
         shutil.copyfile(in_path, out_path)
     return out_path

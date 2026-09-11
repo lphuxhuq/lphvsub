@@ -1,4 +1,5 @@
 """Kiểm thử việc trích dạng sóng từ tệp âm thanh."""
+
 from __future__ import annotations
 
 import json
@@ -7,14 +8,12 @@ import os
 import wave
 
 import numpy as np
-import pytest
 
 from autodub_gui import waveform
 from autodub_gui.waveform import CACHE_NAME, DEFAULT_BUCKETS, peaks
 
 
-def _write_wav(path, seconds=1.0, rate=8000, channels=1, width=2,
-               amplitude=0.5, silent_tail=0.0):
+def _write_wav(path, seconds=1.0, rate=8000, channels=1, width=2, amplitude=0.5, silent_tail=0.0):
     """Ghi một tệp WAV dạng PCM để kiểm thử."""
     frames = int(rate * seconds)
     time = np.arange(frames) / rate
@@ -35,6 +34,7 @@ def _write_wav(path, seconds=1.0, rate=8000, channels=1, width=2,
 
 
 # -- Trường hợp bình thường --------------------------------------------
+
 
 def test_returns_requested_number_of_buckets(tmp_path) -> None:
     path = _write_wav(tmp_path / "am.wav")
@@ -78,6 +78,7 @@ def test_default_bucket_count_is_reasonable() -> None:
 
 # -- Trường hợp hỏng ---------------------------------------------------
 
+
 def test_missing_file_returns_empty() -> None:
     assert peaks("khong_ton_tai.wav") == []
 
@@ -110,6 +111,7 @@ def test_zero_buckets_returns_empty(tmp_path) -> None:
 
 
 # -- Bộ nhớ đệm --------------------------------------------------------
+
 
 def test_cache_file_is_written(tmp_path) -> None:
     path = _write_wav(tmp_path / "am.wav")
@@ -173,6 +175,7 @@ def test_clear_cache_on_missing_file_is_safe(tmp_path) -> None:
 
 
 # -- Chọn nguồn âm thanh -----------------------------------------------
+
 
 def test_prefers_vietnamese_audio(tmp_path) -> None:
     """Ưu tiên giọng Việt vì đó là thứ người dùng cần canh."""

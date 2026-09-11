@@ -4,6 +4,7 @@ Mọi trang đều kế thừa `BasePage` để cửa sổ chính có một giao
 đóng ứng dụng: hỏi xem trang có việc đang chạy không, yêu cầu dừng, rồi dọn
 tài nguyên.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget

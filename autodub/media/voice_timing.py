@@ -16,6 +16,7 @@ cục) và render bằng atempo khi thật sự cần:
 Cache theo mtime + thời lượng kỳ vọng (copy pattern segments_timed của
 timing.py): đổi tempo giữa hai lần chạy thì render lại đúng clip đó.
 """
+
 from __future__ import annotations
 
 import os
@@ -33,15 +34,19 @@ CACHE_TOLERANCE_S = 0.05
 
 @dataclass
 class FitResult:
-    tempo_factor: float   # 1.0 = giữ natural
-    out_path: str         # wav sau fit (== input khi tempo 1.0)
-    rendered: bool        # có chạy atempo không
+    tempo_factor: float  # 1.0 = giữ natural
+    out_path: str  # wav sau fit (== input khi tempo 1.0)
+    rendered: bool  # có chạy atempo không
 
 
-def _decide_tempo(actual: float, target: float, min_speed: float = 0.90,
-                  max_speed: float = 1.15,
-                  min_worthwhile: float = MIN_WORTHWHILE_ATEMPO,
-                  allow_stretch: bool = False) -> float:
+def _decide_tempo(
+    actual: float,
+    target: float,
+    min_speed: float = 0.90,
+    max_speed: float = 1.15,
+    min_worthwhile: float = MIN_WORTHWHILE_ATEMPO,
+    allow_stretch: bool = False,
+) -> float:
     """Tempo cho clip ``actual`` giây vào slot ``target`` giây.
 
     Thuần toán — scheduler gọi trực tiếp để quyết định placement mà không
@@ -53,7 +58,7 @@ def _decide_tempo(actual: float, target: float, min_speed: float = 0.90,
     if actual <= target:
         if not allow_stretch:
             return 1.0
-        want = actual / target          # < 1.0: cần đọc chậm lại cho vừa slot
+        want = actual / target  # < 1.0: cần đọc chậm lại cho vừa slot
         if want > 1.0 / min_worthwhile:  # chênh lệch nhỏ quá — bỏ qua
             return 1.0
         return float(max(min_speed, want))
@@ -92,11 +97,13 @@ def fit_voice_to_slot(
     out_path = os.path.join(out_dir, os.path.basename(wav_path))
     expected = actual / tempo
     # Resume-safe: đầu ra còn mới hơn nguồn VÀ đúng thời lượng kỳ vọng.
-    if (os.path.exists(out_path) and os.path.getsize(out_path) > 0
-            and os.path.getmtime(out_path) >= os.path.getmtime(work_wav)):
+    if (
+        os.path.exists(out_path)
+        and os.path.getsize(out_path) > 0
+        and os.path.getmtime(out_path) >= os.path.getmtime(work_wav)
+    ):
         have = wav_duration_s(out_path) or -1.0
         if abs(have - expected) < CACHE_TOLERANCE_S:
-            return FitResult(tempo_factor=tempo, out_path=out_path,
-                             rendered=False)
+            return FitResult(tempo_factor=tempo, out_path=out_path, rendered=False)
     apply_formant_preserved_stretch(work_wav, out_path, tempo)
     return FitResult(tempo_factor=tempo, out_path=out_path, rendered=True)

@@ -12,6 +12,7 @@ Các bước đều resume-safe — chạy lại script sẽ bỏ qua phần đ�
   4. Kiểm tra torch.cuda.is_available() → ghi installed_ok.json
      (GPU không có vẫn OK — Whisper/Demucs rơi về CPU, nhưng cài xong)
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_DIR = os.path.join(PROJECT_ROOT, ".venv-gpu")
-VENV_PY = os.path.join(VENV_DIR,
-                        "Scripts" if os.name == "nt" else "bin",
-                        "python.exe" if os.name == "nt" else "python")
+VENV_PY = os.path.join(
+    VENV_DIR, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+)
 MARKER = os.path.join(VENV_DIR, "installed_ok.json")
 
 _TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
@@ -45,43 +46,58 @@ def step_venv() -> None:
         log("venv .venv-gpu đã có — bỏ qua")
         return
     log("tạo virtualenv .venv-gpu ...")
-    subprocess.run([sys.executable, "-m", "venv", VENV_DIR],
-                   check=True, creationflags=_NO_WINDOW)
+    subprocess.run([sys.executable, "-m", "venv", VENV_DIR], check=True, creationflags=_NO_WINDOW)
     log("cập nhật pip trong .venv-gpu ...")
     subprocess.run(
         [VENV_PY, "-m", "pip", "install", "--upgrade", "--quiet", "pip"],
-        check=True, creationflags=_NO_WINDOW)
+        check=True,
+        creationflags=_NO_WINDOW,
+    )
 
 
 def step_torch() -> None:
     """Cài PyTorch CUDA 12.4 nếu chưa có."""
     probe = subprocess.run(
         [VENV_PY, "-c", "import torch; print(torch.__version__)"],
-        capture_output=True, text=True, creationflags=_NO_WINDOW)
+        capture_output=True,
+        text=True,
+        creationflags=_NO_WINDOW,
+    )
     if probe.returncode == 0 and probe.stdout.strip():
         log(f"torch {probe.stdout.strip()} đã cài — bỏ qua")
         return
     log("cài PyTorch CUDA 12.4 (~2 GB, có thể mất 10–20 phút) ...")
     subprocess.run(
-        [VENV_PY, "-m", "pip", "install", "--quiet",
-         *_TORCH_PACKAGES,
-         "--index-url", _TORCH_INDEX_URL],
-        check=True, creationflags=_NO_WINDOW)
+        [
+            VENV_PY,
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            *_TORCH_PACKAGES,
+            "--index-url",
+            _TORCH_INDEX_URL,
+        ],
+        check=True,
+        creationflags=_NO_WINDOW,
+    )
     log("PyTorch CUDA 12.4 đã cài xong")
 
 
 def step_demucs() -> None:
     """Cài Demucs nếu chưa có."""
     probe = subprocess.run(
-        [VENV_PY, "-c", "import demucs"],
-        capture_output=True, creationflags=_NO_WINDOW)
+        [VENV_PY, "-c", "import demucs"], capture_output=True, creationflags=_NO_WINDOW
+    )
     if probe.returncode == 0:
         log("demucs đã cài — bỏ qua")
         return
     log("cài demucs ...")
     subprocess.run(
         [VENV_PY, "-m", "pip", "install", "--quiet", _DEMUCS_SPEC],
-        check=True, creationflags=_NO_WINDOW)
+        check=True,
+        creationflags=_NO_WINDOW,
+    )
     log("demucs đã cài xong")
 
 
@@ -93,12 +109,18 @@ def step_smoke() -> None:
 
     log("kiểm tra CUDA ...")
     probe = subprocess.run(
-        [VENV_PY, "-c",
-         "import torch; "
-         "cuda = torch.cuda.is_available(); "
-         "name = torch.cuda.get_device_name(0) if cuda else 'none'; "
-         "print(f'cuda={cuda} device={name}')"],
-        capture_output=True, text=True, creationflags=_NO_WINDOW)
+        [
+            VENV_PY,
+            "-c",
+            "import torch; "
+            "cuda = torch.cuda.is_available(); "
+            "name = torch.cuda.get_device_name(0) if cuda else 'none'; "
+            "print(f'cuda={cuda} device={name}')",
+        ],
+        capture_output=True,
+        text=True,
+        creationflags=_NO_WINDOW,
+    )
 
     cuda_available = False
     device_name = "none"
@@ -118,12 +140,17 @@ def step_smoke() -> None:
 
     # Ghi marker dù GPU có hay không — cài package đã xong là đủ
     with open(MARKER, "w", encoding="utf-8") as f:
-        json.dump({
-            "ok": True,
-            "cuda_available": cuda_available,
-            "device": device_name,
-            "torch_index": _TORCH_INDEX_URL,
-        }, f, ensure_ascii=False, indent=2)
+        json.dump(
+            {
+                "ok": True,
+                "cuda_available": cuda_available,
+                "device": device_name,
+                "torch_index": _TORCH_INDEX_URL,
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
     log("installed_ok.json đã ghi")
 
 

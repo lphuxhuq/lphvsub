@@ -5,6 +5,7 @@ kể ngắn gọn ứng dụng làm được gì, máy đang thiếu gì và cá
 mỗi mục có nút sao chép lệnh giống trang Trợ giúp. Người dùng đóng hộp là
 dùng được ngay; mọi thứ trong này đều xem lại được ở trang Trợ giúp.
 """
+
 from __future__ import annotations
 
 import os
@@ -12,7 +13,12 @@ import shutil
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+    QApplication,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
 )
 
 from autodub_gui import icons, tokens
@@ -23,18 +29,26 @@ _MIN_W = 560
 
 #: (tên, mô tả ngắn, lệnh cài, hàm kiểm tra đã sẵn sàng chưa)
 _CHECKS = (
-    ("FFmpeg — ghép hình và tiếng",
-     "Bắt buộc. Tải bản đầy đủ, giải nén rồi thêm thư mục bin vào đường "
-     "dẫn hệ thống.",
-     "", lambda s: bool(shutil.which("ffmpeg"))),
-    ("Bộ giọng đọc VieNeu",
-     "Tùy chọn — để lồng tiếng offline. Không cài vẫn dùng được bộ giọng "
-     "CapCut (cần mạng). Chạy một lần, khoảng vài phút.",
-     "py scripts/setup_vieneu.py", lambda s: s.vieneu_configured()),
-    ("Dịch tự động",
-     "Chạy qua máy chủ VoxDub — không cần cấu hình gì. Máy mới được tặng "
-     "Vox dùng thử; xem số dư ở trang Tài khoản.",
-     "", lambda s: s.translate_enabled),
+    (
+        "FFmpeg — ghép hình và tiếng",
+        "Bắt buộc. Tải bản đầy đủ, giải nén rồi thêm thư mục bin vào đường dẫn hệ thống.",
+        "",
+        lambda s: bool(shutil.which("ffmpeg")),
+    ),
+    (
+        "Bộ giọng đọc VieNeu",
+        "Tùy chọn — để lồng tiếng offline. Không cài vẫn dùng được bộ giọng "
+        "CapCut (cần mạng). Chạy một lần, khoảng vài phút.",
+        "py scripts/setup_vieneu.py",
+        lambda s: s.vieneu_configured(),
+    ),
+    (
+        "Dịch tự động",
+        "Chạy qua máy chủ VoxDub — không cần cấu hình gì. Máy mới được tặng "
+        "Vox dùng thử; xem số dư ở trang Tài khoản.",
+        "",
+        lambda s: s.translate_enabled,
+    ),
 )
 
 
@@ -61,7 +75,7 @@ def mark_done() -> None:
 class FirstRunDialog(QDialog):
     """Màn chào: ứng dụng làm gì, máy thiếu gì, cài thế nào."""
 
-    settings_requested = False   # người dùng bấm "Mở Cài đặt" hay không
+    settings_requested = False  # người dùng bấm "Mở Cài đặt" hay không
 
     def __init__(self, settings, parent: QWidget | None = None):
         super().__init__(parent)
@@ -70,36 +84,38 @@ class FirstRunDialog(QDialog):
         self.setMinimumWidth(_MIN_W)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(tokens.SP_6, tokens.SP_5,
-                                tokens.SP_6, tokens.SP_5)
+        root.setContentsMargins(tokens.SP_6, tokens.SP_5, tokens.SP_6, tokens.SP_5)
         root.setSpacing(tokens.SP_4)
 
         title = QLabel("Chào mừng đến VoxDub Studio")
         title.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_SECTION}px; "
-            f"font-weight: 700; background: transparent;")
+            f"font-weight: 700; background: transparent;"
+        )
         intro = QLabel(
             "Ứng dụng tự động lồng tiếng video sang tiếng Việt: tách nhạc "
             "nền, nghe lời thoại, dịch, đọc bằng giọng Việt tự nhiên rồi ghép "
-            "lại thành video hoàn chỉnh. Dưới đây là tình trạng máy của bạn:")
+            "lại thành video hoàn chỉnh. Dưới đây là tình trạng máy của bạn:"
+        )
         intro.setWordWrap(True)
         intro.setStyleSheet(
             f"color: {tokens.TEXT_SECONDARY}; font-size: {tokens.FS_BODY}px; "
-            f"background: transparent;")
+            f"background: transparent;"
+        )
         root.addWidget(title)
         root.addWidget(intro)
 
         for name, description, command, probe in _CHECKS:
-            root.addLayout(self._check_row(settings, name, description,
-                                           command, probe))
+            root.addLayout(self._check_row(settings, name, description, command, probe))
 
         note = QLabel(
             "Bạn xem lại được toàn bộ hướng dẫn này ở trang Trợ giúp, và đổi "
-            "mọi lựa chọn ở trang Cài đặt.")
+            "mọi lựa chọn ở trang Cài đặt."
+        )
         note.setWordWrap(True)
         note.setStyleSheet(
-            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {tokens.TEXT_MUTED}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         root.addWidget(note)
 
         buttons = QHBoxLayout()
@@ -114,11 +130,10 @@ class FirstRunDialog(QDialog):
         buttons.addWidget(btn_start)
         root.addLayout(buttons)
 
-    def _check_row(self, settings, name: str, description: str,
-                   command: str, probe) -> QVBoxLayout:
+    def _check_row(self, settings, name: str, description: str, command: str, probe) -> QVBoxLayout:
         try:
             ready = bool(settings is not None and probe(settings))
-        except Exception:  # noqa: BLE001 — không kiểm tra được thì coi là chưa
+        except Exception:
             ready = False
         column = QVBoxLayout()
         column.setSpacing(2)
@@ -132,11 +147,12 @@ class FirstRunDialog(QDialog):
         label = QLabel(name)
         label.setStyleSheet(
             f"color: {tokens.TEXT_PRIMARY}; font-size: {tokens.FS_LABEL}px; "
-            f"font-weight: 600; background: transparent;")
+            f"font-weight: 600; background: transparent;"
+        )
         state = QLabel("đã sẵn sàng" if ready else "chưa sẵn sàng")
         state.setStyleSheet(
-            f"color: {color}; font-size: {tokens.FS_META}px; "
-            f"background: transparent;")
+            f"color: {color}; font-size: {tokens.FS_META}px; background: transparent;"
+        )
         head.addWidget(icon)
         head.addWidget(label)
         head.addWidget(state)
@@ -144,8 +160,7 @@ class FirstRunDialog(QDialog):
         if command and not ready:
             copy_button = GhostButton("Sao chép lệnh cài")
             copy_button.setToolTip(command)
-            copy_button.clicked.connect(
-                lambda _c=False, cmd=command: self._copy(cmd))
+            copy_button.clicked.connect(lambda _c=False, cmd=command: self._copy(cmd))
             head.addWidget(copy_button)
         column.addLayout(head)
         if not ready:
@@ -153,13 +168,15 @@ class FirstRunDialog(QDialog):
             body.setWordWrap(True)
             body.setStyleSheet(
                 f"color: {tokens.TEXT_SECONDARY}; "
-                f"font-size: {tokens.FS_META}px; background: transparent;")
+                f"font-size: {tokens.FS_META}px; background: transparent;"
+            )
             column.addWidget(body)
         return column
 
     def _copy(self, command: str) -> None:
         QApplication.clipboard().setText(command)
         from autodub_gui.ui.toast import TOASTS
+
         TOASTS.success("Đã sao chép lệnh. Dán vào cửa sổ dòng lệnh rồi chạy.")
 
     def _open_settings(self) -> None:
@@ -181,12 +198,13 @@ def maybe_show_first_run(window) -> bool:
 
     try:
         settings = Settings.load(override=True)
-    except Exception:  # noqa: BLE001 — cấu hình hỏng thì vẫn chào được
+    except Exception:
         settings = None
     dialog = FirstRunDialog(settings, window)
     dialog.exec()
     mark_done()
     if dialog.settings_requested:
         from autodub_gui.app import ROW_SETTINGS
+
         window.switch_page(ROW_SETTINGS)
     return True

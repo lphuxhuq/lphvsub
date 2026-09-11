@@ -9,7 +9,7 @@ Các bước đều resume-safe — chạy lại script sẽ bỏ qua phần đ�
   4. Ghi danh sách 14 giọng đọc (voices.json) cho GUI
   5. Render thử 1 câu (smoke test) → installed_ok.json
 """
-import json
+
 import os
 import subprocess
 import sys
@@ -18,8 +18,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENV_DIR = os.path.join(PROJECT_ROOT, ".venv-vieneu")
-VENV_PY = os.path.join(VENV_DIR, "Scripts" if os.name == "nt" else "bin",
-                       "python.exe" if os.name == "nt" else "python")
+VENV_PY = os.path.join(
+    VENV_DIR, "Scripts" if os.name == "nt" else "bin", "python.exe" if os.name == "nt" else "python"
+)
 MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "vieneu")
 MARKER = os.path.join(MODEL_DIR, "installed_ok.json")
 VOICES_JSON = os.path.join(MODEL_DIR, "voices.json")
@@ -43,16 +44,14 @@ def step_venv() -> None:
 
 
 def step_install() -> None:
-    probe = subprocess.run([VENV_PY, "-c", "import vieneu"],
-                           capture_output=True)
+    probe = subprocess.run([VENV_PY, "-c", "import vieneu"], capture_output=True)
     if probe.returncode == 0:
         log("package vieneu đã cài — bỏ qua")
         return
     log("cài vieneu (ONNX, không cần GPU) ...")
     # Chặn trần major: bản 2.x có thể đổi API worker (vieneu_worker.py gọi
     # thẳng) — nâng trần sau khi đã thử, đừng để pip tự nhảy phiên bản lớn.
-    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet", _VIENEU_SPEC],
-                   check=True)
+    subprocess.run([VENV_PY, "-m", "pip", "install", "--quiet", _VIENEU_SPEC], check=True)
 
 
 def step_model_and_voices() -> None:
@@ -88,8 +87,10 @@ print("model OK,", len(voices), "giọng")
 
 def main() -> None:
     log("Cài đặt VieNeu-TTS — giọng đọc tiếng Việt chạy CPU")
-    log("Model: pnnbao-ump/VieNeu-TTS-v3-Turbo (kiểm tra license trên "
-        "HuggingFace trước khi dùng thương mại)")
+    log(
+        "Model: pnnbao-ump/VieNeu-TTS-v3-Turbo (kiểm tra license trên "
+        "HuggingFace trước khi dùng thương mại)"
+    )
     step_venv()
     step_install()
     step_model_and_voices()

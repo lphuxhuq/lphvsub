@@ -1,6 +1,5 @@
-import pytest
 from autodub.media.subtitle import build_filter_complex
-from autodub.resources import FFMPEG_SLOTS, FFMPEG_AUDIO_SLOTS
+from autodub.resources import FFMPEG_AUDIO_SLOTS
 
 
 def test_build_filter_complex_uses_delogo():
@@ -44,11 +43,20 @@ def test_ffmpeg_audio_slots_independence():
 def test_delogo_ffmpeg_real_execution():
     """Xác nhận FFmpeg thực thi cú pháp delogo mà không có lỗi cú pháp."""
     import subprocess
+
     cmd = [
-        "ffmpeg", "-v", "error", "-f", "lavfi",
-        "-i", "color=black:s=320x240:d=0.1",
-        "-vf", "delogo=x=10:y=10:w=50:h=50:show=0:enable='between(t,0,0.05)'",
-        "-f", "null", "-",
+        "ffmpeg",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=black:s=320x240:d=0.1",
+        "-vf",
+        "delogo=x=10:y=10:w=50:h=50:show=0:enable='between(t,0,0.05)'",
+        "-f",
+        "null",
+        "-",
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0

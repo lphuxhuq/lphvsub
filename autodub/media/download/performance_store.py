@@ -7,7 +7,6 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from autodub.pipeline_cache import cache_root
 
@@ -17,17 +16,17 @@ logger = logging.getLogger(__name__)
 class PerformanceStore:
     """Stores download metrics and calculates CDN health scores across sessions."""
 
-    _instance: Optional[PerformanceStore] = None
+    _instance: PerformanceStore | None = None
     _init_lock = threading.Lock()
 
-    def __new__(cls, db_path: Optional[Path | str] = None):
+    def __new__(cls, db_path: Path | str | None = None):
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_path: Optional[Path | str] = None):
+    def __init__(self, db_path: Path | str | None = None):
         if getattr(self, "_initialized", False):
             return
 
@@ -75,7 +74,7 @@ class PerformanceStore:
         bytes_transferred: int,
         duration: float,
         status_code: int = 200,
-        error_type: Optional[str] = None,
+        error_type: str | None = None,
         success: bool = True,
     ) -> None:
         """Records a single download transaction or chunk transfer metric."""
@@ -85,11 +84,21 @@ class PerformanceStore:
             with self._lock, self._get_connection() as conn:
                 conn.execute(
                     """
-                    INSERT INTO cdn_metrics 
+                    INSERT INTO cdn_metrics
                     (timestamp, platform, host, bytes_transferred, duration, speed, status_code, error_type, success)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (now, platform, host, bytes_transferred, duration, speed, status_code, error_type or "", 1 if success else 0),
+                    (
+                        now,
+                        platform,
+                        host,
+                        bytes_transferred,
+                        duration,
+                        speed,
+                        status_code,
+                        error_type or "",
+                        1 if success else 0,
+                    ),
                 )
                 conn.commit()
         except Exception as e:
@@ -124,7 +133,7 @@ class PerformanceStore:
             logger.warning(f"Error computing health score for {host}: {e}")
             return 75.0
 
-    def get_fastest_cdns(self, platform: str, limit: int = 3) -> List[str]:
+    def get_fastest_cdns(self, platform: str, limit: int = 3) -> list[str]:
         """Returns the top hosts ranked by average transfer speed."""
         try:
             with self._lock, self._get_connection() as conn:

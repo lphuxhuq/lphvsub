@@ -4,6 +4,7 @@ Phần lưới giọng dùng lại nguyên `VoiceLibraryTab`, chỉ khác ở ch
 có chân trang Hủy và Lưu riêng, ghi thẳng xuống tệp cấu hình mà không đụng
 tới những mục khác của trang Cài đặt.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
@@ -18,8 +19,7 @@ class VoiceToolPage(ToolPage):
 
     TAB = spec.TAB_VOICE
     TITLE = "Giọng đọc AI"
-    SUBTITLE = ("Chọn giọng và phong cách cho video lồng tiếng. "
-                "Bấm nghe thử để so trước khi lưu.")
+    SUBTITLE = "Chọn giọng và phong cách cho video lồng tiếng. Bấm nghe thử để so trước khi lưu."
     SAVE_LABEL = "Lưu giọng đọc"
     SAVED_TOAST = "Đã lưu giọng đọc."
 

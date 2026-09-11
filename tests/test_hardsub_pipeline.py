@@ -1,7 +1,7 @@
 import os
-import pytest
+
 from autodub.config import Settings
-from autodub.pipeline import DubPipeline, DubRequest
+from autodub.pipeline import DubRequest
 
 
 def test_pipeline_auto_mask_hardsub_off_by_default():
@@ -19,9 +19,11 @@ def test_pipeline_auto_mask_hardsub_enabled_flow(tmp_path, monkeypatch):
         f.write(b"dummy video")
 
     from autodub.media import hardsub_detector
+
     monkeypatch.setattr(
-        hardsub_detector, "detect_hardsub_regions",
-        lambda p: [{"x": 0.12, "y": 0.82, "w": 0.76, "h": 0.10}]
+        hardsub_detector,
+        "detect_hardsub_regions",
+        lambda p: [{"x": 0.12, "y": 0.82, "w": 0.76, "h": 0.10}],
     )
 
     req = DubRequest(auto_mask_hardsub=True)

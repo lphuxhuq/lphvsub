@@ -4,9 +4,9 @@ Trích xuất cao độ F0 (Autocorrelation) thuần CPU, tính toán các chỉ
 (median, p10, p90, std, voiced_ratio, confidence), phân loại giới tính xác suất
 và phát hiện vai trò người dẫn chuyện (Narrator) dựa trên cấu trúc timeline.
 """
+
 from __future__ import annotations
 
-import os
 import numpy as np
 
 from autodub.speech.voice_models import PitchStats, SpeakerProfile
@@ -36,8 +36,12 @@ def estimate_f0_stats(
     """
     if audio is None or len(audio) == 0:
         return PitchStats(
-            pitch_median=0.0, pitch_p10=0.0, pitch_p90=0.0,
-            pitch_std=0.0, voiced_ratio=0.0, confidence=0.0,
+            pitch_median=0.0,
+            pitch_p10=0.0,
+            pitch_p90=0.0,
+            pitch_std=0.0,
+            voiced_ratio=0.0,
+            confidence=0.0,
         )
 
     # Chuyển về float32 mono nếu cần
@@ -58,8 +62,12 @@ def estimate_f0_stats(
 
     if len(audio) < frame_len:
         return PitchStats(
-            pitch_median=0.0, pitch_p10=0.0, pitch_p90=0.0,
-            pitch_std=0.0, voiced_ratio=0.0, confidence=0.0,
+            pitch_median=0.0,
+            pitch_p10=0.0,
+            pitch_p90=0.0,
+            pitch_std=0.0,
+            voiced_ratio=0.0,
+            confidence=0.0,
         )
 
     window = np.hanning(frame_len)
@@ -103,8 +111,12 @@ def estimate_f0_stats(
 
     if not voiced_f0 or total_frames == 0:
         return PitchStats(
-            pitch_median=0.0, pitch_p10=0.0, pitch_p90=0.0,
-            pitch_std=0.0, voiced_ratio=0.0, confidence=0.0,
+            pitch_median=0.0,
+            pitch_p10=0.0,
+            pitch_p90=0.0,
+            pitch_std=0.0,
+            voiced_ratio=0.0,
+            confidence=0.0,
         )
 
     voiced_arr = np.array(voiced_f0, dtype=np.float32)
@@ -174,7 +186,6 @@ def detect_narrator_role(
     return "character", 0.75
 
 
-
 def profile_speakers(
     audio_source: str | np.ndarray,
     segments: list[dict],
@@ -188,6 +199,7 @@ def profile_speakers(
     # Load audio array nếu truyền đường dẫn
     if isinstance(audio_source, str):
         from autodub.speech.diarization import load_audio_mono16k
+
         try:
             audio_arr, sr = load_audio_mono16k(audio_source)
         except Exception as e:
@@ -198,8 +210,10 @@ def profile_speakers(
         audio_arr = audio_source
         sr = sample_rate
 
-    total_audio_dur = (len(audio_arr) / sr) if len(audio_arr) > 0 else (
-        max(float(s.get("end", 0.0)) for s in segments) if segments else 1.0
+    total_audio_dur = (
+        (len(audio_arr) / sr)
+        if len(audio_arr) > 0
+        else (max(float(s.get("end", 0.0)) for s in segments) if segments else 1.0)
     )
 
     # Nhóm các đoạn audio theo speaker_id
@@ -211,7 +225,9 @@ def profile_speakers(
     profiles: dict[int, SpeakerProfile] = {}
 
     for spk_id, segs in speaker_segments.items():
-        total_dur = sum(max(0.0, float(s.get("end", 0.0)) - float(s.get("start", 0.0))) for s in segs)
+        total_dur = sum(
+            max(0.0, float(s.get("end", 0.0)) - float(s.get("start", 0.0))) for s in segs
+        )
         seg_count = len(segs)
         avg_dur = total_dur / max(1, seg_count)
 
@@ -237,7 +253,9 @@ def profile_speakers(
 
         stats = estimate_f0_stats(spk_audio, sr=sr)
         gender, g_conf = classify_gender_probabilistic(stats)
-        role, r_conf = detect_narrator_role(total_dur, total_audio_dur, seg_count, coverage, avg_dur)
+        role, r_conf = detect_narrator_role(
+            total_dur, total_audio_dur, seg_count, coverage, avg_dur
+        )
 
         profile = SpeakerProfile(
             speaker_id=spk_id,
