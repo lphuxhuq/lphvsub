@@ -75,3 +75,6 @@ website/dist/
 # Gemini SRT UI uploads & outputs
 autodub/tools/gemini_srt_ui/uploads/
 autodub/tools/gemini_srt_ui/outputs/
+
+# Benchmark media test files (dung de chay benchmark parallel export)
+.artifacts/benchmarks/parallel_bench/
