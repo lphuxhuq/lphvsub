@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Logo overlay hoàn tất (movie+scale+colorchannelmixer).
+> Minh chứng: Tham số `logo_*` của `merge_video` + overlay trong `build_filter_complex`.
+
 # Logo / Watermark Overlay Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

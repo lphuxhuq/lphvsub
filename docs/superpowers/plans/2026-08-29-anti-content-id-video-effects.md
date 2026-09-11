@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Anti-Content-ID hoàn tất: smart flip, micro zoom, color filter, metadata randomize.
+> Minh chứng: `autodub/media/metadata.py` (free-atom hash randomize) + smart_flip/micro_zoom/color_filter trong `build_filter_complex`; `tests/test_video_merge.py` pass.
+
 # Anti-Content ID Video Effects Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

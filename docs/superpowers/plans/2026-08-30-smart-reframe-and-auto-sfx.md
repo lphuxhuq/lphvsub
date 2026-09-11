@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Smart reframe 9:16 + procedural SFX hoàn tất.
+> Minh chứng: `autodub/media/sfx.py` + reframe_mode blur/top_split/center_crop; `tests/test_video_merge.py` + `tests/test_sfx.py` pass.
+
 # Smart Auto-Reframe (9:16 Shorts/TikTok) & Auto Scene Cut SFX Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

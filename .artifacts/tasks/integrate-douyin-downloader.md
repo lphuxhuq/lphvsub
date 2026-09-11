@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: CANCELLED / SUPERSEDED**
+> Kế hoạch Douyin V2 (a_bogus + gmssl SM3) bỏ dở ở TASK-001 — không có `download/douyin/`, không có `tests/test_douyin_v2_core.py`.
+> Minh chứng: Thay thế bằng: `autodub/media/download/douyin_engine.py` (Playwright + cookie, đã tích hợp Smart Download Engine, `tests/test_douyin_engine.py` pass). Quyết định không theo hướng ký a_bogus thuần Python.
+
 # Task Breakdown: Tích Hợp Douyin Downloader V2 & Việt Hoá
 
 - **Mã kế hoạch**: `TASK-SMART-DOWNLOAD-ENGINE-DOUYIN-V2`

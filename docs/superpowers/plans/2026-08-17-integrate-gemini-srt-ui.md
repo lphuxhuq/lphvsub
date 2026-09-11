@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Tích hợp Gemini SRT UI hoàn tất và chạy production.
+> Minh chứng: `autodub/tools/gemini_srt_ui/app.py` + `chay_dich_srt.bat` + `tests/test_gemini_srt_*.py` (pass).
+
 # Tích Hợp Gemini SRT UI Vào LPH VSub (VoxDub Studio) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

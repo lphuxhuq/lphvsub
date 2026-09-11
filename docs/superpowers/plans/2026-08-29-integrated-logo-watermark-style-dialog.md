@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Tab Logo & Watermark trong StyleDialog hoàn tất.
+> Minh chứng: `autodub_gui/style_dialog.py` tab 'Logo & Watermark'; `tests/test_style_dialog.py` assert tabs pass.
+
 # Integrated Logo & Watermark in StyleDialog Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

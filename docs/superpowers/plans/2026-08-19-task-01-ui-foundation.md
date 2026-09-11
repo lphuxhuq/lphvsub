@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> UI foundation hoàn tất — shell, tokens, theme chạy production.
+> Minh chứng: `autodub_gui/shell.py`, `tokens.py`, `theme.py`; `tests/test_ui_tokens.py` pass.
+
 # TASK 01 — UI FOUNDATION Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

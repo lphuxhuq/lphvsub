@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Watermark chuyển động (bounce/drift/static) hoàn tất.
+> Minh chứng: `_build_drawtext_watermark_filter` trong `autodub/media/subtitle.py`; `tests/test_subtitle.py` pass.
+
 # Dynamic Moving Watermark Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

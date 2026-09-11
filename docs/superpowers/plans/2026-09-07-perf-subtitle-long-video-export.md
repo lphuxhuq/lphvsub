@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED — VƯỢT MỤC TIÊU**
+> Tối ưu phụ đề + xuất video dài hoàn tất và tiếp tục được nâng cấp.
+> Minh chứng: RenderPlan/OutputProfile/BlurStrategy/EncoderProfile + `-filter_complex_threads 0` + karaoke overlap fix; benchmark 2.36x (commit d950a53), báo cáo `docs/perf-ffmpeg-export-v2.md` (12.16x realtime); nâng cấp tiếp: parallel chunked export (commit 06779a7, +1.7x).
+
 # Tối Ưu Tốc Độ Ghi Phụ Đề & Xuất Video Dài Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> 3-Tier Adaptive Voice Sync hoàn tất, final audit PASS.
+> Minh chứng: `autodub/media/voice_timing.py` + `autodub/speech/boundaries.py`; audit `.artifacts/reviews/final-audit-voice-sync.md`; full suite 728 passed tại thời điểm đó.
+
 # Advanced 3-Tier Adaptive Voice Sync Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

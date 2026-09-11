@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: MOSTLY DONE — CÒN TASK 2**
+> Task 1 (progress_cb core) + Task 3 (DownloadProgressBar UI) đã xong và test pass. Task 2 chưa: viết `tests/test_prefetch_worker_progress.py` cho signal `PrefetchWorker.progress`.
+> Minh chứng: `progress_cb` xuyên suốt download engines + `DownloadProgressBar` wired vào VideoStep + `PrefetchWorker.progress` Signal; `tests/test_download_progress_callback.py` 6 pass.
+
 # Thanh Tiến Độ Phần Trăm Khi Tải Video (Douyin & Bilibili) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

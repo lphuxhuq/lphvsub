@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE (PHẦN SINH NỘI DUNG) — AUTO-PUBLISH CHƯA LÀM**
+> Sinh metadata/thumbnail/publishing package hoàn tất; upload tự động CHƯA làm.
+> Minh chứng: `autodub/content/generator.py` ghi gói content vào `output/*/youtube/`. Follow-up: YouTube Data API / TikTok Content API upload.
+
 # Social Automation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

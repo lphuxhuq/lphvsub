@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Nhiều vùng blur với timing hoàn tất; đã tối ưu batch single-split (2026-09-10).
+> Minh chứng: `blur_regions` + `enable=between(t,...)`; commit a3e0b4d (batch split); `tests/test_subtitle.py` pass.
+
 # Multiple Blur Regions Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

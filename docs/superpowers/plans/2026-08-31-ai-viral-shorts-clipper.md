@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> AI Viral Shorts & Reels Clipper hoàn tất kèm Studio dialog.
+> Minh chứng: `autodub/content/viral_clipper.py` + `autodub/media/clipper.py` + `viral_clipper_dialog.py`; commit 010066f.
+
 # AI Viral Shorts & Reels Clipper Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

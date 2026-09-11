@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Karaoke acoustic word alignment hoàn tất, đã triệt tiêu dialogue overlap.
+> Minh chứng: `autodub/speech/acoustic_align.py` + `autodub/text/ass_karaoke.py`; commit 179767d; `tests/test_ass_karaoke.py` pass.
+
 # Karaoke Acoustic Word Alignment Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

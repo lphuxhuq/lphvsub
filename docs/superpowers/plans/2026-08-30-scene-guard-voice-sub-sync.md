@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **STATUS KIỂM TOÁN 2026-09-10: DONE / VERIFIED**
+> Dual-edge scene guard + word-level timing hoàn tất.
+> Minh chứng: Scene guard + invariant usable_end > t trong `autodub/media/timing.py`; `tests/test_timing_engine_invariants.py` pass.
+
 # Dual-Edge Scene Guard & Word-Level Timing Sync Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
