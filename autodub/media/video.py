@@ -447,34 +447,24 @@ def merge_video(
         from autodub.media.parallel_export import _MIN_SPLIT_DURATION_S as _PSEND
     except ImportError:
         _PSEND = 45.0
+    has_timed_blur = any(
+        isinstance(r, dict) and r.get("time_range") for r in (effective_blur_regions or [])
+    )
     if (
         parallel_enabled
         and filter_complex
         and dur_probe
         and dur_probe >= _PSEND
         and subprocess.run is _REAL_SUBPROCESS_RUN
+        and subtitle_mode != "burn"
+        and not has_timed_blur
     ):
         try:
             from autodub.media.parallel_export import parallel_chunked_export
 
-            soft_args = (
-                [
-                    "-i",
-                    srt_path,
-                    "-map",
-                    "2:s",
-                    "-c:s",
-                    "mov_text",
-                    "-metadata:s:s:0",
-                    f"language={subtitle_lang}",
-                    "-disposition:s:0",
-                    "default",
-                ]
-                if subtitle_mode == "soft"
-                else []
-            )
-
-            def _build_chunk_cmd(src: str, start_s: float, end_s: float, chunk_out: str) -> list:
+            def _build_chunk_cmd(
+                src: str, start_s: float, end_s: float, chunk_out: str
+            ) -> list[str]:
                 chunk_cmd = [
                     "ffmpeg",
                     *hw_args,
@@ -486,6 +476,10 @@ def merge_video(
                     f"{end_s:.3f}",
                     "-i",
                     src,
+                    "-ss",
+                    f"{start_s:.3f}",
+                    "-to",
+                    f"{end_s:.3f}",
                     "-i",
                     audio_path,
                 ]
@@ -503,8 +497,23 @@ def merge_video(
                 ]
                 if apply_speed:
                     chunk_cmd += ["-fps_mode", "cfr"]
-                if soft_args:
-                    chunk_cmd += soft_args
+                if subtitle_mode == "soft" and srt_path:
+                    chunk_cmd += [
+                        "-ss",
+                        f"{start_s:.3f}",
+                        "-to",
+                        f"{end_s:.3f}",
+                        "-i",
+                        srt_path,
+                        "-map",
+                        "2:s",
+                        "-c:s",
+                        "mov_text",
+                        "-metadata:s:s:0",
+                        f"language={subtitle_lang}",
+                        "-disposition:s:0",
+                        "default",
+                    ]
                 if randomize_metadata:
                     from autodub.media.metadata import build_clean_metadata_args
 
@@ -514,6 +523,7 @@ def merge_video(
 
             # filter_args / codec cần sẵn cho callback — dùng holder dict
             # vì callback closure được gọi sau khi biến local được gán.
+            filter_script_file = None
             if (
                 len(filter_complex) > 1024
                 or "\n" in filter_complex

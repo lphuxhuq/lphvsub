@@ -62,7 +62,9 @@ test('chuẩn hóa: sai độ dài trả về chuỗi rỗng', () => {
 
 test('mã đơn hàng chỉ chữ HOA và số (ngân hàng lọc ký tự đặc biệt)', () => {
   for (let i = 0; i < 100; i += 1) {
-    assert.match(generateOrderCode(), /^VOX\d{6}$/)
+    const code = generateOrderCode()
+    assert.match(code, /^VOX\d{6}$/)
+    assert.ok(Number(code.slice(3)) >= 1, 'orderCode số phải >= 1 cho PayOS')
   }
 })
 

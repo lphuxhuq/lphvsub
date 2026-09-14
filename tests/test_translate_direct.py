@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 
 from autodub.config import Settings
 from autodub.languages import get_target
@@ -256,3 +257,14 @@ def test_response_schema_in_gemini_payload():
     cfg = captured["payload"]["generationConfig"]
     assert cfg["responseMimeType"] == "application/json"
     assert cfg["responseSchema"] == schema
+
+
+def test_translate_segments_direct_empty_segments():
+    """Xác minh: segments rỗng không crash ValueError max_workers=0."""
+    from autodub.languages import get_target
+    from autodub.text.translate_direct import translate_segments_direct
+
+    settings = mock.MagicMock()
+    settings.gemini_api_key = "dummy"
+    res = translate_segments_direct([], get_target("vi"), "zh-CN", settings)
+    assert res == []

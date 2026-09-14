@@ -41,7 +41,7 @@ const providerCache = new Map()   // role -> { list, expiresAt }
 async function syncProvidersFromEnv() {
   const envPaths = [
     path.join(__dirname, '../../.env'),           // control_server/.env
-    path.join(__dirname, '../../../../.env'),      // root .env
+    path.join(__dirname, '../../../.env'),         // root .env
     path.join(process.cwd(), '.env'),             // current working dir .env
     path.join(process.cwd(), 'control_server/.env'),
   ]

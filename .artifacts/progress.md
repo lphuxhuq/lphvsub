@@ -1,6 +1,34 @@
 # TIẾN ĐỘ
 
-## AI Multi-Speaker Smart Voice Director (Đạo diễn Lồng Tiếng Đa Nhân Vật Tự Động) — HOÀN THÀNH TOÀN BỘ ✅ (2026-09-02)
+## Khắc phục triệt để 8 Bug Crash & Lỗi Logic — HOÀN THÀNH TOÀN BỘ ✅ (2026-09-14)
+
+Đã hoàn thành xuất sắc toàn bộ 9 Task theo kế hoạch (`.artifacts/tasks/bug-fixes-plan.md`):
+
+1. **TASK-001 (P0): Fix Parallel Export Audio & Subtitle Sync** (`autodub/media/video.py`):
+   - Thêm `-ss {start_s:.3f} -to {end_s:.3f}` trước `-i audio_path` và `-i srt_path` trong `_build_chunk_cmd`, khắc phục triệt để lỗi phình thời lượng video gấp 4 lần (video 60s thành 240s) và lặp audio.
+   - Thêm guard `subtitle_mode != "burn"` và `not has_timed_blur` cho parallel export, bảo đảm chế độ sub cứng luôn dùng luồng 1-process ổn định 100% PTS, không lệch sub.
+2. **TASK-002 (P0): Fix `translate_segments_direct` Empty Segments Crash** (`autodub/text/translate_direct.py`):
+   - Thêm early return `if not segments: return []` ngăn chặn crash `ValueError: max_workers must be greater than 0`.
+3. **TASK-003 (P1): Fix QTimer Context trong Editor AI Retranslate** (`autodub_gui/pages/editor_page.py`):
+   - Chuyển `QTimer.singleShot(0, _done)` thành `QTimer.singleShot(0, self, _done)` và `_err` với context `self`, bảo đảm callback từ background thread được dispatch về main thread Qt.
+4. **TASK-004 (P1): Dependency Scikit-learn & Lazy Fallback** (`requirements.txt`, `pyproject.toml`, `autodub/speech/diarization.py`):
+   - Thêm `scikit-learn>=1.3.0` và `scipy>=1.10.0` vào build metadata.
+   - Bọc lazy import an toàn trong `diarization.py`, fallback về 1 speaker nếu môi trường thiếu thư viện.
+5. **TASK-005 (P2): Fix `sub_vi` Splitting & Merging trong Editor** (`autodub/editor.py`):
+   - `split_segment` chia đôi `sub_vi` theo tỷ lệ cắt chữ, không nhân bản đè text mới.
+   - `merge_segments` gộp phụ đề của toàn bộ nhóm câu, tự động xóa trường thừa nếu trùng spoken text.
+6. **TASK-006 (P2): Fix ZeroDivisionError trong `_apply_slowdown`** (`autodub/editor.py`):
+   - Đổi điều kiện thành `0.1 <= speed < 0.999`.
+7. **TASK-007 (P2): Fix `payosOrderCode: 0`** (`control_server/src/utils/keycode.js`):
+   - Đổi sang `crypto.randomInt(1, 1_000_000)` bảo đảm `payosOrderCode >= 1` hợp lệ với PayOS.
+8. **TASK-008 (P3): Fix `.env` Root Path Traversal** (`control_server/src/services/ai-gateway.service.js`):
+   - Sửa `../../../../.env` thành `../../../.env`.
+9. **TASK-009: Verification & Regression Suite Check**:
+   - Python Test Suite: **1340 / 1340 passed (100%)** trong 114.16s.
+   - Node.js Test Suite: **59 / 59 passed (100%)** trong 0.34s.
+   - Linter: `py -m ruff check .` **All checks passed!**
+
+---
 
 Đã triển khai hoàn chỉnh toàn bộ 7 Task theo kế hoạch (`.artifacts/tasks/ai-multi-speaker-voice-director.md`):
 

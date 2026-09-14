@@ -762,7 +762,7 @@ def _apply_slowdown(
             with open(deferred_marker, encoding="utf-8") as f:
                 info = json.load(f)
             speed, fps = float(info["speed"]), str(info["fps"])
-            if speed < 0.999:
+            if 0.1 <= speed < 0.999:
                 rescale_segments(segments, 1.0 / speed)
                 annotate_slots(segments)
                 logger.info(f"Làm chậm video ({speed}x) gộp vào lượt xuất — như lần chạy trước")
@@ -1574,6 +1574,8 @@ def split_segment(
     left_source, right_source = _split_text(str(segment.get("text", "")), ratio)
     spk_id = int(segment.get("speaker_id", 0))
 
+    from autodub.text.srt import SUBTITLE_FIELD
+
     left = dict(segment)
     left.update(
         {
@@ -1594,6 +1596,21 @@ def split_segment(
             "speaker_id": spk_id,
         }
     )
+
+    sub_orig = segment.get(SUBTITLE_FIELD)
+    if sub_orig:
+        left_sub, right_sub = _split_text(str(sub_orig), ratio)
+        if left_sub and left_sub != left_text:
+            left[SUBTITLE_FIELD] = left_sub
+        else:
+            left.pop(SUBTITLE_FIELD, None)
+        if right_sub and right_sub != right_text:
+            right[SUBTITLE_FIELD] = right_sub
+        else:
+            right.pop(SUBTITLE_FIELD, None)
+    else:
+        left.pop(SUBTITLE_FIELD, None)
+        right.pop(SUBTITLE_FIELD, None)
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     # Cả hai nửa đều phải đọc lại vì lời thoại đã khác, nên bỏ tệp giọng cũ.
@@ -1636,6 +1653,20 @@ def merge_segments(work_dir: str, seg_ids: list[int], target_key: str = "vi") ->
     ).strip()
     merged["text"] = " ".join(str(s.get("text", "")).strip() for s in group).strip()
     merged["speaker_id"] = int(group[0].get("speaker_id", 0))
+
+    from autodub.text.srt import SUBTITLE_FIELD
+
+    has_any_sub = any(bool(s.get(SUBTITLE_FIELD)) for s in group)
+    if has_any_sub:
+        merged_sub = " ".join(
+            str(s.get(SUBTITLE_FIELD) or s.get(target.text_field, "")).strip() for s in group
+        ).strip()
+        if merged_sub and merged_sub != merged[target.text_field]:
+            merged[SUBTITLE_FIELD] = merged_sub
+        else:
+            merged.pop(SUBTITLE_FIELD, None)
+    else:
+        merged.pop(SUBTITLE_FIELD, None)
 
     old_ids = [int(s.get("id", -1)) for s in segments]
     for seg_id in ids:

@@ -12,6 +12,8 @@ license = { file = "LICENSE" }
 dependencies = [
     "pydub>=0.25.1",
     "numpy>=1.24",
+    "scipy>=1.10.0",
+    "scikit-learn>=1.3.0",
     "audioop-lts>=0.2.2; python_version >= '3.13'",
     "python-dotenv>=1.0.1",
     "requests>=2.31.0",

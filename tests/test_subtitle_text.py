@@ -136,3 +136,36 @@ def test_unknown_id_is_reported(work_dir):
     wd, _path = work_dir
     with pytest.raises(EditorError, match="Không tìm thấy câu"):
         save_subtitle_texts(wd, {99: "x"})
+
+
+def test_split_and_merge_preserve_subtitles(work_dir):
+    """Xác minh: split_segment chia đôi sub_vi tương ứng; merge_segments ghép sub_vi lại."""
+    import json
+
+    from autodub.editor import merge_segments, save_subtitle_texts, split_segment
+    from autodub.text.srt import SUBTITLE_FIELD
+
+    wd, transcript_path = work_dir
+
+    # 1. Đặt sub_vi tùy biến cho câu 1 ("Nửa đầu phụ đề và nửa sau phụ đề")
+    save_subtitle_texts(wd, {1: "Nửa đầu phụ đề và nửa sau phụ đề"})
+
+    # Tách câu 1 (start 0.0, end 2.0) tại 1.0s
+    left_id, right_id = split_segment(wd, 1, 1.0)
+    with open(transcript_path, encoding="utf-8") as f:
+        segs = json.load(f)
+
+    left_seg = next(s for s in segs if s["id"] == left_id)
+    right_seg = next(s for s in segs if s["id"] == right_id)
+
+    assert left_seg.get(SUBTITLE_FIELD) != "Nửa đầu phụ đề và nửa sau phụ đề"
+    assert "Nửa đầu" in str(left_seg.get(SUBTITLE_FIELD, ""))
+    assert "nửa sau" in str(right_seg.get(SUBTITLE_FIELD, ""))
+
+    # 2. Gộp lại
+    merged_id = merge_segments(wd, [left_id, right_id])
+    with open(transcript_path, encoding="utf-8") as f:
+        segs = json.load(f)
+    merged_seg = next(s for s in segs if s["id"] == merged_id)
+    assert "Nửa đầu" in str(merged_seg.get(SUBTITLE_FIELD, ""))
+    assert "nửa sau" in str(merged_seg.get(SUBTITLE_FIELD, ""))

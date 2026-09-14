@@ -1168,14 +1168,14 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                     self.reload_segments()
                     TOASTS.success(f"Câu {seg_id}: đã dịch lại bằng AI thành công!")
 
-                QTimer.singleShot(0, _done)
+                QTimer.singleShot(0, self, _done)
             except Exception as e:
                 err_msg = str(e)  # except-as bị xóa khỏi scope khi block thoát
 
                 def _err():
                     TOASTS.error(f"Lỗi dịch lại câu {seg_id}: {err_msg}")
 
-                QTimer.singleShot(0, _err)
+                QTimer.singleShot(0, self, _err)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1239,7 +1239,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                     self.save_indicator.set_state("saved", "Đã dịch AI xong")
                     TOASTS.success(f"Đã dịch lại xong toàn bộ {len(translated)} câu bằng AI!")
 
-                QTimer.singleShot(0, _done)
+                QTimer.singleShot(0, self, _done)
             except Exception as e:
                 err_msg = str(e)  # except-as bị xóa khỏi scope khi block thoát
 
@@ -1247,7 +1247,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
                     self.save_indicator.set_state("error", err_msg)
                     TOASTS.error(f"Lỗi dịch lại dự án: {err_msg}")
 
-                QTimer.singleShot(0, _err)
+                QTimer.singleShot(0, self, _err)
 
         threading.Thread(target=_worker, daemon=True).start()
 

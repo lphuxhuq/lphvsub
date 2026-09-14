@@ -14,10 +14,21 @@ import wave
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy import fft, signal
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import silhouette_score
-from sklearn.metrics.pairwise import cosine_distances
+
+try:
+    from scipy import fft, signal
+except ImportError:
+    fft = None
+    signal = None
+
+try:
+    from sklearn.cluster import AgglomerativeClustering
+    from sklearn.metrics import silhouette_score
+    from sklearn.metrics.pairwise import cosine_distances
+except ImportError:
+    AgglomerativeClustering = None
+    silhouette_score = None
+    cosine_distances = None
 
 from autodub.utils import setup_logging
 
@@ -291,11 +302,14 @@ def _bandpass_filter(
 def estimate_num_speakers(
     emb_matrix: np.ndarray,
     min_speakers: int = 1,
-    max_speakers: int = 4,
+    max_speakers: int = MAX_SPEAKERS_DEFAULT,
     distance_threshold: float = DISTANCE_THRESHOLD,
     silhouette_threshold: float = SILHOUETTE_THRESHOLD,
 ) -> tuple[int, float]:
-    """Estimate optimal number of speakers using Silhouette analysis & distance clustering."""
+    """Estimate the optimal number of clusters K using Silhouette Analysis."""
+    if AgglomerativeClustering is None or cosine_distances is None:
+        return 1, 1.0
+
     n_samples = len(emb_matrix)
     if n_samples <= 1:
         return 1, 1.0
@@ -339,7 +353,7 @@ def cluster_speaker_embeddings(
     n = len(emb_matrix)
     if n == 0:
         return []
-    if num_speakers <= 1 or n <= 1:
+    if AgglomerativeClustering is None or num_speakers <= 1 or n <= 1:
         return [0] * n
 
     k = min(num_speakers, n)
@@ -372,6 +386,14 @@ def diarize_segments(
     out_segments = [dict(s) for s in segments]
     if not out_segments:
         return []
+
+    if AgglomerativeClustering is None or signal is None:
+        logger.warning(
+            "Diarization: scikit-learn / scipy chưa được cài đặt — fallback sang 1 người nói (0)."
+        )
+        for s in out_segments:
+            s["speaker_id"] = 0
+        return out_segments
 
     if settings is not None and not getattr(settings, "diarization_enabled", True):
         for s in out_segments:

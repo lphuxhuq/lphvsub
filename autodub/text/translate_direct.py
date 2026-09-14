@@ -740,6 +740,9 @@ def translate_segments_direct(
     checkpoint_path: str | None = None,
 ) -> list[dict]:
     """Dịch toàn bộ các câu thoại trực tiếp qua API bên thứ 3 với đa luồng song song."""
+    if not segments:
+        return []
+
     client, provider_desc = get_direct_client(settings)
 
     annotate_slots(segments)

@@ -52,7 +52,7 @@ function normalizeKeyCode(raw) {
 
 /** Mã đơn hàng — chỉ chữ HOA + số, vì ngân hàng lọc ký tự đặc biệt. */
 function generateOrderCode() {
-  const n = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0')
+  const n = crypto.randomInt(1, 1_000_000).toString().padStart(6, '0')
   return `VOX${n}`
 }
 
