@@ -201,7 +201,7 @@ class VideoPreviewLoaderDialog(QDialog):
 class VideoStep(_StepPanel):
     """Bước 1: chọn nguồn video (hỗ trợ nhập 1 hoặc nhiều liên kết để chạy đa luồng)."""
 
-    SOURCES = [("Dán liên kết", "url"), ("Tải tệp lên", "file"), ("Tiếp tục dang dở", "resume")]
+    SOURCES = [("Dán link", "url"), ("Chọn tệp", "file"), ("Dự án dở", "resume")]
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(
@@ -905,7 +905,7 @@ class RecognizeStep(_StepPanel):
         )
         self.auto_detect.toggled.connect(self._on_auto)
 
-        self.diarization_enabled = QCheckBox("Tự động phân tách người nói (Speaker Diarization)")
+        self.diarization_enabled = QCheckBox("Tự động phân tách người nói (Diarization)")
         self.diarization_enabled.setToolTip(
             "Tự động nhận diện và phân biệt các nhân vật khác nhau trong video bằng âm sắc giọng nói."
         )
@@ -1014,7 +1014,7 @@ class TranslateStep(_StepPanel):
         self.auto_translate.toggled.connect(self._on_auto_translate)
         self.body.addWidget(self.auto_translate)
 
-        self.metadata = QCheckBox("Tạo tiêu đề + mô tả đăng bài (YouTube/TikTok/Facebook)")
+        self.metadata = QCheckBox("Tạo tiêu đề và mô tả mạng xã hội")
         self.metadata.setToolTip(
             "AI viết sẵn tiêu đề, mô tả và hashtag cho mạng xã hội, lưu vào "
             "tệp youtube_post.txt trong thư mục dự án."
@@ -1027,13 +1027,13 @@ class TranslateStep(_StepPanel):
         self.engine = LabeledCombo(
             "Công nghệ dịch",
             [
-                ("Gemini SRT Translator Pro / Gemini Direct (Google AI - Nhanh & Chuẩn)", "gemini"),
-                ("Google AI Studio qua Trình duyệt (Miễn phí, không cần API Key)", "ai_studio"),
-                ("DeepSeek API Trực tiếp (deepseek-chat)", "deepseek"),
-                ("OpenRouter API (Hàng trăm mô hình AI)", "openrouter"),
+                ("Gemini Direct (Google AI - Nhanh & Chuẩn)", "gemini"),
+                ("Google AI Studio (Trình duyệt, Miễn phí)", "ai_studio"),
+                ("DeepSeek API (deepseek-chat)", "deepseek"),
+                ("OpenRouter API (Đa mô hình AI)", "openrouter"),
                 ("OpenAI API (GPT-4o, GPT-4o-mini)", "openai"),
             ],
-            "Chọn nơi xử lý dịch thuật: Gemini SRT Pro, AI Studio (trình duyệt, miễn phí), API trực tiếp (DeepSeek/OpenRouter/OpenAI).",
+            "Chọn nơi xử lý dịch thuật: Gemini Direct, AI Studio (miễn phí), hoặc API trực tiếp (DeepSeek/OpenRouter/OpenAI).",
         )
         self.engine.changed.connect(self._on_engine_changed)
 
@@ -1414,6 +1414,7 @@ class VoiceStep(_StepPanel):
         self.btn_load_ckpt = GhostButton("Nạp")
         self.btn_load_ckpt.setToolTip("Nạp toàn bộ thiết lập từ Checkpoint đang chọn")
         self.btn_load_ckpt.clicked.connect(self._on_load_checkpoint_clicked)
+        self.btn_load_ckpt.setStyleSheet("padding: 4px 10px; min-height: 18px;")
         ckpt_layout.addWidget(self.btn_load_ckpt)
 
         self.btn_save_ckpt = PrimaryButton("Lưu")
@@ -1421,11 +1422,13 @@ class VoiceStep(_StepPanel):
             "Lưu toàn bộ thiết lập hiện tại thành Checkpoint (theo tên kênh)"
         )
         self.btn_save_ckpt.clicked.connect(self._on_save_checkpoint_clicked)
+        self.btn_save_ckpt.setStyleSheet("padding: 4px 10px; min-height: 18px;")
         ckpt_layout.addWidget(self.btn_save_ckpt)
 
         self.btn_del_ckpt = GhostButton("Xóa")
         self.btn_del_ckpt.setToolTip("Xóa Checkpoint đang chọn")
         self.btn_del_ckpt.clicked.connect(self._on_delete_checkpoint_clicked)
+        self.btn_del_ckpt.setStyleSheet("padding: 4px 10px; min-height: 18px;")
         ckpt_layout.addWidget(self.btn_del_ckpt)
 
         self.btn_load_checkpoint = self.btn_load_ckpt
@@ -1573,7 +1576,7 @@ class VoiceStep(_StepPanel):
         self.body.addWidget(self._logo_section)
 
         # Watermark chữ chìm chuyển động
-        self._wm_section = CollapsibleSection("Watermark chữ chìm chuyển động (Chống reup)")
+        self._wm_section = CollapsibleSection("Watermark chữ chìm (Chống reup)")
         self._wm_section.toggled.connect(lambda _e: self.changed.emit())
 
         self.wm_text = LabeledLineEdit(
@@ -1587,7 +1590,7 @@ class VoiceStep(_StepPanel):
         self.wm_motion = LabeledCombo(
             "Kiểu chuyển động",
             [
-                ("Chạy nảy mượt mà quanh video (Khuyên dùng)", "bounce"),
+                ("Chạy nảy mượt mà (Khuyên dùng)", "bounce"),
                 ("Cố định góc trên bên phải", "top_right"),
                 ("Cố định góc dưới bên phải", "bottom_right"),
                 ("Cố định góc dưới bên trái", "bottom_left"),
@@ -1619,19 +1622,17 @@ class VoiceStep(_StepPanel):
         self.body.addWidget(self._wm_section)
 
         # Xử lý Video & Chống quét bản quyền (Anti-Content ID)
-        self._anti_id_section = CollapsibleSection(
-            "Xử lý Video & Chống bản quyền (Anti-Content ID)"
-        )
+        self._anti_id_section = CollapsibleSection("Xử lý Video & Chống bản quyền")
         self._anti_id_section.toggled.connect(lambda _e: self.changed.emit())
 
-        self.smart_flip = QCheckBox("Lật gương thông minh (Smart Flip — Giữ nguyên phụ đề / logo)")
+        self.smart_flip = QCheckBox("Lật gương thông minh (Smart Flip)")
         self.smart_flip.setToolTip(
             "Lật ngang hình ảnh video để tránh nhận diện bản quyền nhưng không lật chữ tiếng Việt."
         )
         self.smart_flip.toggled.connect(lambda _c: self.changed.emit())
         self._anti_id_section.add_widget(self.smart_flip)
 
-        self.micro_zoom = QCheckBox("Zoom động 103% & Trượt góc máy (Micro-zoom)")
+        self.micro_zoom = QCheckBox("Zoom động 103% & Trượt góc máy")
         self.micro_zoom.setToolTip(
             "Phóng to nhẹ và chuyển động vi mô phá vỡ thuật toán quét khuôn hình."
         )
@@ -1642,11 +1643,11 @@ class VoiceStep(_StepPanel):
             "Bộ lọc màu điện ảnh",
             [
                 ("Nguyên bản (Không lọc màu)", "none"),
-                ("Cinematic Warm (Ấm áp điện ảnh)", "cinematic_warm"),
-                ("Teal & Orange (Phim bom tấn Hollywood)", "teal_orange"),
-                ("Vintage Retro (Hoài niệm cổ điển)", "vintage"),
-                ("Moody Dark (Tương phản cao)", "moody_dark"),
-                ("Clean Film (Trong trẻo sắc nét)", "clean_film"),
+                ("Cinematic Warm (Ấm áp)", "cinematic_warm"),
+                ("Teal & Orange (Hollywood)", "teal_orange"),
+                ("Vintage Retro (Cổ điển)", "vintage"),
+                ("Moody Dark (Tương phản)", "moody_dark"),
+                ("Clean Film (Sắc nét)", "clean_film"),
             ],
         )
         self.color_filter.changed.connect(lambda *_a: self.changed.emit())
@@ -1662,7 +1663,7 @@ class VoiceStep(_StepPanel):
 
         self.body.addWidget(self._anti_id_section)
 
-        self.audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề, bỏ ghép video")
+        self.audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề")
         self.audio_only.setToolTip(
             "Bật khi bạn tự dựng video ở phần mềm khác và chỉ cần tiếng Việt cùng tệp phụ đề."
         )

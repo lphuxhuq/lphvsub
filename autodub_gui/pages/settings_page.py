@@ -283,7 +283,8 @@ class SettingsPage(BasePage):
 
     def _build_footer(self) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setSpacing(tokens.SP_2)
+        row.setContentsMargins(0, tokens.SP_3, 0, tokens.SP_2)
+        row.setSpacing(tokens.SP_3)
         self.btn_defaults = GhostButton("Khôi phục mặc định")
         self.btn_defaults.clicked.connect(self._restore_defaults)
         self.btn_cancel = GhostButton("Hủy")

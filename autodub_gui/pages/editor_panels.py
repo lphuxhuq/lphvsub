@@ -146,7 +146,7 @@ class SegmentRow(QWidget):
             f"QPushButton {{ background: {tokens.BG_SELECTED_SOFT}; "
             f"color: {tokens.ACCENT_PURPLE}; font-size: {tokens.FS_BADGE}px; "
             f"font-weight: 600; border: 1px solid {tokens.ACCENT_PURPLE}; "
-            f"border-radius: 8px; padding: 0 6px; }} "
+            f"border-radius: 8px; padding: 0 6px; min-height: 0px; }} "
             f"QPushButton:hover {{ background: {tokens.BG_SELECTED}; }}"
         )
         self._voice_chip.setFixedHeight(18)

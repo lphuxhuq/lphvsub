@@ -433,7 +433,8 @@ class _FrameCanvas(QWidget):
             return
 
         bg_color_hex = str(self._banner_opts.get("color", "#000000")).strip()
-        bg_col = QColor(bg_color_hex) if QColor.isValidColor(bg_color_hex) else QColor("#000000")
+        _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
+        bg_col = QColor(bg_color_hex) if _is_valid(bg_color_hex) else QColor("#000000")
 
         # Chiều cao mỗi dải banner theo tỷ lệ người dùng chọn (mặc định 16%)
         height_ratio = float(
@@ -474,7 +475,7 @@ class _FrameCanvas(QWidget):
                 or self._banner_opts.get("header_color")
                 or "#FFFFFF"
             ).strip()
-            text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFFFFF")
+            text_col = QColor(c_hex) if _is_valid(c_hex) else QColor("#FFFFFF")
             painter.setFont(QFont("Arial", fs, QFont.Bold))
             painter.setPen(text_col)
             painter.drawText(
@@ -497,7 +498,7 @@ class _FrameCanvas(QWidget):
                 or self._banner_opts.get("footer_color")
                 or "#FFD54A"
             ).strip()
-            text_col = QColor(c_hex) if QColor.isValidColor(c_hex) else QColor("#FFD54A")
+            text_col = QColor(c_hex) if _is_valid(c_hex) else QColor("#FFD54A")
             painter.setFont(QFont("Arial", fs, QFont.Bold))
             painter.setPen(text_col)
             painter.drawText(
@@ -2148,14 +2149,15 @@ class StyleDialog(QDialog):
 
     def _paint_color_button(self, btn: QPushButton, hex_color: str) -> None:
         btn.setText(hex_color)
-        c = QColor(hex_color) if QColor.isValidColor(hex_color) else QColor("#FFFFFF")
+        _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
+        c = QColor(hex_color) if _is_valid(hex_color) else QColor("#FFFFFF")
         luminance = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
         text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
         btn.setStyleSheet(
             f"QPushButton {{ background: {hex_color}; color: {text_color}; "
             f"border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; "
             f"font-family: monospace; font-size: 11px; font-weight: bold; "
-            f"padding: 0 4px; }}"
+            f"padding: 0 4px; min-height: 0px; }}"
             f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; }}"
         )
 

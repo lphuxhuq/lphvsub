@@ -53,10 +53,10 @@ from autodub_gui.workers import BatchWorker, DubWorker, ExportWorker, PrefetchWo
 DRAFT_FILE = "draft_project.json"
 _DRAFT_DEBOUNCE_MS = 800
 _PAGE_MARGIN = 28
-_FORM_MAX_W = 460
-_FORM_MIN_W = 390  # đủ chỗ cho bước rộng nhất — không thì cắt mép phải
-_PREVIEW_STRETCH = 6
-_FORM_STRETCH = 4
+_FORM_MAX_W = 680
+_FORM_MIN_W = 440  # đủ chỗ cho bước rộng nhất — không thì cắt mép phải
+_PREVIEW_STRETCH = 5
+_FORM_STRETCH = 5
 
 # Bước nào của quá trình xử lý ứng với ô nào trên thanh sáu bước.
 # Toàn bộ phần chạy (nghe, dịch, đọc, ghép tiếng) nằm trong bước 5 «Chạy
@@ -227,7 +227,7 @@ class NewProjectPage(BasePage):
         layout = QVBoxLayout(holder)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        card = Card(padding=tokens.SP_5)
+        card = Card(padding=tokens.SP_4)
         scroll = QScrollArea()
         clear_background(scroll)
         scroll.viewport().setStyleSheet("background: transparent;")
@@ -270,7 +270,8 @@ class NewProjectPage(BasePage):
 
     def _build_footer(self) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setSpacing(tokens.SP_2)
+        row.setContentsMargins(0, tokens.SP_3, 0, tokens.SP_2)
+        row.setSpacing(tokens.SP_3)
         self.btn_back = GhostButton("Quay lại")
         self.btn_back.clicked.connect(self._go_back)
         self.btn_clear_draft = GhostButton("Xóa nháp")

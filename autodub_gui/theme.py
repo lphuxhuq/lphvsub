@@ -476,7 +476,7 @@ QPushButton#primary {{
     border-top: 1px solid {_t.GLASS_HIGHLIGHT};
     color: {_t.TEXT_ON_ACCENT};
     font-weight: 600;
-    padding: 10px 24px;
+    padding: 8px 20px;
     border-radius: {_t.RADIUS_MD}px;
     letter-spacing: 0px;
 }}
@@ -579,7 +579,7 @@ QPushButton#segment {{
     background: transparent;
     border: 1px solid {_t.BORDER_SUBTLE};
     border-radius: {_t.RADIUS_NONE}px;
-    padding: 8px 14px;
+    padding: 6px 12px;
     font-size: {_t.FS_BODY}px;
     font-weight: 500;
     color: {_t.TEXT_SECONDARY};
@@ -814,36 +814,48 @@ QTabBar::tab:disabled {{
     color: {_t.TEXT_DISABLED};
 }}
 
-/* Thin Minimal Scrollbar */
+/* Accessible Modern Scrollbar */
 QScrollBar:vertical {{
-    background: transparent;
-    width: 6px;
-    margin: 4px 2px;
+    background: rgba(0, 0, 0, 0.12);
+    width: 10px;
+    margin: 2px 0px;
+    border-radius: 5px;
 }}
 QScrollBar::handle:vertical {{
-    background: {_t.BORDER_DEFAULT};
-    border-radius: 3px;
-    min-height: 24px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    min-height: 32px;
+    margin: 0px 1px;
 }}
 QScrollBar::handle:vertical:hover {{
-    background: {_t.SCROLL_HANDLE_HOVER};
+    background: {_t.PRIMARY};
+}}
+QScrollBar::handle:vertical:pressed {{
+    background: {_t.PRIMARY_DARK};
 }}
 QScrollBar:horizontal {{
-    background: transparent;
-    height: 6px;
-    margin: 2px 4px;
+    background: rgba(0, 0, 0, 0.12);
+    height: 10px;
+    margin: 0px 2px;
+    border-radius: 5px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {_t.BORDER_DEFAULT};
-    border-radius: 3px;
-    min-width: 24px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    min-width: 32px;
+    margin: 1px 0px;
 }}
 QScrollBar::handle:horizontal:hover {{
-    background: {_t.SCROLL_HANDLE_HOVER};
+    background: {_t.PRIMARY};
+}}
+QScrollBar::handle:horizontal:pressed {{
+    background: {_t.PRIMARY_DARK};
 }}
 QScrollBar::add-line, QScrollBar::sub-line {{
     height: 0;
     width: 0;
+    border: none;
+    background: transparent;
 }}
 QScrollBar::add-page, QScrollBar::sub-page {{
     background: transparent;
