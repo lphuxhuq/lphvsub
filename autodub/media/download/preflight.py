@@ -45,17 +45,41 @@ class PlatformDetector:
         plat = platform or PlatformDetector.detect(clean_url)
 
         if plat == Platform.BILIBILI:
+            # Giải mã link rút gọn b23.tv nếu có
+            if "b23.tv" in clean_url.lower():
+                from autodub.media.downloader import _resolve_b23_shortlink
+
+                clean_url = _resolve_b23_shortlink(clean_url)
             m_bv = _BILI_BV_PATTERN.search(clean_url)
             if m_bv:
-                return m_bv.group(1)
+                bvid = m_bv.group(1)
+                import urllib.parse
+
+                p_idx = 1
+                try:
+                    parsed = urllib.parse.urlparse(clean_url)
+                    qs = urllib.parse.parse_qs(parsed.query)
+                    p_idx = max(1, int(qs.get("p", ["1"])[0]))
+                except Exception:
+                    pass
+                return f"{bvid}_p{p_idx}" if p_idx > 1 else bvid
             m_av = _BILI_AV_PATTERN.search(clean_url)
             if m_av:
                 return m_av.group(1)
 
         elif plat == Platform.DOUYIN:
-            m_dy = _DOUYIN_VID_PATTERN.search(clean_url)
+            from autodub.media.douyin import extract_clean_url
+
+            c_url = extract_clean_url(clean_url)
+            m_dy = _DOUYIN_VID_PATTERN.search(c_url)
             if m_dy:
                 return m_dy.group(1) or m_dy.group(2)
+            if "v.douyin.com" in c_url.lower():
+                from autodub.media.douyin import resolve_video_id
+
+                vid = resolve_video_id(c_url)
+                if vid:
+                    return vid
 
         elif plat == Platform.YOUTUBE:
             m_yt = _YT_VID_PATTERN.search(clean_url)

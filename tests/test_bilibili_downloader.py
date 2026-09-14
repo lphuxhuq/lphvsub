@@ -194,3 +194,44 @@ def test_update_ytdlp_failure(monkeypatch):
 
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: Bad())
     assert update_ytdlp() is False
+
+
+def test_bilibili_pagination_media_id_distinct():
+    """Xác minh: Các tập khác nhau của cùng một Bilibili video có media_id riêng biệt, không đè cache."""
+    from autodub.media.download.preflight import PlatformDetector
+
+    u1 = "https://www.bilibili.com/video/BV1xx411c7mD?p=1"
+    u2 = "https://www.bilibili.com/video/BV1xx411c7mD?p=2"
+
+    id1 = PlatformDetector.extract_media_id(u1)
+    id2 = PlatformDetector.extract_media_id(u2)
+
+    assert id1 == "BV1xx411c7mD"
+    assert id2 == "BV1xx411c7mD_p2"
+    assert id1 != id2
+
+
+def test_find_existing_project_by_url_pagination_isolation(tmp_path):
+    """Xác minh: find_existing_project_by_url không nhận nhầm tập 1 thành tập 2."""
+    import json
+
+    from autodub.pipeline import find_existing_project_by_url
+
+    # Tạo dự án cũ cho tập 1
+    proj_p1 = tmp_path / "proj_p1"
+    data_dir = proj_p1 / "data"
+    data_dir.mkdir(parents=True)
+    with open(data_dir / "source_info.json", "w", encoding="utf-8") as f:
+        json.dump({"url": "https://www.bilibili.com/video/BV1xx411c7mD?p=1"}, f)
+
+    # Tìm với link tập 1 -> Thấy
+    res1 = find_existing_project_by_url(
+        str(tmp_path), "https://www.bilibili.com/video/BV1xx411c7mD?p=1"
+    )
+    assert res1 == str(proj_p1)
+
+    # Tìm với link tập 2 -> KHÔNG được thấy tập 1
+    res2 = find_existing_project_by_url(
+        str(tmp_path), "https://www.bilibili.com/video/BV1xx411c7mD?p=2"
+    )
+    assert res2 is None

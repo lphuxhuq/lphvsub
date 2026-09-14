@@ -374,9 +374,10 @@ def _extract_via_playwright(
     headless: bool = True,
 ) -> dict:
     """Điều khiển Chromium bóc tách luồng phát Douyin (ưu tiên BrowserPool singleton)."""
-    captured = {"dash_video": [], "dash_audio": [], "progressive": []}
+    captured = {"dash_video": [], "dash_audio": [], "progressive": [], "target_urls": []}
     title = ""
     canonical = url
+    target_video_id = _extract_video_id(url)
 
     def _drive_page(page):
         nonlocal title, canonical
@@ -399,11 +400,18 @@ def _extract_via_playwright(
                     data = resp.json()
                     detail = data.get("aweme_detail") or {}
                     if detail:
+                        resp_aweme_id = str(detail.get("aweme_id", ""))
+                        if target_video_id and resp_aweme_id and resp_aweme_id != target_video_id:
+                            logger.warning(
+                                f"Ignoring aweme detail for different video: {resp_aweme_id} != {target_video_id}"
+                            )
+                            return
                         if not title:
                             desc = detail.get("desc")
                             if desc:
                                 title = desc.strip()
                         vid_obj = detail.get("video") or {}
+                        matched_urls = []
                         bit_rates = vid_obj.get("bit_rate") or []
                         if bit_rates:
                             sorted_br = sorted(
@@ -411,11 +419,13 @@ def _extract_via_playwright(
                             )
                             for br in sorted_br:
                                 for play_u in br.get("play_addr", {}).get("url_list", []):
-                                    if play_u and play_u not in captured["progressive"]:
-                                        captured["progressive"].append(play_u)
+                                    if play_u and play_u not in matched_urls:
+                                        matched_urls.append(play_u)
                         for play_u in vid_obj.get("play_addr", {}).get("url_list", []):
-                            if play_u and play_u not in captured["progressive"]:
-                                captured["progressive"].append(play_u)
+                            if play_u and play_u not in matched_urls:
+                                matched_urls.append(play_u)
+                        if matched_urls:
+                            captured["target_urls"] = matched_urls
             except Exception:
                 pass
 
@@ -515,7 +525,17 @@ def _extract_via_playwright(
 
     video_id = _extract_video_id(canonical) or ""
 
-    # Ưu tiên số 1: DASH streams (chứa toàn bộ video đầy đủ, chất lượng cao nhất)
+    # Ưu tiên số 1: URL video chính xác đã được đối chiếu khớp video_id từ aweme_detail
+    if captured.get("target_urls"):
+        return {
+            "mode": "progressive",
+            "canonical_url": canonical,
+            "video_id": video_id,
+            "title": title,
+            "video_url": captured["target_urls"][0],
+        }
+
+    # Ưu tiên số 2: DASH streams (chứa toàn bộ video đầy đủ, chất lượng cao nhất)
     if captured["dash_video"] and captured["dash_audio"]:
         return {
             "mode": "dash",
@@ -526,7 +546,7 @@ def _extract_via_playwright(
             "audio_url": max(captured["dash_audio"], key=_bitrate_of),
         }
 
-    # Ưu tiên số 2: Progressive MP4 (dự phòng nếu không có DASH)
+    # Ưu tiên số 3: Progressive MP4 (dự phòng nếu không có DASH)
     if captured["progressive"]:
         return {
             "mode": "progressive",
@@ -654,7 +674,6 @@ def _download_via_playwright(
     urls_to_try.extend(
         [
             f"https://www.douyin.com/video/{video_id}",
-            f"https://www.douyin.com/discover?modal_id={video_id}",
             f"https://www.iesdouyin.com/share/video/{video_id}/",
         ]
     )

@@ -197,9 +197,10 @@ class DouyinDownloader:
 
     def extract_via_browser_pool(self, url: str, wait_seconds: float = 15.0) -> dict[str, Any]:
         """Sniffs direct CDN URLs using pooled Chromium page."""
-        captured = {"dash_video": [], "dash_audio": [], "progressive": []}
+        captured = {"dash_video": [], "dash_audio": [], "progressive": [], "target_urls": []}
         title = ""
         canonical_url = url
+        target_video_id = self.extract_video_id(url)
 
         def on_request(req):
             u = req.url
@@ -219,11 +220,18 @@ class DouyinDownloader:
                     data = resp.json()
                     detail = data.get("aweme_detail") or {}
                     if detail:
+                        resp_aweme_id = str(detail.get("aweme_id", ""))
+                        if target_video_id and resp_aweme_id and resp_aweme_id != target_video_id:
+                            logger.warning(
+                                f"Ignoring aweme detail for different video: {resp_aweme_id} != {target_video_id}"
+                            )
+                            return
                         if not title:
                             desc = detail.get("desc")
                             if desc:
                                 title = desc.strip()
                         vid_obj = detail.get("video") or {}
+                        matched_urls = []
                         # 1. Bit rates (sorted highest first)
                         bit_rates = vid_obj.get("bit_rate") or []
                         if bit_rates:
@@ -232,12 +240,14 @@ class DouyinDownloader:
                             )
                             for br in sorted_br:
                                 for play_u in br.get("play_addr", {}).get("url_list", []):
-                                    if play_u and play_u not in captured["progressive"]:
-                                        captured["progressive"].append(play_u)
+                                    if play_u and play_u not in matched_urls:
+                                        matched_urls.append(play_u)
                         # 2. General play_addr
                         for play_u in vid_obj.get("play_addr", {}).get("url_list", []):
-                            if play_u and play_u not in captured["progressive"]:
-                                captured["progressive"].append(play_u)
+                            if play_u and play_u not in matched_urls:
+                                matched_urls.append(play_u)
+                        if matched_urls:
+                            captured["target_urls"] = matched_urls
             except Exception as ex:
                 logger.debug(f"Parsing aweme detail response failed: {ex}")
 
@@ -265,7 +275,11 @@ class DouyinDownloader:
 
             deadline = time.time() + wait_seconds
             while time.time() < deadline:
-                if captured["progressive"] or (captured["dash_video"] and captured["dash_audio"]):
+                if (
+                    captured.get("target_urls")
+                    or captured["progressive"]
+                    or (captured["dash_video"] and captured["dash_audio"])
+                ):
                     break
                 # Inspect DOM video currentSrc directly if network sniffer hasn't registered yet
                 try:
@@ -296,6 +310,15 @@ class DouyinDownloader:
             canonical_url = page.url
 
         video_id = self.extract_video_id(canonical_url) or ""
+
+        # Ưu tiên số 1: URL video chính xác đã được đối chiếu khớp video_id từ aweme_detail
+        if captured.get("target_urls"):
+            return {
+                "mode": "progressive",
+                "video_url": captured["target_urls"][0],
+                "title": title,
+                "video_id": video_id,
+            }
 
         if captured["dash_video"] and captured["dash_audio"]:
             return {
@@ -418,12 +441,9 @@ class DouyinDownloader:
             if video_id and video_id.isdigit():
                 canonical_video = f"https://www.douyin.com/video/{video_id}"
                 candidate_urls.append(canonical_video)
-                modal_route = f"https://www.douyin.com/jingxuan?modal_id={video_id}"
-                if modal_route not in candidate_urls:
-                    candidate_urls.append(modal_route)
-                discover_route = f"https://www.douyin.com/discover?modal_id={video_id}"
-                if discover_route not in candidate_urls:
-                    candidate_urls.append(discover_route)
+                share_mobile = f"https://www.iesdouyin.com/share/video/{video_id}/"
+                if share_mobile not in candidate_urls:
+                    candidate_urls.append(share_mobile)
 
             for cand in [request.url, canonical_url]:
                 if cand and cand not in candidate_urls and "/user/self" not in cand:

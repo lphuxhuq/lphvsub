@@ -98,6 +98,8 @@ class NewProjectPage(BasePage):
         self._export_worker: ExportWorker | None = None
         self._prefetch_worker: PrefetchWorker | None = None
         self._prefetched_path: str = ""  # file đã tải sẵn khi nguồn là URL
+        self._prefetched_url: str = ""
+        self._prefetching_url: str = ""
         self._result: DubResult | None = None
         self._blur_regions: list[dict] = []
         self._subtitle_style: dict | None = None
@@ -324,11 +326,16 @@ class NewProjectPage(BasePage):
             prefetched_in_step = getattr(self.step_video, "_prefetched_paths", {}).get(url)
             if prefetched_in_step and os.path.isfile(prefetched_in_step):
                 self._prefetched_path = prefetched_in_step
+                self._prefetched_url = url
                 self.stepper.set_max_reached(0)
                 self._go_to_step(1)
                 return
             # File đã tải sẵn trong NewProjectPage và chưa bị xóa thì chuyển ngay
-            if self._prefetched_path and os.path.isfile(self._prefetched_path):
+            if (
+                self._prefetched_path
+                and self._prefetched_url == url
+                and os.path.isfile(self._prefetched_path)
+            ):
                 self.stepper.set_max_reached(0)
                 self._go_to_step(1)
                 return
@@ -347,6 +354,7 @@ class NewProjectPage(BasePage):
                     src_v = source_video_path(existing)
                     if src_v and os.path.isfile(src_v):
                         self._prefetched_path = src_v
+                        self._prefetched_url = url
                         self.stepper.set_max_reached(0)
                         self._go_to_step(1)
                         return
@@ -371,6 +379,8 @@ class NewProjectPage(BasePage):
             self._prefetch_worker.wait(1000)
             self._prefetch_worker = None
         self._prefetched_path = ""
+        self._prefetched_url = ""
+        self._prefetching_url = ""
         # Nếu URL trùng với dự án cũ đã có sẵn video thì nhớ sẵn video đó
         try:
             urls = self.step_video.urls()
@@ -388,6 +398,7 @@ class NewProjectPage(BasePage):
                     src_v = source_video_path(existing)
                     if src_v and os.path.isfile(src_v):
                         self._prefetched_path = src_v
+                        self._prefetched_url = urls[0]
         except Exception:
             pass
         self._restore_next_button()
@@ -400,6 +411,7 @@ class NewProjectPage(BasePage):
 
     def _start_prefetch(self, url: str) -> None:
         """Khởi động tải ngầm — block nút Tiếp tục, tự chuyển bước khi xong."""
+        self._prefetching_url = url
         # Kiểm tra nếu VideoStep đã có worker đang chạy cho URL này
         if hasattr(self.step_video, "_prefetch_workers"):
             for w in self.step_video._prefetch_workers:
@@ -438,6 +450,7 @@ class NewProjectPage(BasePage):
     @Slot(str)
     def _on_prefetch_done(self, path: str) -> None:
         self._prefetched_path = path
+        self._prefetched_url = getattr(self, "_prefetching_url", "")
         if hasattr(self.step_video, "download_progress"):
             self.step_video.download_progress.set_progress(1.0, "Đã tải xong video!")
         self._restore_next_button()

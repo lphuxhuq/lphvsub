@@ -214,13 +214,22 @@ class BilibiliDownloader:
         out_dir = Path(request.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        bvid = self.extract_bvid(request.url)
+        url = request.url
+        if "b23.tv" in url.lower():
+            from autodub.media.downloader import _resolve_b23_shortlink
+
+            url = _resolve_b23_shortlink(url)
+
+        bvid = self.extract_bvid(url)
         if not bvid:
             return self._download_via_ytdlp_fallback(
                 request, out_dir / (request.custom_filename or "bilibili_out.mp4")
             )
 
-        target_name = request.custom_filename or f"bilibili_{bvid}.mp4"
+        page_idx = self.extract_page_index(url)
+        target_name = request.custom_filename or (
+            f"bilibili_{bvid}_p{page_idx}.mp4" if page_idx > 1 else f"bilibili_{bvid}.mp4"
+        )
         target_path = out_dir / target_name
 
         session = self.session_mgr.create_session(
@@ -232,7 +241,7 @@ class BilibiliDownloader:
         try:
             view_data = self.fetch_video_view(bvid, session)
             pages = view_data.get("pages", [])
-            page_idx = self.extract_page_index(request.url) - 1
+            page_idx = self.extract_page_index(url) - 1
             if 0 <= page_idx < len(pages):
                 cid = pages[page_idx]["cid"]
             elif pages:

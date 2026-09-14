@@ -178,3 +178,53 @@ def test_douyin_user_self_modal_id_and_api_sniffing(tmp_path):
         "video_url"
     ].endswith(".mp4")
     assert sniff_res["video_id"] == "7680311804580384027"
+
+
+def test_douyin_ignores_mismatched_aweme_detail():
+    """Xác minh: BrowserPool bỏ qua aweme_detail của video khác trong feed."""
+    mock_pool = MagicMock()
+    mock_page = MagicMock()
+    mock_pool.borrow_page.return_value.__enter__.return_value = mock_page
+
+    handlers = {}
+    mock_page.on.side_effect = lambda ev, h: handlers.update({ev: h})
+
+    def fake_goto(url, **kwargs):
+        # 1. Video khác trong feed trả về trước (aweme_id=99999999)
+        wrong_resp = MagicMock()
+        wrong_resp.url = "https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=99999999"
+        wrong_resp.json.return_value = {
+            "aweme_detail": {
+                "aweme_id": "99999999",
+                "desc": "Wrong Feed Video",
+                "video": {"play_addr": {"url_list": ["https://v5-dy.zjcdn.com/wrong_stream.mp4"]}},
+            }
+        }
+        # 2. Video thật của người dùng trả về (aweme_id=12345678)
+        correct_resp = MagicMock()
+        correct_resp.url = "https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=12345678"
+        correct_resp.json.return_value = {
+            "aweme_detail": {
+                "aweme_id": "12345678",
+                "desc": "Real Target Video",
+                "video": {
+                    "play_addr": {"url_list": ["https://v5-dy.zjcdn.com/correct_stream.mp4"]}
+                },
+            }
+        }
+        if "response" in handlers:
+            handlers["response"](wrong_resp)
+            handlers["response"](correct_resp)
+
+    mock_page.goto.side_effect = fake_goto
+    mock_page.title.return_value = "Real Target Video - 抖音"
+    mock_page.url = "https://www.douyin.com/video/12345678"
+
+    downloader = DouyinDownloader(browser_pool=mock_pool)
+    sniff_res = downloader.extract_via_browser_pool(
+        "https://www.douyin.com/video/12345678", wait_seconds=0.1
+    )
+
+    assert sniff_res["video_id"] == "12345678"
+    assert sniff_res["title"] == "Real Target Video"
+    assert sniff_res["video_url"] == "https://v5-dy.zjcdn.com/correct_stream.mp4"

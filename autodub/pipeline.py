@@ -166,7 +166,14 @@ def find_existing_project_by_url(base_dir: str, url: str) -> str | None:
                         if target_norm and normalize_video_url(proj_url) == target_norm:
                             return proj_dir
                         if target_vid and extract_video_id(proj_url) == target_vid:
-                            return proj_dir
+                            p1 = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get(
+                                "p", ["1"]
+                            )[0]
+                            p2 = urllib.parse.parse_qs(urllib.parse.urlparse(proj_url).query).get(
+                                "p", ["1"]
+                            )[0]
+                            if p1 == p2:
+                                return proj_dir
             except Exception:
                 pass
 
@@ -181,7 +188,14 @@ def find_existing_project_by_url(base_dir: str, url: str) -> str | None:
                         if target_norm and normalize_video_url(proj_url) == target_norm:
                             return proj_dir
                         if target_vid and extract_video_id(proj_url) == target_vid:
-                            return proj_dir
+                            p1 = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get(
+                                "p", ["1"]
+                            )[0]
+                            p2 = urllib.parse.parse_qs(urllib.parse.urlparse(proj_url).query).get(
+                                "p", ["1"]
+                            )[0]
+                            if p1 == p2:
+                                return proj_dir
                     file_path = data.get("file_path") or ""
                     if target_vid and target_vid in os.path.basename(file_path):
                         return proj_dir

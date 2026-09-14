@@ -271,6 +271,12 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
 
     ensure_dir(output_dir)
 
+    from autodub.media.douyin import download_douyin, extract_clean_url, is_douyin_url
+
+    clean_url = extract_clean_url(url)
+    canonical = normalize_url(clean_url)
+    effective_url = canonical or clean_url or url
+
     def _engine_cb(status_dict):
         if not progress_cb or not isinstance(status_dict, dict):
             return
@@ -298,7 +304,7 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
 
         engine = get_decision_engine()
         req = DownloadRequest(
-            url=url,
+            url=effective_url,
             output_dir=output_dir,
             progress_callback=_engine_cb if progress_cb else None,
         )
@@ -320,9 +326,6 @@ def download_video(url: str, output_dir: str, progress_cb: Any = None) -> str:
     # Douyin's yt-dlp extractor is broken upstream (requires `a_bogus`
     # signature). Route Douyin URLs (including v.douyin.com short links)
     # through the Playwright-based fallback.
-    from autodub.media.douyin import download_douyin, extract_clean_url, is_douyin_url
-
-    clean_url = extract_clean_url(url)
     if is_douyin_url(clean_url):
         logger.info(f"Routing to Douyin extractor: {clean_url}")
         info = download_douyin(clean_url, output_dir, progress_cb=progress_cb)
