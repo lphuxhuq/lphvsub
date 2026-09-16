@@ -586,23 +586,12 @@ class Settings:
                 "GEMINI_API_KEY", "", "GOOGLE_API_KEY", "SEED_GEMINI_API_KEY"
             ).strip(),
             gemini_model=env("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash",
-            openrouter_api_key=env("OPENROUTER_API_KEY", "", "SEED_OPENROUTER_API_KEY").strip(),
-            openai_api_key=env("OPENAI_API_KEY", "", "SEED_OPENAI_API_KEY").strip(),
-            deepseek_api_key=env("DEEPSEEK_API_KEY", "", "SEED_DEEPSEEK_API_KEY").strip(),
-            custom_ai_base_url=env(
-                "CUSTOM_AI_BASE_URL",
-                "https://hhtechapi.net/v1",
-                "HHTECH_BASE_URL",
-                "OPENAI_COMPAT_BASE_URL",
-            ).strip()
-            or "https://hhtechapi.net/v1",
-            custom_ai_api_key=env(
-                "CUSTOM_AI_API_KEY", "", "HHTECH_API_KEY", "OPENAI_COMPAT_API_KEY"
-            ).strip(),
-            custom_ai_model=env(
-                "CUSTOM_AI_MODEL", "deepseek-v4-flash", "HHTECH_MODEL", "OPENAI_COMPAT_MODEL"
-            ).strip()
-            or "deepseek-v4-flash",
+            openrouter_api_key="",
+            openai_api_key="",
+            deepseek_api_key="",
+            custom_ai_base_url="",
+            custom_ai_api_key="",
+            custom_ai_model="",
             ai_studio_enabled=env_bool("AI_STUDIO_ENABLED", "false"),
             ai_studio_headless=env_bool("AI_STUDIO_HEADLESS", "false"),
             ai_studio_single_chat=env_bool("AI_STUDIO_SINGLE_CHAT", "true"),

@@ -675,12 +675,7 @@ class SystemStatusWorker(QThread):
         if not settings.translate_enabled:
             return ("đang tắt", None)
         # Kiểm tra có API key nào được cấu hình không
-        has_key = bool(
-            settings.gemini_api_keys
-            or getattr(settings, "deepseek_api_key", "")
-            or getattr(settings, "openrouter_api_key", "")
-            or getattr(settings, "openai_api_key", "")
-        )
+        has_key = bool(settings.gemini_api_keys)
         if has_key:
             return ("API key đã cấu hình — sẵn sàng dịch", True)
         return ("chưa có API key dịch — vào Cài đặt để thêm", False)

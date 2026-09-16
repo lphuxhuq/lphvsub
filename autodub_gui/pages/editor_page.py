@@ -1139,12 +1139,7 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         settings = (
             self._settings_provider() if callable(self._settings_provider) else Settings.load()
         )
-        has_key = bool(
-            getattr(settings, "gemini_api_key", "").strip()
-            or getattr(settings, "deepseek_api_key", "").strip()
-            or getattr(settings, "openrouter_api_key", "").strip()
-            or getattr(settings, "openai_api_key", "").strip()
-        )
+        has_key = bool(getattr(settings, "gemini_api_key", "").strip())
         if not has_key:
             TOASTS.warn(
                 "Chưa cấu hình Google Gemini API Key. Vui lòng vào Cài đặt > Dịch thuật để nhập key Gemini."
@@ -1196,21 +1191,15 @@ class EditorPage(VoiceAndExportMixin, BasePage):
         settings = (
             self._settings_provider() if callable(self._settings_provider) else Settings.load()
         )
-        has_key = bool(
-            getattr(settings, "custom_ai_api_key", "").strip()
-            or getattr(settings, "gemini_api_key", "").strip()
-            or getattr(settings, "deepseek_api_key", "").strip()
-            or getattr(settings, "openrouter_api_key", "").strip()
-            or getattr(settings, "openai_api_key", "").strip()
-        )
+        has_key = bool(getattr(settings, "gemini_api_key", "").strip())
         if not has_key:
-            TOASTS.warn("Chưa cấu hình API Key AI. Vui lòng vào Cài đặt > Dịch thuật.")
+            TOASTS.warn("Chưa cấu hình Google Gemini API Key. Vui lòng vào Cài đặt > Dịch thuật.")
             return
 
         confirmed, _ = ConfirmDialog.ask(
             self,
             "Dịch lại toàn bộ dự án bằng AI",
-            f"Bạn có muốn dịch lại toàn bộ {len(self._segments)} câu bằng AI bên thứ 3?\n"
+            f"Bạn có muốn dịch lại toàn bộ {len(self._segments)} câu bằng Google Gemini AI?\n"
             "Bản dịch mới sẽ tự động cập nhật vào danh sách và làm mới dự án.",
             confirm_label="Bắt đầu dịch lại",
             cancel_label="Khoan đã",

@@ -710,12 +710,6 @@ class NewProjectPage(BasePage):
             self.step_translate.gemini_key.set_text(settings.gemini_api_key)
         if hasattr(self.step_translate, "gemini_model") and settings.gemini_model:
             self.step_translate.gemini_model.set_key(settings.gemini_model)
-        if hasattr(self.step_translate, "deepseek_key"):
-            self.step_translate.deepseek_key.set_text(settings.deepseek_api_key)
-        if hasattr(self.step_translate, "openrouter_key"):
-            self.step_translate.openrouter_key.set_text(settings.openrouter_api_key)
-        if hasattr(self.step_translate, "openai_key"):
-            self.step_translate.openai_key.set_text(settings.openai_api_key)
         self.step_voice.picker.reload(settings)
         self.step_voice.picker.set_voice(settings.vieneu_voice)
         self.step_voice.speed.set_value(settings.voice_speed)
@@ -1119,21 +1113,12 @@ class NewProjectPage(BasePage):
         if engine == "ai_studio":
             changes["ai_studio_enabled"] = True
             changes["gemini_api_key"] = ""
-            changes["deepseek_api_key"] = ""
-            changes["openrouter_api_key"] = ""
-            changes["openai_api_key"] = ""
         else:
             changes["ai_studio_enabled"] = False
             if "gemini_api_key" in data:
                 changes["gemini_api_key"] = data["gemini_api_key"]
             if data.get("gemini_model"):
                 changes["gemini_model"] = data["gemini_model"]
-            if "deepseek_api_key" in data:
-                changes["deepseek_api_key"] = data["deepseek_api_key"]
-            if "openrouter_api_key" in data:
-                changes["openrouter_api_key"] = data["openrouter_api_key"]
-            if "openai_api_key" in data:
-                changes["openai_api_key"] = data["openai_api_key"]
         if merged != settings.translate_style_notes:
             changes["translate_style_notes"] = merged
         if data["asr_engine"]:
@@ -1189,12 +1174,6 @@ class NewProjectPage(BasePage):
                 put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
             if data.get("gemini_model"):
                 put("GEMINI_MODEL", data["gemini_model"], settings.gemini_model)
-            if "deepseek_api_key" in data:
-                put("DEEPSEEK_API_KEY", data["deepseek_api_key"], settings.deepseek_api_key)
-            if "openrouter_api_key" in data:
-                put("OPENROUTER_API_KEY", data["openrouter_api_key"], settings.openrouter_api_key)
-            if "openai_api_key" in data:
-                put("OPENAI_API_KEY", data["openai_api_key"], settings.openai_api_key)
         if data.get("asr_engine"):
             put("ASR_ENGINE", data["asr_engine"], settings.asr_engine)
         if data.get("whisper_model"):

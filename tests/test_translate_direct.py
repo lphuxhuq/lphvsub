@@ -172,11 +172,10 @@ def test_plan_batches_keeps_normal_batching():
 def test_default_workers():
     from autodub.text.translate_direct import _default_workers
 
-    assert _default_workers(1, 0, is_compat=False) == 2  # 1 key vẫn 2 luồng
-    assert _default_workers(9, 0, is_compat=False) == 4
-    assert _default_workers(1, 0, is_compat=True) == 2
-    assert _default_workers(1, 5, is_compat=False) == 5  # cấu hình đè
-    assert _default_workers(1, 99, is_compat=False) == 8  # trần 8
+    assert _default_workers(1, 0) == 2  # 1 key vẫn 2 luồng
+    assert _default_workers(9, 0) == 4
+    assert _default_workers(1, 5) == 5  # cấu hình đè
+    assert _default_workers(1, 99) == 8  # trần 8
 
 
 class _FakeResp:

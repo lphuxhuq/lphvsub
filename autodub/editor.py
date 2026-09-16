@@ -1868,7 +1868,7 @@ def retranslate_segment_ai(
     target_key: str = "vi",
     settings: Any = None,
 ) -> str:
-    """Dịch lại một câu thoại bằng AI bên thứ 3 (HHTech / Gemini / OpenAI / DeepSeek...)."""
+    """Dịch lại một câu thoại bằng AI (Google Gemini)."""
     if settings is None:
         settings = Settings.load()
     target = get_target(target_key)

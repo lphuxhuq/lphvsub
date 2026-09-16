@@ -2098,13 +2098,8 @@ class DubPipeline:
                 rep.emit("translate", "error", detail=str(e))
                 return None
 
-        # 2. Gọi trực tiếp API Google Gemini AI / Gemini SRT nếu có API key
-        has_direct_key = bool(
-            settings.gemini_api_key.strip()
-            or settings.deepseek_api_key.strip()
-            or settings.openrouter_api_key.strip()
-            or settings.openai_api_key.strip()
-        )
+        # 2. Gọi trực tiếp API Google Gemini AI nếu có API key
+        has_direct_key = bool(settings.gemini_api_key.strip())
         if has_direct_key:
             logger.info(
                 "Phát hiện Google Gemini API Key — Dịch trực tiếp từ máy khách qua Gemini SRT Engine (không qua máy chủ trung gian)"

@@ -207,7 +207,7 @@ class SegmentRow(QWidget):
             (icons.reload(tokens.ACCENT_BLUE), "Đọc lại câu này", self.resynth_requested),
             (
                 icons.globe(tokens.ACCENT_PURPLE),
-                "Dịch lại câu này bằng AI (HHTech / Gemini / DeepSeek)",
+                "Dịch lại câu này bằng AI (Google Gemini)",
                 self.ai_translate_requested,
             ),
             (icons.scissors(tokens.TEXT_SECONDARY), "Tách câu này làm đôi", self.split_requested),
@@ -349,9 +349,7 @@ class SubtitleListPanel(QWidget):
         btn_row.addWidget(add_button)
 
         retrans_btn = GhostButton("Dịch lại tất cả bằng AI")
-        retrans_btn.setToolTip(
-            "Dịch lại toàn bộ các câu thoại bằng AI bên thứ 3 (HHTech / Gemini / DeepSeek...)"
-        )
+        retrans_btn.setToolTip("Dịch lại toàn bộ các câu thoại bằng AI (Google Gemini)")
         retrans_btn.clicked.connect(self.retranslate_all_requested.emit)
         btn_row.addWidget(retrans_btn)
         root.addLayout(btn_row)

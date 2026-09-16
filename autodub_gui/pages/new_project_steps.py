@@ -1023,17 +1023,14 @@ class TranslateStep(_StepPanel):
         self.metadata.toggled.connect(lambda _c: self.changed.emit())
         self.body.addWidget(self.metadata)
 
-        # Bộ chọn công nghệ dịch: Gemini SRT Pro, DeepSeek, OpenRouter, OpenAI
+        # Bộ chọn công nghệ dịch: Gemini Direct hoặc AI Studio
         self.engine = LabeledCombo(
             "Công nghệ dịch",
             [
                 ("Gemini Direct (Google AI - Nhanh & Chuẩn)", "gemini"),
                 ("Google AI Studio (Trình duyệt, Miễn phí)", "ai_studio"),
-                ("DeepSeek API (deepseek-chat)", "deepseek"),
-                ("OpenRouter API (Đa mô hình AI)", "openrouter"),
-                ("OpenAI API (GPT-4o, GPT-4o-mini)", "openai"),
             ],
-            "Chọn nơi xử lý dịch thuật: Gemini Direct, AI Studio (miễn phí), hoặc API trực tiếp (DeepSeek/OpenRouter/OpenAI).",
+            "Chọn nơi xử lý dịch thuật: Gemini Direct (Google AI) hoặc Google AI Studio (trình duyệt, miễn phí).",
         )
         self.engine.changed.connect(self._on_engine_changed)
 
@@ -1083,22 +1080,6 @@ class TranslateStep(_StepPanel):
         )
         self.ai_studio_login_status.setVisible(False)
 
-        # 2. Các ô nhập cho DeepSeek, OpenRouter, OpenAI
-        self.deepseek_key = LabeledLineEdit(
-            "DeepSeek API Key", "sk-...", "Khóa API DeepSeek từ platform.deepseek.com."
-        )
-        self.deepseek_key.changed.connect(lambda _t: self.changed.emit())
-
-        self.openrouter_key = LabeledLineEdit(
-            "OpenRouter API Key", "sk-or-v1-...", "Khóa API OpenRouter từ openrouter.ai."
-        )
-        self.openrouter_key.changed.connect(lambda _t: self.changed.emit())
-
-        self.openai_key = LabeledLineEdit(
-            "OpenAI API Key", "sk-...", "Khóa API OpenAI từ platform.openai.com."
-        )
-        self.openai_key.changed.connect(lambda _t: self.changed.emit())
-
         self.style = LabeledCombo(
             "Phong cách dịch",
             [(label, key) for label, key, _note in consts.TRANSLATE_STYLES],
@@ -1119,9 +1100,6 @@ class TranslateStep(_StepPanel):
         self.body.addWidget(self.btn_login_ai_studio)
         self.body.addWidget(self.ai_studio_hint)
         self.body.addWidget(self.ai_studio_login_status)
-        self.body.addWidget(self.deepseek_key)
-        self.body.addWidget(self.openrouter_key)
-        self.body.addWidget(self.openai_key)
         self.body.addWidget(self.style)
         self.body.addWidget(self.note)
 
@@ -1269,9 +1247,6 @@ class TranslateStep(_StepPanel):
         self.btn_login_ai_studio.setVisible(key == "ai_studio")
         self.ai_studio_hint.setVisible(key == "ai_studio")
         self.ai_studio_login_status.setVisible(key == "ai_studio")
-        self.deepseek_key.setVisible(key == "deepseek")
-        self.openrouter_key.setVisible(key == "openrouter")
-        self.openai_key.setVisible(key == "openai")
         self.changed.emit()
         if key == "ai_studio":
             self._check_ai_studio_login()
@@ -1285,9 +1260,6 @@ class TranslateStep(_StepPanel):
             self.btn_login_ai_studio,
             self.ai_studio_hint,
             self.ai_studio_login_status,
-            self.deepseek_key,
-            self.openrouter_key,
-            self.openai_key,
             self.style,
             self.note,
         ):
@@ -1305,9 +1277,6 @@ class TranslateStep(_StepPanel):
             "translate_engine": self.engine.current_key(),
             "gemini_api_key": self.gemini_key.text().strip(),
             "gemini_model": self.gemini_model.current_key(),
-            "deepseek_api_key": self.deepseek_key.text().strip(),
-            "openrouter_api_key": self.openrouter_key.text().strip(),
-            "openai_api_key": self.openai_key.text().strip(),
             "translate_style": self.style.current_key(),
             "translate_note": self.note.text(),
         }
@@ -1322,14 +1291,10 @@ class TranslateStep(_StepPanel):
             fb_meta = settings.generate_metadata
             fb_gemini_key = settings.gemini_api_key
             fb_gemini_model = settings.gemini_model
-            fb_deepseek_key = settings.deepseek_api_key
-            fb_openrouter_key = settings.openrouter_api_key
-            fb_openai_key = settings.openai_api_key
             fb_ai_studio = bool(settings.ai_studio_enabled)
         except Exception:
             fb_auto, fb_meta = True, True
             fb_gemini_key, fb_gemini_model = "", "gemini-2.5-flash"
-            fb_deepseek_key, fb_openrouter_key, fb_openai_key = "", "", ""
             fb_ai_studio = False
 
         self.auto_translate.setChecked(bool(data.get("auto_translate", fb_auto)))
@@ -1338,21 +1303,9 @@ class TranslateStep(_StepPanel):
         self.gemini_key.set_text(data.get("gemini_api_key", fb_gemini_key))
         self.gemini_model.set_key(data.get("gemini_model", fb_gemini_model or "gemini-2.5-flash"))
 
-        self.deepseek_key.set_text(data.get("deepseek_api_key", fb_deepseek_key))
-        self.openrouter_key.set_text(data.get("openrouter_api_key", fb_openrouter_key))
-        self.openai_key.set_text(data.get("openai_api_key", fb_openai_key))
-
         engine_key = data.get("translate_engine")
-        if not engine_key or engine_key == "custom_ai":
-            if fb_gemini_key:
-                engine_key = "gemini"
-            elif fb_deepseek_key:
-                engine_key = "deepseek"
-            elif fb_openrouter_key:
-                engine_key = "openrouter"
-            elif fb_openai_key:
-                engine_key = "openai"
-            elif fb_ai_studio:
+        if not engine_key or engine_key not in ("gemini", "ai_studio"):
+            if fb_ai_studio:
                 engine_key = "ai_studio"
             else:
                 engine_key = "gemini"

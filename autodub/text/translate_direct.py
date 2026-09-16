@@ -438,226 +438,8 @@ class GeminiDirectClient:
         )
 
 
-class OpenAICompatDirectClient:
-    """Gọi trực tiếp OpenAI-Compatible API (HHTech, DeepSeek, OpenRouter, OpenAI, v.v.) từ máy khách."""
-
-    def __init__(
-        self,
-        api_keys: list[str] | str,
-        base_url: str = "https://hhtechapi.net/v1",
-        model: str = "deepseek-v4-flash",
-        timeout_s: int = 75,
-    ):
-        if isinstance(api_keys, str):
-            raw_tokens = re.split(r"[,;\n]+", api_keys)
-            self.keys = [k.strip().strip("'\"") for k in raw_tokens if k.strip().strip("'\"")]
-        else:
-            self.keys = [
-                str(k).strip().strip("'\"") for k in api_keys if str(k).strip().strip("'\"")
-            ]
-        if not self.keys:
-            raise ValueError("Cần cung cấp ít nhất một API Key.")
-
-        self._key_index = 0
-        self._lock = threading.Lock()
-        base = base_url.strip().rstrip("/")
-        if not base.endswith("/v1"):
-            base += "/v1"
-        self.endpoint = f"{base}/chat/completions"
-        self.model = model.strip() if model else "deepseek-v4-flash"
-        self.timeout_s = timeout_s
-        self.session = requests.Session()
-
-    def get_key(self, index: int | None = None) -> str:
-        if index is not None:
-            return self.keys[index % len(self.keys)]
-        with self._lock:
-            return self.keys[self._key_index % len(self.keys)]
-
-    def rotate_key(self) -> str:
-        with self._lock:
-            self._key_index += 1
-            new_key = self.keys[self._key_index % len(self.keys)]
-            logger.info(
-                f"Đã chuyển sang API Key #{self._key_index % len(self.keys) + 1}/{len(self.keys)}"
-            )
-            return new_key
-
-    def call_ai(
-        self,
-        system_instruction: str,
-        user_prompt: str,
-        preferred_key: str | None = None,
-        max_retries: int = 6,
-        response_format: dict | None = None,
-        response_schema: dict | None = None,
-    ) -> str:
-        current_key = preferred_key or self.get_key()
-        # Fallback model nếu model chính bị nghẽn trên HHTech proxy
-        fallback_models = [self.model]
-        if "hhtech" in self.endpoint:
-            for alt in ("deepseek-v4-pro", "grok-4.6"):
-                if alt not in fallback_models:
-                    fallback_models.append(alt)
-
-        include_fmt = bool(response_format)
-        for attempt in range(max_retries):
-            KEY_LIMITER.acquire(current_key)
-            current_model = fallback_models[attempt % len(fallback_models)]
-            if attempt > 0:
-                logger.info(
-                    f"    ↻ Thử lại lần {attempt + 1}/{max_retries} với model [{current_model}]..."
-                )
-            else:
-                logger.debug(f"    → Gọi [{current_model}] (attempt 1/{max_retries})")
-            headers = {
-                "Authorization": f"Bearer {current_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            }
-            payload: dict[str, Any] = {
-                "model": current_model,
-                "messages": [
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 1500,
-                "stream": True,  # Stream để không bị timeout giữa chừng khi proxy bận
-            }
-            if include_fmt and response_format:
-                payload["response_format"] = response_format
-
-            _t_req = time.time()
-            try:
-                # connect timeout 10s, max 45s per-chunk để phát hiện lô bị nghẽn sớm
-                resp = self.session.post(
-                    self.endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=(10, 45),
-                    stream=True,
-                )
-            except Exception as e:
-                logger.warning(
-                    f"    ✗ [{current_model}] kết nối lỗi sau {time.time() - _t_req:.1f}s (lần {attempt + 1}/{max_retries}): {e}"
-                )
-                # Tạo session mới để tránh kết nối cũ bị hỏng
-                self.session = requests.Session()
-                time.sleep(1.0 * (attempt + 1))
-                continue
-
-            if resp.status_code == 400 and include_fmt:
-                logger.warning(
-                    f"Model {current_model} từ chối response_format (400), thử lại không kèm format..."
-                )
-                include_fmt = False
-                continue
-
-            if resp.status_code != 200:
-                err_text = resp.text[:300]
-                if resp.status_code == 401:
-                    masked = f"...{current_key[-6:]}" if len(current_key) > 6 else "***"
-                    logger.error(f"Khóa API không hợp lệ ({masked}): HTTP 401")
-                    if len(self.keys) > 1:
-                        current_key = self.rotate_key()
-                        continue
-                    raise TranslateError(
-                        f"Khóa API không hợp lệ (HTTP 401 Unauthorized): {err_text}"
-                    )
-                if resp.status_code == 429:
-                    if len(self.keys) > 1:
-                        current_key = self.rotate_key()
-                        continue
-                    wait_s = min(15.0, 2.0 * (attempt + 1) + random.uniform(0.5, 1.5))
-                    time.sleep(wait_s)
-                    continue
-                logger.warning(f"AI ({current_model}) HTTP {resp.status_code}: {err_text}")
-                time.sleep(1.0 * (attempt + 1))
-                continue
-
-            # Thu thập các chunk SSE với tổng timeout 60s để không bị kẹt vô thời hạn
-            try:
-                import queue as _queue
-
-                _result_q: _queue.Queue = _queue.Queue()
-
-                # Bind tường minh biến vòng lặp — tránh B023 (closure bắt
-                # biến vòng lặp) và an toàn nếu caller sau này chuyển sang
-                # start thread bất đồng bộ.
-                stream_resp = resp
-
-                def _read_stream(resp=stream_resp, result_q=_result_q):
-                    try:
-                        parts: list[str] = []
-                        for raw_line in resp.iter_lines():
-                            if not raw_line:
-                                continue
-                            line = (
-                                raw_line.decode("utf-8")
-                                if isinstance(raw_line, bytes)
-                                else raw_line
-                            )
-                            if not line.startswith("data:"):
-                                continue
-                            data_str = line[len("data:") :].strip()
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(data_str)
-                                delta = chunk.get("choices", [{}])[0].get("delta", {})
-                                part = delta.get("content", "")
-                                if part:
-                                    parts.append(part)
-                            except Exception:
-                                continue
-                        result_q.put("".join(parts))
-                    except Exception as ex:
-                        result_q.put(ex)
-
-                t = threading.Thread(target=_read_stream, daemon=True)
-                t.start()
-                try:
-                    result_val = _result_q.get(timeout=40)
-                except _queue.Empty:
-                    elapsed = time.time() - _t_req
-                    logger.warning(
-                        f"    ⏱ [{current_model}] stream kẹt quá 40s ({elapsed:.1f}s), tạo session mới và thử lại..."
-                    )
-                    resp.close()
-                    self.session = requests.Session()
-                    continue
-
-                if isinstance(result_val, Exception):
-                    raise result_val
-
-                content = result_val.strip()
-                if content:
-                    elapsed = time.time() - _t_req
-                    chars = len(content)
-                    logger.debug(f"    ✔ [{current_model}] trả về {chars} ký tự sau {elapsed:.1f}s")
-                    return content
-                logger.warning(f"    ⚠ [{current_model}] trả về stream rỗng, thử lại...")
-                time.sleep(1.0)
-            except TranslateError:
-                raise
-            except Exception as e:
-                logger.warning(
-                    f"    ✗ [{current_model}] stream lỗi (lần {attempt + 1}/{max_retries}): {e}"
-                )
-                self.session = requests.Session()
-                time.sleep(1.0 * (attempt + 1))
-                continue
-
-        raise TranslateError(f"Không thể gọi AI API sau {max_retries} lần thử.")
-
-
-def get_direct_client(settings: Any) -> tuple[Any, str]:
-    """Khởi tạo client AI phù hợp dựa trên cài đặt của người dùng.
-
-    Google Gemini AI (Gemini SRT Pro Direct) là bộ dịch chính trực tiếp.
-    """
-    # 1. Google Gemini AI (Ưu tiên số 1 - Gemini Direct / Gemini SRT Pro)
+def get_direct_client(settings: Any) -> tuple[GeminiDirectClient, str]:
+    """Khởi tạo Google Gemini AI client dựa trên cài đặt của người dùng."""
     gemini_key = getattr(settings, "gemini_api_key", "").strip()
     if gemini_key:
         model = getattr(settings, "gemini_model", "gemini-2.5-flash") or "gemini-2.5-flash"
@@ -667,41 +449,17 @@ def get_direct_client(settings: Any) -> tuple[Any, str]:
             f"Google Gemini ({model})",
         )
 
-    # 2. DeepSeek API trực tiếp
-    deepseek_key = getattr(settings, "deepseek_api_key", "").strip()
-    if deepseek_key:
-        return OpenAICompatDirectClient(
-            deepseek_key, base_url="https://api.deepseek.com/v1", model="deepseek-chat"
-        ), "DeepSeek (deepseek-chat)"
-
-    # 3. OpenRouter API
-    openrouter_key = getattr(settings, "openrouter_api_key", "").strip()
-    if openrouter_key:
-        return OpenAICompatDirectClient(
-            openrouter_key, base_url="https://openrouter.ai/api/v1", model="google/gemini-2.5-flash"
-        ), "OpenRouter"
-
-    # 4. OpenAI API
-    openai_key = getattr(settings, "openai_api_key", "").strip()
-    if openai_key:
-        return OpenAICompatDirectClient(
-            openai_key, base_url="https://api.openai.com/v1", model="gpt-4o-mini"
-        ), "OpenAI (gpt-4o-mini)"
-
     raise ValueError("Chưa cấu hình Google Gemini API Key trong Cài đặt hoặc bước Tạo dự án.")
 
 
-def _default_workers(num_keys: int, configured: int, is_compat: bool) -> int:
+def _default_workers(num_keys: int, configured: int) -> int:
     """Số luồng dịch: cấu hình tường minh (>0) hoặc tự động theo số key.
 
-    Tự động: proxy compat 2 luồng; Gemini tối thiểu 2 (1 key vẫn song song —
-    API chấp nhận, rate limiter giữ nhịp, 429 thì client tự xoay key),
-    tối đa 4 theo số key.
+    Gemini tối thiểu 2 (1 key vẫn song song — API chấp nhận, rate limiter
+    giữ nhịp, 429 thì client tự xoay key), tối đa 4 theo số key.
     """
     if configured > 0:
         return max(1, min(8, configured))
-    if is_compat:
-        return 2
     return max(2, min(4, num_keys))
 
 
@@ -747,20 +505,18 @@ def translate_segments_direct(
 
     annotate_slots(segments)
     cps = effective_cps(settings)
-    is_compat = isinstance(client, OpenAICompatDirectClient)
-    # Với API OpenAI Compat / HHTech proxy, chia lô nhỏ 5 câu
-    default_bs = 5 if is_compat else 25
-    max_bs = 8 if is_compat else 40
+    default_bs = 25
+    max_bs = 40
     batch_size = max(
         1, min(int(getattr(settings, "translate_batch_size", default_bs) or default_bs), max_bs)
     )
 
     num_keys = len(client.keys)
     configured_workers = int(getattr(settings, "translate_direct_workers", 0) or 0)
-    max_workers = _default_workers(num_keys, configured_workers, is_compat)
+    max_workers = _default_workers(num_keys, configured_workers)
     # Chia lô thích nghi: ít lô hơn số luồng thì chia nhỏ để đủ việc cho
     # mọi luồng (floor câu/lô) — không còn "1 lô 38 câu chạy 1 luồng".
-    floor = 5 if is_compat else 8
+    floor = 8
     batches: list[tuple[int, list[dict]]] = [
         (b_idx, segments[s:e])
         for b_idx, s, e in _plan_batches(len(segments), batch_size, max_workers, floor)

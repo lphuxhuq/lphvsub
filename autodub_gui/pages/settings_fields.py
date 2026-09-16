@@ -1047,36 +1047,6 @@ FIELDS: tuple[Field, ...] = (
         ],
     ),
     Field(
-        "OPENROUTER_API_KEY",
-        TEXT,
-        "OpenRouter API Key",
-        TAB_TRANSLATE,
-        "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)",
-        "",
-        "Khóa API OpenRouter (dùng được nhiều mô hình tại openrouter.ai).",
-        placeholder="sk-or-v1-...",
-    ),
-    Field(
-        "OPENAI_API_KEY",
-        TEXT,
-        "OpenAI API Key",
-        TAB_TRANSLATE,
-        "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)",
-        "",
-        "Khóa API OpenAI chính thức từ platform.openai.com.",
-        placeholder="sk-...",
-    ),
-    Field(
-        "DEEPSEEK_API_KEY",
-        TEXT,
-        "DeepSeek API Key",
-        TAB_TRANSLATE,
-        "Khóa API dịch AI (Gọi trực tiếp & Chia luồng song song)",
-        "",
-        "Khóa API DeepSeek từ platform.deepseek.com.",
-        placeholder="sk-...",
-    ),
-    Field(
         "TRANSLATE_DOMAIN",
         TEXT,
         "Chủ đề video",
@@ -1136,33 +1106,6 @@ FIELDS: tuple[Field, ...] = (
         "Kết quả lưu vào thư mục dự án, tệp youtube_post.txt. Tắt đi nếu bạn tự viết.",
     ),
     Field(
-        "CUSTOM_AI_BASE_URL",
-        TEXT,
-        "Địa chỉ API dịch AI",
-        TAB_TRANSLATE,
-        "Dịch AI tùy chỉnh",
-        "https://hhtechapi.net/v1",
-        "Địa chỉ máy chủ API tương thích OpenAI dùng cho dịch thuật.",
-    ),
-    Field(
-        "CUSTOM_AI_API_KEY",
-        TEXT,
-        "Khóa API dịch AI",
-        TAB_TRANSLATE,
-        "Dịch AI tùy chỉnh",
-        "",
-        "Khóa API nếu sử dụng máy chủ dịch thuật riêng.",
-    ),
-    Field(
-        "CUSTOM_AI_MODEL",
-        TEXT,
-        "Mô hình dịch AI",
-        TAB_TRANSLATE,
-        "Dịch AI tùy chỉnh",
-        "deepseek-v4-flash",
-        "Tên mô hình AI dùng để dịch thuật (ví dụ deepseek-v4-flash).",
-    ),
-    Field(
         "AI_STUDIO_ENABLED",
         CHECK,
         "Dịch qua Google AI Studio (miễn phí, không cần API Key)",
@@ -1172,7 +1115,7 @@ FIELDS: tuple[Field, ...] = (
         "Dùng Google AI Studio qua trình duyệt Chrome để dịch — tận dụng "
         "tài khoản Google miễn phí, không cần API Key. Chậm hơn API trực "
         "tiếp nhưng không tốn phí. Cần đăng nhập Google lần đầu. "
-        "Nếu ô Gemini/DeepSeek/OpenRouter/OpenAI còn API Key, pipeline vẫn "
+        "Nếu ô Google Gemini API Key còn key, pipeline vẫn "
         "đi phương thức 1 — hãy xóa key hoặc chọn AI Studio ở bước tạo dự án. "
         "Model miễn phí: Gemini 2.5 Flash / 2.0 Flash / 1.5 Flash.",
     ),
