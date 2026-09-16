@@ -154,3 +154,51 @@ def test_download_progress_bar_cross_thread():
 
     assert pbar.bar.value() == 88
     assert pbar.lbl_percent.text() == "88%"
+
+
+def test_is_worker_running_safety_with_deleted_qobject():
+    import sys
+
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.workers import PrefetchWorker, is_worker_running
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert is_worker_running(None) is False
+
+    worker = PrefetchWorker("https://example.com/video.mp4", "downloads")
+    assert is_worker_running(worker) is False
+
+    # Simulate Qt deleteLater deletion
+    worker.deleteLater()
+    QCoreApplication.sendPostedEvents(None, 52)  # DeferredDelete = 52
+    app.processEvents()
+
+    # Must return False and not raise RuntimeError: libshiboken: Internal C++ object already deleted
+    assert is_worker_running(worker) is False
+
+
+def test_new_project_page_url_changed_tolerates_deleted_prefetch_worker():
+    import sys
+
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtWidgets import QApplication
+
+    from autodub_gui.pages.new_project_page import NewProjectPage
+    from autodub_gui.workers import PrefetchWorker
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = NewProjectPage(lambda: None)
+
+    dead_worker = PrefetchWorker("https://example.com/video.mp4", "downloads")
+    dead_worker.deleteLater()
+    QCoreApplication.sendPostedEvents(None, 52)
+    app.processEvents()
+
+    # Assign dead C++ worker to page
+    page._prefetch_worker = dead_worker
+
+    # Changing URL must NOT raise RuntimeError
+    page._on_url_changed("https://example.com/new_video.mp4")
+    assert page._prefetch_worker is None

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
@@ -58,6 +59,20 @@ def attach_gui_logging(signal) -> GuiLogHandler:
 
 def detach_gui_logging(handler: GuiLogHandler) -> None:
     logging.getLogger("autodub").removeHandler(handler)
+
+
+def is_worker_running(worker: Any) -> bool:
+    """Kiểm tra an toàn xem một worker QThread còn đang chạy hay không mà không bị lỗi shiboken."""
+    if worker is None:
+        return False
+    try:
+        import shiboken6
+
+        if not shiboken6.isValid(worker):
+            return False
+        return bool(worker.isRunning())
+    except (RuntimeError, AttributeError):
+        return False
 
 
 class DubWorker(QThread):

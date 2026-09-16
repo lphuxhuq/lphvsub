@@ -35,6 +35,7 @@ from autodub_gui.ui.inputs import (
 )
 from autodub_gui.ui.labels import ElidedLabel
 from autodub_gui.ui.style import clear_background
+from autodub_gui.workers import is_worker_running
 
 STEP_NAMES = ("Video", "Nhận dạng", "Dịch thuật", "Giọng & Phụ đề", "Chạy dịch", "Xuất video")
 
@@ -166,29 +167,45 @@ class VideoPreviewLoaderDialog(QDialog):
     def _on_finished(self, *args):
         path = args[1] if len(args) == 2 else args[0]
         self.video_path = path
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(500)
+        if is_worker_running(self._worker):
+            try:
+                self._worker.wait(500)
+            except RuntimeError:
+                pass
+        self._worker = None
         self.accept()
 
     @Slot(str, str)
     @Slot(str)
     def _on_failed(self, *args):
         self.video_path = None
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(500)
+        if is_worker_running(self._worker):
+            try:
+                self._worker.wait(500)
+            except RuntimeError:
+                pass
+        self._worker = None
         self.accept()
 
     def _skip_waiting(self):
-        if self._worker:
-            self._worker.cancel()
-            self._worker.wait(500)
+        if is_worker_running(self._worker):
+            try:
+                self._worker.cancel()
+                self._worker.wait(500)
+            except RuntimeError:
+                pass
+        self._worker = None
         self.video_path = None
         self.accept()
 
     def _cancel(self):
-        if self._worker:
-            self._worker.cancel()
-            self._worker.wait(500)
+        if is_worker_running(self._worker):
+            try:
+                self._worker.cancel()
+                self._worker.wait(500)
+            except RuntimeError:
+                pass
+        self._worker = None
         self.reject()
 
     def closeEvent(self, event):
@@ -329,7 +346,7 @@ class VideoStep(_StepPanel):
         self.changed.emit()
 
     def _cleanup_finished_workers(self) -> None:
-        self._prefetch_workers = [w for w in self._prefetch_workers if w.isRunning()]
+        self._prefetch_workers = [w for w in self._prefetch_workers if is_worker_running(w)]
 
     def _auto_prefetch_urls(self) -> None:
         """Tự động tải video ngầm từ các link vừa nhập để người dùng mở xem trước ngay không cần chờ."""
@@ -347,9 +364,12 @@ class VideoStep(_StepPanel):
         out_dir = os.path.join(cache_dir(), "preview_videos")
 
         # Hủy các worker cũ và loại bỏ worker đã xong khỏi danh sách
-        for w in self._prefetch_workers:
-            if w.isRunning():
-                w.cancel()
+        for w in list(self._prefetch_workers):
+            if is_worker_running(w):
+                try:
+                    w.cancel()
+                except RuntimeError:
+                    pass
         self._cleanup_finished_workers()
 
         for u in urls:
@@ -376,7 +396,16 @@ class VideoStep(_StepPanel):
                 worker.failed_url.connect(
                     self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection
                 )
-                worker.finished.connect(worker.deleteLater)
+
+                def _make_cleanup(wrk):
+                    def _done():
+                        if wrk in self._prefetch_workers:
+                            self._prefetch_workers.remove(wrk)
+                        wrk.deleteLater()
+
+                    return _done
+
+                worker.finished.connect(_make_cleanup(worker))
                 self._prefetch_workers.append(worker)
                 worker.start()
 
@@ -1292,10 +1321,12 @@ class TranslateStep(_StepPanel):
             fb_gemini_key = settings.gemini_api_key
             fb_gemini_model = settings.gemini_model
             fb_ai_studio = bool(settings.ai_studio_enabled)
+            fb_style = getattr(settings, "translate_style", "natural") or "natural"
         except Exception:
             fb_auto, fb_meta = True, True
             fb_gemini_key, fb_gemini_model = "", "gemini-2.5-flash"
             fb_ai_studio = False
+            fb_style = "natural"
 
         self.auto_translate.setChecked(bool(data.get("auto_translate", fb_auto)))
         self.metadata.setChecked(bool(data.get("generate_metadata", fb_meta)))
@@ -1312,7 +1343,7 @@ class TranslateStep(_StepPanel):
         self.engine.set_key(engine_key)
         self._on_engine_changed()
 
-        self.style.set_key(data.get("translate_style", "natural"))
+        self.style.set_key(data.get("translate_style") or fb_style)
         self.note.set_text(data.get("translate_note", ""))
         self._on_auto_translate(self.auto_translate.isChecked())
 

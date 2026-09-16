@@ -48,7 +48,13 @@ from autodub_gui.ui.style import clear_background
 from autodub_gui.ui.toast import TOASTS
 from autodub_gui.voice_preview import VoicePreview
 from autodub_gui.widgets import Banner, LogPanel, RunStatsPanel, StepTracker
-from autodub_gui.workers import BatchWorker, DubWorker, ExportWorker, PrefetchWorker
+from autodub_gui.workers import (
+    BatchWorker,
+    DubWorker,
+    ExportWorker,
+    PrefetchWorker,
+    is_worker_running,
+)
 
 DRAFT_FILE = "draft_project.json"
 _DRAFT_DEBOUNCE_MS = 800
@@ -374,10 +380,13 @@ class NewProjectPage(BasePage):
 
     def _on_url_changed(self, _text: str = "") -> None:
         """URL thay đổi → file tải sẵn không còn hợp lệ, hủy tải nếu đang tải."""
-        if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
-            self._prefetch_worker.cancel()
-            self._prefetch_worker.wait(1000)
-            self._prefetch_worker = None
+        if is_worker_running(self._prefetch_worker):
+            try:
+                self._prefetch_worker.cancel()
+                self._prefetch_worker.wait(1000)
+            except RuntimeError:
+                pass
+        self._prefetch_worker = None
         self._prefetched_path = ""
         self._prefetched_url = ""
         self._prefetching_url = ""
@@ -414,8 +423,8 @@ class NewProjectPage(BasePage):
         self._prefetching_url = url
         # Kiểm tra nếu VideoStep đã có worker đang chạy cho URL này
         if hasattr(self.step_video, "_prefetch_workers"):
-            for w in self.step_video._prefetch_workers:
-                if w.isRunning() and getattr(w, "_url", None) == url:
+            for w in list(self.step_video._prefetch_workers):
+                if is_worker_running(w) and getattr(w, "_url", None) == url:
                     self.btn_next.setEnabled(False)
                     self.btn_next.setText("Đang tải…")
                     w.progress.connect(
@@ -425,10 +434,16 @@ class NewProjectPage(BasePage):
                         self._on_prefetch_done, Qt.ConnectionType.QueuedConnection
                     )
                     w.failed.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
+
+                    def _on_w_finished(wrk=w):
+                        if self._prefetch_worker is wrk:
+                            self._prefetch_worker = None
+
+                    w.finished.connect(_on_w_finished)
                     self._prefetch_worker = w
                     return
 
-        if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
+        if is_worker_running(self._prefetch_worker):
             return
         self.btn_next.setEnabled(False)
         self.btn_next.setText("Đang tải…")
@@ -436,7 +451,13 @@ class NewProjectPage(BasePage):
         worker.progress.connect(self._on_prefetch_progress, Qt.ConnectionType.QueuedConnection)
         worker.finished_ok.connect(self._on_prefetch_done, Qt.ConnectionType.QueuedConnection)
         worker.failed.connect(self._on_prefetch_failed, Qt.ConnectionType.QueuedConnection)
-        worker.finished.connect(worker.deleteLater)
+
+        def _on_worker_finished():
+            if self._prefetch_worker is worker:
+                self._prefetch_worker = None
+            worker.deleteLater()
+
+        worker.finished.connect(_on_worker_finished)
         self._prefetch_worker = worker
         worker.start()
 
@@ -451,6 +472,7 @@ class NewProjectPage(BasePage):
     def _on_prefetch_done(self, path: str) -> None:
         self._prefetched_path = path
         self._prefetched_url = getattr(self, "_prefetching_url", "")
+        self._prefetch_worker = None
         if hasattr(self.step_video, "download_progress"):
             self.step_video.download_progress.set_progress(1.0, "Đã tải xong video!")
         self._restore_next_button()
@@ -459,6 +481,7 @@ class NewProjectPage(BasePage):
 
     @Slot(str)
     def _on_prefetch_failed(self, message: str) -> None:
+        self._prefetch_worker = None
         self._restore_next_button()
         if hasattr(self.step_video, "download_progress"):
             self.step_video.download_progress.lbl_status.setText(f"Lỗi tải: {message[:60]}")
@@ -1121,6 +1144,8 @@ class NewProjectPage(BasePage):
                 changes["gemini_model"] = data["gemini_model"]
         if merged != settings.translate_style_notes:
             changes["translate_style_notes"] = merged
+        if data.get("translate_style"):
+            changes["translate_style"] = data["translate_style"]
         if data["asr_engine"]:
             changes["asr_engine"] = data["asr_engine"]
         if data["whisper_model"]:
@@ -1174,6 +1199,12 @@ class NewProjectPage(BasePage):
                 put("GEMINI_API_KEY", data["gemini_api_key"], settings.gemini_api_key)
             if data.get("gemini_model"):
                 put("GEMINI_MODEL", data["gemini_model"], settings.gemini_model)
+        if data.get("translate_style"):
+            put(
+                "TRANSLATE_STYLE",
+                data["translate_style"],
+                getattr(settings, "translate_style", "natural"),
+            )
         if data.get("asr_engine"):
             put("ASR_ENGINE", data["asr_engine"], settings.asr_engine)
         if data.get("whisper_model"):
@@ -2161,18 +2192,24 @@ class NewProjectPage(BasePage):
     # -- Vòng đời ------------------------------------------------------
     def is_running(self) -> bool:
         return any(
-            w is not None and w.isRunning()
-            for w in (self._worker, self._export_worker, self._batch_worker)
+            is_worker_running(w) for w in (self._worker, self._export_worker, self._batch_worker)
         )
 
     def shutdown(self) -> None:
-        if self._prefetch_worker is not None and self._prefetch_worker.isRunning():
-            self._prefetch_worker.cancel()
-            self._prefetch_worker.wait(3000)
+        if is_worker_running(self._prefetch_worker):
+            try:
+                self._prefetch_worker.cancel()
+                self._prefetch_worker.wait(3000)
+            except RuntimeError:
+                pass
+        self._prefetch_worker = None
         for worker in (self._worker, self._export_worker, self._batch_worker):
-            if worker is not None and worker.isRunning():
-                worker.cancel()
-                worker.wait(5000)
+            if is_worker_running(worker):
+                try:
+                    worker.cancel()
+                    worker.wait(5000)
+                except RuntimeError:
+                    pass
 
     def cleanup(self) -> None:
         self._save_draft()
