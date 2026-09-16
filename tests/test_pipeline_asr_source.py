@@ -7,7 +7,7 @@ from autodub.pipeline import DubPipeline, DubRequest
 def test_asr_source_default_without_vocals(tmp_path):
     pipeline = DubPipeline(Settings(asr_use_vocals=False))
     default_audio = str(tmp_path / "original_audio.wav")
-    with open(default_audio, "w") as f:
+    with open(default_audio, "w", encoding="utf-8") as f:
         f.write("dummy")
 
     req = DubRequest(file_path="dummy.mp4", bg_mode="duck")

@@ -137,7 +137,7 @@ def test_new_project_page_shows_social_card_on_complete(qapp, tmp_path):
     work_dir = str(tmp_path / "test_proj")
     os.makedirs(os.path.join(work_dir, "youtube"), exist_ok=True)
     video_out = os.path.join(work_dir, "video_dubbed.mp4")
-    with open(video_out, "w") as f:
+    with open(video_out, "w", encoding="utf-8") as f:
         f.write("mock video")
 
     save_social_metadata(

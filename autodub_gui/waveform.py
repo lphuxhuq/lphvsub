@@ -167,7 +167,7 @@ def _compute_peaks(wav_path: str, buckets: int) -> list[float]:
 def _scan(source, dtype, width: int, channels: int, frames: int, buckets: int) -> list[float]:
     """Đọc theo khối và dồn vào các ô, không nạp cả tệp vào bộ nhớ."""
     totals = np.zeros(buckets, dtype=np.float64)
-    frames_per_chunk = max(1, _CHUNK_BYTES // (width * channels))
+    frames_per_chunk = max(1, _CHUNK_BYTES // max(1, width * channels))
     full_scale = float(np.iinfo(dtype).max)
     position = 0
 
@@ -177,7 +177,7 @@ def _scan(source, dtype, width: int, channels: int, frames: int, buckets: int) -
             break
         samples = np.frombuffer(raw, dtype=dtype)
         if channels > 1:
-            usable = (len(samples) // channels) * channels
+            usable = (len(samples) // max(1, channels)) * channels
             samples = samples[:usable].reshape(-1, channels).mean(axis=1)
         read_frames = len(samples)
         if read_frames == 0:

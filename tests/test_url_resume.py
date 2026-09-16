@@ -97,7 +97,8 @@ class TestFindExistingProjectByUrl(unittest.TestCase):
         proj_dir = os.path.join(self.test_dir, "20260905_proj_vi")
         os.makedirs(proj_dir, exist_ok=True)
         # Video file directly in project directory
-        open(os.path.join(proj_dir, "raw_BV1X4t865ECX.mp4"), "w").close()
+        with open(os.path.join(proj_dir, "raw_BV1X4t865ECX.mp4"), "w", encoding="utf-8"):
+            pass
 
         found = find_existing_project_by_url(
             self.test_dir, "https://www.bilibili.com/video/BV1X4t865ECX"
@@ -135,7 +136,8 @@ class TestPipelineUrlResume(unittest.TestCase):
             json.dump({"url": target_url}, f)
 
         fake_video = os.path.join(existing_proj, "source.mp4")
-        open(fake_video, "w").close()
+        with open(fake_video, "w", encoding="utf-8"):
+            pass
 
         settings = Settings.load()
         pipeline = DubPipeline(settings)

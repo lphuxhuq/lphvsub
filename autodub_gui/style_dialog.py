@@ -282,7 +282,7 @@ class _FrameCanvas(QWidget):
     def _apply_text_drag(self, mouse_y: float) -> None:
         """Move the preview line to the cursor; report position + margin back."""
         pr = self._pixmap_rect()
-        if pr.height() == 0:
+        if pr.height() <= 0:
             return
         clamped_y = max(pr.y(), min(mouse_y, pr.bottom()))
         center_ratio = (clamped_y - pr.y()) / pr.height()
@@ -372,7 +372,7 @@ class _FrameCanvas(QWidget):
     def normalized_regions(self) -> list[dict]:
         """Convert stored displayed rectangles to normalized 0..1 dicts."""
         pr = self._pixmap_rect()
-        if pr.width() == 0 or pr.height() == 0:
+        if pr.width() <= 0 or pr.height() <= 0:
             return []
         out = []
         for r in self._rects:

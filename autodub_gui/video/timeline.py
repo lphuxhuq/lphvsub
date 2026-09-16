@@ -214,7 +214,7 @@ class TimelineCanvas(QWidget):
         self.set_zoom(self._zoom / _ZOOM_STEP)
 
     def _visible_span(self) -> float:
-        return self._duration / self._zoom if self._duration else 1.0
+        return self._duration / self._zoom if self._duration and self._zoom > 0 else 1.0
 
     def _center_time(self) -> float:
         return self._offset + self._visible_span() / 2
@@ -269,6 +269,8 @@ class TimelineCanvas(QWidget):
     def _label_step(self) -> int:
         """Khoảng cách giữa hai mốc chữ trên thước, đủ thưa để không chồng nhau."""
         span = self._visible_span()
+        if span <= 0:
+            return _LABEL_STEPS[-1]
         for step in _LABEL_STEPS:
             if step / span * self.width() >= _MIN_LABEL_GAP_PX:
                 return step

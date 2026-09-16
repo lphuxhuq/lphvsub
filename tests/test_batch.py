@@ -302,7 +302,7 @@ def _fake_download_video(url, dest):
     """Tải giả: ghi file vào dest và trả đường dẫn (không đụng mạng)."""
     os.makedirs(dest, exist_ok=True)
     p = os.path.join(dest, f"vid_{url.rsplit('/', 1)[-1]}.mp4")
-    with open(p, "w") as f:
+    with open(p, "w", encoding="utf-8") as f:
         f.write("data")
     return p
 

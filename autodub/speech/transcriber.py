@@ -482,8 +482,8 @@ def _transcribe_whisper(
         if not text:
             continue
         segment_id += 1
-        start = seg.start
-        end = seg.end
+        start = float(seg.start or 0.0)
+        end = float(seg.end or start)
         segment = {
             "id": segment_id,
             "text": text,
@@ -494,7 +494,16 @@ def _transcribe_whisper(
         words = getattr(seg, "words", None)
         if words:
             segment["words"] = [
-                {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)} for w in words
+                {
+                    "word": w.word,
+                    "start": round(w.start, 3)
+                    if getattr(w, "start", None) is not None
+                    else round(start, 3),
+                    "end": round(w.end, 3)
+                    if getattr(w, "end", None) is not None
+                    else round(end, 3),
+                }
+                for w in words
             ]
         segment = _anchor_segment_to_words(segment)
         segments.append(segment)

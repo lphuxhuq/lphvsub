@@ -52,3 +52,12 @@ def test_symbols_and_ranges():
     assert "cộng" in normalize_vi_text("1 + 1 = 2")
     assert "bằng" in normalize_vi_text("1 + 1 = 2")
     assert "a còng" in normalize_vi_text("Gửi vào email test@gmail.com")
+
+
+def test_dates_and_temperatures():
+    assert "ba mươi tháng tư năm một nghìn chín trăm bảy mươi lăm" in normalize_vi_text(
+        "Chiến thắng 30/4/1975"
+    )
+    assert "hai mươi tháng mười một" in normalize_vi_text("Chào mừng ngày 20/11")
+    assert "ba mươi bảy độ C" in normalize_vi_text("Nhiệt độ 37°C")
+    assert "một trăm độ" in normalize_vi_text("Nước sôi ở 100°")

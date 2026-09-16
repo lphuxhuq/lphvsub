@@ -199,6 +199,35 @@ def normalize_vi_text(text: str) -> str:
         text,
     )
 
+    # 7.5. Ngày tháng: 30/4/1975 -> ba mươi tháng tư năm 1975, ngày 20/11 -> ngày 20 tháng 11
+    def _read_month(m_str: str) -> str:
+        return "tư" if int(m_str) == 4 else _read_number(m_str)
+
+    def _full_date(m: re.Match) -> str:
+        d, mo, y = m.group(1), m.group(2), m.group(3)
+        return f"{_read_number(d)} tháng {_read_month(mo)} năm {number_to_words(int(y))}"
+
+    def _day_month(m: re.Match) -> str:
+        prefix, d, mo = m.group(1), m.group(2), m.group(3)
+        return f"{prefix} {_read_number(d)} tháng {_read_month(mo)}"
+
+    def _month_year(m: re.Match) -> str:
+        mo, y = m.group(1), m.group(2)
+        return f"tháng {_read_month(mo)} năm {number_to_words(int(y))}"
+
+    text = re.sub(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", _full_date, text)
+    text = re.sub(
+        r"\b(ngày|hôm|sáng|chiều|tối|đêm|vào)\s*(\d{1,2})/(\d{1,2})\b",
+        _day_month,
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\btháng\s*(\d{1,2})/(\d{4})\b", _month_year, text, flags=re.IGNORECASE)
+
+    # Nhiệt độ: 37°C -> 37 độ C, 37° -> 37 độ
+    text = re.sub(r"(\d+(?:[.,]\d+)?)\s*°\s*[cC]\b", r"\1 độ C", text)
+    text = re.sub(r"(\d+(?:[.,]\d+)?)\s*°(?!\w)", r"\1 độ", text)
+
     # 8. Phân số: 1/2, 3/4 -> một phần hai, ba phần tư
     def _fraction(m: re.Match) -> str:
         num = m.group(1)

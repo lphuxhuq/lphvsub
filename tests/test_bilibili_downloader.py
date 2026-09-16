@@ -86,11 +86,11 @@ def test_download_one_isolated_moves_file_and_meta(tmp_path, monkeypatch):
     def fake_download_one(url, output_dir, cookies_from_browser=None, cookies_file=None):
         tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
         video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
-        with open(video, "w") as f:
+        with open(video, "w", encoding="utf-8") as f:
             f.write("data")
         meta_dir = os.path.join(tmp_dir, "data")
         os.makedirs(meta_dir, exist_ok=True)
-        with open(os.path.join(meta_dir, "video_meta.json"), "w") as f:
+        with open(os.path.join(meta_dir, "video_meta.json"), "w", encoding="utf-8") as f:
             f.write('{"title": "t"}')
         return {"input_url": url, "filepath": video}
 
@@ -111,20 +111,20 @@ def test_download_one_isolated_name_collision_no_overwrite(tmp_path, monkeypatch
     from autodub.media import downloader
 
     existing = os.path.join(str(tmp_path), "BiliBili_BV1xx411c7mD.mp4")
-    with open(existing, "w") as f:
+    with open(existing, "w", encoding="utf-8") as f:
         f.write("old")
 
     def fake_download_one(url, output_dir, cookies_from_browser=None, cookies_file=None):
         tmp_dir = os.path.join(str(tmp_path), ".dl_tmp")
         video = os.path.join(tmp_dir, "BiliBili_BV1xx411c7mD.mp4")
-        with open(video, "w") as f:
+        with open(video, "w", encoding="utf-8") as f:
             f.write("new")
         return {"input_url": url, "filepath": video}
 
     monkeypatch.setattr(downloader, "download_one", fake_download_one)
     entry = downloader.download_one_isolated("https://x", str(tmp_path))
 
-    with open(existing) as f:
+    with open(existing, encoding="utf-8") as f:
         assert f.read() == "old"  # bản gốc còn nguyên
     assert os.path.isfile(entry["filepath"])  # bản mới bên cạnh, tên khác
     assert entry["filepath"] != existing
@@ -148,7 +148,7 @@ def test_resolve_filepath_direct_and_multipart(tmp_path):
 
     # 1. Exact match with extractor prefix
     target_file = os.path.join(out_dir, "BiliBili_BV1xx411c7mD.mp4")
-    with open(target_file, "w") as f:
+    with open(target_file, "w", encoding="utf-8") as f:
         f.write("dummy")
 
     info = {
@@ -162,7 +162,7 @@ def test_resolve_filepath_direct_and_multipart(tmp_path):
     # 2. Multi-part file resolution (_p1 suffix)
     os.remove(target_file)
     p1_file = os.path.join(out_dir, "BiliBili_BV17x411w7KC_p1.mp4")
-    with open(p1_file, "w") as f:
+    with open(p1_file, "w", encoding="utf-8") as f:
         f.write("dummy")
 
     info_p1 = {

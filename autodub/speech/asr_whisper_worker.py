@@ -183,15 +183,21 @@ def main() -> None:
         if not text:
             continue
         seg_id += 1
+        seg_start = float(seg.start or 0.0)
+        seg_end = float(seg.end or seg_start)
         words = []
         for w in getattr(seg, "words", None) or []:
-            words.append({"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)})
+            w_start = (
+                round(w.start, 3) if getattr(w, "start", None) is not None else round(seg_start, 3)
+            )
+            w_end = round(w.end, 3) if getattr(w, "end", None) is not None else round(seg_end, 3)
+            words.append({"word": w.word, "start": w_start, "end": w_end})
         out = {
             "seg": True,
             "id": seg_id,
             "text": text,
-            "start": round(seg.start, 3),
-            "end": round(seg.end, 3),
+            "start": round(seg_start, 3),
+            "end": round(seg_end, 3),
             "words": words,
         }
         print(json.dumps(out, ensure_ascii=False), file=proto_out, flush=True)

@@ -123,7 +123,7 @@ def test_apply_rescales_by_measured_ratio(monkeypatch, tmp_path):
     assert abs(segs[1]["start"] - 4.0 * 1.26) < 1e-6
     assert "slot" in segs[0]  # slots re-annotated
     # Marker persisted for resume reuse (bố cục mới: nằm trong data/).
-    with open(os.path.join(str(tmp_path), "data", "slowed_video.json")) as f:
+    with open(os.path.join(str(tmp_path), "data", "slowed_video.json"), encoding="utf-8") as f:
         assert json.load(f)["speed"] == 0.8
 
 

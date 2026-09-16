@@ -267,7 +267,7 @@ class SetupScriptWorker(QThread):
                 if len(tail) > 200:
                     tail.pop(0)
                 self.log.emit(line)
-                pct = min(95, int(lines_seen / total_lines * 95))
+                pct = min(95, int(lines_seen / max(1, total_lines) * 95))
                 self.progress.emit(pct)
 
             proc.wait()
