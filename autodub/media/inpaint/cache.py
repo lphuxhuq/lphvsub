@@ -74,7 +74,8 @@ def compute_inpaint_hash(
     regions_json = json.dumps(normalized_regions, sort_keys=True)
     hasher.update(regions_json.encode("utf-8"))
 
-    # 3. Model & Engine metadata
+    # 3. Model & Engine metadata + Cache Version (v2 tránh dùng lại video lỗi dải màu cũ)
+    hasher.update(b"v2_color_fix")
     hasher.update(engine_name.strip().lower().encode("utf-8"))
     hasher.update(model_id.strip().lower().encode("utf-8"))
 

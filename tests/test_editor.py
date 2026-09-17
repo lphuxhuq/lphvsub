@@ -210,7 +210,15 @@ def test_rebuild_reuses_cached_wavs(work_dir, monkeypatch):
 
 
 def test_rebuild_defaults_to_persisted_render_opts(work_dir, monkeypatch):
-    save_render_opts(work_dir, {"subtitle_mode": "soft", "blur_regions": [{"x": 0}]})
+    save_render_opts(
+        work_dir,
+        {
+            "subtitle_mode": "soft",
+            "blur_regions": [{"x": 0}],
+            "mask_method": "ai_inpaint",
+            "inpaint_engine": "vsr_cli",
+        },
+    )
     captured = {}
     import autodub.media.audio as audio_mod
     import autodub.media.video as video_mod
@@ -222,12 +230,16 @@ def test_rebuild_defaults_to_persisted_render_opts(work_dir, monkeypatch):
     def fake_merge_video(*a, **k):
         captured["mode"] = k.get("subtitle_mode")
         captured["blur"] = k.get("blur_regions")
+        captured["mask_method"] = k.get("mask_method")
+        captured["inpaint_engine"] = k.get("inpaint_engine")
         return a[2]
 
     monkeypatch.setattr(video_mod, "merge_video", fake_merge_video)
     editor.rebuild_output(work_dir, Settings())  # no explicit opts
     assert captured["mode"] == "soft"
     assert captured["blur"] == [{"x": 0}]
+    assert captured["mask_method"] == "ai_inpaint"
+    assert captured["inpaint_engine"] == "vsr_cli"
 
 
 def test_rebuild_passes_subtitle_style(work_dir, monkeypatch):

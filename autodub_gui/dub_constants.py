@@ -39,15 +39,60 @@ SUBTITLE_MODES: list[tuple[str, str]] = [
     ("Ghi thẳng vào hình", "burn"),
 ]
 
-# Sáu phong cách dịch. Chuỗi ghi chú được nối thêm vào phần hướng dẫn dịch
-# mà lõi xử lý đã đọc sẵn, nên không phải sửa gì trong lõi.
+# Mười một phong cách dịch thực chiến. Chuỗi ghi chú được nối thêm vào phần
+# hướng dẫn dịch mà lõi xử lý đã đọc sẵn, kết hợp cùng prompt phong cách chuyên sâu.
 TRANSLATE_STYLES: list[tuple[str, str, str]] = [
     ("Tự nhiên, gần gũi (mặc định)", "natural", ""),
-    ("Trang trọng", "formal", "Dịch trang trọng, lịch sự, dùng từ chuẩn mực; tránh tiếng lóng."),
-    ("Sát nghĩa", "literal", "Bám sát nghĩa gốc, giữ nguyên cấu trúc câu khi tiếng Việt vẫn xuôi."),
-    ("Sáng tạo", "creative", "Dịch thoáng, ưu tiên câu chữ mượt và hấp dẫn hơn là bám từng chữ."),
-    ("Hài hước", "humorous", "Giữ giọng vui, dí dỏm; dùng cách nói đời thường của giới trẻ Việt."),
-    ("Hợp mạng xã hội", "social", "Câu ngắn, nhịp nhanh, dễ nghe khi lướt; tránh câu dài lê thê."),
+    (
+        "Review phim / Kể chuyện kịch tính",
+        "movie_review",
+        "Kể chuyện điện ảnh gay cấn, nhịp nhanh, hook mạnh, xưng hô ngôi thứ 3.",
+    ),
+    (
+        "Cổ trang / Kiếm hiệp / Tiên hiệp",
+        "wuxia",
+        "Âm hưởng Hán-Việt truyền thống, xưng hô chuẩn mực kiếm hiệp, chiêu thức trau chuốt.",
+    ),
+    (
+        "Anime / Manga / Hoạt hình",
+        "anime_manga",
+        "Nhiệt huyết, giàu cảm xúc, trẻ trung, xưng hô thân mật chuẩn hoạt hình.",
+    ),
+    (
+        "Hài hước / Gen Z / Châm biếm",
+        "humorous",
+        "Tếu táo, dí dỏm, bắt trend giới trẻ Việt duyên dáng, gây cười tự nhiên.",
+    ),
+    (
+        "Hợp mạng xã hội (Shorts, TikTok)",
+        "social",
+        "Cực ngắn gọn (dưới 10 từ/câu), nhịp dồn dập, đập thẳng vào tai, loại bỏ từ đệm.",
+    ),
+    (
+        "Trang trọng / Thời sự / Phóng sự",
+        "formal",
+        "Dịch trang trọng, lịch sự, dùng từ chuẩn mực; tránh tiếng lóng.",
+    ),
+    (
+        "Bán hàng / Review sản phẩm",
+        "commercial",
+        "Thuyết phục, kích thích tò mò, nhấn mạnh lợi ích và giải pháp, thúc đẩy hành động.",
+    ),
+    (
+        "Khoa học / Công nghệ / Tài liệu",
+        "tech_documentary",
+        "Chính xác thuật ngữ chuyên môn (giữ chuẩn Latin), mạch lạc, dễ hiểu với đại chúng.",
+    ),
+    (
+        "Sáng tạo / Phóng tác nghệ thuật",
+        "creative",
+        "Dịch thoáng, ưu tiên câu chữ mượt và hấp dẫn hơn là bám từng chữ.",
+    ),
+    (
+        "Sát nghĩa / Đối chiếu nguyên tác",
+        "literal",
+        "Bám sát nghĩa gốc, giữ nguyên cấu trúc câu khi tiếng Việt vẫn xuôi.",
+    ),
 ]
 
 # Dung lượng thật của từng phần cần tải thêm, hiện trong Cài đặt và Trợ giúp.

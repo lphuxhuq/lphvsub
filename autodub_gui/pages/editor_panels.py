@@ -596,6 +596,13 @@ class OverviewPanel(QScrollArea):
             section.add_widget(caption)
             section.add_widget(box)
 
+        self._style_combo = LabeledCombo(
+            "Phong cách dịch",
+            [(label, key) for label, key, _note in consts.TRANSLATE_STYLES],
+            "Quyết định văn phong khi dịch lại câu hoặc toàn bộ phụ đề.",
+        )
+        section.add_widget(self._style_combo)
+
         row = QHBoxLayout()
         save = GhostButton("Lưu ngữ cảnh")
         save.setToolTip("Lưu vào dự án này. Lần dịch lại kế tiếp sẽ dùng đúng các thông tin trên.")
@@ -615,6 +622,11 @@ class OverviewPanel(QScrollArea):
             box.setPlainText(str(value or ""))
             box.blockSignals(False)
 
+        style_key = (context or {}).get("translate_style", "")
+        if not style_key:
+            style_key = (context or {}).get("style", "natural") or "natural"
+        self._style_combo.set_key(style_key)
+
     def _emit_context(self) -> None:
         data: dict = {}
         for key, box in self._ctx_fields.items():
@@ -623,6 +635,7 @@ class OverviewPanel(QScrollArea):
                 data[key] = [line.strip() for line in text.splitlines() if line.strip()]
             else:
                 data[key] = text
+        data["translate_style"] = self._style_combo.current_key()
         self.context_saved.emit(data)
 
     def _info_row(self, key: str, label: str) -> QHBoxLayout:

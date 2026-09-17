@@ -721,6 +721,8 @@ class NewProjectPage(BasePage):
         """Lần đầu mở thì lấy giá trị mặc định từ tệp cấu hình."""
         try:
             settings = self._settings_provider()
+            if settings is None:
+                return
         except Exception:
             return
         self.step_recognize.engine.set_key(settings.asr_engine)

@@ -274,8 +274,10 @@ def apply_soft_timing(
     from autodub.media.voice_stretch import apply_formant_preserved_stretch
     from autodub.speech.tts_trimmer import trim_tts_silence
 
-    # 1) Cắt tỉa khoảng lặng thừa đầu/đuôi file TTS nếu được bật
-    if getattr(settings, "voice_vad_trim_enabled", True):
+    # 1) Cắt tỉa khoảng lặng thừa đầu/đuôi file TTS nếu được bật và chưa qua postprocess
+    if getattr(settings, "voice_vad_trim_enabled", True) and "segments_post" not in os.path.abspath(
+        src_dir
+    ):
         for s in segments:
             wav_file = seg_wav_path(src_dir, s["id"])
             if os.path.exists(wav_file):

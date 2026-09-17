@@ -891,15 +891,9 @@ def rebuild_output(
         auto_sfx_enabled=auto_sfx_enabled,
         sfx_preset=sfx_preset,
         sfx_volume_db=sfx_volume_db,
-        mask_method=mask_method
-        if mask_method is not None
-        else getattr(settings, "mask_method", None),
-        inpaint_engine=inpaint_engine
-        if inpaint_engine is not None
-        else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device
-        if inpaint_device is not None
-        else getattr(settings, "inpaint_device", None),
+        mask_method=mask_method,
+        inpaint_engine=inpaint_engine,
+        inpaint_device=inpaint_device,
         frame_banner_enabled=frame_banner_enabled,
         frame_banner_color=frame_banner_color,
         frame_header_text=frame_header_text,
@@ -927,6 +921,14 @@ def rebuild_output(
     slowed_video = data_path(work_dir, "slowed_video.mp4")
 
     total_duration = max(s["end"] for s in segments) + 1.0 if segments else 0.0
+    if getattr(settings, "voice_vad_trim_enabled", True):
+        from autodub.speech.tts_trimmer import trim_tts_silence
+
+        for s in segments:
+            raw_wav = seg_wav_path(seg_dir, s["id"])
+            if os.path.exists(raw_wav):
+                trim_tts_silence(raw_wav, raw_wav)
+
     merge_dir = seg_dir
     if settings.voice_postprocess:
         from autodub.media.audio import postprocess_voice_clips
@@ -1104,15 +1106,9 @@ def rebuild_subtitles(
         micro_zoom=micro_zoom,
         color_filter=color_filter,
         aspect_preset=aspect_preset,
-        mask_method=mask_method
-        if mask_method is not None
-        else getattr(settings, "mask_method", None),
-        inpaint_engine=inpaint_engine
-        if inpaint_engine is not None
-        else getattr(settings, "inpaint_engine", None),
-        inpaint_device=inpaint_device
-        if inpaint_device is not None
-        else getattr(settings, "inpaint_device", None),
+        mask_method=mask_method,
+        inpaint_engine=inpaint_engine,
+        inpaint_device=inpaint_device,
         frame_banner_enabled=frame_banner_enabled,
         frame_banner_color=frame_banner_color,
         frame_header_text=frame_header_text,
@@ -1888,17 +1884,23 @@ def retranslate_segment_ai(
 
     # Đọc ngữ cảnh video nếu có
     ctx_path = data_path(work_dir, "video_context.json")
-    style_notes = getattr(settings, "translate_style_notes", "")
     if os.path.exists(ctx_path):
         try:
             with open(ctx_path, encoding="utf-8") as f:
                 ctx_data = json.load(f)
-                if ctx_data.get("style_notes"):
-                    style_notes = f"{style_notes}\n{ctx_data['style_notes']}".strip()
+            from autodub.text.translate_context import apply_analysis
+
+            settings = apply_analysis(settings, ctx_data)
         except Exception:
             logger.debug("Bỏ qua lỗi Exception trong editor.py", exc_info=True)
 
-    system_prompt = _build_system_prompt(target_field=target.text_field, style_notes=style_notes)
+    style_notes = getattr(settings, "translate_style_notes", "")
+    system_prompt = _build_system_prompt(
+        target_field=target.text_field,
+        style_notes=style_notes,
+        target=target,
+        settings=settings,
+    )
     user_prompt = f"Translate this segment into {target.name} ({target.text_field}):\n{json.dumps([{'id': seg_id, 'text': seg.get('text', '')}], ensure_ascii=False)}"
 
     raw = client.call_ai(system_prompt, user_prompt)
@@ -1935,6 +1937,18 @@ def retranslate_all_segments_ai(
     from autodub.pipeline import source_lang_of
     from autodub.text.translate_direct import translate_segments_direct
 
+    # Đọc ngữ cảnh video nếu có
+    ctx_path = data_path(work_dir, "video_context.json")
+    if os.path.exists(ctx_path):
+        try:
+            with open(ctx_path, encoding="utf-8") as f:
+                ctx_data = json.load(f)
+            from autodub.text.translate_context import apply_analysis
+
+            settings = apply_analysis(settings, ctx_data)
+        except Exception:
+            logger.debug("Bỏ qua lỗi Exception trong editor.py", exc_info=True)
+
     source_lang = source_lang_of(work_dir) or "auto"
     translated = translate_segments_direct(
         segments,
@@ -1942,6 +1956,7 @@ def retranslate_all_segments_ai(
         source_lang=source_lang,
         settings=settings,
         reporter=reporter,
+        checkpoint_path=path,
     )
     _commit(work_dir, target, translated, path, old_ids=[-1] * len(translated))
     return translated

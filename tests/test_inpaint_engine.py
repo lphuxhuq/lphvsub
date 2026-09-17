@@ -109,3 +109,41 @@ def test_lama_onnx_fixed_512_shape_scaling():
     assert res[5, 5, 0] == 0
     # Vùng trong mask thành trắng (255)
     assert res[30, 80, 0] == 255
+
+
+def test_lama_onnx_model_output_255_range():
+    """Kiểm tra mô hình trả về dải 0..255 không bị nhân 255 làm bão hòa."""
+    engine = LaMaOnnxEngine(model_path="dummy_255.onnx")
+
+    mock_session = MagicMock()
+    mock_input_img = MagicMock()
+    mock_input_img.name = "image"
+    mock_input_img.shape = [1, 3, 512, 512]
+    mock_input_mask = MagicMock()
+    mock_input_mask.name = "mask"
+    mock_input_mask.shape = [1, 1, 512, 512]
+    mock_output = MagicMock()
+    mock_output.name = "output"
+
+    mock_session.get_inputs.return_value = [mock_input_img, mock_input_mask]
+    mock_session.get_outputs.return_value = [mock_output]
+
+    # Model trả về tensor dải 0..255 (ví dụ 120.0)
+    def mock_run(output_names, inputs):
+        out = np.full((1, 3, 512, 512), 120.0, dtype=np.float32)
+        return [out]
+
+    mock_session.run.side_effect = mock_run
+
+    engine._session = mock_session
+    engine._input_names = ["image", "mask"]
+    engine._input_shapes = [[1, 3, 512, 512], [1, 1, 512, 512]]
+    engine._output_name = "output"
+
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    mask[20:40, 20:40] = 255
+
+    res = engine.inpaint_frame(frame, mask)
+    # Vùng trong mask phải nhận giá trị 120, không bị nhân 255 thành 255
+    assert res[25, 25, 0] == 120

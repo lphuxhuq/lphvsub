@@ -288,6 +288,10 @@ def build_translation_prompt(
         if compact_output
         else "`id`, `text`, `start`, `end`, and `duration` (in seconds)"
     )
+    style_key = getattr(settings, "translate_style", "natural") if settings else "natural"
+    from autodub.text.translate_styles import get_style_prompt
+
+    style_prompt_block = get_style_prompt(style_key)
     return f"""You are an expert translator specializing in ASR (Automatic Speech Recognition) transcripts for video dubbing.
 Your task is to translate an ASR transcript from {source_lang} to {target.name}.
 
@@ -296,6 +300,8 @@ You will receive a JSON array of segments. Each segment contains: {input_fields}
 {build_user_context_block(settings)}{_output_format_block(target, compact_output)}
 
 ### STYLE & TRANSLATION RULES
+{style_prompt_block}
+
 {build_style_rules(target, domain=domain)}
 
 ### FIDELITY TO THE ORIGINAL (CRITICAL)
@@ -364,15 +370,23 @@ def write_hint(
     ctx_cache = os.path.join(d_dir, "video_context.json")
     if settings is not None and os.path.exists(ctx_cache):
         try:
-            from autodub import securestore
-            from autodub.text.translate_common import HOLD
+            import json as _json
 
-            analysis = securestore.read_json_secure(ctx_cache, HOLD.key or None)
-            from autodub.text.translate_saas import apply_analysis
+            with open(ctx_cache, encoding="utf-8") as f:
+                analysis = _json.load(f)
+            from autodub.text.translate_context import apply_analysis
 
             settings = apply_analysis(settings, analysis)
-        except Exception as e:
-            logger.warning(f"Không đọc được ngữ cảnh video cho dịch tay: {e}")
+        except Exception:
+            try:
+                from autodub import securestore
+                from autodub.text.translate_common import HOLD
+                from autodub.text.translate_context import apply_analysis
+
+                analysis = securestore.read_json_secure(ctx_cache, HOLD.key or None)
+                settings = apply_analysis(settings, analysis)
+            except Exception as e:
+                logger.warning(f"Không đọc được ngữ cảnh video cho dịch tay: {e}")
 
     # Tiêu đề video gốc (downloader lưu) — dịch tay nhận đúng ngữ cảnh như
     # dịch tự động.

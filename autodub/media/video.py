@@ -436,7 +436,8 @@ def merge_video(
 
             filter_complex = f"[0:v]{setpts},{build_dimension_filter()}[vout]"
 
-    hw_args = ["-hwaccel", "auto"] if video_encoder_name() != "CPU (libx264)" else []
+    # ponytail: decode in software CPU avoids DXVA2/CUDA chroma zeroing (green patch [0, 172, 0]) when software filtergraph splits/crops; NVENC encoder stays hardware-accelerated.
+    hw_args: list[str] = []
 
     # ---- Đường xuất SONG SONG theo chunk (tối ưu video dài) ----
     # Điều kiện: re-encode (filter_complex), ffmpeg thật (không mock trong

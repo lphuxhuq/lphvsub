@@ -531,6 +531,31 @@ def translate_segments_direct(
         else None
     )
 
+    if getattr(settings, "translate_analysis", True):
+        try:
+            from autodub.text.translate_context import (
+                analyze_transcript_context,
+                apply_analysis,
+            )
+
+            cache_path = (
+                os.path.join(
+                    os.path.dirname(os.path.abspath(checkpoint_path)), "video_context.json"
+                )
+                if checkpoint_path
+                else None
+            )
+            analysis = analyze_transcript_context(
+                segments,
+                source_lang=source_lang,
+                settings=settings,
+                video_title=getattr(settings, "translate_video_title", ""),
+                cache_path=cache_path,
+            )
+            settings = apply_analysis(settings, analysis)
+        except Exception as e:
+            logger.debug(f"Không thể phân tích ngữ cảnh video trước khi dịch: {e}")
+
     system_prompt = _build_system_prompt(
         target_field=target.text_field,
         style_notes=getattr(settings, "translate_style_notes", ""),

@@ -43,6 +43,7 @@ class LaMaOnnxEngine(BaseInpaintEngine):
         self._session = None
         self._input_names = None
         self._output_name = None
+        self._out_is_255: bool | None = None
 
     def _ensure_session(self, device: str | None = None):
         """Khởi tạo session ONNX Runtime khi cần dùng (chia sẻ session đã nạp trước)."""
@@ -69,6 +70,7 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 self._output_name = cached["output_name"]
                 self._fixed_h = cached["fixed_h"]
                 self._fixed_w = cached["fixed_w"]
+                self._out_is_255 = cached.get("out_is_255")
                 self._cached_mask_key = None
                 self._cached_mask_tensor = None
                 logger.debug("Dùng lại session LaMa ONNX đã nạp sẵn từ cache")
@@ -217,7 +219,17 @@ class LaMaOnnxEngine(BaseInpaintEngine):
             out_tensor = outputs[0][0]  # (3, fixed_h, fixed_w)
 
             out_rgb = np.transpose(out_tensor, (1, 2, 0))
-            out_rgb = np.clip(out_rgb * 255.0, 0, 255).astype(np.uint8)
+            if self._out_is_255 is None:
+                # ponytail: lock output scaling after first non-black frame so dark scenes never flip between [0..1] and [0..255]
+                if out_tensor.max() > 1.5:
+                    self._out_is_255 = True
+                elif out_tensor.max() > 0.0:
+                    self._out_is_255 = False
+
+            if self._out_is_255 is False or (self._out_is_255 is None and out_tensor.max() <= 1.5):
+                out_rgb = np.clip(out_rgb * 255.0, 0, 255).astype(np.uint8)
+            else:
+                out_rgb = np.clip(out_rgb, 0, 255).astype(np.uint8)
             out_bgr_fixed = out_rgb[:, :, ::-1]
 
             # Resize ngược lại kích thước ban đầu (w, h)
@@ -257,7 +269,17 @@ class LaMaOnnxEngine(BaseInpaintEngine):
                 out_tensor = out_tensor[:, :h, :w]
 
             out_rgb = np.transpose(out_tensor, (1, 2, 0))
-            out_rgb = np.clip(out_rgb * 255.0, 0, 255).astype(np.uint8)
+            if self._out_is_255 is None:
+                # ponytail: lock output scaling after first non-black frame so dark scenes never flip between [0..1] and [0..255]
+                if out_tensor.max() > 1.5:
+                    self._out_is_255 = True
+                elif out_tensor.max() > 0.0:
+                    self._out_is_255 = False
+
+            if self._out_is_255 is False or (self._out_is_255 is None and out_tensor.max() <= 1.5):
+                out_rgb = np.clip(out_rgb * 255.0, 0, 255).astype(np.uint8)
+            else:
+                out_rgb = np.clip(out_rgb, 0, 255).astype(np.uint8)
             out_bgr = out_rgb[:, :, ::-1]
 
         # Blend: chỉ lấy pixel từ out_bgr ở những nơi mask > 0 để bảo toàn 100% chi tiết vùng không xóa

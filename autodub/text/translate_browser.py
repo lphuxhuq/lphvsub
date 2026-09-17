@@ -889,19 +889,26 @@ def _apply_translated_map(
 
 
 def _build_browser_system_prompt(target: TargetLang, source_lang: str, settings: Any = None) -> str:
-    target_field = target.text_field
-    domain = getattr(settings, "translate_domain", "general").strip() or "general"
+    from autodub.text.translate_hint import build_user_context_block
+    from autodub.text.translate_styles import get_style_prompt
 
-    style_guide = "phong cách review phim/kể chuyện YouTube/TikTok, tự nhiên, cuốn hút"
-    if "novel" in domain.lower() or "fiction" in domain.lower():
-        style_guide = "phong cách tiểu thuyết, kiếm hiệp, ngôn tình, xưng hô chuẩn bối cảnh"
-    elif "anime" in domain.lower():
-        style_guide = "phong cách anime, hoạt hình, năng động, trẻ trung"
+    target_field = target.text_field
+    style_key = getattr(settings, "translate_style", "natural") if settings else "natural"
+    style_prompt = get_style_prompt(style_key)
+    user_context = build_user_context_block(settings)
+
+    context_section = ""
+    if user_context.strip():
+        context_section = f"\n{user_context}\n"
 
     return f"""Bạn là chuyên gia chuyển thể lồng tiếng video từ {source_lang} sang {target.name} cho AI TTS.
-NGUYÊN TẮC BẮT BUỘC:
+{context_section}
+### HƯỚNG DẪN PHONG CÁCH LỒNG TIẾNG
+{style_prompt}
+
+### NGUYÊN TẮC BẮT BUỘC:
 1. Độ dài câu: Khống chế độ dài ký tự của bản dịch không vượt quá trường 'max_chars' trong mỗi câu. Câu dịch phải ngắn gọn, súc tích, lược bỏ từ thừa để AI đọc vừa khít thời lượng video gốc.
-2. Ngôn ngữ: Dịch sang {target.name} ({style_guide}), xưng hô chuẩn xác theo vai vế, thuần Việt, tự nhiên.
+2. Ngôn ngữ & Xưng hô: Dịch sang {target.name}, tuân thủ nghiêm ngặt bảng xưng hô và văn phong đã chỉ định ở trên, thuần Việt 100%, tự nhiên.
 3. Chuyển ngữ toàn bộ: Tên nhân vật, địa danh, thuật ngữ phải được phiên âm hoặc dịch sang tiếng Việt, TUYỆT ĐỐI KHÔNG để lại chữ Hán/Nhật/Hàn.
 4. Định dạng đầu ra: BẮT BUỘC trả về DUY NHẤT một mảng JSON các object gồm đúng 2 trường: 'id' (giữ nguyên) và '{target_field}' (câu dịch). Ví dụ:
 [
@@ -930,6 +937,31 @@ def translate_segments_browser(
         if checkpoint_path
         else None
     )
+
+    if getattr(settings, "translate_analysis", True):
+        try:
+            from autodub.text.translate_context import (
+                analyze_transcript_context,
+                apply_analysis,
+            )
+
+            cache_path = (
+                os.path.join(
+                    os.path.dirname(os.path.abspath(checkpoint_path)), "video_context.json"
+                )
+                if checkpoint_path
+                else None
+            )
+            analysis = analyze_transcript_context(
+                segments,
+                source_lang=source_lang,
+                settings=settings,
+                video_title=getattr(settings, "translate_video_title", ""),
+                cache_path=cache_path,
+            )
+            settings = apply_analysis(settings, analysis)
+        except Exception as e:
+            logger.debug(f"Không thể nạp ngữ cảnh video cho browser translation: {e}")
 
     system_prompt = _build_browser_system_prompt(
         target=target,

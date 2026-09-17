@@ -46,10 +46,11 @@ def apply_formant_preserved_stretch(
     out_path: str,
     tempo: float,
     *,
-    sample_rate: int = 16000,
+    sample_rate: int | None = None,
 ) -> str:
     """Áp dụng co dãn thời lượng audio chất lượng cao.
 
+    Bảo toàn sample rate gốc của file (24kHz / 44.1kHz), không hạ ép xuống 16kHz làm mờ tiếng.
     Trả về đường dẫn file kết quả.
     """
     if abs(tempo - 1.0) < 0.01:
@@ -65,6 +66,16 @@ def apply_formant_preserved_stretch(
             shutil.copyfile(in_path, out_path)
         return out_path
 
+    # Tự động đọc framerate gốc của file nguồn nếu không truyền sample_rate cụ thể
+    if sample_rate is None:
+        try:
+            import wave as _wave
+
+            with _wave.open(in_path, "rb") as w:
+                sample_rate = w.getframerate()
+        except Exception:
+            sample_rate = None
+
     tmp = out_path + ".stretch.tmp.wav"
     cmd = [
         "ffmpeg",
@@ -73,10 +84,10 @@ def apply_formant_preserved_stretch(
         in_path,
         "-filter:a",
         filter_chain,
-        "-ar",
-        str(sample_rate),
-        tmp,
     ]
+    if sample_rate is not None:
+        cmd += ["-ar", str(sample_rate)]
+    cmd.append(tmp)
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=_SEG_TIMEOUT_S)
         if res.returncode == 0 and os.path.exists(tmp) and os.path.getsize(tmp) > 0:

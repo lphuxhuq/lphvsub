@@ -1047,6 +1047,16 @@ FIELDS: tuple[Field, ...] = (
         ],
     ),
     Field(
+        "TRANSLATE_STYLE",
+        COMBO,
+        "Phong cách dịch mặc định",
+        TAB_TRANSLATE,
+        "Ngữ cảnh video",
+        "natural",
+        "Quyết định giọng văn và phong cách bản dịch của AI.",
+        options=[(label, key) for label, key, _note in consts.TRANSLATE_STYLES],
+    ),
+    Field(
         "TRANSLATE_DOMAIN",
         TEXT,
         "Chủ đề video",

@@ -81,9 +81,9 @@ class RenderPlan:
             scale_limit_h = int(th * max(0.20, (1.0 - 2 * self.banner_height_ratio)))
             scaled_h = round(tw * float(self.video_h) / float(self.video_w))
             if (th - scaled_h) / 2 < min_bar_h:
-                flt = f"scale={tw}:{scale_limit_h}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
+                flt = f"scale={tw}:{scale_limit_h}:force_original_aspect_ratio=decrease,pad={tw}:{th}:trunc((ow-iw)/4)*2:trunc((oh-ih)/4)*2:color={pad_col}"
             else:
-                flt = f"scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:color={pad_col}"
+                flt = f"scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:trunc((ow-iw)/4)*2:trunc((oh-ih)/4)*2:color={pad_col}"
 
         elif mode in ("center_crop", "crop", "fill"):
             flt = f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th}"
@@ -118,7 +118,7 @@ class RenderPlan:
                 f"split[asp_bg][asp_fg];"
                 f"{bg_flt};"
                 f"[asp_fg]scale={tw}:{th}:force_original_aspect_ratio=decrease[asp_fg_s];"
-                f"[asp_bgb][asp_fg_s]overlay=(W-w)/2:(H-h)/2"
+                f"[asp_bgb][asp_fg_s]overlay=trunc((W-w)/4)*2:trunc((H-h)/4)*2"
             )
 
         return flt, tw, th

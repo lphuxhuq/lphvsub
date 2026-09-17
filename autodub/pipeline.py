@@ -1135,9 +1135,18 @@ class DubPipeline:
                 "— áp một tốc độ cho MỌI câu; scheduler per-segment có thể "
                 "nhân chồng hệ số này"
             )
+        # Cắt tỉa khoảng lặng thừa đầu/đuôi trên clip TTS thô trước khi cân bằng âm lượng và làm mượt biên
+        if getattr(settings, "voice_vad_trim_enabled", True):
+            from autodub.speech.tts_trimmer import trim_tts_silence
+
+            for s in segments:
+                raw_wav = seg_wav_path(seg_dir, s["id"])
+                if os.path.exists(raw_wav):
+                    trim_tts_silence(raw_wav, raw_wav)
+
         speed_in_post = settings.voice_postprocess and abs(voice_speed - 1.0) >= 0.005
         if settings.voice_postprocess:
-            logger.info("STEP 6a: Voice postprocess (loudnorm, fade, highpass)")
+            logger.info("STEP 6a: Voice postprocess (linear gain, fade, highpass)")
             logger.info("Đang cân chỉnh âm lượng các câu cho đều nhau...")
             from autodub.media.audio import postprocess_voice_clips
 
@@ -2080,6 +2089,37 @@ class DubPipeline:
         settings, rep = self.settings, self._reporter
         if not settings.translate_enabled:
             return None
+
+        # Tiêu đề video gốc (downloader lưu)
+        title = ""
+        if work_dir:
+            from autodub.workdir import load_video_meta
+
+            title = str(load_video_meta(work_dir).get("title", "")).strip()
+        if title and not getattr(settings, "translate_video_title", ""):
+            import dataclasses
+
+            settings = dataclasses.replace(settings, translate_video_title=title)
+
+        # Lượt 0: Phân tích ngữ cảnh video & phụ đề chưa dịch (lưu cache video_context.json)
+        if getattr(settings, "translate_analysis", True):
+            try:
+                from autodub.text.translate_context import (
+                    analyze_transcript_context,
+                    apply_analysis,
+                )
+
+                ctx_cache = data_path(work_dir, "video_context.json") if work_dir else None
+                analysis = analyze_transcript_context(
+                    segments,
+                    source_lang=source_lang,
+                    settings=settings,
+                    video_title=title,
+                    cache_path=ctx_cache,
+                )
+                settings = apply_analysis(settings, analysis)
+            except Exception as e:
+                logger.debug(f"Phân tích ngữ cảnh video bước 0 lỗi ({e})")
 
         # 1. AI Studio trình duyệt (khi user chủ động chọn — bỏ qua API key)
         if getattr(settings, "ai_studio_enabled", False):

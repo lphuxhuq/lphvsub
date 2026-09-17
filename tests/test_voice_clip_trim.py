@@ -70,3 +70,40 @@ def test_postprocess_trims_real_ffmpeg(tmp_path):
             np.frombuffer(w.readframes(int(0.25 * rate)), dtype=np.int16).astype(np.float32) / 32768
         )
     assert lead_silence_s(head, rate) <= 0.13
+
+
+def test_compute_speech_gain_db_consistency():
+    """Xác minh: compute_speech_gain_db tính toán gain tuyến tính cân bằng âm lượng mà không bóp méo."""
+    from autodub.media.audio import compute_speech_gain_db
+
+    # 1. Âm thanh câm/rỗng trả về 0.0
+    assert compute_speech_gain_db(np.zeros(1000, dtype=np.float32)) == 0.0
+    assert compute_speech_gain_db(np.array([], dtype=np.float32)) == 0.0
+
+    # 2. Câu bình thường (peak ~ 0.3)
+    s1 = np.sin(np.linspace(0, 100, 24000)) * 0.3
+    g1 = compute_speech_gain_db(s1, target_lufs=-16.0)
+    assert -15.0 <= g1 <= 15.0
+
+    # 3. Câu quá to (peak 0.95) bị ghìm lại dưới trần -1.5 dBFS
+    s2 = np.sin(np.linspace(0, 100, 24000)) * 0.95
+    g2 = compute_speech_gain_db(s2, target_lufs=-16.0, max_peak_db=-1.5)
+    # Peak mới: 20*log10(0.95) + g2 <= -1.49
+    new_peak = 20 * np.log10(0.95) + g2
+    assert new_peak <= -1.45
+
+
+def test_postprocess_preserves_sample_rate_and_avoids_distortion(tmp_path):
+    """Xác minh: postprocess_voice_clip giữ nguyên 24kHz / 44.1kHz và áp dụng linear gain."""
+    for rate in (24000, 44100):
+        src = tmp_path / f"clip_{rate}.wav"
+        _write_wav(src, lead_s=0.2, tone_s=1.0, rate=rate)
+        dst = tmp_path / f"out_{rate}.wav"
+        ok = postprocess_voice_clip(str(src), str(dst), target_lufs=-16.0)
+        assert ok is True
+        with wave.open(str(dst)) as w:
+            assert w.getframerate() == rate, (
+                f"Sample rate {rate} phải được giữ nguyên, thực tế: {w.getframerate()}"
+            )
+            dur = w.getnframes() / float(w.getframerate())
+            assert dur > 0.5

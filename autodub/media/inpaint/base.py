@@ -88,10 +88,10 @@ def get_bounding_box_for_regions(
     min_y = min_y - (min_y % 2)
     w = max_x - min_x
     h = max_y - min_y
-    w = w + (w % 2)
-    h = h + (h % 2)
-    w = min(w, width - min_x)
-    h = min(h, height - min_y)
+    w = min(w + (w % 2), width - min_x)
+    h = min(h + (h % 2), height - min_y)
+    w = w - (w % 2)
+    h = h - (h % 2)
 
     return min_x, min_y, max(2, w), max(2, h)
 

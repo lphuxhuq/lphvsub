@@ -299,16 +299,42 @@ def lead_silence_s(
     return max(0.0, round(speech_s - _LEAD_TRIM_GUARD_S, 3))
 
 
+def compute_speech_gain_db(samples, target_lufs: float = -16.0, max_peak_db: float = -1.5) -> float:
+    """Tính gain tuyến tính (dB) đưa câu thoại về mức âm lượng mong muốn mà không bóp méo âm sắc.
+
+    Thay vì dùng loudnorm 1-pass (dynamic compressor gây bóp nghẹt và giật âm lượng giữa các câu ngắn),
+    hàm này đo RMS trên các mẫu có tiếng nói thật và tính linear gain với trần True-Peak.
+    """
+    import numpy as np
+
+    if samples is None or len(samples) == 0:
+        return 0.0
+    peak = float(np.max(np.abs(samples)))
+    if peak < 1e-5:
+        return 0.0
+    peak_db = 20.0 * np.log10(peak)
+    max_gain_db = max_peak_db - peak_db
+
+    active = samples[np.abs(samples) > 0.005]
+    if len(active) == 0:
+        active = samples
+    rms = float(np.sqrt(np.mean(active**2)))
+    # Perceived loudness giọng nói xấp xỉ RMS - 0.69 dB
+    est_lufs = 20.0 * np.log10(max(1e-5, rms)) - 0.69
+    desired_gain = target_lufs - est_lufs
+    final_gain = min(desired_gain, max_gain_db)
+    return round(float(np.clip(final_gain, -15.0, 15.0)), 2)
+
+
 def postprocess_voice_clip(
     src: str, dst: str, target_lufs: float = -16.0, speed: float = 1.0
 ) -> bool:
-    """Broadcast-clean one TTS clip: highpass, loudness, fades.
+    """Broadcast-clean one TTS clip: highpass, linear loudness gain, fades.
 
     One ffmpeg pass per clip:
     - ``highpass 80 Hz`` — strips rumble/DC offset some TTS engines leave in
-    - ``loudnorm`` (EBU R128, single pass) — every clip lands at the same
-      perceived loudness regardless of voice (presets differ by several dB)
-      so no line suddenly shouts or whispers
+    - ``volume={gain}dB`` (Linear Gain Normalization) — cân bằng âm lượng tuyến tính
+      chuẩn xác theo target_lufs mà KHÔNG dùng dynamic compressor, giữ nguyên 100% âm sắc
     - 15 ms fade-in/out — kills boundary clicks when clips land on the mix
 
     ``src``/``dst`` may differ or be equal (temp + replace). On failure the
@@ -316,14 +342,12 @@ def postprocess_voice_clip(
     """
     dur = wav_duration_s(src)
     if not dur or dur < 0.15:
-        # Too short for loudnorm's analysis window (silence stubs etc.).
         if src != dst:
             shutil.copyfile(src, dst)
         return False
-    # loudnorm nội bộ chạy ở 192 kHz và GIỮ mức đó ở đầu ra nếu không ép
-    # lại — file phình 8 lần và mọi bước sau chậm theo. Ép về rate gốc.
     src_rate = 24000
     trim_s = 0.0
+    data = None
     try:
         import wave as _wave
 
@@ -341,14 +365,9 @@ def postprocess_voice_clip(
         trim_s = lead_silence_s(data, src_rate)
     except (OSError, EOFError, ValueError):
         pass
-    # Chỉ cắt nếu khoảng lặng đầu lớn (>= 80ms) và sau khi cắt vẫn còn đủ dài cho loudnorm
     if trim_s < 0.080 or dur - trim_s < 0.15:
         trim_s = 0.0
     fade_s = _VOICE_FADE_MS / 1000.0
-    # atempo gộp luôn vào đây: mỗi câu chỉ còn MỘT lệnh ffmpeg thay vì hai
-    # (hậu kỳ rồi VOICE_SPEED). Fade phải tính trên thời lượng SAU khi đổi
-    # tốc độ, nên atempo đứng trước afade. Khoảng lặng đầu clip bỏ qua -ss
-    # seek trước input (wav seek chính xác từng mẫu).
     tempo = speed if speed > 0 else 1.0
     speed_filter = ""
     out_dur = dur - trim_s
@@ -356,9 +375,15 @@ def postprocess_voice_clip(
         tempo = min(2.0, max(0.5, tempo))
         speed_filter = f"atempo={tempo:.3f},"
         out_dur = (dur - trim_s) / tempo
+
+    # Tính gain tuyến tính trên phần âm thanh thực sau khi trim
+    gain_samples = data[int(trim_s * src_rate) :] if (data is not None and trim_s > 0) else data
+    gain_db = compute_speech_gain_db(gain_samples, target_lufs=target_lufs, max_peak_db=-1.5)
+    vol_filter = f"volume={gain_db:+.2f}dB," if abs(gain_db) >= 0.05 else ""
+
     filters = (
         f"highpass=f=80,"
-        f"loudnorm=I={target_lufs}:TP=-1.5:LRA=11,"
+        f"{vol_filter}"
         f"{speed_filter}"
         f"afade=t=in:st=0:d={fade_s},"
         f"afade=t=out:st={max(0.0, out_dur - fade_s):.3f}:d={fade_s}"

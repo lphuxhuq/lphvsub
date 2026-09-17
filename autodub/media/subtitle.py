@@ -277,7 +277,9 @@ def build_force_style(style: dict | None = None) -> str:
 def _to_pixels(region: dict, video_w: int, video_h: int) -> tuple[int, int, int, int]:
     """Đổi một vùng chuẩn hóa thành số điểm ảnh chẵn, nằm gọn trong khung.
 
-    Chiều rộng và cao chẵn để phép cắt còn hợp lệ với yuv420p.
+    Toạ độ x, y và kích thước w, h đều được làm chẵn để phép cắt (crop) và
+    phủ (overlay) tương thích hoàn hảo với yuv420p chroma subsampling, tránh
+    lệch mặt phẳng màu U/V gây ra viền hoặc vệt xanh lá.
     """
     x = int(round(float(region["x"]) * video_w))
     y = int(round(float(region["y"]) * video_h))
@@ -286,9 +288,15 @@ def _to_pixels(region: dict, video_w: int, video_h: int) -> tuple[int, int, int,
 
     x = max(0, min(x, video_w - 2))
     y = max(0, min(y, video_h - 2))
+    x = x - (x % 2)
+    y = y - (y % 2)
     w = max(2, min(w, video_w - x))
     h = max(2, min(h, video_h - y))
-    return x, y, w - (w % 2), h - (h % 2)
+    w = w - (w % 2)
+    h = h - (h % 2)
+    w = max(2, w)
+    h = max(2, h)
+    return x, y, w, h
 
 
 def build_aspect_ratio_filter(

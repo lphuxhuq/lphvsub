@@ -267,6 +267,9 @@ class Settings:
     translate_context: str = ""  # mô tả tự do (nhiều dòng)
     translate_pronouns: str = ""  # quy ước xưng hô, vd "mình – các bạn"
     translate_glossary: str = ""  # thuật ngữ cố định, mỗi dòng "gốc = dịch"
+    translate_style: str = (
+        "natural"  # mã phong cách dịch (vd "natural", "movie_review", "wuxia"...)
+    )
     translate_style_notes: str = ""  # yêu cầu thêm về giọng văn
     # Tiêu đề video gốc — KHÔNG nạp từ .env: pipeline tự bơm mỗi lượt chạy
     # (đọc data/video_meta.json do downloader ghi) vào bản sao Settings để
@@ -566,6 +569,7 @@ class Settings:
             translate_context=env_multiline("TRANSLATE_CONTEXT"),
             translate_pronouns=env("TRANSLATE_PRONOUNS").strip(),
             translate_glossary=env_multiline("TRANSLATE_GLOSSARY"),
+            translate_style=env("TRANSLATE_STYLE", "natural").strip() or "natural",
             translate_style_notes=env_multiline("TRANSLATE_STYLE_NOTES"),
             default_source_lang=env("DEFAULT_SOURCE_LANG", "zh-CN"),
             audio_sample_rate=env_int("AUDIO_SAMPLE_RATE", "16000"),
