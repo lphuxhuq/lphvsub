@@ -152,3 +152,23 @@ def test_merge_segments_with_auto_sfx(tmp_path):
     assert abs(len(audio) / 1000.0 - 8.0) < 0.1
     # Ensure audio has energy at scene cut points
     assert audio.dBFS > -60.0
+
+
+def test_merge_segments_updates_segment_start_end_on_collision(tmp_path):
+    """Xác minh: Khi merge_segments dời audio để chống đè tiếng, seg['start'] và seg['end'] được đồng bộ."""
+    seg_dir = str(tmp_path / "segments")
+    os.makedirs(seg_dir)
+    _make_segment_file(os.path.join(seg_dir, "seg_001.wav"), 1500)
+    _make_segment_file(os.path.join(seg_dir, "seg_002.wav"), 1000)
+
+    segments = [
+        {"id": 1, "start": 0.0, "end": 1.5, "duration": 1.5},
+        {"id": 2, "start": 1.0, "end": 2.0, "duration": 1.0},
+    ]
+    output_path = str(tmp_path / "merged_sync.wav")
+    merge_segments(segments, seg_dir, output_path, total_duration=4.0)
+
+    # Seg 2 PHẢI được dời sang sau khi Seg 1 kết thúc
+    assert segments[1]["start"] >= 1.51
+    assert segments[1]["end"] >= 2.51
+    assert segments[1]["dub_start"] == segments[1]["start"]

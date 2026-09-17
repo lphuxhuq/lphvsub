@@ -21,6 +21,8 @@ from autodub.text.glossary import _DEFAULT_PHONETIC_GLOSSARY
 from autodub.text.translate_common import TranslateCheckpoint, TranslateError
 from autodub.text.translate_hint import (
     annotate_slots,
+    context_note,
+    context_payload,
     effective_cps,
     ensure_terminal_punct,
     payload_segment,
@@ -276,9 +278,9 @@ def _build_system_prompt(
     phonetic = _phonetic_section()
 
     extra_blocks = [phonetic]
-    if style_notes and style_notes.strip():
-        if style_notes.strip() not in base_prompt:
-            extra_blocks.append(f"### YÊU CẦU BỔ SUNG VỀ VĂN PHONG:\n{style_notes.strip()}")
+    s_notes = str(style_notes).strip() if isinstance(style_notes, str) else ""
+    if s_notes and s_notes not in base_prompt:
+        extra_blocks.append(f"### YÊU CẦU BỔ SUNG VỀ VĂN PHONG:\n{s_notes}")
 
     return base_prompt + "\n\n" + "\n\n".join(extra_blocks)
 
@@ -575,6 +577,8 @@ def translate_segments_direct(
     translated_segments_map: dict[int, dict] = {}
     tracker = ProgressTracker(len(segments), f"Dịch lời thoại ({provider_desc})", unit="câu")
     state_lock = threading.Lock()
+    seg_idx_map = {s["id"]: i for i, s in enumerate(segments)}
+    seg_dict_map = {s["id"]: s for s in segments}
 
     pending_batches: list[tuple[int, list[dict], str]] = []
     for idx, (b_idx, batch) in enumerate(batches):
@@ -627,10 +631,21 @@ def translate_segments_direct(
         _t0 = time.time()
 
         payload_items = [payload_segment(s, cps_budget=cps) for s in batch]
-        user_prompt = (
+        start_seg_idx = seg_idx_map.get(batch[0]["id"], 0)
+        with state_lock:
+            context_segs = context_payload(segments, start_seg_idx, target=target, n=3)
+
+        prompt_parts = []
+        if context_segs:
+            prompt_parts.append(context_note(target))
+            prompt_parts.append(
+                f"Context (tham chiếu giữ nhất quán nhân xưng/ngữ cảnh, KHÔNG dịch và KHÔNG xuất ra):\n{json.dumps(context_segs, ensure_ascii=False, indent=2)}\n\n"
+            )
+        prompt_parts.append(
             f"Dịch các câu thoại sau sang {target.name} ({target.text_field}):\n"
             f"{json.dumps(payload_items, ensure_ascii=False)}"
         )
+        user_prompt = "".join(prompt_parts)
 
         translated_items = []
         last_err = None
@@ -701,6 +716,8 @@ def translate_segments_direct(
         with state_lock:
             for s in batch_results:
                 translated_segments_map[s["id"]] = s
+                if s["id"] in seg_dict_map:
+                    seg_dict_map[s["id"]][target.text_field] = s[target.text_field]
             if checkpoint:
                 checkpoint.put(batch_results)
             preview = ""

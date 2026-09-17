@@ -267,3 +267,58 @@ def test_translate_segments_direct_empty_segments():
     settings.gemini_api_key = "dummy"
     res = translate_segments_direct([], get_target("vi"), "zh-CN", settings)
     assert res == []
+
+
+def test_translate_segments_direct_includes_context_payload():
+    """Xác minh: Lô thứ 2 nhận ngữ cảnh từ 3 câu liền trước để dịch chuẩn mạch hội thoại."""
+    from autodub.languages import get_target
+    from autodub.text.translate_direct import translate_segments_direct
+
+    settings = mock.MagicMock()
+    settings.gemini_api_key = "dummy"
+    settings.translate_workers = 1
+    settings.translate_batch_size = 2
+    settings.translate_cps_budget = 14.0
+    settings.translate_analysis = False
+
+    segments = [
+        {"id": 1, "text": "Sentence 1", "duration": 2.0},
+        {"id": 2, "text": "Sentence 2", "duration": 2.0},
+        {"id": 3, "text": "Sentence 3", "duration": 2.0},
+        {"id": 4, "text": "Sentence 4", "duration": 2.0},
+    ]
+
+    prompts_captured = []
+
+    def fake_call_ai(system_prompt, user_prompt, **kwargs):
+        prompts_captured.append(user_prompt)
+        if "Sentence 1" in user_prompt:
+            return json.dumps([{"id": 1, "text_vi": "Câu một."}, {"id": 2, "text_vi": "Câu hai."}])
+        return json.dumps([{"id": 3, "text_vi": "Câu ba."}, {"id": 4, "text_vi": "Câu bốn."}])
+
+    with mock.patch(
+        "autodub.text.translate_direct.GeminiDirectClient.call_ai", side_effect=fake_call_ai
+    ):
+        res = translate_segments_direct(segments, get_target("vi"), "en", settings)
+
+    assert len(res) == 4
+    assert len(prompts_captured) >= 2
+    # Lô thứ hai (chứa câu 3 và 4) PHẢI chứa Context của các câu trước
+    batch2_prompt = prompts_captured[1]
+    assert "Context" in batch2_prompt
+    assert "Sentence 1" in batch2_prompt or "Sentence 2" in batch2_prompt
+
+
+def test_translate_browser_build_single_user_prompt_includes_context():
+    """Xác minh: Browser translation prompt cũng nhận Context của các câu trước kèm bản dịch."""
+    from autodub.languages import get_target
+    from autodub.text.translate_browser import _build_single_user_prompt
+
+    target = get_target("vi")
+    chunk = [{"id": 4, "text": "Hello", "duration": 2.0}]
+    context_segs = [{"id": 3, "text": "Hi", "text_vi": "Xin chào."}]
+    prompt = _build_single_user_prompt(chunk, target, cps=14.0, context_segs=context_segs)
+
+    assert '"context":' in prompt
+    assert "Xin chào." in prompt
+    assert 'The "context" array holds the lines IMMEDIATELY BEFORE this batch' in prompt

@@ -103,3 +103,15 @@ def test_max_lines_single_line_strictly_one_line():
         assert "\n" not in c["text"]
         assert len(c["text"].splitlines()) == 1
         assert len(c["text"]) <= 32
+
+
+def test_split_for_display_pauses_and_word_weights():
+    """Xác minh: split_for_display chia thời lượng theo số từ và cộng trọng số cho vế có dấu phẩy ngắt hơi."""
+    text = "Chúng ta hãy cùng chờ xem, điều gì sẽ xảy ra tiếp theo."
+    seg = {"start": 0.0, "end": 6.0, "text_vi": text}
+    cues = split_for_display(seg, "text_vi", line_words=6, max_lines=1)
+    assert len(cues) >= 2
+    assert cues[0]["start"] == 0.0
+    assert cues[-1]["end"] == 6.0
+    for a, b in zip(cues, cues[1:]):
+        assert a["end"] == b["start"]

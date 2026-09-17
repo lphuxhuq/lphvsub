@@ -983,6 +983,8 @@ def translate_segments_browser(
 
     client = AiStudioBrowserClient(profile_dir=profile_dir, headless=headless)
     translated_segments_map: dict[int, dict] = {}
+    seg_idx_map = {s["id"]: i for i, s in enumerate(segments)}
+    seg_dict_map = {s["id"]: s for s in segments}
     t_trans_start = time.time()
 
     # Restore checkpoint
@@ -991,6 +993,8 @@ def translate_segments_browser(
         cached = checkpoint.take([s]) if checkpoint else None
         if cached:
             translated_segments_map[s["id"]] = cached[0]
+            if target.text_field in cached[0]:
+                s[target.text_field] = cached[0][target.text_field]
             completed_count += 1
 
     if reporter and completed_count > 0:
@@ -1014,8 +1018,8 @@ def translate_segments_browser(
                     chunk[0]["id"],
                     chunk[-1]["id"],
                 )
-                start_seg_idx = chunk[0].get("index", idx)
-                context_segs = context_payload(segments, start_seg_idx, target=target)
+                start_seg_idx = seg_idx_map.get(chunk[0]["id"], idx)
+                context_segs = context_payload(segments, start_seg_idx, target=target, n=3)
                 user_prompt = _build_single_user_prompt(chunk, target, cps, context_segs)
 
                 # Retry loop cho riêng từng chunk nếu AI Studio trả về văn bản hội thoại/lỗi JSON
@@ -1052,6 +1056,8 @@ def translate_segments_browser(
                 )
                 for s in batch_results:
                     translated_segments_map[s["id"]] = s
+                    if s["id"] in seg_dict_map:
+                        seg_dict_map[s["id"]][target.text_field] = s[target.text_field]
                 if checkpoint:
                     checkpoint.put(batch_results)
                 if reporter:
@@ -1089,7 +1095,8 @@ def translate_segments_browser(
                 _t0 = time.time()
 
                 payload_items = [payload_segment(s, cps_budget=cps) for s in batch]
-                ctx_segs = context_payload(segments, start_idx, target=target)
+                start_idx = seg_idx_map.get(batch[0]["id"], start_idx)
+                ctx_segs = context_payload(segments, start_idx, target=target, n=3)
                 user_lines = []
                 if ctx_segs:
                     user_lines.append(context_note(target))
@@ -1127,6 +1134,8 @@ def translate_segments_browser(
                 )
                 for s in batch_results:
                     translated_segments_map[s["id"]] = s
+                    if s["id"] in seg_dict_map:
+                        seg_dict_map[s["id"]][target.text_field] = s[target.text_field]
                 if checkpoint:
                     checkpoint.put(batch_results)
 

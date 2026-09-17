@@ -151,15 +151,31 @@ def split_for_display(
     if cur:
         chunks.append(cur)
 
-    # Chia thời gian của câu cho các mảnh theo số ký tự.
-    total_chars = sum(len(c) for c in chunks) or 1
-    duration = seg["end"] - seg["start"]
+    # Chia thời gian theo trọng số âm tiết/từ và điểm ngắt nghỉ tự nhiên (thay vì đếm ký tự phẳng)
+    def _chunk_speech_weight(c: str) -> float:
+        words = len(c.split())
+        # Nếu vế kết thúc bằng dấu ngắt câu (phẩy, chấm phẩy, gạch ngang), người nói sẽ ngắt hơi ~0.3-0.5s
+        tail_pause = (
+            0.6 if any(c.rstrip().endswith(p) for p in (",", ";", ":", "—", "-", "…")) else 0.0
+        )
+        return max(1.0, float(words) + tail_pause)
+
+    weights = [_chunk_speech_weight(c) for c in chunks]
+    total_weight = sum(weights) or 1.0
+    duration = max(0.0, float(seg.get("end", 0.0)) - float(seg.get("start", 0.0)))
     cues = []
-    t = seg["start"]
+    t = float(seg.get("start", 0.0))
     for i, chunk in enumerate(chunks):
-        share = duration * len(chunk) / total_chars
-        share = max(share, MIN_CUE_SECONDS if duration >= MIN_CUE_SECONDS * len(chunks) else share)
-        end = seg["end"] if i == len(chunks) - 1 else min(t + share, seg["end"])
+        share = duration * (weights[i] / total_weight)
+        share = max(
+            share,
+            MIN_CUE_SECONDS if duration >= MIN_CUE_SECONDS * len(chunks) else share,
+        )
+        end = (
+            float(seg.get("end", 0.0))
+            if i == len(chunks) - 1
+            else min(t + share, float(seg.get("end", 0.0)))
+        )
         cues.append({"start": round(t, 3), "end": round(end, 3), "text": _wrapped(chunk)})
         t = end
     return cues

@@ -274,7 +274,11 @@ _LEAD_TRIM_GUARD_S = (
 
 
 def lead_silence_s(
-    samples, rate: int, threshold: float = _LEAD_TRIM_THRESHOLD, window_s: float = 0.02
+    samples,
+    rate: int,
+    threshold: float = _LEAD_TRIM_THRESHOLD,
+    window_s: float = 0.02,
+    guard_s: float | None = None,
 ) -> float:
     """Số giây cần BỎ ở đầu clip để sát tiếng nói (đã trừ guard, ≥ 0).
 
@@ -296,7 +300,8 @@ def lead_silence_s(
     if not len(full):
         return 0.0
     speech_s = (full[0] - need + 1) * window_s
-    return max(0.0, round(speech_s - _LEAD_TRIM_GUARD_S, 3))
+    eff_guard = _LEAD_TRIM_GUARD_S if guard_s is None else guard_s
+    return max(0.0, round(speech_s - eff_guard, 3))
 
 
 def compute_speech_gain_db(samples, target_lufs: float = -16.0, max_peak_db: float = -1.5) -> float:
@@ -362,10 +367,10 @@ def postprocess_voice_clip(
             )
         if n_ch > 1:
             data = data.reshape(-1, n_ch).mean(axis=1)
-        trim_s = lead_silence_s(data, src_rate)
+        trim_s = lead_silence_s(data, src_rate, guard_s=0.08)
     except (OSError, EOFError, ValueError):
         pass
-    if trim_s < 0.080 or dur - trim_s < 0.15:
+    if trim_s < 0.040 or dur - trim_s < 0.15:
         trim_s = 0.0
     fade_s = _VOICE_FADE_MS / 1000.0
     tempo = speed if speed > 0 else 1.0
@@ -749,6 +754,10 @@ def merge_segments(
             max(s_start, last_audio_end + 0.010) if last_audio_end > float("-inf") else s_start
         )
         actual_end = actual_start + dur
+        seg["start"] = round(actual_start, 3)
+        seg["end"] = round(actual_end, 3)
+        seg["dub_start"] = round(actual_start, 3)
+        seg["dub_end"] = round(actual_end, 3)
         adjusted_seg_index.append((actual_start, actual_end, seg))
         last_audio_end = actual_end
     seg_index = adjusted_seg_index

@@ -9,6 +9,7 @@ continue.
 """
 
 import os
+from typing import Any
 
 from autodub.languages import TargetLang
 from autodub.utils import setup_logging
@@ -62,7 +63,7 @@ def annotate_slots(segments: list[dict], tail_slack: float = 2.0) -> list[dict]:
     Mutates the segments in place and returns the same list.
     """
     for i, seg in enumerate(segments):
-        if i + 1 < len(segments):
+        if i + 1 < len(segments) and "start" in segments[i + 1] and "start" in seg:
             slot = float(segments[i + 1]["start"]) - float(seg["start"])
         else:
             slot = float(seg.get("duration", 0) or 0) + tail_slack
@@ -184,12 +185,16 @@ def build_user_context_block(settings) -> str:
     if settings is None:
         return ""
     lines: list[str] = []
-    title = getattr(settings, "translate_video_title", "").strip()
-    domain = getattr(settings, "translate_domain", "").strip()
-    context = getattr(settings, "translate_context", "").strip()
-    pronouns = getattr(settings, "translate_pronouns", "").strip()
-    glossary = getattr(settings, "translate_glossary", "").strip()
-    style = getattr(settings, "translate_style_notes", "").strip()
+
+    def _clean(val: Any) -> str:
+        return str(val).strip() if isinstance(val, str) else ""
+
+    title = _clean(getattr(settings, "translate_video_title", ""))
+    domain = _clean(getattr(settings, "translate_domain", ""))
+    context = _clean(getattr(settings, "translate_context", ""))
+    pronouns = _clean(getattr(settings, "translate_pronouns", ""))
+    glossary = _clean(getattr(settings, "translate_glossary", ""))
+    style = _clean(getattr(settings, "translate_style_notes", ""))
     if title:
         lines.append(f"- **Original video title**: {title}")
     if domain:

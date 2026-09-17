@@ -1272,6 +1272,7 @@ class DubPipeline:
             sfx_preset=sfx_preset,
             sfx_volume_db=sfx_vol,
         )
+        _refresh_subs(segments, work_dir, target, subtitle_style)
         rep.emit("merge_audio", "done", detail=merged_audio_path)
 
         # Mọi thứ phase Xuất video cần, gói làm một: luồng batch/legacy dùng
