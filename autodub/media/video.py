@@ -252,6 +252,23 @@ def render_preview_clip(
     return output_path
 
 
+def adapt_filter_for_chunk(filter_complex: str, start_s: float) -> str:
+    """Điều chỉnh filter complex cho từng chunk render song song.
+
+    Dịch chuyển PTS đầu vào lên start_s để phụ đề (subtitles=...) và các bộ lọc
+    theo thời gian (between(t,...), watermark, zoom) khớp đúng dòng thời gian thực của video gốc.
+    Sau đó khôi phục PTS đầu ra về 0 để concat demuxer ghép nối video hoàn chỉnh.
+    """
+    if not filter_complex or abs(start_s) < 0.001:
+        return filter_complex
+    adapted = f"[0:v]setpts=PTS+{start_s:.3f}/TB[v_offset];" + filter_complex.replace(
+        "[0:v]", "[v_offset]", 1
+    )
+    if adapted.endswith("[vout]"):
+        adapted = adapted[: -len("[vout]")] + "[v_pre];[v_pre]setpts=PTS-STARTPTS[vout]"
+    return adapted
+
+
 def merge_video(
     video_path: str,
     audio_path: str,
@@ -448,20 +465,17 @@ def merge_video(
         from autodub.media.parallel_export import _MIN_SPLIT_DURATION_S as _PSEND
     except ImportError:
         _PSEND = 45.0
-    has_timed_blur = any(
-        isinstance(r, dict) and r.get("time_range") for r in (effective_blur_regions or [])
-    )
     if (
         parallel_enabled
         and filter_complex
         and dur_probe
         and dur_probe >= _PSEND
         and subprocess.run is _REAL_SUBPROCESS_RUN
-        and subtitle_mode != "burn"
-        and not has_timed_blur
     ):
         try:
             from autodub.media.parallel_export import parallel_chunked_export
+
+            codec_holder = {"args": video_codec_args()}
 
             def _build_chunk_cmd(
                 src: str, start_s: float, end_s: float, chunk_out: str
@@ -484,8 +498,22 @@ def merge_video(
                     "-i",
                     audio_path,
                 ]
+
+                chunk_fc = adapt_filter_for_chunk(filter_complex, start_s)
+                if (
+                    len(chunk_fc) > 1024
+                    or "\n" in chunk_fc
+                    or len(effective_blur_regions or []) > 2
+                ):
+                    script_file = chunk_out + ".filter.txt"
+                    with open(script_file, "w", encoding="utf-8") as f:
+                        f.write(chunk_fc)
+                    chunk_filter_args = ["-filter_complex_script", script_file]
+                else:
+                    chunk_filter_args = ["-filter_complex", chunk_fc]
+
                 chunk_cmd += [
-                    *filter_args_holder["args"],
+                    *chunk_filter_args,
                     "-filter_complex_threads",
                     "0",
                     "-map",
@@ -522,24 +550,6 @@ def merge_video(
                 chunk_cmd += ["-c:a", "aac", "-b:a", "192k", "-y", chunk_out]
                 return chunk_cmd
 
-            # filter_args / codec cần sẵn cho callback — dùng holder dict
-            # vì callback closure được gọi sau khi biến local được gán.
-            filter_script_file = None
-            if (
-                len(filter_complex) > 1024
-                or "\n" in filter_complex
-                or len(effective_blur_regions or []) > 2
-            ):
-                import tempfile
-
-                fd, filter_script_file = tempfile.mkstemp(prefix="filtergraph_", suffix=".txt")
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(filter_complex)
-                filter_args_holder = {"args": ["-filter_complex_script", filter_script_file]}
-            else:
-                filter_args_holder = {"args": ["-filter_complex", filter_complex]}
-            codec_holder = {"args": video_codec_args()}
-
             from autodub.media.metadata import randomize_file_hash
 
             def _rand_meta() -> None:
@@ -560,12 +570,6 @@ def merge_video(
                 return result_path
             except Exception as e:
                 logger.warning(f"Parallel export thất bại ({e}) — fallback 1 process.")
-            finally:
-                if filter_script_file and os.path.exists(filter_script_file):
-                    try:
-                        os.remove(filter_script_file)
-                    except OSError:
-                        pass
         except ImportError as e:
             logger.warning(f"parallel_export không khả dụng ({e}) — dùng 1 process")
 

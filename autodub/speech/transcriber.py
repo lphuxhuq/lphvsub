@@ -432,6 +432,7 @@ def _transcribe_whisper(
 
     if whisper_cache is not None:
         model = whisper_cache.get(settings)
+        _device = "cuda" if getattr(settings, "whisper_device", "auto") != "cpu" else "cpu"
     else:
         logger.info(f"Loading Whisper model: {model_name} (first run downloads the model)")
         model, _device = _load_whisper_model(model_name, settings)
@@ -442,23 +443,40 @@ def _transcribe_whisper(
         else None
     )
     logger.info(f"Starting transcription: {audio_path} (language: {whisper_lang})")
-    raw_segments, info = model.transcribe(
-        audio_path,
-        language=whisper_lang,
-        beam_size=settings.whisper_beam_size,
-        vad_filter=True,
-        vad_parameters={
+
+    transcribe_kwargs = {
+        "language": whisper_lang,
+        "beam_size": settings.whisper_beam_size,
+        "vad_filter": True,
+        "vad_parameters": {
             "threshold": 0.35,
             "min_silence_duration_ms": 500,
             "speech_pad_ms": 150,
             "min_speech_duration_ms": 100,
         },
-        condition_on_previous_text=False,
-        initial_prompt=initial_prompt,
-        word_timestamps=True,
-        no_speech_threshold=0.6,
-        log_prob_threshold=-1.0,
-    )
+        "condition_on_previous_text": False,
+        "initial_prompt": initial_prompt,
+        "word_timestamps": True,
+        "no_speech_threshold": 0.6,
+        "log_prob_threshold": -1.0,
+    }
+
+    batched_model = model
+    try:
+        from faster_whisper import BatchedInferencePipeline
+
+        fe = getattr(model, "feature_extractor", None)
+        has_real_fe = fe is not None and isinstance(
+            getattr(fe, "sampling_rate", None), (int, float)
+        )
+        if has_real_fe and type(model).__name__ != "BatchedInferencePipeline":
+            batched_model = BatchedInferencePipeline(model=model)
+            transcribe_kwargs["batch_size"] = 16 if _device == "cuda" else 4
+    except Exception as e:
+        logger.debug(f"BatchedInferencePipeline không kích hoạt được ({e}) — dùng tuần tự")
+        batched_model = model
+
+    raw_segments, info = batched_model.transcribe(audio_path, **transcribe_kwargs)
     if whisper_lang is None and getattr(info, "language", None):
         logger.info(
             f"Ngôn ngữ tự nhận dạng: {info.language} "

@@ -151,24 +151,45 @@ def main() -> None:
         if (language or "").startswith("zh")
         else None
     )
+
     try:
-        raw_segments, info = model.transcribe(
-            audio_path,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=True,
-            vad_parameters={
-                "threshold": 0.35,
-                "min_silence_duration_ms": 500,
-                "speech_pad_ms": 500,
-                "min_speech_duration_ms": 100,
-            },
-            condition_on_previous_text=False,
-            initial_prompt=initial_prompt,
-            word_timestamps=True,
-            no_speech_threshold=0.6,
-            log_prob_threshold=-1.0,
+        from faster_whisper import BatchedInferencePipeline
+
+        fe = getattr(model, "feature_extractor", None)
+        has_real_fe = fe is not None and isinstance(
+            getattr(fe, "sampling_rate", None), (int, float)
         )
+        if has_real_fe and type(model).__name__ != "BatchedInferencePipeline":
+            batched_model = BatchedInferencePipeline(model=model)
+            batch_size = 16 if cuda_ok else 4
+        else:
+            batched_model = model
+            batch_size = None
+    except Exception:
+        batched_model = model
+        batch_size = None
+
+    transcribe_kwargs = {
+        "language": language,
+        "beam_size": beam_size,
+        "vad_filter": True,
+        "vad_parameters": {
+            "threshold": 0.35,
+            "min_silence_duration_ms": 500,
+            "speech_pad_ms": 500,
+            "min_speech_duration_ms": 100,
+        },
+        "condition_on_previous_text": False,
+        "initial_prompt": initial_prompt,
+        "word_timestamps": True,
+        "no_speech_threshold": 0.6,
+        "log_prob_threshold": -1.0,
+    }
+    if batch_size is not None:
+        transcribe_kwargs["batch_size"] = batch_size
+
+    try:
+        raw_segments, info = batched_model.transcribe(audio_path, **transcribe_kwargs)
     except Exception as e:
         _die(proto_out, f"Lỗi khi nhận dạng: {e}")
 

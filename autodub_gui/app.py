@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 from autodub_gui import _frozen
 
@@ -166,26 +167,19 @@ _STARTUP_RECHECK_MS = 30 * 60 * 1000
 _SMOKE_DELAY_MS = 1500
 _VIDEO_PROBE_MS = 4000  # thời gian chờ tối đa khi thử giải mã video
 
-# Dựng sẵn các trang sau khi cửa sổ hiện lên: trang hay dùng trước, trang
-# nặng nhất (Cài đặt) dựng sớm để lần bấm đầu tiên không phải chờ.
+# Dựng sẵn các trang cần thiết sau khi cửa sổ hiện lên; các trang còn lại
+# giữ lazy-load 100% khi người dùng bấm vào giúp mở ứng dụng tức thì (< 0.8s).
 _PREWARM_ORDER = (
-    ROW_HELP,
-    ROW_SETTINGS,
     ROW_NEW,
+    ROW_SETTINGS,
     ROW_PROJECTS,
-    ROW_BATCH,
-    ROW_DOWNLOAD,
-    ROW_EDITOR,
-    ROW_VOICE,
-    ROW_TRANSLATE,
-    ROW_SUBTITLE,
-    ROW_EDITOR_LAUNCHER,
 )
-_PREWARM_START_MS = 700  # chờ khung hình đầu vẽ xong rồi mới dựng
-_PREWARM_GAP_MS = 250  # nghỉ giữa hai trang để giao diện luôn mượt
-_PREFLIGHT_DELAY_MS = 1200  # kiểm tra máy sau khi cửa sổ đã hiện xong
+_PREWARM_START_MS = 2000  # chờ cửa sổ chính hiện lên và khung hình vẽ mượt mà
+_PREWARM_GAP_MS = 300  # nghỉ giữa hai trang để giao diện luôn mượt
+_PREFLIGHT_DELAY_MS = 1500  # kiểm tra máy sau khi cửa sổ đã hiện xong
 _FIRST_RUN_DELAY_MS = 400  # màn chào lần đầu, ngay sau khung hình đầu tiên
-_UPDATE_CHECK_DELAY_MS = 5000  # hỏi bản mới sau cùng, khi mọi thứ đã yên
+_UPDATE_CHECK_DELAY_MS = 6000  # hỏi bản mới sau cùng, khi mọi thứ đã yên
+_AUTO_CLEAN_DELAY_MS = 7000  # tự động dọn dẹp file tạm ngầm khi rảnh rỗi
 
 
 class MainWindow(QMainWindow):
@@ -234,6 +228,21 @@ class MainWindow(QMainWindow):
         # Hỏi GitHub có bản mới không — nền, im lặng khi lỗi mạng.
         self._update_worker: QThread | None = None
         QTimer.singleShot(_UPDATE_CHECK_DELAY_MS, self._check_updates)
+        QTimer.singleShot(_AUTO_CLEAN_DELAY_MS, self._schedule_auto_clean)
+
+    def _schedule_auto_clean(self) -> None:
+        """Tự động dọn dẹp các tệp xem trước và tải tạm cũ trong luồng nền."""
+
+        def _run():
+            try:
+                from autodub.media.cache_cleaner import clean_preview_videos, clean_temp_prefetch
+
+                clean_preview_videos(max_age_days=3.0, max_size_mb=2048.0)
+                clean_temp_prefetch(max_age_hours=12.0)
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=True).start()
 
     # -- Dựng sẵn các trang lúc máy rảnh -------------------------------
     def _schedule_prewarm(self) -> None:
@@ -246,7 +255,7 @@ class MainWindow(QMainWindow):
         """
         self._prewarm_queue = list(_PREWARM_ORDER)
         QTimer.singleShot(_PREWARM_START_MS, self._prewarm_next)
-        QTimer.singleShot(_PREWARM_START_MS + 1200, self._start_model_preload)
+        QTimer.singleShot(_PREWARM_START_MS + 2500, self._start_model_preload)
 
     def _start_model_preload(self) -> None:
         """Kích hoạt nạp trước các model AI (Paraformer đầu tiên, Whisper, Demucs...) ở luồng nền."""

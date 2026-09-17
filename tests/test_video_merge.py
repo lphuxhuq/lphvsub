@@ -358,11 +358,10 @@ def test_parallel_export_unboundlocal_regression(paths, monkeypatch, tmp_path):
         pass
 
 
-def test_parallel_export_audio_and_sub_guard(paths, captured, monkeypatch, tmp_path):
+def test_parallel_export_burn_subtitles_and_audio_sync(paths, captured, monkeypatch, tmp_path):
     """Xác minh:
     1. _build_chunk_cmd phải gán -ss và -to cho CẢ video lẫn audio.
-    2. subtitle_mode='burn' hoặc timed blur phải bypass parallel export (1-process)
-       để tránh lệch PTS phụ đề.
+    2. subtitle_mode='burn' được kích hoạt chạy song song qua parallel_export với adapt_filter_for_chunk.
     """
     import autodub.media.video as vm
 
@@ -380,9 +379,10 @@ def test_parallel_export_audio_and_sub_guard(paths, captured, monkeypatch, tmp_p
     monkeypatch.setattr("autodub.media.parallel_export.parallel_chunked_export", fake_parallel)
 
     out = paths["out"]
-    # 1. Chạy với smart_flip (re-encode không sub) -> parallel_export được gọi
     orig_run = vm._REAL_SUBPROCESS_RUN
     monkeypatch.setattr(vm, "_REAL_SUBPROCESS_RUN", vm.subprocess.run)
+
+    # 1. Chạy với smart_flip (re-encode không sub) -> parallel_export được gọi
     vm.merge_video(paths["video"], paths["audio"], out, smart_flip=True)
     assert len(built_cmds) == 1
     cmd = built_cmds[0]
@@ -390,8 +390,21 @@ def test_parallel_export_audio_and_sub_guard(paths, captured, monkeypatch, tmp_p
     ss_indices = [i for i, c in enumerate(cmd) if c == "-ss"]
     assert len(ss_indices) >= 2, "Cả video và audio đều phải có -ss"
 
-    # 2. Chạy với subtitle_mode='burn' -> PHẢI bypass parallel export
+    # 2. Chạy với subtitle_mode='burn' -> ĐƯỢC KÍCH HOẠT song song với PTS offset
     built_cmds.clear()
-    monkeypatch.setattr(vm, "_REAL_SUBPROCESS_RUN", orig_run)
     vm.merge_video(paths["video"], paths["audio"], out, subtitle_mode="burn", srt_path=paths["srt"])
-    assert len(built_cmds) == 0, "subtitle_mode='burn' không được chạy parallel export"
+    assert len(built_cmds) == 1, "subtitle_mode='burn' phải được kích hoạt chạy song song"
+    burn_cmd = built_cmds[0]
+    # Kiểm tra filter complex trong lệnh (hoặc file script) có chứa setpts offset
+    flt_arg = ""
+    for idx, c in enumerate(burn_cmd):
+        if c == "-filter_complex":
+            flt_arg = burn_cmd[idx + 1]
+            break
+        elif c == "-filter_complex_script":
+            with open(burn_cmd[idx + 1], encoding="utf-8") as f:
+                flt_arg = f.read()
+            break
+    assert "setpts=PTS+15.000/TB" in flt_arg
+    assert "setpts=PTS-STARTPTS" in flt_arg
+    assert "subtitles=" in flt_arg

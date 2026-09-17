@@ -409,20 +409,31 @@ class MaintenancePanel(CollapsibleSection):
             TOASTS.warn(message)
 
     def _clear_cache(self) -> None:
-        """Xóa ảnh đại diện và dạng sóng đã tính sẵn của mọi dự án."""
+        """Xóa video xem trước, tệp tải tạm, dạng sóng và dữ liệu đệm cũ."""
         confirmed, _ = ConfirmDialog.ask(
             self,
-            "Xóa dữ liệu đã lưu tạm",
-            "Ảnh đại diện và dạng sóng đã tính sẵn sẽ bị xóa. Video và bản "
-            "dịch của bạn không bị ảnh hưởng. Lần mở sau sẽ chậm hơn một chút "
-            "vì phải tính lại.",
+            "Dọn dẹp bộ nhớ đệm",
+            "Video xem trước tải tạm, dạng sóng và các tệp đệm cũ sẽ bị xóa "
+            "để giải phóng dung lượng ổ đĩa. Các dự án hoàn chỉnh của bạn "
+            "không bị ảnh hưởng.",
             kind="warning",
-            confirm_label="Xóa dữ liệu tạm",
+            confirm_label="Dọn dẹp ngay",
         )
         if not confirmed:
             return
-        removed = self._remove_cache_files()
-        TOASTS.success(f"Đã xóa {removed} tệp lưu tạm.")
+        from autodub.media.cache_cleaner import purge_all_caches
+
+        try:
+            output_dir = self._settings_provider().output_dir
+        except Exception:
+            output_dir = None
+        res = purge_all_caches(output_dir)
+        mb = res["reclaimed_bytes"] / (1024 * 1024)
+        if mb >= 1024:
+            gb = mb / 1024.0
+            TOASTS.success(f"Đã dọn dẹp {res['removed']} tệp, giải phóng {gb:.2f} GB ổ đĩa.")
+        else:
+            TOASTS.success(f"Đã dọn dẹp {res['removed']} tệp, giải phóng {mb:.1f} MB ổ đĩa.")
 
     def _remove_cache_files(self) -> int:
         from autodub_gui.projects import INDEX_FILE, THUMB_FILE
