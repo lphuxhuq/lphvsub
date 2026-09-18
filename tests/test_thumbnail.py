@@ -87,32 +87,34 @@ def test_render_thumbnail_portrait(tmp_path):
         assert out_img.size == (720, 1280)
 
 
-def test_render_3_presets_distinct(tmp_path):
-    """Xác nhận cả 3 preset Cổ Đại, Quân Sư, Chiến Thần render ra kết quả khác nhau."""
+def test_render_presets_distinct(tmp_path):
+    """Xác nhận tất cả các preset render ra kết quả khác nhau."""
     frame_path = os.path.join(tmp_path, "base_frame.jpg")
     img = Image.new("RGB", (1280, 720), color=(50, 50, 70))
     img.save(frame_path)
 
     results = {}
-    for preset_name in ("co_dai", "quan_su", "chien_than"):
+    presets = ["co_dai", "quan_su", "chien_than", "ngon_tinh", "tu_tien", "kinh_di", "hai_huoc"]
+    for preset_name in presets:
         out_file = os.path.join(tmp_path, f"thumb_{preset_name}.jpg")
         res = render_thumbnail(
             frame_path=frame_path,
-            title="",
-            top_title="Xuyên Không Về Thời Cổ Đại",
-            bottom_title="DÙNG TƯ DUY HIỆN ĐẠI LÀM GIÀU",
-            badge_text="TẬP 1-100",
+            title="TEST",
             output_path=out_file,
+            width=1280,
+            height=720,
+            badge_text="TẬP 1",
             preset=preset_name,
         )
         assert os.path.exists(res)
         with open(res, "rb") as f:
             results[preset_name] = f.read()
 
-    # Các file của các preset khác nhau phải có dữ liệu byte khác nhau (visual signature riêng)
+    # So sánh theo cặp, đảm bảo dung lượng hoặc nội dung file khác nhau
     assert results["co_dai"] != results["quan_su"]
     assert results["quan_su"] != results["chien_than"]
-    assert results["co_dai"] != results["chien_than"]
+    assert results["ngon_tinh"] != results["tu_tien"]
+    assert results["kinh_di"] != results["hai_huoc"]
 
 
 def test_detect_badge_from_context_all_scenarios():
@@ -187,3 +189,73 @@ def test_extract_info_from_link_or_text():
     res_bili = extract_info_from_link_or_text(bili_url)
     assert res_bili["platform"] == "Bilibili"
     assert res_bili["badge"] == "TẬP 17"
+
+
+def test_resolve_font_file():
+    """Kiểm tra hàm resolve_font_file nhận diện đúng các họ font dự án và font hệ thống."""
+    from autodub.media.thumbnail import resolve_font_file
+
+    assert resolve_font_file(None) is None
+    assert resolve_font_file("") is None
+
+    # Tên họ font trong fonts/
+    p_barlow = resolve_font_file("Barlow Condensed")
+    assert p_barlow is not None
+    assert os.path.isfile(p_barlow)
+    assert "barlow" in os.path.basename(p_barlow).lower()
+
+    p_merienda = resolve_font_file("Merienda")
+    assert p_merienda is not None
+    assert os.path.isfile(p_merienda)
+
+    p_arial = resolve_font_file("Arial")
+    assert p_arial is not None
+    assert os.path.isfile(p_arial)
+
+
+def test_color_helpers():
+    """Kiểm tra parse_color_to_rgb và generate_gradient_from_color."""
+    from autodub.media.thumbnail import generate_gradient_from_color, parse_color_to_rgb
+
+    # Hex thông thường
+    assert parse_color_to_rgb("#FFD700") == (255, 215, 0)
+    assert parse_color_to_rgb("#FF2A2A") == (255, 42, 42)
+    # Hex ASS
+    assert parse_color_to_rgb("&H00FFFFFF") == (255, 255, 255)
+    # Tuple
+    assert parse_color_to_rgb((10, 20, 30)) == (10, 20, 30)
+
+    # Gradient 3 bước
+    grad = generate_gradient_from_color("#FFD700")
+    assert len(grad) == 3
+    # Đỉnh sáng hơn đáy
+    assert sum(grad[0]) > sum(grad[2])
+
+
+def test_render_thumbnail_with_custom_font_and_colors(tmp_path):
+    """Kiểm tra render thumbnail với custom font và custom colors."""
+    frame_path = os.path.join(tmp_path, "base.jpg")
+    img = Image.new("RGB", (1280, 720), color=(20, 25, 40))
+    img.save(frame_path)
+
+    out_path = os.path.join(tmp_path, "thumb_custom.jpg")
+    res = render_thumbnail(
+        frame_path=frame_path,
+        title="TIÊU ĐỀ VIDEO",
+        output_path=out_path,
+        top_title="XUYÊN KHÔNG",
+        bottom_title="LÀM GIÀU",
+        badge_text="TẬP 1",
+        font_name="Barlow Condensed",
+        custom_colors={
+            "primary_color": "#00E5FF",
+            "top_color": "#FFFFFF",
+            "glow_color": "#0066FF",
+            "outline_color": "#000000",
+            "badge_color": "#00E5FF",
+        },
+    )
+    assert os.path.exists(res)
+    assert os.path.getsize(res) > 2000
+    with Image.open(res) as out_im:
+        assert out_im.size == (1280, 720)

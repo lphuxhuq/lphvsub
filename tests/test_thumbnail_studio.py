@@ -27,8 +27,10 @@ def test_thumbnail_studio_initialization(qapp, tmp_path):
     assert dlg.input_top.text() == "Xuyên Không"
     assert dlg.input_bottom.text() == "Làm Giàu"
     assert dlg.input_badge.text() == "1-100"
-    assert dlg.combo_preset.count() == 3
+    assert dlg.combo_preset.count() == 8
     assert dlg.combo_aspect.count() == 2
+    assert dlg.combo_font.count() >= 1
+    assert "::subtitle::" in dlg.combo_font.itemData(0)
     dlg.close()
 
 
@@ -174,3 +176,61 @@ def test_thumbnail_studio_detect_from_link_meta(qapp, tmp_path):
     dlg._detect_badge_now()
     assert dlg.input_badge.text() == "TẬP 17"
     dlg.close()
+
+
+def test_thumbnail_studio_custom_font_and_colors(qapp, tmp_path):
+    """Kiểm tra chọn font phụ đề, tùy chỉnh màu sắc và lưu/nạp lại metadata."""
+    work_dir = str(tmp_path / "proj_custom")
+    data_dir = os.path.join(work_dir, "data")
+    yt_dir = os.path.join(work_dir, "youtube")
+    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(yt_dir, exist_ok=True)
+
+    # 1. Giả lập render_opts.json đặt font phụ đề là "Barlow Condensed"
+    with open(os.path.join(data_dir, "render_opts.json"), "w", encoding="utf-8") as f:
+        json.dump({"subtitle_style": {"font": "Barlow Condensed"}}, f)
+
+    # Tạo frame giả lập
+    frame_path = os.path.join(yt_dir, "thumbnail_original.jpg")
+    img = Image.new("RGB", (1280, 720), color=(40, 30, 60))
+    img.save(frame_path)
+
+    dlg = ThumbnailStudioDialog(work_dir=work_dir, initial_title="Tu Tiên Giới")
+    # Kiểm tra font mặc định là font phụ đề từ dự án
+    assert "Barlow Condensed" in dlg.combo_font.itemText(0)
+
+    # Đổi sang chip màu Đỏ Lửa
+    dlg._apply_quick_color("#FF2A2A", "#FF0055")
+    assert dlg.chk_custom_colors.isChecked()
+    assert dlg.btn_color_primary.text() == "#FF2A2A"
+    assert dlg.btn_color_glow.text() == "#FF0055"
+
+    # Đổi font sang một font khác nếu có
+    if dlg.combo_font.count() > 1:
+        dlg.combo_font.setCurrentIndex(1)
+
+    eff_font, custom_colors = dlg._get_current_render_options()
+    assert custom_colors is not None
+    assert custom_colors["primary_color"] == "#FF2A2A"
+    assert custom_colors["glow_color"] == "#FF0055"
+
+    # Lưu và kiểm tra
+    dlg._save_thumbnail()
+    out_16_9 = os.path.join(yt_dir, "thumbnail_landscape.jpg")
+    meta_path = os.path.join(yt_dir, "youtube_metadata.json")
+    assert os.path.exists(out_16_9)
+    assert os.path.exists(meta_path)
+
+    with open(meta_path, encoding="utf-8") as f:
+        saved = json.load(f)
+    assert saved.get("custom_colors") is not None
+    assert saved["custom_colors"]["primary_color"] == "#FF2A2A"
+
+    dlg.close()
+
+    # Mở lại dialog và kiểm tra khôi phục đúng cấu hình màu
+    dlg2 = ThumbnailStudioDialog(work_dir=work_dir)
+    assert dlg2.chk_custom_colors.isChecked()
+    assert dlg2.btn_color_primary.text() == "#FF2A2A"
+    assert dlg2.btn_color_glow.text() == "#FF0055"
+    dlg2.close()

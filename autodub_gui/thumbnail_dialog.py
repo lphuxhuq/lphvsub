@@ -18,10 +18,11 @@ import time
 
 from PIL import Image
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QSlider,
     QTextEdit,
@@ -130,6 +132,7 @@ class ThumbnailStudioDialog(QDialog):
         self._temp_dir = os.path.join(tempfile.gettempdir(), f"autodub_studio_{os.getpid()}")
         os.makedirs(self._temp_dir, exist_ok=True)
         self._preview_out_path = os.path.join(self._temp_dir, "studio_preview.jpg")
+        self._subtitle_font = self._detect_subtitle_font()
 
         self.setWindowTitle("Thiết kế ảnh bìa (Thumbnail Studio)")
         self.resize(1180, 740)
@@ -154,6 +157,30 @@ class ThumbnailStudioDialog(QDialog):
         self._build_ui(initial_title)
         self._load_metadata()
         self._init_first_frame()
+
+    def _detect_subtitle_font(self) -> str:
+        """Lấy phông chữ phụ đề đã thiết lập cho dự án."""
+        if self._work_dir:
+            try:
+                from autodub.editor import load_render_opts
+
+                opts = load_render_opts(self._work_dir)
+                style = opts.get("subtitle_style") or {}
+                if style.get("font"):
+                    return str(style["font"])
+            except Exception:
+                pass
+        try:
+            from autodub.config import Settings
+
+            s = Settings.load()
+            if s.subtitle_font:
+                return s.subtitle_font
+        except Exception:
+            pass
+        from autodub_gui.fonts import default_subtitle_font
+
+        return default_subtitle_font()
 
     def _build_ui(self, initial_title: str) -> None:
         main_layout = QHBoxLayout(self)
@@ -326,19 +353,110 @@ class ThumbnailStudioDialog(QDialog):
 
         right_box.addWidget(text_group)
 
-        # 2. Phong cách & Bố cục
-        style_group = QGroupBox("Phong cách & Tỷ lệ")
+        # 2. Phong cách, Phông chữ & Màu sắc
+        style_group = QGroupBox("Phong cách, Phông chữ & Màu sắc")
         stg_layout = QVBoxLayout(style_group)
         stg_layout.setSpacing(tokens.SP_2)
 
+        # Phông chữ tiêu đề
+        stg_layout.addWidget(QLabel("Phông chữ tiêu đề:"))
+        self.combo_font = QComboBox()
+        self.combo_font.addItem(f"⭐ Dùng font của phụ đề ({self._subtitle_font})", "::subtitle::")
+        try:
+            from autodub_gui.fonts import font_choices
+
+            for label, family in font_choices():
+                self.combo_font.addItem(label, family)
+        except Exception:
+            pass
+        polish_combo(self.combo_font)
+        self.combo_font.currentIndexChanged.connect(self._schedule_preview_update)
+        stg_layout.addWidget(self.combo_font)
+
+        # Bộ màu
         stg_layout.addWidget(QLabel("Bộ màu (Style Preset):"))
         self.combo_preset = QComboBox()
         self.combo_preset.addItem("Cổ Đại Làm Giàu (Vàng Gold 3D)", "co_dai")
         self.combo_preset.addItem("Quân Sư Hiện Đại (Neon Tím Hồng)", "quan_su")
         self.combo_preset.addItem("Chiến Thần Rực Lửa (Đỏ Cam 3D)", "chien_than")
+        self.combo_preset.addItem("Tổng Tài Ngôn Tình (Hồng Pastel)", "ngon_tinh")
+        self.combo_preset.addItem("Tu Tiên Kỷ Nguyên (Xanh Cyan)", "tu_tien")
+        self.combo_preset.addItem("Hồi Hộp Kinh Dị (Đỏ Đen)", "kinh_di")
+        self.combo_preset.addItem("Hài Hước Giải Trí (Xanh Vàng Pop)", "hai_huoc")
+        self.combo_preset.addItem("Tùy chỉnh màu sắc... (Custom Palette)", "custom")
         polish_combo(self.combo_preset)
-        self.combo_preset.currentIndexChanged.connect(self._schedule_preview_update)
+        self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
         stg_layout.addWidget(self.combo_preset)
+
+        # Tùy chỉnh màu sắc chi tiết
+        self.chk_custom_colors = QCheckBox("Tùy chỉnh màu sắc chi tiết")
+        self.chk_custom_colors.setStyleSheet(f"color: {tokens.TEXT_PRIMARY};")
+        self.chk_custom_colors.toggled.connect(self._on_custom_colors_toggled)
+        stg_layout.addWidget(self.chk_custom_colors)
+
+        self.color_panel = QWidget()
+        cp_layout = QVBoxLayout(self.color_panel)
+        cp_layout.setContentsMargins(0, 0, 0, 0)
+        cp_layout.setSpacing(tokens.SP_2)
+
+        # Quick color chips
+        chip_row = QHBoxLayout()
+        chip_row.setSpacing(tokens.SP_1)
+        chips_data = [
+            ("Vàng Gold", "#FFD700", "#FFA500"),
+            ("Đỏ Lửa", "#FF2A2A", "#FF0055"),
+            ("Xanh Cyber", "#00E5FF", "#0066FF"),
+            ("Neon Tím", "#EC4899", "#A855F7"),
+            ("Xanh Lục", "#00E676", "#00B0FF"),
+            ("Trắng Bạc", "#FFFFFF", "#64748B"),
+        ]
+        for name, p_col, g_col in chips_data:
+            b = GhostButton(name)
+            b.setStyleSheet(
+                f"QPushButton {{ background: {tokens.BG_INPUT}; font-size: 11px; padding: 2px 6px; }}"
+            )
+            b.clicked.connect(lambda _c=False, p=p_col, g=g_col: self._apply_quick_color(p, g))
+            chip_row.addWidget(b)
+        chip_row.addStretch()
+        cp_layout.addLayout(chip_row)
+
+        # 3 color pickers: Chữ chính, Phát sáng Glow, Viền ngoài
+        colors_grid = QHBoxLayout()
+        colors_grid.setSpacing(tokens.SP_2)
+
+        # 1. Màu chữ chính
+        col1_box = QVBoxLayout()
+        col1_box.setSpacing(2)
+        col1_box.addWidget(QLabel("Chữ chính:"))
+        self.btn_color_primary = QPushButton("#FFD700")
+        self._paint_color_btn(self.btn_color_primary, "#FFD700")
+        self.btn_color_primary.clicked.connect(lambda: self._pick_color("primary"))
+        col1_box.addWidget(self.btn_color_primary)
+        colors_grid.addLayout(col1_box)
+
+        # 2. Màu phát sáng
+        col2_box = QVBoxLayout()
+        col2_box.setSpacing(2)
+        col2_box.addWidget(QLabel("Phát sáng:"))
+        self.btn_color_glow = QPushButton("#FFA500")
+        self._paint_color_btn(self.btn_color_glow, "#FFA500")
+        self.btn_color_glow.clicked.connect(lambda: self._pick_color("glow"))
+        col2_box.addWidget(self.btn_color_glow)
+        colors_grid.addLayout(col2_box)
+
+        # 3. Màu viền
+        col3_box = QVBoxLayout()
+        col3_box.setSpacing(2)
+        col3_box.addWidget(QLabel("Viền ngoài:"))
+        self.btn_color_outline = QPushButton("#000000")
+        self._paint_color_btn(self.btn_color_outline, "#000000")
+        self.btn_color_outline.clicked.connect(lambda: self._pick_color("outline"))
+        col3_box.addWidget(self.btn_color_outline)
+        colors_grid.addLayout(col3_box)
+
+        cp_layout.addLayout(colors_grid)
+        self.color_panel.setVisible(False)
+        stg_layout.addWidget(self.color_panel)
 
         stg_layout.addWidget(QLabel("Tỷ lệ khung hình:"))
         self.combo_aspect = QComboBox()
@@ -479,6 +597,21 @@ class ThumbnailStudioDialog(QDialog):
                         idx = self.combo_preset.findData(str(data["preset"]))
                         if idx >= 0:
                             self.combo_preset.setCurrentIndex(idx)
+                    if data.get("font_name"):
+                        idx = self.combo_font.findData(str(data["font_name"]))
+                        if idx >= 0:
+                            self.combo_font.setCurrentIndex(idx)
+                    elif data.get("use_subtitle_font"):
+                        self.combo_font.setCurrentIndex(0)
+                    if data.get("custom_colors") and isinstance(data["custom_colors"], dict):
+                        cc = data["custom_colors"]
+                        if cc.get("primary_color"):
+                            self._paint_color_btn(self.btn_color_primary, str(cc["primary_color"]))
+                        if cc.get("glow_color"):
+                            self._paint_color_btn(self.btn_color_glow, str(cc["glow_color"]))
+                        if cc.get("outline_color"):
+                            self._paint_color_btn(self.btn_color_outline, str(cc["outline_color"]))
+                        self.chk_custom_colors.setChecked(True)
                     if data.get("timestamp_sec") is not None:
                         sec = float(data["timestamp_sec"])
                         self.timeline_slider.setValue(int(sec * 10))
@@ -804,6 +937,98 @@ class ThumbnailStudioDialog(QDialog):
         sec = self.timeline_slider.value() / 10.0
         self._request_frame_at_sec(sec)
 
+    # ---------------- COLOR & FONT CONTROLS ----------------
+
+    def _paint_color_btn(self, btn: QPushButton, hex_color: str) -> None:
+        btn.setText(hex_color)
+        _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
+        c = QColor(hex_color) if _is_valid(hex_color) else QColor("#FFFFFF")
+        luminance = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+        text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
+        btn.setStyleSheet(
+            f"QPushButton {{ background: {hex_color}; color: {text_color}; "
+            f"border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; "
+            f"font-family: monospace; font-size: 11px; font-weight: bold; "
+            f"padding: 4px 8px; min-height: 24px; min-width: 70px; }} "
+            f"QPushButton:hover {{ border-color: {tokens.PRIMARY}; }}"
+        )
+
+    def _pick_color(self, target: str) -> None:
+        btn = (
+            self.btn_color_primary
+            if target == "primary"
+            else self.btn_color_glow
+            if target == "glow"
+            else self.btn_color_outline
+        )
+        current_hex = btn.text().strip()
+        _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
+        init_c = QColor(current_hex) if _is_valid(current_hex) else QColor("#FFFFFF")
+        c = QColorDialog.getColor(init_c, self, "Chọn màu")
+        if c.isValid():
+            hex_str = c.name().upper()
+            self._paint_color_btn(btn, hex_str)
+            self.chk_custom_colors.setChecked(True)
+            self._schedule_preview_update()
+
+    def _apply_quick_color(self, primary: str, glow: str) -> None:
+        self._paint_color_btn(self.btn_color_primary, primary)
+        self._paint_color_btn(self.btn_color_glow, glow)
+        self.chk_custom_colors.setChecked(True)
+        self._schedule_preview_update()
+
+    def _on_preset_changed(self) -> None:
+        preset_key = self.combo_preset.currentData()
+        if preset_key == "custom":
+            self.chk_custom_colors.setChecked(True)
+        elif preset_key == "co_dai":
+            self._paint_color_btn(self.btn_color_primary, "#FFD700")
+            self._paint_color_btn(self.btn_color_glow, "#FFA500")
+            self._paint_color_btn(self.btn_color_outline, "#000000")
+        elif preset_key == "quan_su":
+            self._paint_color_btn(self.btn_color_primary, "#FFFFFF")
+            self._paint_color_btn(self.btn_color_glow, "#EC4899")
+            self._paint_color_btn(self.btn_color_outline, "#140523")
+        elif preset_key == "chien_than":
+            self._paint_color_btn(self.btn_color_primary, "#FF2A2A")
+            self._paint_color_btn(self.btn_color_glow, "#FF4500")
+            self._paint_color_btn(self.btn_color_outline, "#000000")
+        elif preset_key == "ngon_tinh":
+            self._paint_color_btn(self.btn_color_primary, "#FFB4C8")
+            self._paint_color_btn(self.btn_color_glow, "#FF69B4")
+            self._paint_color_btn(self.btn_color_outline, "#0A0514")
+        elif preset_key == "tu_tien":
+            self._paint_color_btn(self.btn_color_primary, "#B4FFFF")
+            self._paint_color_btn(self.btn_color_glow, "#00FFFF")
+            self._paint_color_btn(self.btn_color_outline, "#050A14")
+        elif preset_key == "kinh_di":
+            self._paint_color_btn(self.btn_color_primary, "#C8C8C8")
+            self._paint_color_btn(self.btn_color_glow, "#B40000")
+            self._paint_color_btn(self.btn_color_outline, "#000000")
+        elif preset_key == "hai_huoc":
+            self._paint_color_btn(self.btn_color_primary, "#FFFFFF")
+            self._paint_color_btn(self.btn_color_glow, "#FF9600")
+            self._paint_color_btn(self.btn_color_outline, "#140A00")
+        self._schedule_preview_update()
+
+    def _on_custom_colors_toggled(self, checked: bool) -> None:
+        self.color_panel.setVisible(checked)
+        self._schedule_preview_update()
+
+    def _get_current_render_options(self) -> tuple[str | None, dict | None]:
+        font_data = self.combo_font.currentData() if hasattr(self, "combo_font") else "::subtitle::"
+        eff_font = self._subtitle_font if font_data == "::subtitle::" else (font_data or None)
+        preset_key = self.combo_preset.currentData() or "co_dai"
+
+        custom_colors = None
+        if self.chk_custom_colors.isChecked() or preset_key == "custom":
+            custom_colors = {
+                "primary_color": self.btn_color_primary.text().strip(),
+                "glow_color": self.btn_color_glow.text().strip(),
+                "outline_color": self.btn_color_outline.text().strip(),
+            }
+        return eff_font, custom_colors
+
     # ---------------- LIVE PREVIEW RENDERER ----------------
 
     def _schedule_preview_update(self) -> None:
@@ -824,6 +1049,7 @@ class ThumbnailStudioDialog(QDialog):
         top_txt = self.input_top.text().strip()
         bot_txt = self.input_bottom.text().strip()
         badge_txt = self.input_badge.text().strip()
+        eff_font, custom_colors = self._get_current_render_options()
 
         try:
             render_thumbnail(
@@ -837,6 +1063,8 @@ class ThumbnailStudioDialog(QDialog):
                 bottom_title=bot_txt,
                 preset=preset_key,
                 enhance_image=self.chk_enhance.isChecked(),
+                font_name=eff_font,
+                custom_colors=custom_colors,
             )
 
             pix = QPixmap(self._preview_out_path)
@@ -850,9 +1078,10 @@ class ThumbnailStudioDialog(QDialog):
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self.preview_label.setPixmap(scaled_pix)
+                font_label = self.combo_font.currentText() if hasattr(self, "combo_font") else ""
                 self.info_label.setText(
                     f"Kích thước xuất: {'720x1280 (9:16)' if is_vertical else '1280x720 (16:9)'} • "
-                    f"Preset: {self.combo_preset.currentText()}"
+                    f"Preset: {self.combo_preset.currentText()} • Font: {font_label[:22]}"
                 )
         except Exception as e:
             self.preview_label.setText(f"Lỗi render preview: {e}")
@@ -872,6 +1101,8 @@ class ThumbnailStudioDialog(QDialog):
         preset_key = self.combo_preset.currentData() or "co_dai"
         enhance = self.chk_enhance.isChecked()
         curr_sec = self.timeline_slider.value() / 10.0
+        eff_font, custom_colors = self._get_current_render_options()
+        font_data = self.combo_font.currentData() if hasattr(self, "combo_font") else "::subtitle::"
 
         out_16_9 = os.path.join(yt_dir, "thumbnail_landscape.jpg")
         out_9_16 = os.path.join(yt_dir, "thumbnail_portrait.jpg")
@@ -897,6 +1128,8 @@ class ThumbnailStudioDialog(QDialog):
                 bottom_title=bot_txt,
                 preset=preset_key,
                 enhance_image=enhance,
+                font_name=eff_font,
+                custom_colors=custom_colors,
             )
 
             # 2. Render 9:16
@@ -911,6 +1144,8 @@ class ThumbnailStudioDialog(QDialog):
                 bottom_title=bot_txt,
                 preset=preset_key,
                 enhance_image=enhance,
+                font_name=eff_font,
+                custom_colors=custom_colors,
             )
 
             # 3. Lưu frame gốc để dùng lại sau
@@ -930,6 +1165,9 @@ class ThumbnailStudioDialog(QDialog):
                 "bottom_title": bot_txt,
                 "badge_text": badge_txt,
                 "preset": preset_key,
+                "font_name": font_data,
+                "use_subtitle_font": (font_data == "::subtitle::"),
+                "custom_colors": custom_colors,
                 "timestamp_sec": curr_sec,
                 "caption": cap_val,
                 "hashtags": tags_list,

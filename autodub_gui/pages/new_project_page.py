@@ -2138,6 +2138,21 @@ class NewProjectPage(BasePage):
         badge = meta.get("badge_text", "1-100")
         preset = meta.get("preset", "co_dai")
 
+        sub_font = None
+        try:
+            from autodub.editor import load_render_opts
+
+            opts = load_render_opts(work_dir)
+            sub_font = opts.get("subtitle_style", {}).get("font")
+        except Exception:
+            pass
+        font_to_use = (
+            meta.get("font_name")
+            if meta.get("font_name") and meta.get("font_name") != "::subtitle::"
+            else sub_font
+        )
+        custom_colors = meta.get("custom_colors")
+
         def _worker():
             try:
                 from autodub.media.thumbnail import generate_high_ctr_thumbnail
@@ -2151,6 +2166,8 @@ class NewProjectPage(BasePage):
                     top_title=top_title,
                     bottom_title=bottom_title,
                     preset=preset,
+                    font_name=font_to_use,
+                    custom_colors=custom_colors,
                 )
                 generate_high_ctr_thumbnail(
                     video_path,
@@ -2161,6 +2178,8 @@ class NewProjectPage(BasePage):
                     top_title=top_title,
                     bottom_title=bottom_title,
                     preset=preset,
+                    font_name=font_to_use,
+                    custom_colors=custom_colors,
                 )
                 from PySide6.QtCore import QMetaObject, Qt
 

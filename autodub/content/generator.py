@@ -682,13 +682,26 @@ def generate_content(
     if video_path and os.path.exists(video_path):
         from autodub.media.thumbnail import generate_high_ctr_thumbnail
 
+        sub_font = getattr(settings, "subtitle_font", None)
+        try:
+            from autodub.editor import load_render_opts
+
+            opts = load_render_opts(output_dir)
+            sub_font = opts.get("subtitle_style", {}).get("font") or sub_font
+        except Exception:
+            pass
+
         thumb_title = meta.get("title") or "VIDEO MỚI NHẤT"
         thumb_landscape = os.path.join(output_dir, "thumbnail_landscape.jpg")
         thumb_portrait = os.path.join(output_dir, "thumbnail_portrait.jpg")
         try:
-            generate_high_ctr_thumbnail(video_path, thumb_title, thumb_landscape, aspect="16:9")
+            generate_high_ctr_thumbnail(
+                video_path, thumb_title, thumb_landscape, aspect="16:9", font_name=sub_font
+            )
             result["thumbnail_landscape"] = thumb_landscape
-            generate_high_ctr_thumbnail(video_path, thumb_title, thumb_portrait, aspect="9:16")
+            generate_high_ctr_thumbnail(
+                video_path, thumb_title, thumb_portrait, aspect="9:16", font_name=sub_font
+            )
             result["thumbnail_portrait"] = thumb_portrait
         except Exception as e:
             logger.warning(f"Lỗi khi tự động tạo thumbnail: {e}")

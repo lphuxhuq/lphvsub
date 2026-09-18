@@ -158,6 +158,160 @@ PRESETS: dict[str, StylePresetConfig] = {
         badge_border=(250, 204, 21),  # Viền vàng kim loại
         vignette_intensity=0.42,
     ),
+    "ngon_tinh": StylePresetConfig(
+        name="ngon_tinh",
+        label="Tổng Tài Ngôn Tình",
+        top_text_color=(255, 180, 200),  # Hồng phấn
+        top_stroke_inner=(150, 20, 80),  # Hồng đậm
+        top_stroke_outer=(10, 5, 20),
+        top_glow_color=(255, 105, 180, 200),  # Hồng Hot Pink
+        top_font_priority=[
+            "Merienda-Bold.ttf",
+            "StoryScript-Regular.ttf",
+            "BarlowCondensed-Medium.ttf",
+        ],
+        bottom_gradient=[
+            (255, 240, 245),  # Trắng hồng
+            (255, 150, 180),  # Hồng đào
+            (220, 50, 100),  # Hồng thẫm
+        ],
+        bottom_stroke_inner=(255, 255, 255),
+        bottom_stroke_outer=(0, 0, 0),
+        bottom_glow_color=(255, 20, 147, 180),
+        bottom_3d_depth=8,
+        bottom_3d_color=(20, 5, 15),
+        bottom_font_priority=[
+            "Merienda-Bold.ttf",
+            "BarlowCondensed-Bold.ttf",
+        ],
+        badge_bg=(255, 105, 180),
+        badge_text=(255, 255, 255),
+        badge_border=(255, 192, 203),
+        vignette_intensity=0.30,
+    ),
+    "tu_tien": StylePresetConfig(
+        name="tu_tien",
+        label="Tu Tiên Kỷ Nguyên",
+        top_text_color=(180, 255, 255),  # Trắng xanh ngọc
+        top_stroke_inner=(0, 100, 150),
+        top_stroke_outer=(5, 10, 20),
+        top_glow_color=(0, 255, 255, 200),  # Hào quang Cyan
+        top_font_priority=[
+            "BarlowCondensed-Bold.ttf",
+            "FrancoisOne-Regular.ttf",
+        ],
+        bottom_gradient=[
+            (200, 255, 255),  # Trắng cyan
+            (0, 230, 255),  # Cyan sáng
+            (0, 100, 200),  # Xanh biển sâu
+        ],
+        bottom_stroke_inner=(255, 255, 255),
+        bottom_stroke_outer=(0, 0, 0),
+        bottom_glow_color=(0, 191, 255, 180),
+        bottom_3d_depth=12,
+        bottom_3d_color=(5, 10, 30),
+        bottom_font_priority=[
+            "BarlowCondensed-Bold.ttf",
+            "Bangers-Regular.ttf",
+        ],
+        badge_bg=(0, 150, 255),
+        badge_text=(255, 255, 255),
+        badge_border=(0, 255, 255),
+        vignette_intensity=0.45,
+    ),
+    "kinh_di": StylePresetConfig(
+        name="kinh_di",
+        label="Hồi Hộp Kinh Dị",
+        top_text_color=(200, 200, 200),  # Xám bạc
+        top_stroke_inner=(50, 0, 0),
+        top_stroke_outer=(0, 0, 0),
+        top_glow_color=(180, 0, 0, 230),  # Hào quang đỏ máu
+        top_font_priority=[
+            "BarlowCondensed-Bold.ttf",
+            "Bangers-Regular.ttf",
+        ],
+        bottom_gradient=[
+            (255, 255, 255),
+            (255, 50, 50),
+            (100, 0, 0),
+        ],
+        bottom_stroke_inner=(255, 200, 200),
+        bottom_stroke_outer=(0, 0, 0),
+        bottom_glow_color=(200, 0, 0, 200),
+        bottom_3d_depth=10,
+        bottom_3d_color=(0, 0, 0),
+        bottom_font_priority=[
+            "Bangers-Regular.ttf",
+            "BarlowCondensed-Bold.ttf",
+        ],
+        badge_bg=(139, 0, 0),
+        badge_text=(255, 255, 255),
+        badge_border=(255, 0, 0),
+        vignette_intensity=0.55,
+    ),
+    "hai_huoc": StylePresetConfig(
+        name="hai_huoc",
+        label="Hài Hước Giải Trí",
+        top_text_color=(255, 255, 255),
+        top_stroke_inner=None,
+        top_stroke_outer=(20, 10, 0),
+        top_glow_color=(255, 150, 0, 180),
+        top_font_priority=[
+            "Coiny-Regular.ttf",
+            "Bangers-Regular.ttf",
+            "FrancoisOne-Regular.ttf",
+        ],
+        bottom_gradient=[
+            (255, 255, 255),
+            (100, 255, 100),  # Xanh chuối
+            (0, 200, 50),
+        ],
+        bottom_stroke_inner=(255, 255, 255),
+        bottom_stroke_outer=(0, 0, 0),
+        bottom_glow_color=(50, 255, 50, 160),
+        bottom_3d_depth=8,
+        bottom_3d_color=(5, 30, 10),
+        bottom_font_priority=[
+            "Coiny-Regular.ttf",
+            "Bangers-Regular.ttf",
+        ],
+        badge_bg=(255, 200, 0),
+        badge_text=(0, 0, 0),
+        badge_border=(255, 255, 255),
+        vignette_intensity=0.25,
+    ),
+    "custom": StylePresetConfig(
+        name="custom",
+        label="Tùy chỉnh màu sắc",
+        top_text_color=(255, 255, 255),
+        top_stroke_inner=None,
+        top_stroke_outer=(0, 0, 0),
+        top_glow_color=(0, 229, 255, 200),
+        top_font_priority=[
+            "BarlowCondensed-Bold.ttf",
+            "FrancoisOne-Regular.ttf",
+            "Merienda-Bold.ttf",
+        ],
+        bottom_gradient=[
+            (255, 255, 255),
+            (0, 229, 255),
+            (0, 150, 255),
+        ],
+        bottom_stroke_inner=(255, 255, 255),
+        bottom_stroke_outer=(0, 0, 0),
+        bottom_glow_color=(0, 229, 255, 170),
+        bottom_3d_depth=10,
+        bottom_3d_color=(5, 15, 30),
+        bottom_font_priority=[
+            "BarlowCondensed-Bold.ttf",
+            "Bangers-Regular.ttf",
+            "FrancoisOne-Regular.ttf",
+        ],
+        badge_bg=(0, 229, 255),
+        badge_text=(0, 0, 0),
+        badge_border=(255, 255, 255),
+        vignette_intensity=0.38,
+    ),
 }
 
 
@@ -189,6 +343,8 @@ class ThumbnailConfig:
     custom_frame_path: str | None = None
     timestamp_sec: float | None = None
     enhance_image: bool = True
+    font_name: str | None = None
+    custom_colors: dict | None = None
 
 
 # ==============================================================================
@@ -383,14 +539,129 @@ def extract_info_from_link_or_text(text_or_url: str, output_dir: str = "") -> di
 
 
 # ==============================================================================
-# FONT LOADER
+# FONT & COLOR HELPERS
 # ==============================================================================
 
 
+def parse_color_to_rgb(c: str | tuple | list) -> tuple[int, int, int]:
+    """Chuyển đổi mã màu hex (#RRGGBB, #RGB, &H00BBGGRR) hoặc tuple sang (R, G, B)."""
+    if isinstance(c, (tuple, list)):
+        return (int(c[0]), int(c[1]), int(c[2]))
+    if not isinstance(c, str):
+        return (255, 255, 255)
+    s = c.strip()
+    if s.startswith("&H") or s.startswith("&h"):
+        raw = s[2:].rstrip("&")
+        if len(raw) >= 6:
+            try:
+                b = int(raw[-6:-4], 16)
+                g = int(raw[-4:-2], 16)
+                r = int(raw[-2:], 16)
+                return (r, g, b)
+            except ValueError:
+                pass
+    if s.startswith("#"):
+        s = s[1:]
+    if len(s) == 3:
+        s = "".join(ch * 2 for ch in s)
+    if len(s) >= 6:
+        try:
+            return (int(s[:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+        except ValueError:
+            pass
+    return (255, 255, 255)
+
+
+def generate_gradient_from_color(base_color: str | tuple) -> list[tuple[int, int, int]]:
+    """Tạo bộ màu chuyển sắc 3 tầng rực rỡ từ 1 màu cơ sở: Đỉnh sáng -> Giữa chuẩn -> Đáy đậm đà."""
+    r, g, b = parse_color_to_rgb(base_color)
+    top = (
+        min(255, int(r * 0.7 + 255 * 0.3)),
+        min(255, int(g * 0.7 + 255 * 0.3)),
+        min(255, int(b * 0.7 + 255 * 0.3)),
+    )
+    mid = (r, g, b)
+    bot = (
+        max(0, int(r * 0.7)),
+        max(0, int(g * 0.7)),
+        max(0, int(b * 0.7)),
+    )
+    return [top, mid, bot]
+
+
+def resolve_font_file(font_name_or_file: str | None) -> str | None:
+    """Tìm đường dẫn tệp phông chữ (.ttf/.otf) từ tên phông phụ đề, họ phông hoặc tệp font."""
+    if not font_name_or_file:
+        return None
+    raw = str(font_name_or_file).strip()
+    if not raw:
+        return None
+    if os.path.isfile(raw):
+        return raw
+
+    clean_target = raw.lower().replace("-", " ").replace("_", " ").strip()
+    clean_no_ext = os.path.splitext(clean_target)[0]
+    clean_compact = clean_no_ext.replace(" ", "")
+
+    font_files = bundled_font_files()
+
+    # 1. Khớp chính xác tên tệp trong bundled fonts
+    for f in font_files:
+        base = os.path.basename(f).lower()
+        if base == raw.lower() or os.path.splitext(base)[0] == clean_no_ext:
+            return f
+
+    # 2. Ưu tiên biến thể Bold nếu người dùng chọn họ phông (tiêu đề thumbnail cần nét đậm)
+    for f in font_files:
+        base = os.path.basename(f).lower()
+        base_compact = os.path.splitext(base)[0].replace("-", "").replace("_", "").replace(" ", "")
+        if clean_compact and (
+            clean_compact == base_compact or base_compact.startswith(clean_compact)
+        ):
+            if "bold" in base or "black" in base:
+                return f
+
+    for f in font_files:
+        base = os.path.basename(f).lower()
+        base_compact = os.path.splitext(base)[0].replace("-", "").replace("_", "").replace(" ", "")
+        if clean_compact and (
+            clean_compact == base_compact or base_compact.startswith(clean_compact)
+        ):
+            return f
+
+    # 3. Tra trong thư mục Fonts của Windows
+    win_fonts = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts")
+    if os.path.isdir(win_fonts):
+        for f in os.listdir(win_fonts):
+            if f.lower().endswith((".ttf", ".otf", ".ttc")):
+                base_no_ext = os.path.splitext(f.lower())[0]
+                if base_no_ext == clean_compact or base_no_ext.startswith(clean_compact):
+                    if "bd" in base_no_ext or "bold" in base_no_ext:
+                        return os.path.join(win_fonts, f)
+
+        for f in os.listdir(win_fonts):
+            if f.lower().endswith((".ttf", ".otf", ".ttc")):
+                base_no_ext = os.path.splitext(f.lower())[0]
+                if base_no_ext == clean_compact or base_no_ext.startswith(clean_compact):
+                    return os.path.join(win_fonts, f)
+
+    return None
+
+
 def _get_best_font(
-    size: int, priority_names: list[str] | None = None
+    size: int,
+    priority_names: list[str] | None = None,
+    font_name: str | None = None,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Nạp font chữ Việt hóa chất lượng cao, ưu tiên font nét đậm, hỗ trợ 100% tiếng Việt."""
+    if font_name:
+        resolved = resolve_font_file(font_name)
+        if resolved and os.path.isfile(resolved):
+            try:
+                return ImageFont.truetype(resolved, size=size)
+            except Exception:
+                pass
+
     default_priorities = [
         "BarlowCondensed-Bold.ttf",
         "FrancoisOne-Regular.ttf",
@@ -818,6 +1089,7 @@ def _draw_badge_box(
     pos: tuple[int, int],
     preset: StylePresetConfig,
     height: int,
+    font_name: str | None = None,
 ) -> tuple[int, int, int, int]:
     """Vẽ huy hiệu Badge số tập sắc cạnh, bắt mắt chuẩn phong cách Manhwa."""
     badge_str = str(text or "").strip().upper()
@@ -825,7 +1097,9 @@ def _draw_badge_box(
         return (pos[0], pos[1], 0, 0)
 
     font_size = max(18, int(height * 0.038))
-    font = _get_best_font(font_size, priority_names=preset.bottom_font_priority)
+    font = _get_best_font(
+        font_size, priority_names=preset.bottom_font_priority, font_name=font_name
+    )
 
     draw = ImageDraw.Draw(canvas)
     b_bbox = draw.textbbox((0, 0), badge_str, font=font)
@@ -877,16 +1151,51 @@ def render_thumbnail(
     bottom_title: str = "",
     preset: str = "co_dai",
     enhance_image: bool = True,
+    font_name: str | None = None,
+    custom_colors: dict | None = None,
 ) -> str:
     """Thiết kế và render đồ họa ảnh bìa High-CTR chuẩn YouTube Review Phim / Manhwa.
 
     Hỗ trợ đầy đủ:
-    - 3 Style Presets thực tế (Cổ Đại Làm Giàu, Quân Sư Hiện Đại, Chiến Thần Rực Lửa).
+    - 4 Style Presets thực tế (Cổ Đại Làm Giàu, Quân Sư Hiện Đại, Chiến Thần Rực Lửa, Tùy chỉnh màu).
+    - Tùy chỉnh phông chữ riêng biệt hoặc kế thừa từ phông chữ phụ đề của dự án.
+    - Tùy chỉnh màu sắc chi tiết (chữ chính, phát sáng Neon Glow, viền ngoài, huy hiệu).
     - Typography 3D Extrusion, viền kép tương phản cao, phát sáng Neon Glow.
     - Huy hiệu Badge số tập sắc cạnh.
     - Cân đối bố cục theo tỉ lệ 16:9 (ngang) và 9:16 (dọc).
     """
-    preset_cfg = PRESETS.get(preset, PRESETS["co_dai"])
+    from dataclasses import replace
+
+    base_preset = PRESETS.get(preset, PRESETS["co_dai"])
+    preset_cfg = replace(base_preset)
+
+    if custom_colors:
+        if custom_colors.get("primary_color"):
+            preset_cfg.bottom_gradient = generate_gradient_from_color(
+                custom_colors["primary_color"]
+            )
+        elif custom_colors.get("bottom_color"):
+            preset_cfg.bottom_gradient = generate_gradient_from_color(custom_colors["bottom_color"])
+
+        if custom_colors.get("top_color"):
+            preset_cfg.top_text_color = parse_color_to_rgb(custom_colors["top_color"])
+        elif custom_colors.get("primary_color"):
+            preset_cfg.top_text_color = parse_color_to_rgb(custom_colors["primary_color"])
+
+        outline_val = custom_colors.get("outline_color") or custom_colors.get("stroke_color")
+        if outline_val:
+            out_c = parse_color_to_rgb(outline_val)
+            preset_cfg.top_stroke_outer = out_c
+            preset_cfg.bottom_stroke_outer = out_c
+
+        if custom_colors.get("glow_color"):
+            g_c = parse_color_to_rgb(custom_colors["glow_color"])
+            preset_cfg.top_glow_color = (*g_c, 200)
+            preset_cfg.bottom_glow_color = (*g_c, 170)
+
+        badge_col = custom_colors.get("badge_bg") or custom_colors.get("badge_color")
+        if badge_col:
+            preset_cfg.badge_bg = parse_color_to_rgb(badge_col)
 
     # 1. Nạp và xử lý ảnh nền
     if os.path.exists(frame_path) and os.path.getsize(frame_path) > 500:
@@ -977,7 +1286,9 @@ def render_thumbnail(
 
     # 5. Tính toán và vẽ Tiêu đề trên (Eyebrow / Header)
     top_font_size = max(22, int(height * (0.046 if is_vertical else 0.060)))
-    top_font = _get_best_font(top_font_size, priority_names=preset_cfg.top_font_priority)
+    top_font = _get_best_font(
+        top_font_size, priority_names=preset_cfg.top_font_priority, font_name=font_name
+    )
     top_draw = ImageDraw.Draw(canvas)
 
     top_chars = max(14, int(width / (top_font_size * 0.62)))
@@ -993,7 +1304,9 @@ def render_thumbnail(
         if max_w <= width * 0.88:
             break
         top_font_size -= 2
-        top_font = _get_best_font(top_font_size, priority_names=preset_cfg.top_font_priority)
+        top_font = _get_best_font(
+            top_font_size, priority_names=preset_cfg.top_font_priority, font_name=font_name
+        )
 
     top_line_h = int(top_font_size * 1.25)
     top_y = int(height * 0.10 if is_vertical else height * 0.055)
@@ -1028,11 +1341,15 @@ def render_thumbnail(
         badge_y = max(top_end_y + 10, int(height * 0.32))
         badge_x = int(width * 0.84)
 
-    _draw_badge_box(canvas, badge_label, (badge_x, badge_y), preset_cfg, height)
+    _draw_badge_box(
+        canvas, badge_label, (badge_x, badge_y), preset_cfg, height, font_name=font_name
+    )
 
     # 7. Vẽ Tiêu đề dưới (Main Hook / Punchline - Chữ to bản 3D nổi bật)
     bot_font_size = max(30, int(height * (0.072 if is_vertical else 0.088)))
-    bot_font = _get_best_font(bot_font_size, priority_names=preset_cfg.bottom_font_priority)
+    bot_font = _get_best_font(
+        bot_font_size, priority_names=preset_cfg.bottom_font_priority, font_name=font_name
+    )
 
     bot_chars = max(10, int(width / (bot_font_size * 0.60)))
     bot_lines = textwrap.wrap(bottom_text.upper(), width=bot_chars)[:3]
@@ -1047,7 +1364,9 @@ def render_thumbnail(
         if max_bw <= width * 0.88:
             break
         bot_font_size -= 2
-        bot_font = _get_best_font(bot_font_size, priority_names=preset_cfg.bottom_font_priority)
+        bot_font = _get_best_font(
+            bot_font_size, priority_names=preset_cfg.bottom_font_priority, font_name=font_name
+        )
 
     bot_line_h = int(bot_font_size * 1.22)
     total_bot_h = len(bot_lines) * bot_line_h
@@ -1095,6 +1414,8 @@ def generate_high_ctr_thumbnail(
     preset: str = "co_dai",
     timestamp_sec: float | None = None,
     duration_sec: float | None = None,
+    font_name: str | None = None,
+    custom_colors: dict | None = None,
 ) -> str:
     """Hàm tiện ích trích xuất frame từ video và sinh Thumbnail hoàn chỉnh."""
     temp_dir = os.path.dirname(os.path.abspath(output_path))
@@ -1123,6 +1444,8 @@ def generate_high_ctr_thumbnail(
         top_title=top_title,
         bottom_title=bottom_title,
         preset=preset,
+        font_name=font_name,
+        custom_colors=custom_colors,
     )
 
     if os.path.exists(temp_frame):
