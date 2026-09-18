@@ -330,9 +330,16 @@ def build_aspect_ratio_filter(
     return plan.build_reframe_filter()
 
 
-def _logo_overlay_coords(position: str, margin: int) -> tuple[str, str]:
+def _logo_overlay_coords(
+    position: str, margin: int, custom_x: float = 0.5, custom_y: float = 0.5
+) -> tuple[str, str]:
     """Tính toán biểu thức tọa độ x, y cho bộ lọc overlay của logo."""
     pos = (position or "top_right").lower().strip()
+    if pos == "custom":
+        # Keep inside bounds
+        cx = max(0.0, min(1.0, float(custom_x)))
+        cy = max(0.0, min(1.0, float(custom_y)))
+        return f"{cx}*(main_w-overlay_w)", f"{cy}*(main_h-overlay_h)"
     if pos in ("top_left", "tl"):
         return f"{margin}", f"{margin}"
     if pos in ("bottom_left", "bl"):
@@ -356,6 +363,8 @@ def _build_drawtext_watermark_filter(
     color: str = "white",
     speed: int = 40,
     motion: str = "bounce",
+    custom_x: float = 0.5,
+    custom_y: float = 0.5,
 ) -> str:
     """Tạo bộ lọc drawtext cho chữ watermark chìm chuyển động quanh video."""
     from autodub.utils import bundled_font_files
@@ -393,6 +402,11 @@ def _build_drawtext_watermark_filter(
     elif motion == "top_left":
         x_expr = f"{margin}"
         y_expr = f"{margin}"
+    elif motion == "custom":
+        cx = max(0.0, min(1.0, float(custom_x)))
+        cy = max(0.0, min(1.0, float(custom_y)))
+        x_expr = f"{cx}*(w-tw)"
+        y_expr = f"{cy}*(h-th)"
     else:  # top_right or static
         x_expr = f"w-tw-{margin}"
         y_expr = f"{margin}"
@@ -493,12 +507,16 @@ def build_filter_complex(
     logo_opacity: float = 0.85,
     logo_margin: int = 24,
     logo_motion: str = "static",
+    logo_custom_x: float = 0.5,
+    logo_custom_y: float = 0.5,
     watermark_text: str | None = None,
     watermark_opacity: float = 0.28,
     watermark_font_size: int = 26,
     watermark_color: str = "white",
     watermark_speed: int = 40,
     watermark_motion: str = "bounce",
+    watermark_custom_x: float = 0.5,
+    watermark_custom_y: float = 0.5,
     smart_flip: bool = False,
     micro_zoom: bool = False,
     color_filter: str = "none",
@@ -681,7 +699,9 @@ def build_filter_complex(
             ox = f"{margin}+abs(mod(t*{sp_x},2*(main_w-overlay_w-{2 * margin}))-(main_w-overlay_w-{2 * margin}))"
             oy = f"{margin}+abs(mod(t*{sp_y},2*(main_h-overlay_h-{2 * margin}))-(main_h-overlay_h-{2 * margin}))"
         else:
-            ox, oy = _logo_overlay_coords(logo_position or "top_right", margin)
+            ox, oy = _logo_overlay_coords(
+                logo_position or "top_right", margin, logo_custom_x, logo_custom_y
+            )
 
         parts.append(
             f"movie='{escaped_logo}',scale={target_w}:-1,format=rgba,colorchannelmixer=aa={opacity:.2f}[logo]"
@@ -697,6 +717,8 @@ def build_filter_complex(
             color=watermark_color,
             speed=watermark_speed,
             motion=watermark_motion,
+            custom_x=watermark_custom_x,
+            custom_y=watermark_custom_y,
         )
         parts.append(f"[{current}]{wm_flt}[vwm]")
         current = "vwm"

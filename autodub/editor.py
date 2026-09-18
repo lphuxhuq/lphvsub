@@ -531,12 +531,16 @@ def _render_options(
     logo_opacity: float | None = None,
     logo_margin: int | None = None,
     logo_motion: str | None = None,
+    logo_custom_x: float | None = None,
+    logo_custom_y: float | None = None,
     watermark_text: str | None = None,
     watermark_opacity: float | None = None,
     watermark_font_size: int | None = None,
     watermark_color: str | None = None,
     watermark_speed: int | None = None,
     watermark_motion: str | None = None,
+    watermark_custom_x: float | None = None,
+    watermark_custom_y: float | None = None,
     smart_flip: bool | None = None,
     micro_zoom: bool | None = None,
     color_filter: str | None = None,
@@ -593,6 +597,10 @@ def _render_options(
         merged["logo_margin"] = logo_margin
     if logo_motion is not None:
         merged["logo_motion"] = logo_motion
+    if logo_custom_x is not None:
+        merged["logo_custom_x"] = logo_custom_x
+    if logo_custom_y is not None:
+        merged["logo_custom_y"] = logo_custom_y
     if watermark_text is not None:
         merged["watermark_text"] = watermark_text
     if watermark_opacity is not None:
@@ -605,6 +613,10 @@ def _render_options(
         merged["watermark_speed"] = watermark_speed
     if watermark_motion is not None:
         merged["watermark_motion"] = watermark_motion
+    if watermark_custom_x is not None:
+        merged["watermark_custom_x"] = watermark_custom_x
+    if watermark_custom_y is not None:
+        merged["watermark_custom_y"] = watermark_custom_y
     if smart_flip is not None:
         merged["smart_flip"] = smart_flip
     if micro_zoom is not None:
@@ -655,6 +667,8 @@ def _render_options(
         "logo_opacity": merged.get("logo_opacity", getattr(settings, "logo_opacity", 0.85)),
         "logo_margin": merged.get("logo_margin", getattr(settings, "logo_margin", 24)),
         "logo_motion": merged.get("logo_motion") or getattr(settings, "logo_motion", "static"),
+        "logo_custom_x": merged.get("logo_custom_x", getattr(settings, "logo_custom_x", 0.5)),
+        "logo_custom_y": merged.get("logo_custom_y", getattr(settings, "logo_custom_y", 0.5)),
         "watermark_text": merged.get("watermark_text") or getattr(settings, "watermark_text", ""),
         "watermark_opacity": merged.get(
             "watermark_opacity", getattr(settings, "watermark_opacity", 0.28)
@@ -668,6 +682,12 @@ def _render_options(
         "watermark_speed": merged.get("watermark_speed", getattr(settings, "watermark_speed", 40)),
         "watermark_motion": merged.get(
             "watermark_motion", getattr(settings, "watermark_motion", "bounce")
+        ),
+        "watermark_custom_x": merged.get(
+            "watermark_custom_x", getattr(settings, "watermark_custom_x", 0.5)
+        ),
+        "watermark_custom_y": merged.get(
+            "watermark_custom_y", getattr(settings, "watermark_custom_y", 0.5)
         ),
         "smart_flip": merged.get("smart_flip", getattr(settings, "smart_flip", False)),
         "micro_zoom": merged.get("micro_zoom", getattr(settings, "micro_zoom", False)),
@@ -824,12 +844,16 @@ def rebuild_output(
     logo_opacity: float | None = None,
     logo_margin: int | None = None,
     logo_motion: str | None = None,
+    logo_custom_x: float | None = None,
+    logo_custom_y: float | None = None,
     watermark_text: str | None = None,
     watermark_opacity: float | None = None,
     watermark_font_size: int | None = None,
     watermark_color: str | None = None,
     watermark_speed: int | None = None,
     watermark_motion: str | None = None,
+    watermark_custom_x: float | None = None,
+    watermark_custom_y: float | None = None,
     smart_flip: bool | None = None,
     micro_zoom: bool | None = None,
     color_filter: str | None = None,
@@ -877,12 +901,16 @@ def rebuild_output(
         logo_opacity=logo_opacity,
         logo_margin=logo_margin,
         logo_motion=logo_motion,
+        logo_custom_x=logo_custom_x,
+        logo_custom_y=logo_custom_y,
         watermark_text=watermark_text,
         watermark_opacity=watermark_opacity,
         watermark_font_size=watermark_font_size,
         watermark_color=watermark_color,
         watermark_speed=watermark_speed,
         watermark_motion=watermark_motion,
+        watermark_custom_x=watermark_custom_x,
+        watermark_custom_y=watermark_custom_y,
         smart_flip=smart_flip,
         micro_zoom=micro_zoom,
         color_filter=color_filter,
@@ -1049,12 +1077,16 @@ def rebuild_subtitles(
     logo_opacity: float | None = None,
     logo_margin: int | None = None,
     logo_motion: str | None = None,
+    logo_custom_x: float | None = None,
+    logo_custom_y: float | None = None,
     watermark_text: str | None = None,
     watermark_opacity: float | None = None,
     watermark_font_size: int | None = None,
     watermark_color: str | None = None,
     watermark_speed: int | None = None,
     watermark_motion: str | None = None,
+    watermark_custom_x: float | None = None,
+    watermark_custom_y: float | None = None,
     smart_flip: bool | None = None,
     micro_zoom: bool | None = None,
     color_filter: str | None = None,
@@ -1096,12 +1128,16 @@ def rebuild_subtitles(
         logo_opacity=logo_opacity,
         logo_margin=logo_margin,
         logo_motion=logo_motion,
+        logo_custom_x=logo_custom_x,
+        logo_custom_y=logo_custom_y,
         watermark_text=watermark_text,
         watermark_opacity=watermark_opacity,
         watermark_font_size=watermark_font_size,
         watermark_color=watermark_color,
         watermark_speed=watermark_speed,
         watermark_motion=watermark_motion,
+        watermark_custom_x=watermark_custom_x,
+        watermark_custom_y=watermark_custom_y,
         smart_flip=smart_flip,
         micro_zoom=micro_zoom,
         color_filter=color_filter,

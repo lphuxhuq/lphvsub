@@ -175,9 +175,19 @@ class _FrameCanvas(QWidget):
         self._selected_index: int | None = None
         self._drag_origin: QPoint | None = None
         self._drag_current: QRect | None = None
-        self._dragging_text = False
+
+        self._dragging_target: str | None = None
         self._text_rect = QRectF()
+        self._logo_rect = QRectF()
+        self._wm_rect = QRectF()
+        self._banner_top_rect = QRectF()
+        self._banner_bot_rect = QRectF()
+
         self.on_style_dragged = None  # callback(position: str, margin_v: int)
+        self.on_style_scaled = None  # callback(font_size: int)
+        self.on_logo_changed = None  # callback(opts: dict)
+        self.on_wm_changed = None  # callback(opts: dict)
+        self.on_banner_changed = None  # callback(opts: dict)
         self.on_regions_changed = None  # callback(regions: list[dict])
         self.setMinimumSize(480, 270)
         self.setMouseTracking(True)
@@ -248,27 +258,84 @@ class _FrameCanvas(QWidget):
         if event.button() != Qt.LeftButton:
             return
         pos = event.position()
+
+        # Check hit targets in order: text, logo, wm, banner, regions
         if self._text_rect.adjusted(-8, -8, 8, 8).contains(pos):
-            self._dragging_text = True
+            self._dragging_target = "text"
+        elif self._logo_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            self._dragging_target = "logo"
+        elif self._wm_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            self._dragging_target = "wm"
+        elif self._banner_top_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            self._dragging_target = "banner_top"
+        elif self._banner_bot_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            self._dragging_target = "banner_bot"
         elif self._allow_regions:
+            self._dragging_target = "region"
             self._drag_origin = pos.toPoint()
             self._drag_current = None
 
     def mouseMoveEvent(self, event):
         pos = event.position()
-        if self._dragging_text:
+        pr = self._pixmap_rect()
+        if pr.width() <= 0 or pr.height() <= 0:
+            return
+
+        if self._dragging_target == "text":
             self._apply_text_drag(pos.y())
-        elif self._drag_origin is not None:
+        elif self._dragging_target == "logo":
+            x_ratio = max(0.0, min(1.0, (pos.x() - pr.x()) / pr.width()))
+            y_ratio = max(0.0, min(1.0, (pos.y() - pr.y()) / pr.height()))
+            self._logo_opts["position"] = "custom"
+            self._logo_opts["custom_x"] = x_ratio
+            self._logo_opts["custom_y"] = y_ratio
+            self.update()
+            if self.on_logo_changed:
+                self.on_logo_changed(self._logo_opts)
+        elif self._dragging_target == "wm":
+            x_ratio = max(0.0, min(1.0, (pos.x() - pr.x()) / pr.width()))
+            y_ratio = max(0.0, min(1.0, (pos.y() - pr.y()) / pr.height()))
+            self._wm_opts["motion"] = "custom"
+            self._wm_opts["custom_x"] = x_ratio
+            self._wm_opts["custom_y"] = y_ratio
+            self.update()
+            if self.on_wm_changed:
+                self.on_wm_changed(self._wm_opts)
+        elif self._dragging_target in ("banner_top", "banner_bot"):
+            # Drag to adjust height ratio
+            clamped_y = max(pr.y(), min(pos.y(), pr.bottom()))
+            if self._dragging_target == "banner_top":
+                ratio = (clamped_y - pr.y()) / pr.height()
+            else:
+                ratio = (pr.bottom() - clamped_y) / pr.height()
+            ratio = max(0.05, min(0.4, ratio))
+            self._banner_opts["frame_banner_height_ratio"] = round(ratio, 3)
+            self.update()
+            if self.on_banner_changed:
+                self.on_banner_changed(self._banner_opts)
+        elif self._dragging_target == "region" and self._drag_origin is not None:
             self._drag_current = QRect(self._drag_origin, pos.toPoint()).normalized()
             self.update()
         else:
-            inside = self._text_rect.adjusted(-8, -8, 8, 8).contains(pos)
-            self.setCursor(Qt.SizeVerCursor if inside else Qt.CrossCursor)
+            if self._text_rect.adjusted(-8, -8, 8, 8).contains(pos):
+                self.setCursor(Qt.SizeVerCursor)
+            elif self._logo_rect.adjusted(-8, -8, 8, 8).contains(pos) or self._wm_rect.adjusted(
+                -8, -8, 8, 8
+            ).contains(pos):
+                self.setCursor(Qt.SizeAllCursor)
+            elif self._banner_top_rect.adjusted(-8, -8, 8, 8).contains(
+                pos
+            ) or self._banner_bot_rect.adjusted(-8, -8, 8, 8).contains(pos):
+                self.setCursor(Qt.SizeVerCursor)
+            else:
+                self.setCursor(Qt.CrossCursor if self._allow_regions else Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, event):
-        if self._dragging_text:
-            self._dragging_text = False
-        elif self._drag_origin is not None and self._drag_current is not None:
+        if (
+            self._dragging_target == "region"
+            and self._drag_origin is not None
+            and self._drag_current is not None
+        ):
             clipped = self._drag_current.intersected(self._pixmap_rect())
             if clipped.width() > 4 and clipped.height() > 4:
                 self._rects.append(clipped)
@@ -277,7 +344,60 @@ class _FrameCanvas(QWidget):
                     self.on_regions_changed(self.normalized_regions())
         self._drag_origin = None
         self._drag_current = None
+        self._dragging_target = None
         self.update()
+
+    def wheelEvent(self, event):
+        """Scroll wheel to resize elements hovered by mouse."""
+        pos = event.position()
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+
+        step = 1 if delta > 0 else -1
+
+        if self._logo_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            scale = float(self._logo_opts.get("scale", 0.12))
+            new_scale = max(0.04, min(0.50, scale + step * 0.02))
+            self._logo_opts["scale"] = round(new_scale, 3)
+            self.update()
+            if self.on_logo_changed:
+                self.on_logo_changed(self._logo_opts)
+            event.accept()
+        elif self._wm_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            fs = int(self._wm_opts.get("font_size", 26))
+            new_fs = max(10, min(100, fs + step * 2))
+            self._wm_opts["font_size"] = new_fs
+            self.update()
+            if self.on_wm_changed:
+                self.on_wm_changed(self._wm_opts)
+            event.accept()
+        elif self._banner_top_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            fs = int(self._banner_opts.get("frame_header_font_size", 32))
+            new_fs = max(10, min(150, fs + step * 2))
+            self._banner_opts["frame_header_font_size"] = new_fs
+            self.update()
+            if self.on_banner_changed:
+                self.on_banner_changed(self._banner_opts)
+            event.accept()
+        elif self._banner_bot_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            fs = int(self._banner_opts.get("frame_footer_font_size", 24))
+            new_fs = max(10, min(150, fs + step * 2))
+            self._banner_opts["frame_footer_font_size"] = new_fs
+            self.update()
+            if self.on_banner_changed:
+                self.on_banner_changed(self._banner_opts)
+            event.accept()
+        elif self._text_rect.adjusted(-8, -8, 8, 8).contains(pos):
+            fs = int(self._style.get("font_size", 22))
+            new_fs = max(10, min(100, fs + step))
+            self._style["font_size"] = new_fs
+            self.update()
+            if self.on_style_scaled:
+                self.on_style_scaled(new_fs)
+            event.accept()
+        else:
+            super().wheelEvent(event)
 
     def _apply_text_drag(self, mouse_y: float) -> None:
         """Move the preview line to the cursor; report position + margin back."""
@@ -430,6 +550,8 @@ class _FrameCanvas(QWidget):
     def _paint_banner(self, painter: QPainter, pr: QRect) -> None:
         """Vẽ khung viền dải trên & dưới (Top/Bottom Banner) xem trước trên canvas."""
         if not self._banner_opts or not self._banner_opts.get("enabled"):
+            self._banner_top_rect = QRectF()
+            self._banner_bot_rect = QRectF()
             return
 
         bg_color_hex = str(self._banner_opts.get("color", "#000000")).strip()
@@ -446,6 +568,8 @@ class _FrameCanvas(QWidget):
 
         top_rect = QRect(pr.x(), pr.y(), pr.width(), banner_h)
         bot_rect = QRect(pr.x(), pr.bottom() - banner_h + 1, pr.width(), banner_h)
+        self._banner_top_rect = QRectF(top_rect)
+        self._banner_bot_rect = QRectF(bot_rect)
 
         painter.save()
         # Nền banner
@@ -510,6 +634,7 @@ class _FrameCanvas(QWidget):
     def _paint_logo(self, painter: QPainter, pr: QRect) -> None:
         """Vẽ logo xem trước trên canvas."""
         if not self._logo_opts or not self._logo_opts.get("enabled"):
+            self._logo_rect = QRectF()
             return
         path = str(self._logo_opts.get("path", "")).strip()
         scale = float(self._logo_opts.get("scale", 0.12))
@@ -532,7 +657,16 @@ class _FrameCanvas(QWidget):
             ph = int(target_w * 0.6)
             scaled_pix = None
 
-        if motion == "bounce":
+        if pos == "custom":
+            # For custom drag-and-drop
+            cx = float(self._logo_opts.get("custom_x", 0.5))
+            cy = float(self._logo_opts.get("custom_y", 0.5))
+            lx = pr.x() + int(cx * pr.width())
+            ly = pr.y() + int(cy * pr.height())
+            # Keep it inside canvas
+            lx = max(pr.x(), min(lx, pr.right() - pw))
+            ly = max(pr.y(), min(ly, pr.bottom() - ph))
+        elif motion == "bounce":
             lx = pr.x() + int(pr.width() * 0.35)
             ly = pr.y() + int(pr.height() * 0.15)
         elif pos == "top_left":
@@ -561,16 +695,20 @@ class _FrameCanvas(QWidget):
 
         painter.setOpacity(0.9)
         painter.setPen(QPen(QColor(tokens.PRIMARY), 1, Qt.DotLine))
-        painter.drawRect(QRect(lx - 2, ly - 2, pw + 4, ph + 4))
+        box_rect = QRect(lx - 2, ly - 2, pw + 4, ph + 4)
+        painter.drawRect(box_rect)
+        self._logo_rect = QRectF(box_rect)
 
         painter.restore()
 
     def _paint_watermark(self, painter: QPainter, pr: QRect) -> None:
         """Vẽ watermark chìm xem trước trên canvas."""
         if not self._wm_opts or not self._wm_opts.get("enabled"):
+            self._wm_rect = QRectF()
             return
         text = str(self._wm_opts.get("text", "")).strip()
         if not text:
+            self._wm_rect = QRectF()
             return
         opacity = float(self._wm_opts.get("opacity", 0.28))
         font_size = int(self._wm_opts.get("font_size", 26))
@@ -584,16 +722,45 @@ class _FrameCanvas(QWidget):
         painter.setFont(wm_font)
         painter.setPen(QColor(tokens.TEXT_PRIMARY))
 
-        if motion == "bounce":
-            painter.drawText(pr, Qt.AlignCenter, text)
+        fm = painter.fontMetrics()
+        tw = fm.horizontalAdvance(text)
+        th = fm.height()
+
+        # Calculate bounding rect for the text based on alignment
+        margin = 24
+        inner_pr = pr.adjusted(margin, margin, -margin, -margin)
+
+        # Default center
+        tx = inner_pr.x() + (inner_pr.width() - tw) // 2
+        ty = inner_pr.y() + (inner_pr.height() - th) // 2
+
+        if motion == "custom":
+            cx = float(self._wm_opts.get("custom_x", 0.5))
+            cy = float(self._wm_opts.get("custom_y", 0.5))
+            tx = pr.x() + int(cx * pr.width()) - tw // 2
+            ty = pr.y() + int(cy * pr.height()) - th // 2
         elif motion == "top_left":
-            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignTop | Qt.AlignLeft, text)
+            tx = inner_pr.x()
+            ty = inner_pr.y()
         elif motion == "bottom_left":
-            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignBottom | Qt.AlignLeft, text)
+            tx = inner_pr.x()
+            ty = inner_pr.bottom() - th
         elif motion == "bottom_right":
-            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignBottom | Qt.AlignRight, text)
-        else:  # top_right
-            painter.drawText(pr.adjusted(24, 24, -24, -24), Qt.AlignTop | Qt.AlignRight, text)
+            tx = inner_pr.right() - tw
+            ty = inner_pr.bottom() - th
+        elif motion == "top_right":
+            tx = inner_pr.right() - tw
+            ty = inner_pr.y()
+
+        # Draw the text at tx, ty (need to adjust for font baseline)
+        text_rect = QRect(int(tx), int(ty), int(tw), int(th))
+        painter.drawText(text_rect, Qt.AlignCenter, text)
+
+        painter.setOpacity(0.9)
+        painter.setPen(QPen(QColor(tokens.PRIMARY), 1, Qt.DotLine))
+        box_rect = text_rect.adjusted(-2, -2, 2, 2)
+        painter.drawRect(box_rect)
+        self._wm_rect = QRectF(box_rect)
 
         painter.restore()
 
@@ -801,6 +968,10 @@ class StyleDialog(QDialog):
         left.setSpacing(6)
         self.canvas = _FrameCanvas(pixmap, self._style, allow_regions=True)
         self.canvas.on_style_dragged = self._on_canvas_drag
+        self.canvas.on_style_scaled = self._on_canvas_scaled
+        self.canvas.on_logo_changed = self._on_canvas_logo_changed
+        self.canvas.on_wm_changed = self._on_canvas_wm_changed
+        self.canvas.on_banner_changed = self._on_canvas_banner_changed
         left.addWidget(self.canvas, 1)
 
         # Thanh điều khiển phát video (Live Video Playback)
@@ -1231,6 +1402,7 @@ class StyleDialog(QDialog):
         self.cb_logo_pos.addItem("Góc trên bên trái", "top_left")
         self.cb_logo_pos.addItem("Góc dưới bên phải", "bottom_right")
         self.cb_logo_pos.addItem("Góc dưới bên trái", "bottom_left")
+        self.cb_logo_pos.addItem("Tùy chỉnh (Kéo thả)", "custom")
         polish_combo(self.cb_logo_pos)
         f_logo.addRow("Vị trí:", self.cb_logo_pos)
 
@@ -1280,11 +1452,12 @@ class StyleDialog(QDialog):
         f_wm.addRow("Chữ:", self.txt_wm_text)
 
         self.cb_wm_motion = QComboBox()
-        self.cb_wm_motion.addItem("Chạy nảy quanh video (Khuyên dùng)", "bounce")
+        self.cb_wm_motion.addItem("Chạy nảy mượt mà (Bouncing)", "bounce")
         self.cb_wm_motion.addItem("Cố định góc trên bên phải", "top_right")
         self.cb_wm_motion.addItem("Cố định góc trên bên trái", "top_left")
         self.cb_wm_motion.addItem("Cố định góc dưới bên phải", "bottom_right")
         self.cb_wm_motion.addItem("Cố định góc dưới bên trái", "bottom_left")
+        self.cb_wm_motion.addItem("Tùy chỉnh (Kéo thả)", "custom")
         polish_combo(self.cb_wm_motion)
         f_wm.addRow("Quỹ đạo:", self.cb_wm_motion)
 
@@ -2146,6 +2319,57 @@ class StyleDialog(QDialog):
         self._style["position"] = position
         self._style["margin_v"] = margin_v
         self.sp_margin.setEnabled(position != "middle")
+
+    def _on_canvas_scaled(self, font_size: int) -> None:
+        self.sp_font_size.blockSignals(True)
+        self.sp_font_size.setValue(font_size)
+        self.slider_font_size.blockSignals(True)
+        self.slider_font_size.setValue(font_size)
+        self.slider_font_size.blockSignals(False)
+        self.sp_font_size.blockSignals(False)
+
+    def _on_canvas_logo_changed(self, opts: dict) -> None:
+        self._logo_opts.update(opts)
+        idx = self.cb_logo_pos.findData(self._logo_opts.get("position"))
+        if idx >= 0:
+            self.cb_logo_pos.blockSignals(True)
+            self.cb_logo_pos.setCurrentIndex(idx)
+            self.cb_logo_pos.blockSignals(False)
+        self.sp_logo_scale.blockSignals(True)
+        self.sp_logo_scale.setValue(
+            max(4, min(50, int(float(self._logo_opts.get("scale", 0.12)) * 100)))
+        )
+        self.sp_logo_scale.blockSignals(False)
+
+    def _on_canvas_wm_changed(self, opts: dict) -> None:
+        self._wm_opts.update(opts)
+        idx = self.cb_wm_motion.findData(self._wm_opts.get("motion"))
+        if idx >= 0:
+            self.cb_wm_motion.blockSignals(True)
+            self.cb_wm_motion.setCurrentIndex(idx)
+            self.cb_wm_motion.blockSignals(False)
+        self.sp_wm_font_size.blockSignals(True)
+        self.sp_wm_font_size.setValue(int(self._wm_opts.get("font_size", 26)))
+        self.sp_wm_font_size.blockSignals(False)
+
+    def _on_canvas_banner_changed(self, opts: dict) -> None:
+        self._banner_opts.update(opts)
+        self.sp_banner_height.blockSignals(True)
+        self.sp_banner_height.setValue(
+            max(
+                8,
+                min(35, int(float(self._banner_opts.get("frame_banner_height_ratio", 0.16)) * 100)),
+            )
+        )
+        self.sp_banner_height.blockSignals(False)
+
+        self.sp_header_font_size.blockSignals(True)
+        self.sp_header_font_size.setValue(int(self._banner_opts.get("frame_header_font_size", 32)))
+        self.sp_header_font_size.blockSignals(False)
+
+        self.sp_footer_font_size.blockSignals(True)
+        self.sp_footer_font_size.setValue(int(self._banner_opts.get("frame_footer_font_size", 24)))
+        self.sp_footer_font_size.blockSignals(False)
 
     def _paint_color_button(self, btn: QPushButton, hex_color: str) -> None:
         btn.setText(hex_color)

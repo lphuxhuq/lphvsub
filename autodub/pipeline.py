@@ -296,6 +296,8 @@ class DubRequest:
     logo_opacity: float | None = None
     logo_margin: int | None = None
     logo_motion: str | None = None
+    logo_custom_x: float | None = None
+    logo_custom_y: float | None = None
 
     # Watermark chữ chìm chuyển động
     watermark_text: str | None = None
@@ -304,6 +306,8 @@ class DubRequest:
     watermark_color: str | None = None
     watermark_speed: int | None = None
     watermark_motion: str | None = None
+    watermark_custom_x: float | None = None
+    watermark_custom_y: float | None = None
 
     # Xử lý video chống quét bản quyền / Reup (Anti-Content ID)
     smart_flip: bool | None = None
@@ -1729,6 +1733,12 @@ class DubPipeline:
                 logo_motion=req.logo_motion
                 if req.logo_motion is not None
                 else getattr(settings, "logo_motion", "static"),
+                logo_custom_x=req.logo_custom_x
+                if req.logo_custom_x is not None
+                else getattr(settings, "logo_custom_x", 0.5),
+                logo_custom_y=req.logo_custom_y
+                if req.logo_custom_y is not None
+                else getattr(settings, "logo_custom_y", 0.5),
                 watermark_text=req.watermark_text
                 if req.watermark_text is not None
                 else getattr(settings, "watermark_text", ""),
@@ -1747,6 +1757,12 @@ class DubPipeline:
                 watermark_motion=req.watermark_motion
                 if req.watermark_motion is not None
                 else getattr(settings, "watermark_motion", "bounce"),
+                watermark_custom_x=req.watermark_custom_x
+                if req.watermark_custom_x is not None
+                else getattr(settings, "watermark_custom_x", 0.5),
+                watermark_custom_y=req.watermark_custom_y
+                if req.watermark_custom_y is not None
+                else getattr(settings, "watermark_custom_y", 0.5),
                 smart_flip=req.smart_flip
                 if req.smart_flip is not None
                 else getattr(settings, "smart_flip", False),

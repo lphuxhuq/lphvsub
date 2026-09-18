@@ -299,6 +299,8 @@ class VoiceAndExportMixin:
             "logo_scale": getattr(self, "_logo_scale", 0.12),
             "logo_opacity": getattr(self, "_logo_opacity", 0.85),
             "logo_motion": getattr(self, "_logo_motion", "static"),
+            "custom_x": getattr(self, "_logo_custom_x", 0.5),
+            "custom_y": getattr(self, "_logo_custom_y", 0.5),
         }
         wm_opts = {
             "watermark_text": getattr(self, "_watermark_text", ""),
@@ -306,6 +308,8 @@ class VoiceAndExportMixin:
             "watermark_opacity": getattr(self, "_watermark_opacity", 0.28),
             "watermark_font_size": getattr(self, "_watermark_font_size", 26),
             "watermark_speed": getattr(self, "_watermark_speed", 40),
+            "custom_x": getattr(self, "_watermark_custom_x", 0.5),
+            "custom_y": getattr(self, "_watermark_custom_y", 0.5),
         }
         mask_opts = {
             "mask_method": getattr(self, "_mask_method", "blur"),
@@ -348,6 +352,8 @@ class VoiceAndExportMixin:
         self._logo_scale = new_logo["logo_scale"]
         self._logo_opacity = new_logo["logo_opacity"]
         self._logo_motion = new_logo["logo_motion"]
+        self._logo_custom_x = new_logo.get("custom_x", 0.5)
+        self._logo_custom_y = new_logo.get("custom_y", 0.5)
 
         new_wm = dialog.watermark_options()
         self._watermark_text = new_wm["watermark_text"]
@@ -355,6 +361,8 @@ class VoiceAndExportMixin:
         self._watermark_opacity = new_wm["watermark_opacity"]
         self._watermark_font_size = new_wm["watermark_font_size"]
         self._watermark_speed = new_wm["watermark_speed"]
+        self._watermark_custom_x = new_wm.get("custom_x", 0.5)
+        self._watermark_custom_y = new_wm.get("custom_y", 0.5)
 
         new_mask = dialog.mask_options()
         self._mask_method = new_mask["mask_method"]
