@@ -132,34 +132,9 @@ def step_pyinstaller() -> None:
 def step_assemble() -> None:
     log("lắp ráp thư mục phân phối...")
 
-    # Script cài phần mở rộng (giọng đọc, ASR tiếng Trung, Douyin) chạy trên
-    # máy người dùng — exe chỉ chứa phần lõi.
-    scripts_dst = os.path.join(DIST_DIR, "scripts")
-    os.makedirs(scripts_dst, exist_ok=True)
-    for script in (
-        "setup_vieneu.py",
-        "setup_paraformer.py",
-        "setup_whisper.py",
-        "setup_douyin.py",
-        "setup_gpu.py",
-    ):
-        shutil.copy2(os.path.join(PROJECT_ROOT, "scripts", script), scripts_dst)
-
-    # Phiên bản Python của máy build — setup_douyin.py kiểm tra để libs/
-    # (C-extension) khớp với python trong exe.
-    with open(os.path.join(scripts_dst, "python_tag.txt"), "w", encoding="utf-8") as f:
+    # Phiên bản Python của máy build (dùng để kiểm tra tương thích khi tải thư viện C-extension như Playwright)
+    with open(os.path.join(DIST_DIR, "python_tag.txt"), "w", encoding="utf-8") as f:
         f.write(f"{sys.version_info[0]}.{sys.version_info[1]}\n")
-
-    # .bat để người dùng đúp chuột là cài — không cần biết dòng lệnh.
-    for name, content in (
-        ("Cai dat giong VieNeu.bat", SETUP_VIENEU_BAT),
-        ("Cai dat Whisper ASR.bat", SETUP_WHISPER_BAT),
-        ("Cai dat ASR tieng Trung (Paraformer).bat", SETUP_PARAFORMER_BAT),
-        ("Cai dat tinh nang Douyin.bat", SETUP_DOUYIN_BAT),
-        ("Cai dat GPU tach nhac (Demucs).bat", SETUP_GPU_BAT),
-    ):
-        with open(os.path.join(DIST_DIR, name), "w", encoding="utf-8") as f:
-            f.write(content)
 
     # .env.example làm mẫu; TUYỆT ĐỐI không copy .env thật của máy build
     # (địa chỉ máy chủ đã nhúng trong exe).
@@ -172,7 +147,7 @@ def step_assemble() -> None:
         if os.path.isfile(src):
             shutil.copy2(src, DIST_DIR)
 
-    # Thư mục models rỗng — đích đến của các script cài model.
+    # Thư mục models rỗng — đích đến của các cài đặt model.
     os.makedirs(os.path.join(DIST_DIR, "models"), exist_ok=True)
 
     # Giọng VieNeu: KHÔNG đóng gói voices/ hay custom_voices.json nữa.
@@ -250,173 +225,34 @@ def step_smoke_test() -> bool:
 
 # --------------------------------------------------------------- payloads --
 
-SETUP_VIENEU_BAT = r"""@echo off
-chcp 65001 >nul
-title Cai dat giong doc VieNeu cho VoxDub Studio
-echo.
-echo  Script nay cai giong doc VieNeu (chay CPU, ~300 MB, 14 giong).
-echo  Yeu cau: da cai Python 3.10-3.12 (xem HUONG_DAN_CAI_DAT.md, Buoc 2).
-echo.
-cd /d "%~dp0"
-py -3.12 scripts\setup_vieneu.py 2>nul || py -3.11 scripts\setup_vieneu.py 2>nul || py -3.10 scripts\setup_vieneu.py 2>nul || py scripts\setup_vieneu.py || python scripts\setup_vieneu.py
-if errorlevel 1 (
-    echo.
-    echo  !! Cai dat that bai. Kiem tra da cai Python chua: py --version
-    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
-)
-echo.
-pause
-"""
-
-SETUP_WHISPER_BAT = r"""@echo off
-chcp 65001 >nul
-title Cai dat Whisper ASR cho VoxDub Studio
-echo.
-echo  Script nay cai faster-whisper vao venv rieng (.venv-whisper).
-echo  Whisper se chay ngoai exe — giam ~112 MB kich thuoc ban phan phoi.
-echo  Yeu cau: da cai Python 3.10-3.12 (xem HUONG_DAN_CAI_DAT.md, Buoc 2).
-echo.
-cd /d "%~dp0"
-py -3.12 scripts\setup_whisper.py 2>nul || py -3.11 scripts\setup_whisper.py 2>nul || py -3.10 scripts\setup_whisper.py 2>nul || py scripts\setup_whisper.py || python scripts\setup_whisper.py
-if errorlevel 1 (
-    echo.
-    echo  !! Cai dat that bai. Kiem tra da cai Python chua: py --version
-    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
-)
-echo.
-pause
-"""
-
-SETUP_PARAFORMER_BAT = r"""@echo off
-chcp 65001 >nul
-title Cai dat ASR tieng Trung (Paraformer) cho VoxDub Studio
-echo.
-echo  Script nay cai bo nhan dang tieng Trung Paraformer (~520 MB, chay CPU)
-echo  — chinh xac hon Whisper voi video tieng Trung.
-echo  Yeu cau: da cai Python 3.10-3.12 (xem HUONG_DAN_CAI_DAT.md, Buoc 2).
-echo.
-cd /d "%~dp0"
-py -3.12 scripts\setup_paraformer.py 2>nul || py -3.11 scripts\setup_paraformer.py 2>nul || py -3.10 scripts\setup_paraformer.py 2>nul || py scripts\setup_paraformer.py || python scripts\setup_paraformer.py
-if errorlevel 1 (
-    echo.
-    echo  !! Cai dat that bai. Kiem tra da cai Python chua: py --version
-    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
-)
-echo.
-pause
-"""
-
-SETUP_DOUYIN_BAT = r"""@echo off
-chcp 65001 >nul
-title Cai dat tinh nang tai video Douyin cho VoxDub Studio
-echo.
-echo  Script nay cai thu vien playwright (~40 MB) va trinh duyet Chromium
-echo  (~170 MB) de tai video Douyin. YouTube va link truc tiep KHONG can.
-echo  Yeu cau: Python DUNG phien ban ghi trong scripts\python_tag.txt.
-echo.
-cd /d "%~dp0"
-py -3.12 scripts\setup_douyin.py 2>nul || py scripts\setup_douyin.py || python scripts\setup_douyin.py
-if errorlevel 1 (
-    echo.
-    echo  !! Cai dat that bai. Kiem tra da cai Python dung phien ban:
-    echo     type scripts\python_tag.txt   va   py --version
-    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
-)
-echo.
-pause
-"""
-
-SETUP_GPU_BAT = r"""@echo off
-chcp 65001 >nul
-title Cai dat GPU tach nhac (Demucs) cho VoxDub Studio
-echo.
-echo  Script nay cai PyTorch CUDA 12.4 + Demucs vao .venv-gpu (~2 GB).
-echo  Yeu cau: card NVIDIA voi CUDA support + driver cap nhat.
-echo  Neu khong co GPU, Demucs van chay duoc bang CPU (cham hon).
-echo  Yeu cau: da cai Python 3.10-3.12 (xem HUONG_DAN_CAI_DAT.md).
-echo.
-cd /d "%~dp0"
-py -3.12 scripts\setup_gpu.py 2>nul || py -3.11 scripts\setup_gpu.py 2>nul || py -3.10 scripts\setup_gpu.py 2>nul || py scripts\setup_gpu.py || python scripts\setup_gpu.py
-if errorlevel 1 (
-    echo.
-    echo  !! Cai dat that bai. Kiem tra da cai Python chua: py --version
-    echo     Cap nhat driver NVIDIA tai: https://www.nvidia.com/download/index.aspx
-    echo     Xem muc "Xu ly loi" trong HUONG_DAN_CAI_DAT.md
-)
-echo.
-pause
-"""
-
 GUIDE_MD = """# Hướng dẫn cài đặt VoxDub Studio
 
 VoxDub Studio lồng tiếng video tự động sang tiếng Việt: tải video → nhận dạng
 giọng nói → dịch → đọc giọng Việt (clone giọng) → ghép lại thành video.
 
-> **Cách nhanh nhất:** Đúp chuột **VoxDub.exe** → Wizard cài đặt tự hiện,
+> **Cách duy nhất:** Đúp chuột **VoxDub.exe** → Wizard cài đặt tự hiện,
 > hướng dẫn bạn qua từng bước ngay trong app — không cần gõ lệnh.
 
 ---
 
-## Cách cài bằng Wizard (khuyến nghị)
+## Cài đặt ứng dụng
 
-1. Đúp chuột **VoxDub.exe**.
-2. Wizard cài đặt tự hiện ở lần mở đầu tiên.
-3. Bấm **"Bắt đầu cài đặt"** → wizard tự cài FFmpeg, VieNeu TTS và Whisper ASR
-   (các thành phần bắt buộc), hiện thanh tiến trình + log theo thời gian thực.
-4. **Paraformer ASR** (tùy chọn, cho video tiếng Trung): bấm "Tiếp theo" hoặc
-   "Bỏ qua" nếu bạn không làm video tiếng Trung.
-5. **Tính năng thêm** (tùy chọn): GPU Demucs (tách nhạc siêu nhanh) và Douyin
-   — cài ngay trong wizard hoặc bỏ qua rồi làm sau.
-6. Nhập mã kích hoạt nếu có, hoặc bỏ qua → bấm **"Bắt đầu dùng VoxDub Studio"**.
+1. **Cài Python 3.12:**
+   Mở PowerShell, gõ: `winget install Python.Python.3.12`
+   Đóng và mở lại PowerShell, gõ `py --version` (thấy `Python 3.12.x` là được).
+   *(Nếu máy đã có sẵn Python 3.10-3.12 thì bỏ qua bước này)*
 
-Máy mới được tặng sẵn Vox dùng thử, không cần mua gì để thử.
+2. **Chạy ứng dụng:**
+   Đúp chuột **VoxDub.exe**. Wizard cài đặt tự hiện ở lần mở đầu tiên.
 
----
+3. **Cài đặt thư viện AI:**
+   Bấm **"Bắt đầu cài đặt"** trong cửa sổ → hệ thống tự tải FFmpeg, VieNeu TTS và Whisper ASR
+   trực tiếp bên trong ứng dụng.
+   - Các tính năng nâng cao (Paraformer, Douyin, GPU Demucs) có thể cài thêm trong tab Cài đặt sau.
 
-## Cài thủ công (đường dự phòng khi Wizard không chạy được)
-
-Thứ tự khuyến nghị:
-
-### Bước 1 — Python 3.12 (để script cài chạy được)
-
-```
-winget install Python.Python.3.12
-```
-
-Đóng và mở lại PowerShell, gõ `py --version` — thấy `Python 3.12.x` là được.
-
-> Nếu máy đã có Python 3.10–3.12 thì bỏ qua.
-
-### Bước 2 — Giọng đọc VieNeu (bắt buộc, ~300 MB)
-
-Đúp chuột **`Cai dat giong VieNeu.bat`**.
-
-### Bước 3 — Whisper ASR (bắt buộc, ~1.5 GB)
-
-Đúp chuột **`Cai dat Whisper ASR.bat`**.
-
-### Tùy chọn
-
-| Tính năng | File .bat | Ghi chú |
-|---|---|---|
-| Nhận dạng tiếng Trung (Paraformer) | `Cai dat ASR tieng Trung (Paraformer).bat` | ~520 MB, CPU |
-| Tải video Douyin | `Cai dat tinh nang Douyin.bat` | Playwright + Chromium ~210 MB |
-| GPU Demucs (tách nhạc nhanh) | `Cai dat GPU tach nhac (Demucs).bat` | ~2 GB, cần card NVIDIA |
-
----
-
-## Vox (tài nguyên dịch)
-
-Bước dịch chạy qua máy chủ VoxDub — không cần đăng ký hay lấy API key của ai.
-Máy mới được tặng sẵn Vox dùng thử.
-
-Hết Vox thì mua thêm:
-1. Vào trang web VoxDub, chọn gói → chuyển khoản theo mã QR.
-2. Giữ nguyên nội dung chuyển khoản (mã đơn hàng).
-3. Nhận mã kích hoạt VOX-XXXX-XXXX-XXXX qua web/email.
-4. Mở **VoxDub.exe → Tài khoản**, dán mã, bấm **Kích hoạt**.
-
-> Mỗi mã chỉ dùng được một lần trên một máy. Đổi máy thì liên hệ hỗ trợ.
+4. **Kích hoạt phần mềm:**
+   Nhập mã kích hoạt nếu có, hoặc bỏ qua → bấm **"Bắt đầu dùng VoxDub Studio"**.
+   Máy mới được tặng sẵn Vox dùng thử.
 
 ---
 
@@ -424,36 +260,12 @@ Hết Vox thì mua thêm:
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| Wizard không hiện khi mở app | Xóa file cache/setup_wizard_done trong thư mục dữ liệu app rồi mở lại |
-| ffmpeg không nhận sau khi cài | Đóng mở lại app; hoặc chép ffmpeg.exe+ffprobe.exe vào cạnh VoxDub.exe |
+| Wizard không hiện khi mở app | Xóa file `cache/setup_wizard_done` trong thư mục dữ liệu app rồi mở lại |
+| Lỗi tải thư viện | Tắt Antivirus (Windows Defender), kiểm tra kết nối mạng và ấn Thử lại trong ứng dụng |
 | py không nhận | Cài lại Python bằng winget (Bước 1), mở PowerShell mới |
 | App báo hết Vox | Mở trang Tài khoản để nạp thêm |
-| GPU không được dùng | nvidia-smi trong PowerShell phải chạy được; cập nhật driver NVIDIA |
+| GPU không được dùng | `nvidia-smi` trong PowerShell phải chạy được; cập nhật driver NVIDIA |
 | Antivirus chặn VoxDub.exe | Thêm thư mục VoxDub Studio vào danh sách loại trừ |
-
-## Cấu trúc thư mục sau khi cài đủ
-
-```
-VoxDub Studio/
-├── VoxDub.exe                                  <- mở app tại đây
-├── _internal/                                  <- thư viện app (không đụng)
-├── Cai dat giong VieNeu.bat                    <- dự phòng (wizard đã lo)
-├── Cai dat Whisper ASR.bat                     <- dự phòng
-├── Cai dat ASR tieng Trung (Paraformer).bat    <- tùy chọn
-├── Cai dat tinh nang Douyin.bat                <- tùy chọn
-├── Cai dat GPU tach nhac (Demucs).bat          <- tùy chọn, cần NVIDIA
-├── scripts/
-├── models/vieneu/         <- model VieNeu (sau khi cài)
-├── models/paraformer-zh/  <- model Paraformer (nếu cài)
-├── models/whisper/        <- model Whisper (sau khi cài)
-├── .venv-vieneu/          <- môi trường VieNeu
-├── .venv-whisper/         <- môi trường Whisper
-├── .venv-asr/             <- môi trường Paraformer (nếu cài)
-├── .venv-gpu/             <- môi trường GPU/Demucs (nếu cài)
-├── pw-browsers/           <- Chromium (nếu dùng Douyin)
-├── .env                   <- app tự tạo khi Lưu cài đặt
-└── output/                <- video kết quả
-```
 """
 
 

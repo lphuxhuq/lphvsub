@@ -214,16 +214,18 @@ class FFmpegDownloadWorker(QThread):
 # SetupScriptWorker
 # --------------------------------------------------------------------------- #
 
-# Số dòng ước tính mỗi script sinh ra — dùng để tính tiến độ xấp xỉ
-_SCRIPT_LINES_ESTIMATE = {
-    "setup_vieneu.py": 35,
-    "setup_whisper.py": 25,
-    "setup_paraformer.py": 30,
+# Tên file map qua task function
+_SCRIPT_TO_TASK = {
+    "scripts/setup_vieneu.py": "task_vieneu",
+    "scripts/setup_whisper.py": "task_whisper",
+    "scripts/setup_paraformer.py": "task_paraformer",
+    "scripts/setup_douyin.py": "task_douyin",
+    "scripts/setup_gpu.py": "task_gpu",
 }
 
 
 class SetupScriptWorker(QThread):
-    """Chạy scripts/setup_*.py và stream stdout ra GUI."""
+    """Chạy cài đặt thư viện ngoài trực tiếp trong ứng dụng."""
 
     progress = Signal(int)  # 0–100
     log = Signal(str)  # dòng log
@@ -232,51 +234,39 @@ class SetupScriptWorker(QThread):
 
     def __init__(self, script_rel: str, parent=None):
         super().__init__(parent)
-        self._script_rel = script_rel  # ví dụ: "scripts/setup_vieneu.py"
+        self._script_rel = script_rel
 
     def run(self) -> None:
         try:
-            script_path = _find_script(self._script_rel)
             python_exe = _find_python()
+            task_name = _SCRIPT_TO_TASK.get(self._script_rel.replace("\\", "/"))
+            if not task_name:
+                raise ValueError(f"Không có task tương ứng cho {self._script_rel}")
 
-            script_name = os.path.basename(self._script_rel)
-            total_lines = _SCRIPT_LINES_ESTIMATE.get(script_name, 30)
-
-            self.log.emit(f"Chạy: {script_name}")
+            self.log.emit(f"Chạy cài đặt: {task_name}")
             self.progress.emit(2)
 
-            proc = subprocess.Popen(
-                [python_exe, script_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=app_root(),
-                creationflags=_NO_WINDOW,
-            )
+            from autodub_gui import setup_tasks
+
+            task_fn = getattr(setup_tasks, task_name)
 
             lines_seen = 0
-            tail: list[str] = []
-            for line in proc.stdout:  # type: ignore[union-attr]
-                line = line.rstrip()
-                if not line:
-                    continue
+
+            def log_cb(msg: str) -> None:
+                nonlocal lines_seen
+                self.log.emit(msg)
                 lines_seen += 1
-                tail.append(line)
-                if len(tail) > 200:
-                    tail.pop(0)
-                self.log.emit(line)
-                pct = min(95, int(lines_seen / max(1, total_lines) * 95))
+                # Ước lượng tiến độ cơ bản (tối đa 95%)
+                pct = min(95, int(lines_seen / 30 * 95))
                 self.progress.emit(pct)
 
-            proc.wait()
-            if proc.returncode == 0:
-                self.progress.emit(100)
-                self.finished_ok.emit()
-            else:
-                err = "\n".join(tail[-20:]) if tail else "Không có output."
-                self.failed.emit(f"Script kết thúc với mã lỗi {proc.returncode}:\n{err}")
+            task_fn(python_exe, log_cb)
+
+            self.progress.emit(100)
+            self.finished_ok.emit()
 
         except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
             self.failed.emit(str(exc))
