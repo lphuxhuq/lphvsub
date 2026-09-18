@@ -485,12 +485,11 @@ def main() -> int:
     # thư mục gốc "VoxDub Studio/" (đúng tên trong HUONG_DAN_CAI_DAT.md).
     # Chỉ nén khi smoke test đạt — không bao giờ phát hành bản hỏng.
     if ok and not args.no_zip:
-        # Đọc APP_VERSION bằng regex — import autodub_gui.app sẽ kéo cả Qt
-        # và chạy _frozen.init(), không đáng cho một chuỗi số.
+        # Đọc __version__ bằng regex
         import re
 
-        src = open(os.path.join(PROJECT_ROOT, "autodub_gui", "app.py"), encoding="utf-8").read()
-        m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', src, re.M)
+        src = open(os.path.join(PROJECT_ROOT, "autodub", "__init__.py"), encoding="utf-8").read()
+        m = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.M)
         version = m.group(1) if m else "0.0"
         zip_path = os.path.join(PROJECT_ROOT, "dist", f"VoxDub-Studio-v{version}.zip")
         log(f"đang nén gói phát hành: {os.path.basename(zip_path)} ...")
