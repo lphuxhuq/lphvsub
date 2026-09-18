@@ -200,3 +200,32 @@ def rgba(hex_color: str, alpha: float) -> str:
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha:.3f})"
+
+
+# -- Thumbnail Studio -------------------------------------------------
+THUMB_GOLD = "#FFD700"
+THUMB_GOLD_GLOW = "#FFA500"
+THUMB_RED = "#FF2A2A"
+THUMB_RED_GLOW = "#FF0055"
+THUMB_CYBER = "#00E5FF"
+THUMB_CYBER_GLOW = "#0066FF"
+THUMB_NEON_PINK = "#EC4899"
+THUMB_NEON_PURPLE = "#A855F7"
+THUMB_GREEN = "#00E676"
+THUMB_GREEN_GLOW = "#00B0FF"
+THUMB_WHITE = "#FFFFFF"
+THUMB_SILVER = "#64748B"
+THUMB_BLACK = "#000000"
+
+THUMB_QUAN_SU_BG = "#140523"
+THUMB_CHIEN_THAN_GLOW = "#FF4500"
+THUMB_NGON_TINH_PRI = "#FFB4C8"
+THUMB_NGON_TINH_GLOW = "#FF69B4"
+THUMB_NGON_TINH_OUT = "#0A0514"
+THUMB_TU_TIEN_PRI = "#B4FFFF"
+THUMB_TU_TIEN_GLOW = "#00FFFF"
+THUMB_TU_TIEN_OUT = "#050A14"
+THUMB_KINH_DI_PRI = "#C8C8C8"
+THUMB_KINH_DI_GLOW = "#B40000"
+THUMB_HAI_HUOC_GLOW = "#FF9600"
+THUMB_HAI_HUOC_OUT = "#140A00"

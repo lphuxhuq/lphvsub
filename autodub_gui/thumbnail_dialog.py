@@ -361,7 +361,7 @@ class ThumbnailStudioDialog(QDialog):
         # Phông chữ tiêu đề
         stg_layout.addWidget(QLabel("Phông chữ tiêu đề:"))
         self.combo_font = QComboBox()
-        self.combo_font.addItem(f"⭐ Dùng font của phụ đề ({self._subtitle_font})", "::subtitle::")
+        self.combo_font.addItem(f"Dùng font của phụ đề ({self._subtitle_font})", "::subtitle::")
         try:
             from autodub_gui.fonts import font_choices
 
@@ -403,12 +403,12 @@ class ThumbnailStudioDialog(QDialog):
         chip_row = QHBoxLayout()
         chip_row.setSpacing(tokens.SP_1)
         chips_data = [
-            ("Vàng Gold", "#FFD700", "#FFA500"),
-            ("Đỏ Lửa", "#FF2A2A", "#FF0055"),
-            ("Xanh Cyber", "#00E5FF", "#0066FF"),
-            ("Neon Tím", "#EC4899", "#A855F7"),
-            ("Xanh Lục", "#00E676", "#00B0FF"),
-            ("Trắng Bạc", "#FFFFFF", "#64748B"),
+            ("Vàng Gold", tokens.THUMB_GOLD, tokens.THUMB_GOLD_GLOW),
+            ("Đỏ Lửa", tokens.THUMB_RED, tokens.THUMB_RED_GLOW),
+            ("Xanh Cyber", tokens.THUMB_CYBER, tokens.THUMB_CYBER_GLOW),
+            ("Neon Tím", tokens.THUMB_NEON_PINK, tokens.THUMB_NEON_PURPLE),
+            ("Xanh Lục", tokens.THUMB_GREEN, tokens.THUMB_GREEN_GLOW),
+            ("Trắng Bạc", tokens.THUMB_WHITE, tokens.THUMB_SILVER),
         ]
         for name, p_col, g_col in chips_data:
             b = GhostButton(name)
@@ -428,8 +428,8 @@ class ThumbnailStudioDialog(QDialog):
         col1_box = QVBoxLayout()
         col1_box.setSpacing(2)
         col1_box.addWidget(QLabel("Chữ chính:"))
-        self.btn_color_primary = QPushButton("#FFD700")
-        self._paint_color_btn(self.btn_color_primary, "#FFD700")
+        self.btn_color_primary = QPushButton(tokens.THUMB_GOLD)
+        self._paint_color_btn(self.btn_color_primary, tokens.THUMB_GOLD)
         self.btn_color_primary.clicked.connect(lambda: self._pick_color("primary"))
         col1_box.addWidget(self.btn_color_primary)
         colors_grid.addLayout(col1_box)
@@ -438,8 +438,8 @@ class ThumbnailStudioDialog(QDialog):
         col2_box = QVBoxLayout()
         col2_box.setSpacing(2)
         col2_box.addWidget(QLabel("Phát sáng:"))
-        self.btn_color_glow = QPushButton("#FFA500")
-        self._paint_color_btn(self.btn_color_glow, "#FFA500")
+        self.btn_color_glow = QPushButton(tokens.THUMB_GOLD_GLOW)
+        self._paint_color_btn(self.btn_color_glow, tokens.THUMB_GOLD_GLOW)
         self.btn_color_glow.clicked.connect(lambda: self._pick_color("glow"))
         col2_box.addWidget(self.btn_color_glow)
         colors_grid.addLayout(col2_box)
@@ -448,8 +448,8 @@ class ThumbnailStudioDialog(QDialog):
         col3_box = QVBoxLayout()
         col3_box.setSpacing(2)
         col3_box.addWidget(QLabel("Viền ngoài:"))
-        self.btn_color_outline = QPushButton("#000000")
-        self._paint_color_btn(self.btn_color_outline, "#000000")
+        self.btn_color_outline = QPushButton(tokens.THUMB_BLACK)
+        self._paint_color_btn(self.btn_color_outline, tokens.THUMB_BLACK)
         self.btn_color_outline.clicked.connect(lambda: self._pick_color("outline"))
         col3_box.addWidget(self.btn_color_outline)
         colors_grid.addLayout(col3_box)
@@ -942,7 +942,7 @@ class ThumbnailStudioDialog(QDialog):
     def _paint_color_btn(self, btn: QPushButton, hex_color: str) -> None:
         btn.setText(hex_color)
         _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
-        c = QColor(hex_color) if _is_valid(hex_color) else QColor("#FFFFFF")
+        c = QColor(hex_color) if _is_valid(hex_color) else QColor(tokens.THUMB_WHITE)
         luminance = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
         text_color = tokens.BG_APP if luminance > 140 else tokens.TEXT_ON_ACCENT
         btn.setStyleSheet(
@@ -963,7 +963,7 @@ class ThumbnailStudioDialog(QDialog):
         )
         current_hex = btn.text().strip()
         _is_valid = getattr(QColor, "isValidColorName", QColor.isValidColor)
-        init_c = QColor(current_hex) if _is_valid(current_hex) else QColor("#FFFFFF")
+        init_c = QColor(current_hex) if _is_valid(current_hex) else QColor(tokens.THUMB_WHITE)
         c = QColorDialog.getColor(init_c, self, "Chọn màu")
         if c.isValid():
             hex_str = c.name().upper()
@@ -982,33 +982,33 @@ class ThumbnailStudioDialog(QDialog):
         if preset_key == "custom":
             self.chk_custom_colors.setChecked(True)
         elif preset_key == "co_dai":
-            self._paint_color_btn(self.btn_color_primary, "#FFD700")
-            self._paint_color_btn(self.btn_color_glow, "#FFA500")
-            self._paint_color_btn(self.btn_color_outline, "#000000")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_GOLD)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_GOLD_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_BLACK)
         elif preset_key == "quan_su":
-            self._paint_color_btn(self.btn_color_primary, "#FFFFFF")
-            self._paint_color_btn(self.btn_color_glow, "#EC4899")
-            self._paint_color_btn(self.btn_color_outline, "#140523")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_WHITE)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_NEON_PINK)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_QUAN_SU_BG)
         elif preset_key == "chien_than":
-            self._paint_color_btn(self.btn_color_primary, "#FF2A2A")
-            self._paint_color_btn(self.btn_color_glow, "#FF4500")
-            self._paint_color_btn(self.btn_color_outline, "#000000")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_RED)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_CHIEN_THAN_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_BLACK)
         elif preset_key == "ngon_tinh":
-            self._paint_color_btn(self.btn_color_primary, "#FFB4C8")
-            self._paint_color_btn(self.btn_color_glow, "#FF69B4")
-            self._paint_color_btn(self.btn_color_outline, "#0A0514")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_NGON_TINH_PRI)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_NGON_TINH_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_NGON_TINH_OUT)
         elif preset_key == "tu_tien":
-            self._paint_color_btn(self.btn_color_primary, "#B4FFFF")
-            self._paint_color_btn(self.btn_color_glow, "#00FFFF")
-            self._paint_color_btn(self.btn_color_outline, "#050A14")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_TU_TIEN_PRI)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_TU_TIEN_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_TU_TIEN_OUT)
         elif preset_key == "kinh_di":
-            self._paint_color_btn(self.btn_color_primary, "#C8C8C8")
-            self._paint_color_btn(self.btn_color_glow, "#B40000")
-            self._paint_color_btn(self.btn_color_outline, "#000000")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_KINH_DI_PRI)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_KINH_DI_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_BLACK)
         elif preset_key == "hai_huoc":
-            self._paint_color_btn(self.btn_color_primary, "#FFFFFF")
-            self._paint_color_btn(self.btn_color_glow, "#FF9600")
-            self._paint_color_btn(self.btn_color_outline, "#140A00")
+            self._paint_color_btn(self.btn_color_primary, tokens.THUMB_WHITE)
+            self._paint_color_btn(self.btn_color_glow, tokens.THUMB_HAI_HUOC_GLOW)
+            self._paint_color_btn(self.btn_color_outline, tokens.THUMB_HAI_HUOC_OUT)
         self._schedule_preview_update()
 
     def _on_custom_colors_toggled(self, checked: bool) -> None:
