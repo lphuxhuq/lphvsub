@@ -20,6 +20,7 @@ class UpdateInfo:
     version: str  # số phiên bản mới, ví dụ "2.2"
     url: str  # trang tải bản mới
     notes: str  # ghi chú phát hành (có thể trống)
+    download_url: str | None = None  # URL tải trực tiếp file zip bản phân phối (nếu có)
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -62,8 +63,18 @@ def check_for_update(repo: str, current_version: str) -> UpdateInfo | None:
     tag = str(data.get("tag_name") or "").strip()
     if not tag or not is_newer(tag, current_version):
         return None
+
+    download_url = None
+    for asset in data.get("assets", []):
+        name = str(asset.get("name", "")).lower()
+        if name.endswith(".zip") and "voxdub" in name:
+            download_url = str(asset.get("browser_download_url") or "")
+            if download_url:
+                break
+
     return UpdateInfo(
         version=tag.lstrip("vV"),
         url=str(data.get("html_url") or f"https://github.com/{repo}/releases"),
         notes=str(data.get("body") or "").strip(),
+        download_url=download_url,
     )

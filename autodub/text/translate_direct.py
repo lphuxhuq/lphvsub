@@ -158,7 +158,7 @@ def parse_response_segments(content: str, text_field: str = "text_vi") -> list[d
         if not candidate:
             continue
         try:
-            data = json.loads(candidate)
+            data = json.loads(candidate, strict=False)
         except Exception:
             continue
         if isinstance(data, dict):

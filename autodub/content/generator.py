@@ -312,7 +312,7 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
     try:
         raw = client.call_ai(system_instruction, user_prompt)
         clean = _strip_fences_and_citations(raw)
-        data = json.loads(_slice_to_payload(clean))
+        data = json.loads(_slice_to_payload(clean), strict=False)
         if isinstance(data, dict):
             data = _clean_social_metadata(data, script_translated)
             logger.info(
@@ -406,7 +406,7 @@ Chỉ trả về JSON thuần túy, không có lời dẫn hay giải thích th�
         try:
             raw = client.translate_batch("", user_prompt, max_wait_secs=90)
             clean = _strip_fences_and_citations(raw)
-            data = json.loads(_slice_to_payload(clean))
+            data = json.loads(_slice_to_payload(clean), strict=False)
             if isinstance(data, dict):
                 data = _clean_social_metadata(data, script_translated)
                 logger.info(

@@ -1070,3 +1070,103 @@ class ExportSubsFileWorker(QThread):
                 self.failed.emit(str(e))
         finally:
             detach_gui_logging(handler)
+
+
+class AppUpdaterWorker(QThread):
+    """Tải bản cập nhật (.zip) từ GitHub, giải nén và chuẩn bị tệp batch để tự động thay thế."""
+
+    progress = Signal(float, str)  # phần trăm (0..1), câu thông báo
+    finished_ok = Signal(str, str)  # (đường_dẫn_thư_mục_giải_nén, đường_dẫn_tệp_bat)
+    failed = Signal(str)
+
+    def __init__(self, download_url: str, dest_dir: str, parent=None):
+        super().__init__(parent)
+        self._url = download_url
+        self._dest_dir = dest_dir
+        self._cancel_event = threading.Event()
+
+    def cancel(self):
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        import os
+        import tempfile
+        import urllib.request
+        import zipfile
+
+        try:
+            self.progress.emit(0.01, "Đang tải bản cập nhật...")
+            zip_path = os.path.join(self._dest_dir, "update.zip")
+
+            req = urllib.request.Request(self._url, headers={"User-Agent": "VoxDub-Updater"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                total_size = int(resp.headers.get("content-length", 0))
+                downloaded = 0
+                chunk_size = 128 * 1024
+
+                with open(zip_path, "wb") as f:
+                    while True:
+                        if self._cancel_event.is_set():
+                            return
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            pct = downloaded / total_size
+                            self.progress.emit(
+                                pct * 0.9, f"Đang tải: {downloaded >> 20}/{total_size >> 20} MB"
+                            )
+
+            if self._cancel_event.is_set():
+                return
+
+            self.progress.emit(0.9, "Đang giải nén dữ liệu...")
+            extract_dir = os.path.join(self._dest_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+
+            if self._cancel_event.is_set():
+                return
+
+            self.progress.emit(0.98, "Đang chuẩn bị cài đặt...")
+
+            bat_path = os.path.join(tempfile.gettempdir(), "voxdub_updater.bat")
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+            copy_source = extract_dir
+            for root, dirs, files in os.walk(extract_dir):
+                if "VoxDub.exe" in files:
+                    copy_source = root
+                    break
+
+            bat_content = f"""@echo off
+chcp 65001 >nul
+title Cai dat ban cap nhat VoxDub Studio
+echo.
+echo  Dang doi ung dung hien tai dong lai...
+timeout /t 3 /nobreak >nul
+
+echo  Dang sao chep file cap nhat...
+xcopy /E /Y /Q /H "{copy_source}\\*" "{app_dir}\\"
+
+echo  Dang don dep file tam...
+rmdir /s /q "{self._dest_dir}"
+
+echo  Dang khoi dong lai VoxDub Studio...
+start "" "{app_dir}\\VoxDub.exe"
+
+del "%~f0"
+"""
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+
+            self.progress.emit(1.0, "Sẵn sàng cập nhật!")
+            self.finished_ok.emit(self._dest_dir, bat_path)
+
+        except Exception as e:
+            if not self._cancel_event.is_set():
+                self.failed.emit(str(e))

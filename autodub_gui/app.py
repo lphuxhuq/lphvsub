@@ -612,11 +612,95 @@ class MainWindow(QMainWindow):
     def _on_update_found(self, info) -> None:
         from autodub_gui.system_open import open_url
 
-        TOASTS.info(
-            f"Có bản NovaSub mới v{info.version} (bạn đang dùng v{APP_VERSION}).",
-            action_label="Tải bản mới",
-            on_action=lambda url=info.url: open_url(url),
-        )
+        is_frozen = getattr(sys, "frozen", False)
+        if is_frozen and getattr(info, "download_url", None):
+            TOASTS.info(
+                f"Có bản VoxDub mới v{info.version} (bạn đang dùng v{APP_VERSION}).",
+                action_label="Cập nhật ngay",
+                on_action=lambda url=info.download_url, ver=info.version: self._start_auto_update(
+                    url, ver
+                ),
+            )
+        else:
+            TOASTS.info(
+                f"Có bản VoxDub mới v{info.version} (bạn đang dùng v{APP_VERSION}).",
+                action_label="Tải bản mới",
+                on_action=lambda url=info.url: open_url(url),
+            )
+
+    def _start_auto_update(self, download_url: str, version: str) -> None:
+        from PySide6.QtWidgets import QDialog, QLabel, QProgressBar, QVBoxLayout
+
+        from autodub_gui.ui.style import set_font
+        from autodub_gui.workers import AppUpdaterWorker
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Cập nhật lên bản v{version}")
+        dlg.setFixedSize(400, 150)
+        dlg.setModal(True)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
+
+        lbl_info = QLabel("Đang tải bản cập nhật mới nhất từ GitHub...")
+        set_font(lbl_info, 11)
+        layout.addWidget(lbl_info)
+
+        pbar = QProgressBar()
+        pbar.setRange(0, 100)
+        pbar.setValue(0)
+        pbar.setTextVisible(True)
+        layout.addWidget(pbar)
+
+        lbl_status = QLabel("Khởi tạo...")
+        set_font(lbl_status, 9)
+        lbl_status.setStyleSheet(f"color: {tokens.TEXT_SECONDARY};")
+        layout.addWidget(lbl_status)
+
+        import os
+        import tempfile
+
+        dest_dir = os.path.join(tempfile.gettempdir(), f"voxdub_update_{version}")
+        os.makedirs(dest_dir, exist_ok=True)
+
+        worker = AppUpdaterWorker(download_url, dest_dir, self)
+
+        def on_progress(pct: float, msg: str):
+            pbar.setValue(int(pct * 100))
+            lbl_status.setText(msg)
+
+        def on_failed(msg: str):
+            lbl_info.setText("Cập nhật thất bại!")
+            lbl_status.setText(msg)
+            lbl_status.setStyleSheet(f"color: {tokens.DANGER};")
+
+        def on_finished(dest: str, bat: str):
+            lbl_info.setText("Tải xong! Ứng dụng sẽ khởi động lại...")
+            lbl_status.setText("Đang chuẩn bị...")
+            pbar.setValue(100)
+
+            # Execute the batch file and exit
+            import subprocess
+
+            subprocess.Popen([bat], shell=True, cwd=tempfile.gettempdir())
+            sys.exit(0)
+
+        worker.progress.connect(on_progress)
+        worker.failed.connect(on_failed)
+        worker.finished_ok.connect(on_finished)
+        worker.finished.connect(worker.deleteLater)
+
+        # Ngăn đóng dialog giữa chừng (có thể gây lỗi rác)
+        def reject():
+            worker.cancel()
+            super(QDialog, dlg).reject()
+
+        dlg.reject = reject
+
+        self._app_updater = worker
+        worker.start()
+        dlg.exec()
 
     def _show_notifications(self) -> None:
         self.popup.show_under(self.header.bell.anchor())

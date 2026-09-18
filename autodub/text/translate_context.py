@@ -119,7 +119,7 @@ def analyze_transcript_context(
             response_schema=schema,
             max_retries=2,
         )
-        data = json.loads(raw_reply)
+        data = json.loads(raw_reply, strict=False)
         if isinstance(data, dict):
             logger.info(
                 f"Phân tích ngữ cảnh thành công: {data.get('domain')} | {str(data.get('summary'))[:80]}..."

@@ -1215,7 +1215,7 @@ Chỉ trả về JSON thuần túy."""
                         )
 
                         clean_meta = _strip_fences_and_citations(raw_meta)
-                        meta_data = json.loads(_slice_to_payload(clean_meta))
+                        meta_data = json.loads(_slice_to_payload(clean_meta), strict=False)
                         if isinstance(meta_data, dict) and "title" in meta_data:
                             from autodub.content.generator import (
                                 _clean_social_metadata,
