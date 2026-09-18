@@ -2321,12 +2321,9 @@ class StyleDialog(QDialog):
         self.sp_margin.setEnabled(position != "middle")
 
     def _on_canvas_scaled(self, font_size: int) -> None:
-        self.sp_font_size.blockSignals(True)
-        self.sp_font_size.setValue(font_size)
-        self.slider_font_size.blockSignals(True)
-        self.slider_font_size.setValue(font_size)
-        self.slider_font_size.blockSignals(False)
-        self.sp_font_size.blockSignals(False)
+        self.sp_size.blockSignals(True)
+        self.sp_size.setValue(font_size)
+        self.sp_size.blockSignals(False)
 
     def _on_canvas_logo_changed(self, opts: dict) -> None:
         self._logo_opts.update(opts)
