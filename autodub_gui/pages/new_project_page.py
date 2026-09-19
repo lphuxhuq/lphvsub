@@ -1077,6 +1077,8 @@ class NewProjectPage(BasePage):
             mask_method=data.get("mask_method", "blur"),
             inpaint_engine=data.get("inpaint_engine", "lama_onnx"),
             inpaint_device=data.get("inpaint_device", "auto"),
+            hardlock_dictionary=data.get("hardlock_dictionary"),
+            auto_split_minutes=data.get("auto_split_minutes"),
             logo_path=data.get("logo_path"),
             logo_position=data.get("logo_position"),
             logo_scale=data.get("logo_scale"),
@@ -1129,6 +1131,7 @@ class NewProjectPage(BasePage):
         ).strip()
         changes = {
             "voice_speed": data["voice_speed"],
+            "voice_fit_max_speed": max(1.15, float(data["voice_speed"])),
             "translate_enabled": bool(data["auto_translate"]),
             "generate_metadata": bool(data["generate_metadata"]),
         }

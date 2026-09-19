@@ -171,4 +171,6 @@ def test_merge_segments_updates_segment_start_end_on_collision(tmp_path):
     # Seg 2 PHẢI được dời sang sau khi Seg 1 kết thúc
     assert segments[1]["start"] >= 1.51
     assert segments[1]["end"] >= 2.51
-    assert segments[1]["dub_start"] == segments[1]["start"]
+    from autodub.media.audio import _LEAD_TRIM_GUARD_S
+
+    assert segments[1]["start"] == round(segments[1]["dub_start"] + _LEAD_TRIM_GUARD_S, 3)

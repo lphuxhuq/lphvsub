@@ -754,7 +754,10 @@ def merge_segments(
             max(s_start, last_audio_end + 0.010) if last_audio_end > float("-inf") else s_start
         )
         actual_end = actual_start + dur
-        seg["start"] = round(actual_start, 3)
+        # Audio đã được đệm 80ms im lặng ở đầu (_LEAD_TRIM_GUARD_S).
+        # Ta bù thêm 80ms vào lúc hiển thị phụ đề để chữ bật lên ĐÚNG LÚC mồm phát âm.
+        onset_offset_s = _LEAD_TRIM_GUARD_S
+        seg["start"] = round(actual_start + onset_offset_s, 3)
         seg["end"] = round(actual_end, 3)
         seg["dub_start"] = round(actual_start, 3)
         seg["dub_end"] = round(actual_end, 3)

@@ -244,7 +244,7 @@ class Settings:
     # Khoảng [min, max] tempo per-segment khi fit TTS vào slot. KHÔNG kéo
     # dài (min chỉ là chặn dưới hợp đồng — stretch bị vô hiệu).
     voice_fit_min_speed: float = 0.90
-    voice_fit_max_speed: float = 1.15
+    voice_fit_max_speed: float = 1.30
     timing_max_drift_s: float = 1.5  # trần dồn trễ tích lũy
     timing_min_gap_s: float = 0.12  # khoảng thở tối thiểu giữa hai câu
     timing_max_atempo: float = 1.1  # trần nén bất khả kháng (mỗi câu)
