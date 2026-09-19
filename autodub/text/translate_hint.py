@@ -26,6 +26,45 @@ CHARS_PER_SECOND_BUDGET = 12.5
 _TERMINAL = (".", "!", "?", "…", ":")
 
 
+import re
+
+
+def apply_hardlock_dictionary(text: str, dict_str: str) -> str:
+    """Ép thay thế trước các từ tiếng Trung thành bản dịch tiếng Việt bằng cách bọc dấu cách.
+
+    Đầu vào: "林动" = "Lâm Động"
+    Cách hoạt động: Dùng Regex tìm "林动" trong chuỗi gốc thay bằng " Lâm Động "
+    để khi gửi vào mảng payload, mô hình AI tự nhiên thấy chữ tiếng Việt và sẽ
+    copy-paste nguyên xi vào bản dịch mà không tự ý dịch lệch.
+    """
+    if not text or not dict_str:
+        return text
+
+    # Parse dict
+    rules = []
+    for line in dict_str.splitlines():
+        if "=" in line:
+            parts = line.split("=", 1)
+            src = parts[0].strip()
+            tgt = parts[1].strip()
+            if src and tgt:
+                rules.append((src, tgt))
+
+    # Sort by length descending to replace longer phrases first
+    rules.sort(key=lambda x: len(x[0]), reverse=True)
+
+    res = text
+    for src, tgt in rules:
+        # Nếu từ gốc có chứa ký tự đặc biệt regex thì escape
+        pattern = re.escape(src)
+        # Thêm space 2 đầu để AI dễ cắt từ, tránh dính chùm
+        res = re.sub(pattern, f" {tgt} ", res)
+
+    # Clean up double spaces if any
+    res = re.sub(r"\s+", " ", res).strip()
+    return res
+
+
 def effective_cps(settings, video_slowdown_pending: bool = True) -> float:
     """Ngân sách ký tự/giây THẬT sau hai nút vặn tốc độ.
 
@@ -85,7 +124,9 @@ def ensure_terminal_punct(text: str) -> str:
     return text
 
 
-def payload_segment(seg: dict, cps_budget: float = CHARS_PER_SECOND_BUDGET) -> dict:
+def payload_segment(
+    seg: dict, cps_budget: float = CHARS_PER_SECOND_BUDGET, hardlock_dict_str: str = ""
+) -> dict:
     """Fields sent to the translator for one segment, plus its character budget.
 
     ``max_chars`` gives the model a concrete number instead of only prose
@@ -100,6 +141,9 @@ def payload_segment(seg: dict, cps_budget: float = CHARS_PER_SECOND_BUDGET) -> d
     nghìn câu là hàng chục nghìn token vô ích mỗi video.
     """
     out = {k: seg[k] for k in ("id", "text", "duration") if k in seg}
+    if hardlock_dict_str and "text" in out:
+        out["text"] = apply_hardlock_dictionary(out["text"], hardlock_dict_str)
+
     window = float(seg.get("slot") or seg.get("duration", 0) or 0)
     if window > 0:
         # Floor of 12 keeps ultra-short segments translatable at all.

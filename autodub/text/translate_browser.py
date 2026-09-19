@@ -845,8 +845,11 @@ def _build_single_user_prompt(
     target: TargetLang,
     cps: float,
     context_segs: list[dict],
+    hardlock_dict_str: str = "",
 ) -> str:
-    payload_items = [payload_segment(s, cps_budget=cps) for s in segments]
+    payload_items = [
+        payload_segment(s, cps_budget=cps, hardlock_dict_str=hardlock_dict_str) for s in segments
+    ]
     user_lines = []
     if context_segs:
         user_lines.append(context_note(target))
@@ -1020,7 +1023,10 @@ def translate_segments_browser(
                 )
                 start_seg_idx = seg_idx_map.get(chunk[0]["id"], idx)
                 context_segs = context_payload(segments, start_seg_idx, target=target, n=3)
-                user_prompt = _build_single_user_prompt(chunk, target, cps, context_segs)
+                hardlock_dict_str = getattr(settings, "hardlock_dictionary", "")
+                user_prompt = _build_single_user_prompt(
+                    chunk, target, cps, context_segs, hardlock_dict_str=hardlock_dict_str
+                )
 
                 # Retry loop cho riêng từng chunk nếu AI Studio trả về văn bản hội thoại/lỗi JSON
                 translated_items: list[dict] = []
@@ -1094,7 +1100,11 @@ def translate_segments_browser(
                 )
                 _t0 = time.time()
 
-                payload_items = [payload_segment(s, cps_budget=cps) for s in batch]
+                hardlock_dict_str = getattr(settings, "hardlock_dictionary", "")
+                payload_items = [
+                    payload_segment(s, cps_budget=cps, hardlock_dict_str=hardlock_dict_str)
+                    for s in batch
+                ]
                 start_idx = seg_idx_map.get(batch[0]["id"], start_idx)
                 ctx_segs = context_payload(segments, start_idx, target=target, n=3)
                 user_lines = []

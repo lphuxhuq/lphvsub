@@ -338,6 +338,10 @@ class DubRequest:
     sfx_preset: str | None = None
     sfx_volume_db: float | None = None
 
+    # Tính năng tự động hóa
+    hardlock_dictionary: str | None = None
+    auto_split_minutes: int | None = None
+
     # The dub target is always Vietnamese now.
     target: str = "vi"
 
@@ -1820,6 +1824,20 @@ class DubPipeline:
                 ),
                 cancel_event=self._cancel_event,
             )
+
+            if req.auto_split_minutes and req.auto_split_minutes > 0:
+                logger.info(
+                    f"Đang tự động chia nhỏ video thành các phần {req.auto_split_minutes} phút..."
+                )
+                from autodub.media.auto_split import split_video
+
+                parts = split_video(
+                    video_path=dubbed_video_path,
+                    segments=segments,
+                    chunk_minutes=req.auto_split_minutes,
+                )
+                if len(parts) > 1:
+                    logger.info(f"Tự động chia video hoàn tất ({len(parts)} phần).")
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
         else:

@@ -630,7 +630,10 @@ def translate_segments_direct(
         )
         _t0 = time.time()
 
-        payload_items = [payload_segment(s, cps_budget=cps) for s in batch]
+        hardlock_dict_str = getattr(settings, "hardlock_dictionary", "")
+        payload_items = [
+            payload_segment(s, cps_budget=cps, hardlock_dict_str=hardlock_dict_str) for s in batch
+        ]
         start_seg_idx = seg_idx_map.get(batch[0]["id"], 0)
         with state_lock:
             context_segs = context_payload(segments, start_seg_idx, target=target, n=3)

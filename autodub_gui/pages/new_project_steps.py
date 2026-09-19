@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -1122,6 +1123,11 @@ class TranslateStep(_StepPanel):
         self.style.changed.connect(lambda *_a: self.changed.emit())
         self.note.changed.connect(lambda _t: self.changed.emit())
 
+        self.hardlock_dict = QPlainTextEdit()
+        self.hardlock_dict.setPlaceholderText("林动 = Lâm Động\n异火 = Dị Hỏa\n师父 = Sư phụ")
+        self.hardlock_dict.setMaximumHeight(80)
+        self.hardlock_dict.textChanged.connect(lambda: self.changed.emit())
+
         self.body.addWidget(self.engine)
         self.body.addWidget(self.gemini_key)
         self.body.addWidget(self.gemini_model)
@@ -1131,6 +1137,13 @@ class TranslateStep(_StepPanel):
         self.body.addWidget(self.ai_studio_login_status)
         self.body.addWidget(self.style)
         self.body.addWidget(self.note)
+        self.body.addWidget(
+            LabeledWidget(
+                "Từ điển ép dịch (Hard-Lock)",
+                self.hardlock_dict,
+                "Ép AI dịch chuẩn xác tên riêng/thuật ngữ. Nhập dạng: Tiếng_Trung = Tiếng_Việt (mỗi từ 1 dòng).",
+            )
+        )
 
         self.manual_note = QLabel(
             "Đã tắt dịch tự động: chạy tới bước dịch, ứng dụng sẽ dừng lại và "
@@ -1291,6 +1304,7 @@ class TranslateStep(_StepPanel):
             self.ai_studio_login_status,
             self.style,
             self.note,
+            self.hardlock_dict,
         ):
             widget.setEnabled(checked)
         self.manual_note.setVisible(not checked)
@@ -1308,6 +1322,7 @@ class TranslateStep(_StepPanel):
             "gemini_model": self.gemini_model.current_key(),
             "translate_style": self.style.current_key(),
             "translate_note": self.note.text(),
+            "hardlock_dictionary": self.hardlock_dict.toPlainText().strip(),
         }
 
     def load(self, data: dict) -> None:
@@ -1345,6 +1360,7 @@ class TranslateStep(_StepPanel):
 
         self.style.set_key(data.get("translate_style") or fb_style)
         self.note.set_text(data.get("translate_note", ""))
+        self.hardlock_dict.setPlainText(data.get("hardlock_dictionary", ""))
         self._on_auto_translate(self.auto_translate.isChecked())
 
 
@@ -1645,6 +1661,13 @@ class VoiceStep(_StepPanel):
         self.chk_randomize_metadata.toggled.connect(lambda _c: self.changed.emit())
         self._anti_id_section.add_widget(self.chk_randomize_metadata)
 
+        self.auto_split = QCheckBox("Tự động chia nhỏ video (mỗi 10 phút) cho TikTok/Shorts")
+        self.auto_split.setToolTip(
+            "Cắt video thành các đoạn 10 phút sau khi xuất xong, chuẩn xác theo điểm ngắt câu thoại."
+        )
+        self.auto_split.toggled.connect(lambda _c: self.changed.emit())
+        self._anti_id_section.add_widget(self.auto_split)
+
         self.body.addWidget(self._anti_id_section)
 
         self.audio_only = QCheckBox("Chỉ xuất âm thanh và phụ đề")
@@ -1730,6 +1753,9 @@ class VoiceStep(_StepPanel):
             if self._anti_id_section.is_expanded()
             else "none",
             "randomize_metadata": self.chk_randomize_metadata.isChecked(),
+            "auto_split_minutes": 10
+            if self.auto_split.isChecked() and self._anti_id_section.is_expanded()
+            else 0,
             "skip_video": self.audio_only.isChecked(),
         }
 
@@ -1795,9 +1821,11 @@ class VoiceStep(_StepPanel):
         self.smart_flip.setChecked(bool(data.get("smart_flip", fb_smart_flip)))
         self.micro_zoom.setChecked(bool(data.get("micro_zoom", fb_micro_zoom)))
         self.color_filter.set_key(data.get("color_filter", fb_color_filter or "none"))
+        self.auto_split.setChecked(bool(data.get("auto_split_minutes", 0) > 0))
         anti_active = bool(
             self.smart_flip.isChecked()
             or self.micro_zoom.isChecked()
+            or self.auto_split.isChecked()
             or self.color_filter.current_key() != "none"
         )
         self._anti_id_section.set_expanded(anti_active)
