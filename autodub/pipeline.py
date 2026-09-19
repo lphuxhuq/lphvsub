@@ -1815,6 +1815,10 @@ class DubPipeline:
                 randomize_metadata=req.randomize_metadata
                 if req.randomize_metadata is not None
                 else getattr(settings, "randomize_metadata", True),
+                progress_cb=lambda pct, msg: rep.emit(
+                    "merge_video", "progress", current=int(pct * 100), total=100, detail=msg
+                ),
+                cancel_event=self._cancel_event,
             )
 
             rep.emit("merge_video", "done", detail=dubbed_video_path)
